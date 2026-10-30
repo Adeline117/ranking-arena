@@ -1,120 +1,49 @@
-# OpenClaw Integration for Arena
+# OpenClaw integration — V1 NO-GO
 
-Scripts and configuration for running Arena's autonomous monitoring on the local Mac Mini via OpenClaw.
+OpenClaw automation is suspended for the V1 containment period. This directory
+is not an installation guide and must not be used to add or restore a crontab,
+OpenClaw schedule, automatic remediation, source fetching, commit, merge,
+deploy, restart, backup, or external-ticket mutation.
 
-## Setup
+## What remains permitted
 
-### 1. Environment Variables
+Only task-authorized, non-remediating evidence collection in a controlled
+environment is permitted. Start with the repository's canonical diagnostics:
 
-Set these in OpenClaw or in a `.env` file:
-
-```bash
-ARENA_URL=https://www.arenafi.org
-CRON_SECRET=<your-cron-secret>
-TELEGRAM_BOT_TOKEN=<your-telegram-bot-token>
-TELEGRAM_ALERT_CHAT_ID=<your-chat-id>
+```text
+npm run diagnose
+npm run check:status
+npm run check:freshness
+npm run check:platforms
+npm run check:seasons
+npm run check:enrichment
 ```
 
-### 2. OpenClaw Skills
+These diagnostics may report a problem; they never authorize an operational
+change. Record the evidence and use the owner-approved incident or release
+process for any next step.
 
-Configure these skills in OpenClaw:
+## Retired compatibility paths
 
-#### Health Monitor (every 30 minutes)
+The following former autonomous controls are compatibility tombstones: they
+write a `[RETIRED]` diagnostic to stderr and exit with status `2` without
+loading credentials or contacting services.
 
-```
-Trigger: Every 30 minutes
-Script: node scripts/openclaw/health-monitor.mjs
-Action on alert: Send Telegram notification
-```
+- `auto-fix.mjs`, `schema-canary-sentinel.mjs`, and the five `fetch-*.mjs`
+  source-fetch scripts
+- `scripts/cron/auto-fix-platform.ts`, `merge-autofix-to-main.sh`, and
+  `weekly-self-check.sh`
+- `infra/vps-cron/deploy-vps-cron.sh`, `infra/vps-cron/vps-cron-htx.sh`, and
+  its empty retired cron configuration
+- `scripts/vps-deploy/{setup-crontab.sh,cron-runner.js,scraper-cron.mjs}`,
+  `scripts/vps-scrapers/bybit-detail-pnl.mjs`, and `scripts/sync-vps-key.sh`
+- `health-monitor.mjs --with-auto-fix`
+- `pipeline-health-monitor.mjs --auto-cleanup`
+- `sentry-convergence.mjs --resolve-stale`
+- `field-coverage-canary.mts --update-baseline`
 
-#### Daily Report (8:00 AM)
-
-```
-Trigger: Daily at 08:00
-Script: node scripts/openclaw/health-monitor.mjs daily
-```
-
-#### Auto-Fix Pipeline (on alert)
-
-```
-Trigger: When health-monitor detects pipeline failure
-Action:
-  1. Open Claude Code session in the Arena project directory
-  2. Prompt: "[JOB_NAME] pipeline failed with error: [ERROR].
-     Read pipeline_logs for the last 10 runs of this job.
-     Analyze the error pattern, fix the root cause, run tests, and commit."
-  3. Send Telegram notification with result
-```
-
-#### Bug Report Handler
-
-```
-Trigger: When receiving a bug report (Discord/Telegram)
-Action:
-  1. Extract bug description
-  2. Open Claude Code session
-  3. Prompt: "User reported: [DESCRIPTION].
-     Reproduce, locate root cause, fix, test, commit.
-     Log in CHANGELOG.md."
-  4. Send fix summary to Telegram
-  5. Wait for "ok" to deploy (auto-deploy if <3 files changed + tests pass)
-```
-
-### 3. Auto-Deploy Rules
-
-| Condition                     | Action                |
-| ----------------------------- | --------------------- |
-| Tests pass + <3 files changed | Auto-deploy           |
-| Tests pass + 3+ files changed | Wait for confirmation |
-| Tests fail                    | Block + alert         |
-
-#### Daily R2 Backup (3:00 AM)
-
-```
-Trigger: Daily at 03:00
-Script: cd ~/ranking-arena && BACKUP_SCHEMAS=arena,public npm run backup:r2
-Action: Dump the arena+public application schemas → gzip → multipart upload + HEAD attestation in R2
-Full-database capture (weekly, Sunday): cd ~/ranking-arena && npm run backup:r2:full
-```
-
-`arena+public` is an application-data backup, not a managed-auth recovery point.
-The full-database capture is also not a proven restore point until it passes the
-managed scratch compatibility drill documented in `docs/RUNBOOK.md`.
-
-### 4. Mac Mini Crontab
-
-Add these lines to `crontab -e`:
-
-```cron
-# Arena Health Monitor (every 30 min)
-*/30 * * * * cd ~/ranking-arena && node scripts/openclaw/health-monitor.mjs >> /tmp/arena-health.log 2>&1
-
-# Arena Daily Report (8 AM)
-0 8 * * * cd ~/ranking-arena && node scripts/openclaw/health-monitor.mjs daily >> /tmp/arena-daily.log 2>&1
-
-# Arena UX Patrol (9 AM)
-0 9 * * * cd ~/ranking-arena && node scripts/openclaw/ux-patrol.mjs >> /tmp/arena-ux.log 2>&1
-
-# Arena Daily Backup to R2 (3 AM)
-0 3 * * * cd ~/ranking-arena && BACKUP_SCHEMAS=arena,public npm run backup:r2 >> /tmp/arena-backup.log 2>&1
-
-# Arena Full-Database Capture to R2 (Sunday 4 AM; recovery is not yet certified)
-0 4 * * 0 cd ~/ranking-arena && npm run backup:r2:full >> /tmp/arena-backup-full.log 2>&1
-
-# Sentry Error Convergence (Friday 10 AM)
-0 10 * * 5 cd ~/ranking-arena && node scripts/openclaw/sentry-convergence.mjs --resolve-stale >> /tmp/arena-sentry.log 2>&1
-
-# Field-coverage canary — detects silent field loss (parser/upstream drift) daily at 7:45
-45 7 * * * cd ~/ranking-arena && npx tsx --env-file=.env.local scripts/openclaw/field-coverage-canary.mts >> /tmp/arena-field-canary.log 2>&1
-```
-
-## Scripts
-
-| Script                                   | Purpose                                                          |
-| ---------------------------------------- | ---------------------------------------------------------------- |
-| `health-monitor.mjs`                     | Health check (run every 30 min)                                  |
-| `health-monitor.mjs daily`               | Daily summary report (run at 8 AM)                               |
-| `ux-patrol.mjs`                          | UX health check — pages, APIs, data quality, SSR (daily at 9 AM) |
-| `../maintenance/backup-to-r2.mjs`        | Daily trader data backup to R2 (3 AM)                            |
-| `../maintenance/backup-to-r2.mjs --full` | Full DB backup to R2 (Sunday 4 AM)                               |
-| `sentry-convergence.mjs`                 | Weekly Sentry error report + stale issue cleanup (Friday 10 AM)  |
+Baseline changes, deployments, production diagnostics that require credentials,
+and all host-side cron or PM2 cleanup require explicit owner authorization.
+This repository change cannot disable a schedule or process that was already
+installed on a host; inventory and cleanup of those hosts is a separate,
+authorized operation.

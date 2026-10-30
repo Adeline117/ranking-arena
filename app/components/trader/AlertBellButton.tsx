@@ -1,13 +1,11 @@
 'use client'
 
 /**
- * AlertBellButton — surfaces the per-trader alert config on the trader profile
- * (A4 retention). The full AlertConfig UI + the check-trader-alerts cron
- * evaluation + notification delivery already existed, but there was NO entry
- * point on the trader page: users could Follow/Watchlist a trader but not
- * "notify me when this trader's rank/ROI/score moves". This bell closes that
- * gap by opening the existing AlertConfig in a modal — explicit opt-in per
- * trader (no notification spam), reusing all existing infra.
+ * AlertBellButton — legacy trader-alert cleanup entry point.
+ *
+ * V1 does not publish or evaluate trader alerts. The button may direct an
+ * authenticated user to saved legacy configuration, but never creates or
+ * implies an active monitoring subscription.
  */
 
 import { useEffect, useRef } from 'react'
@@ -18,8 +16,8 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import ModalOverlay from '@/app/components/ui/ModalOverlay'
-import { trackEvent } from '@/lib/analytics/track'
 import { authedFetch } from '@/lib/api/client'
+import { TRADER_ALERTS_PUBLISHED } from '@/lib/alerts/trader-alert-publication'
 import {
   captureSettingsViewer,
   isSettingsViewerCurrent,
@@ -95,6 +93,12 @@ export default function AlertBellButton({ traderId, traderHandle, source }: Aler
   }, [])
 
   useEffect(() => {
+    if (!TRADER_ALERTS_PUBLISHED) {
+      statusOperationRef.current = null
+      setActive(false)
+      return
+    }
+
     const viewer = captureSettingsViewer(authRef.current)
     if (!viewer || resourceScopeKeyRef.current !== scopeKey) return
     const operation: ActiveStatusOperation = {
@@ -151,21 +155,25 @@ export default function AlertBellButton({ traderId, traderHandle, source }: Aler
       }
       return
     }
-    trackEvent('create_trader_alert', { traderId, source: source || '', step: 'open' })
     setOpen(true)
   }
 
   const signedOut = auth.authChecked && !auth.loading && !auth.userId
   const authPending = !currentViewer && !signedOut
+  const buttonLabel = TRADER_ALERTS_PUBLISHED
+    ? active
+      ? t('alertsActive')
+      : t('setAlert')
+    : t('traderAlertsUnavailableTitle')
 
   return (
     <>
       <button
         onClick={handleClick}
         disabled={authPending}
-        aria-label={active ? t('alertsActive') : t('setAlert')}
-        aria-pressed={active}
-        title={active ? t('alertsActive') : t('setAlert')}
+        aria-label={buttonLabel}
+        aria-pressed={TRADER_ALERTS_PUBLISHED && active}
+        title={buttonLabel}
         className="interactive-scale"
         style={{
           padding: '8px 12px',
@@ -215,7 +223,7 @@ export default function AlertBellButton({ traderId, traderHandle, source }: Aler
           setOpen(false)
           setLoadAttempt((attempt) => attempt + 1)
         }}
-        label={t('setAlert')}
+        label={TRADER_ALERTS_PUBLISHED ? t('setAlert') : t('traderAlertsUnavailableTitle')}
         maxWidth={480}
       >
         <div style={{ padding: 24 }}>

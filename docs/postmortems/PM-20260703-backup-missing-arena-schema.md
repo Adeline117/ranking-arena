@@ -38,6 +38,7 @@
 - [x] schema 模式备份（跟随 schema 而非硬编码表名）
 - [x] GH Actions 应用数据备份 + 只读角色（冗余 Mac Mini + 降爆炸半径）——实测 3.87GB arena+public 产物上 R2
 - [x] 备份完整性校验：新鲜度哨兵加"大小 <1GB 告警"（完整 3.9GB vs 残缺 381MB）
+- [x] 生产器上传前在完整解压流中验证三张最小关键关系，避免仅靠 schema 选择和文件大小误判范围
 - [x] Mac crontab 切 schema 模式（BACKUP_SCHEMAS=arena,public，与 GH 15:30 错峰 03:30）
 
 **结果**：两条应用数据备份（Mac 03:30 + GH Actions 15:30）错峰冗余，各

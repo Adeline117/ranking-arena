@@ -41,4 +41,19 @@ describe('StatsTab history completeness', () => {
     expect(screen.queryByTestId('stats-page')).not.toBeInTheDocument()
     expect(screen.getByText('noStatsData')).toBeInTheDocument()
   })
+
+  it('shows only the verification placeholder when quarantined history has no records', () => {
+    render(
+      <StatsTab
+        {...baseProps}
+        stats={{} as never}
+        equityCurve={{ '90D': [], '30D': [], '7D': [] }}
+        historyCompleteness={null}
+        historyUnderVerification
+      />
+    )
+
+    expect(screen.getByText('historyVerificationTitle')).toBeInTheDocument()
+    expect(screen.queryByTestId('stats-page')).not.toBeInTheDocument()
+  })
 })

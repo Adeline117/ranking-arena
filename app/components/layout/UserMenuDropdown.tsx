@@ -295,29 +295,9 @@ export default function UserMenuDropdown({
             </svg>
             <span>{t('referral')}</span>
           </Link>
-          <Link
-            href="/portfolio"
-            role="menuitem"
-            className="top-nav-menu-link"
-            style={MENU_LINK_STYLE}
-            onClick={() => setShowUserMenu(false)}
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
-              <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
-              <path d="M18 12a2 2 0 0 0 0 4h4v-4z" />
-            </svg>
-            <span>{t('portfolio')}</span>
-          </Link>
+          {/* The legacy /portfolio credential plane is deliberately absent from
+              V1 navigation. Its direct URL is retained only as an authenticated
+              removal surface for already-stored legacy connections. */}
           {/* B2C primary navigation: saved traders belongs in the account menu.
               The developer API remains available from the footer/docs routes. */}
           <Link
@@ -339,7 +319,7 @@ export default function UserMenuDropdown({
             >
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
             </svg>
-            <span>{t('watchlist')}</span>
+            <span>{t('myWatchlist')}</span>
           </Link>
           <Link
             href="/settings"

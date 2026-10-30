@@ -1,8 +1,9 @@
 /**
  * ClickHouse analytics query module
  *
- * Each function attempts ClickHouse first, then falls back to Supabase
- * if ClickHouse is unavailable or errors.
+ * Operational aggregates may fall back from ClickHouse to Supabase. Product
+ * history/mover exports are quarantined until a versioned publication source
+ * exists; they never synthesize a fallback series.
  */
 
 import { logger } from '@/lib/logger'
@@ -47,66 +48,19 @@ export interface TopMover {
 // ---------------------------------------------------------------------------
 
 /**
- * Get time-series history for a trader (ROI, PnL, arena_score, rank).
- * Falls back to Supabase trader_snapshots_v2 if ClickHouse is unavailable.
+ * Historical analytics are quarantined until their source is bound to a
+ * sealed publication. Keep the export for callers, but never synthesize a
+ * product series from legacy stores.
  */
 export async function getTraderHistory(
   platform: string,
   traderKey: string,
   days = 30
 ): Promise<TraderHistoryPoint[]> {
-  // Try ClickHouse first
-  if (isClickHouseAvailable()) {
-    try {
-      const rows = await query<TraderHistoryPoint>(
-        `SELECT
-           formatDateTime(captured_at, '%Y-%m-%dT%H:%i:%S.000Z') AS captured_at,
-           roi_pct,
-           pnl_usd,
-           arena_score,
-           rank
-         FROM trader_snapshots_history
-         WHERE platform = {platform:String}
-           AND trader_key = {traderKey:String}
-           AND captured_at >= now() - INTERVAL {days:UInt32} DAY
-         ORDER BY captured_at ASC`,
-        { platform, traderKey, days }
-      )
-      if (rows && rows.length > 0) return rows
-    } catch (err) {
-      chLogger.warn(
-        'getTraderHistory ClickHouse fallback:',
-        err instanceof Error ? err.message : String(err)
-      )
-    }
-  }
-
-  // Fallback: Supabase. Migrated off retiring trader_snapshots_v2 →
-  // trader_daily_snapshots (daily roi/pnl series; arena_score/rank not stored
-  // there — left 0, same as the prior v2 fallback which had no rank).
-  const supabase = getSupabaseAdmin() as SupabaseClient
-  const sinceDate = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10)
-
-  const { data, error } = await supabase
-    .from('trader_daily_snapshots')
-    .select('date, roi, pnl')
-    .eq('platform', platform)
-    .eq('trader_key', traderKey)
-    .gte('date', sinceDate)
-    .order('date', { ascending: true })
-
-  if (error) {
-    chLogger.warn('getTraderHistory Supabase error:', error.message)
-    return []
-  }
-
-  return (data ?? []).map((row) => ({
-    captured_at: row.date,
-    roi_pct: row.roi ?? 0,
-    pnl_usd: row.pnl ?? 0,
-    arena_score: 0,
-    rank: 0,
-  }))
+  void platform
+  void traderKey
+  void days
+  return []
 }
 
 // ---------------------------------------------------------------------------
@@ -170,81 +124,15 @@ export async function getPipelineStats(days = 7): Promise<PipelineStat[]> {
 // ---------------------------------------------------------------------------
 
 /**
- * Get traders with the biggest arena score changes over the given period.
- * Falls back to Supabase with a simpler query.
+ * Movers require two sealed, comparable publication generations. Neither the
+ * legacy ClickHouse history nor a current-score-only fallback proves that
+ * contract, so this compatibility export stays empty with the public route.
  */
 export async function getTopMovers(
   period: '7D' | '30D' | '90D' = '30D',
   limit = 20
 ): Promise<TopMover[]> {
-  if (isClickHouseAvailable()) {
-    try {
-      const rows = await query<TopMover>(
-        `WITH
-           latest AS (
-             SELECT platform, trader_key, period, arena_score,
-                    ROW_NUMBER() OVER (PARTITION BY platform, trader_key, period ORDER BY captured_at DESC) AS rn
-             FROM trader_snapshots_history
-             WHERE period = {period:String}
-               AND captured_at >= now() - INTERVAL 24 HOUR
-           ),
-           earliest AS (
-             SELECT platform, trader_key, period, arena_score,
-                    ROW_NUMBER() OVER (PARTITION BY platform, trader_key, period ORDER BY captured_at ASC) AS rn
-             FROM trader_snapshots_history
-             WHERE period = {period:String}
-               AND captured_at >= now() - INTERVAL 7 DAY
-               AND captured_at <= now() - INTERVAL 6 DAY
-           )
-         SELECT
-           l.platform,
-           l.trader_key,
-           l.period,
-           round(l.arena_score - e.arena_score, 2) AS score_change,
-           l.arena_score AS latest_score,
-           e.arena_score AS earliest_score
-         FROM latest l
-         JOIN earliest e ON l.platform = e.platform
-           AND l.trader_key = e.trader_key
-           AND l.period = e.period
-         WHERE l.rn = 1 AND e.rn = 1
-         ORDER BY abs(l.arena_score - e.arena_score) DESC
-         LIMIT {limit:UInt32}`,
-        { period, limit }
-      )
-      if (rows && rows.length > 0) return rows
-    } catch (err) {
-      chLogger.warn(
-        'getTopMovers ClickHouse fallback:',
-        err instanceof Error ? err.message : String(err)
-      )
-    }
-  }
-
-  // Fallback: Supabase — current scores only (no historical diff), rough proxy.
-  // Migrated off retiring trader_snapshots_v2 → leaderboard_ranks (aliased).
-  const supabase = getSupabaseAdmin() as SupabaseClient
-  const { data, error } = await supabase
-    .from('leaderboard_ranks')
-    .select('platform:source, trader_key:source_trader_id, window:season_id, arena_score')
-    .eq('season_id', period)
-    .not('rank', 'is', null)
-    .not('arena_score', 'is', null)
-    .order('arena_score', { ascending: false })
-    .order('rank', { ascending: true, nullsFirst: false })
-    .limit(limit)
-
-  if (error) {
-    chLogger.warn('getTopMovers Supabase error:', error.message)
-    return []
-  }
-
-  return (data ?? []).map((row) => ({
-    platform: row.platform,
-    trader_key: row.trader_key,
-    period: row.window,
-    score_change: 0, // No historical data in Supabase fallback
-    latest_score: row.arena_score ?? 0,
-    earliest_score: 0,
-  }))
+  void period
+  void limit
+  return []
 }

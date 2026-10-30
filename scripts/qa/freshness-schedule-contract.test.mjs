@@ -6,7 +6,6 @@ import test from 'node:test'
 const root = process.cwd()
 const vercelConfig = JSON.parse(readFileSync(join(root, 'vercel.json'), 'utf8'))
 const crons = vercelConfig.crons ?? []
-const metaMonitor = readFileSync(join(root, 'app/api/cron/meta-monitor/route.ts'), 'utf8')
 const readme = readFileSync(join(root, 'README.md'), 'utf8')
 const slo = readFileSync(join(root, 'docs/SLO.md'), 'utf8')
 const runbook = readFileSync(join(root, 'docs/RUNBOOK.md'), 'utf8')
@@ -32,37 +31,17 @@ function countNamedFiles(directory, fileName) {
 const cronRouteCount = countNamedFiles(join(root, 'app/api/cron'), 'route.ts')
 const adapterImportCount = (adapterRegister.match(/^import\s+['"][^'"]+['"]$/gm) ?? []).length
 
-const FRESHNESS_PATH = '/api/cron/check-data-freshness'
-const FRESHNESS_SCHEDULE = '39 1,4,7,10,13,16,19,22 * * *'
-
-test('registers exactly one three-hour freshness schedule without exceeding Vercel quota', () => {
-  const definitions = crons.filter((cron) => cron.path === FRESHNESS_PATH)
-  const uniqueSchedulePaths = new Set(crons.map((cron) => cron.path))
-  assert.deepEqual(definitions, [{ path: FRESHNESS_PATH, schedule: FRESHNESS_SCHEDULE }])
-  assert.equal(crons.length, 44)
-  assert.equal(uniqueSchedulePaths.size, 44)
-  assert.ok(crons.length <= 100, `expected at most 100 Vercel crons, found ${crons.length}`)
-
-  const [minute, hourList, dayOfMonth, month, dayOfWeek] = FRESHNESS_SCHEDULE.split(' ')
-  assert.equal(minute, '39')
-  assert.deepEqual([dayOfMonth, month, dayOfWeek], ['*', '*', '*'])
-
-  const fireMinutes = hourList.split(',').map((hour) => Number(hour) * 60 + Number(minute))
-  assert.equal(fireMinutes.length, 8)
-  const wrapped = [...fireMinutes, fireMinutes[0] + 24 * 60]
-  assert.deepEqual(
-    wrapped.slice(1).map((value, index) => value - wrapped[index]),
-    Array(8).fill(180)
+test('quarantines every Vercel schedule under the V1 NO-GO', () => {
+  assert.equal(Object.hasOwn(vercelConfig, 'crons'), false)
+  assert.equal(crons.length, 0)
+  assert.equal(vercelConfig.git?.deploymentEnabled, false)
+  assert.equal(vercelConfig.ignoreCommand, 'exit 0')
+  assert.doesNotMatch(vercelConfig.ignoreCommand, /deploy-force|VERCEL_/)
+  assert.equal(
+    crons.some((cron) => cron.path === '/api/cron/cleanup-report-evidence'),
+    false,
+    'cleanup-report-evidence must not regain an automatic Vercel schedule'
   )
-})
-
-test('keeps the six-hour meta-monitor aligned to a 180-minute freshness expectation', () => {
-  assert.deepEqual(
-    crons.filter((cron) => cron.path === '/api/cron/meta-monitor'),
-    [{ path: '/api/cron/meta-monitor', schedule: '23 */6 * * *' }]
-  )
-  assert.match(metaMonitor, /['"]check-data-freshness['"]:\s*180/)
-  assert.match(metaMonitor, /findStuckCronJobs\(statuses, EXPECTED_INTERVALS\)/)
 })
 
 test('budgets the compute watchdog for every sequential season trigger', () => {
@@ -81,11 +60,17 @@ test('budgets the compute watchdog for every sequential season trigger', () => {
   )
 })
 
-test('documents the source_as_of authority and the no-alert inspection path', () => {
+test('documents V1 schedule quarantine without treating routes as scheduled work', () => {
   assert.equal(cronRouteCount, 53)
   assert.equal(adapterImportCount, 26)
-  assert.match(readme, new RegExp(`${crons.length} (?:are )?production Vercel schedules`))
-  assert.match(readme, new RegExp(`${cronRouteCount} cron\\/worker endpoints`))
+  assert.match(readme, /\bV1\s+NO-GO\b/)
+  assert.match(readme, /\b(?:0|zero)\s+Vercel schedules?\b/i)
+  assert.match(
+    readme,
+    new RegExp(
+      `\\b${cronRouteCount}\\s+cron\\/worker\\s+(?:route\\s+)?(?:implementations|endpoints)\\b`
+    )
+  )
   assert.match(readme, new RegExp(`${adapterImportCount} registered ingest adapters`))
   assert.doesNotMatch(readme, /42 exchange connectors/)
   assert.doesNotMatch(readme, /42 custom connectors/)
@@ -98,19 +83,22 @@ test('documents the source_as_of authority and the no-alert inspection path', ()
     /`(?:batch-fetch-traders|batch-enrich|fetch-details|calculate-advanced-metrics|snapshot-positions|auto-post-insights)[^`]*`/
   )
   assert.doesNotMatch(readme, /`warm-cache` every 5 minutes/)
-  assert.match(readme, /\/api\/sources\/visible\?timeRange=90D/)
+  assert.match(readme, /leaderboard_source_freshness\.source_as_of/)
   assert.doesNotMatch(readme, /\/api\/sources\/visible\?period=/)
-  assert.match(readme, /check-data-freshness[\s\S]*Every 3 hours at `:39` UTC/)
   assert.doesNotMatch(readme, /53 (?:scheduled cron jobs|Vercel cron jobs)/)
   assert.match(slo, /leaderboard_source_freshness\.source_as_of/)
   assert.doesNotMatch(slo, /leaderboard_ranks 派生时间距今/)
-  assert.match(runbook, /\/api\/admin\/data-freshness/)
+  assert.doesNotMatch(runbook, /npm run check:freshness/)
+  assert.doesNotMatch(runbook, /\/api\/admin\/data-freshness/)
+  assert.doesNotMatch(runbook, /Authorization: Bearer \$CRON_SECRET/)
   assert.match(runbook, /Never update `source_as_of` manually/)
   assert.match(runbook, /leaderboard_ranks\.computed_at/)
-  assert.match(runbook, /53 endpoints \/ 44 Vercel schedules/)
+  assert.match(runbook, /\bV1\s+NO-GO\b/)
+  assert.match(runbook, /owner-approved[\s\S]{0,80}read-only evidence/i)
+  assert.match(runbook, /\b(?:no|zero|0)\s+Vercel schedules?\b/i)
   assert.doesNotMatch(runbook, /api\/cron\/(?:unified-connector|batch-fetch-traders|batch-enrich)/)
-  assert.match(runbook, /scripts\/ingest-enqueue-region-smoke\.mts/)
+  assert.doesNotMatch(runbook, /scripts\/ingest-enqueue-region-smoke\.mts/)
   assert.match(runbook, /serving leaderboard uses Arena Score v4/)
-  assert.match(runbook, /error_message = 'Force-closed: stuck job'/)
+  assert.doesNotMatch(runbook, /error_message = 'Force-closed: stuck job'/)
   assert.doesNotMatch(runbook, /\btrader_snapshots\b/)
 })

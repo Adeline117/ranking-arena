@@ -3,6 +3,12 @@
  * both sides (drift-proof), plus result payload → TraderCoreModules mapping.
  */
 
+const mockIsV1IngestExecutionPublished = jest.fn(() => false)
+
+jest.mock('@/lib/ingest/v1-execution-publication', () => ({
+  isV1IngestExecutionPublished: () => mockIsV1IngestExecutionPublished(),
+}))
+
 import {
   tierCJobId,
   tierCResultKey,
@@ -63,6 +69,23 @@ describe('Tier-C producer region routing', () => {
       queue: { add: jest.fn(async () => ({})) } as unknown as TierCBridge['queue'],
     }
   }
+
+  beforeEach(() => {
+    // Keep the historical bridge mechanics covered under a test-only module
+    // mock. Production always reads the checked-in false V1 publication flag.
+    mockIsV1IngestExecutionPublished.mockReturnValue(true)
+  })
+
+  it('does not resolve a bridge, read Redis, or enqueue while V1 is unpublished', async () => {
+    mockIsV1IngestExecutionPublished.mockReturnValue(false)
+    const provider = jest.fn(async () => bridge())
+
+    await expect(
+      requestTierCWithProvider(req, { fireAndForget: true }, provider)
+    ).resolves.toBeNull()
+
+    expect(provider).not.toHaveBeenCalled()
+  })
 
   it('selects the DB-resolved region before enqueueing', async () => {
     const target = bridge()

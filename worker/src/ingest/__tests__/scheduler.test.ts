@@ -30,6 +30,12 @@ const mockFastQueue = {
 }
 const mockDbQuery = jest.fn().mockResolvedValue({ rows: [] })
 
+// The scheduler's historical invariants stay unit-tested under an explicit
+// test-only GO. The checked-in V1 source gate remains fixed-off.
+jest.mock('@/lib/ingest/v1-execution-publication', () => ({
+  isV1IngestExecutionPublished: jest.fn(() => true),
+}))
+
 jest.mock('../queues', () => ({
   INGEST_JOB: {
     TIER_A: 'tiera:leaderboard',
@@ -54,8 +60,8 @@ jest.mock('../queues', () => ({
   fastLaneEnabled: () => true,
 }))
 
-// first-party scheduler pass queries trader_authorizations via the ingest
-// pool — mock it so tests never open a real DB connection (it HANGS jest).
+// Keep the ingest DB module mocked so a regression cannot silently reopen the
+// retired authorization-wide first-party scheduler pass in unit tests.
 jest.mock('@/lib/ingest/db', () => ({
   getIngestPool: () => ({ query: mockDbQuery }),
 }))
@@ -94,21 +100,24 @@ describe('reconcileSchedulers cleanup/revival', () => {
     mockDbQuery.mockReset().mockResolvedValue({ rows: [] })
   })
 
-  it('schedules only DB-eligible first-party authorizations with the worker job name', async () => {
-    mockDbQuery.mockResolvedValue({ rows: [{ id: 'auth-1' }] })
-    await reconcileSchedulers()
-    expect(mockDbQuery).toHaveBeenCalledWith(
-      expect.stringContaining('read_only_verified_at IS NOT NULL')
-    )
-    expect(mockQueue.upsertJobScheduler).toHaveBeenCalledWith(
-      'fp:auth-1',
-      { every: 15 * 60_000 },
+  it('removes legacy first-party schedulers without scanning all account authorizations', async () => {
+    mockQueue.getJobSchedulers.mockResolvedValue([
       {
+        key: 'fp:auth-1',
         name: 'firstparty:sync',
-        data: { authorizationId: 'auth-1' },
-        opts: { priority: 4 },
-      }
-    )
+        next: Date.now() + HOUR,
+        every: 15 * 60_000,
+        template: { data: { authorizationId: 'auth-1' } },
+      },
+    ])
+
+    await reconcileSchedulers()
+
+    expect(mockDbQuery).not.toHaveBeenCalled()
+    expect(mockQueue.removeJobScheduler).toHaveBeenCalledWith('fp:auth-1')
+    expect(
+      mockQueue.upsertJobScheduler.mock.calls.some(([key]) => String(key).startsWith('fp:'))
+    ).toBe(false)
   })
 
   it('removes schedulers no longer wanted, addressing them by key (not id)', async () => {

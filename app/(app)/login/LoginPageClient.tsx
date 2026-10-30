@@ -19,6 +19,7 @@ import {
 } from './components/loginHelpers'
 import { trackEvent } from '@/lib/analytics/track'
 import { peekPendingReferral } from '@/lib/referral/pending'
+import { isV1ReferralProgramPublished } from '@/lib/referral/v1-publication'
 import SocialLogin from './components/SocialLogin'
 import RegisterForm from './components/RegisterForm'
 import LoginForm from './components/LoginForm'
@@ -784,23 +785,27 @@ export default function LoginPageClient() {
         }
       }
 
-      // Referral application is also exact-bearer and idempotent server-side.
-      assertAttemptCurrent(attempt, identity)
-      const refCode = searchParams.get('ref') || peekPendingReferral()
-      if (refCode) {
-        try {
-          await exactSessionJsonRequest(
-            identity,
-            '/api/referral/apply',
-            { code: refCode },
-            {
-              signal: attempt.controller.signal,
-            }
-          )
-          assertAttemptCurrent(attempt, identity)
-        } catch (refErr) {
-          if (isCancellation(refErr) || !isAttemptCurrent(attempt)) throw refErr
-          logger.error('Referral apply failed (non-fatal):', refErr)
+      // Referral attribution stays fully dormant while its checked-in V1
+      // publication hold is active. In particular, do not inspect pending
+      // storage or issue a request that could only receive a tombstone.
+      if (isV1ReferralProgramPublished()) {
+        assertAttemptCurrent(attempt, identity)
+        const refCode = searchParams.get('ref') || peekPendingReferral()
+        if (refCode) {
+          try {
+            await exactSessionJsonRequest(
+              identity,
+              '/api/referral/apply',
+              { code: refCode },
+              {
+                signal: attempt.controller.signal,
+              }
+            )
+            assertAttemptCurrent(attempt, identity)
+          } catch (refErr) {
+            if (isCancellation(refErr) || !isAttemptCurrent(attempt)) throw refErr
+            logger.error('Referral apply failed (non-fatal):', refErr)
+          }
         }
       }
 

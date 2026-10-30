@@ -116,9 +116,17 @@ describe('Bitget bot copier aggregate authority', () => {
 
   it('maps SQL NULL or malformed JSON to the existing pending/no-store API contract', () => {
     expect(recordsReader).toContain('if (error || !isPlainRecord(data)) return null')
-    expect(recordsRoute).toMatch(
-      /if \(aggregate\)[\s\S]*withCache\([\s\S]*return apiSuccess\(\{ cacheState: 'pending' as const \}, 200, \{ 'Cache-Control': 'no-store' \}\)/
+    const copierBranch = recordsRoute.slice(
+      recordsRoute.indexOf("if (kind === 'copiers')"),
+      recordsRoute.indexOf('const isAppendOnlyHistory')
     )
+    expect(copierBranch).toContain(
+      'return apiSuccess(aggregate, 200, METRIC_AUTHORITY_NO_STORE_HEADERS)'
+    )
+    expect(copierBranch).toContain(
+      "return apiSuccess({ cacheState: 'pending' as const }, 200, { 'Cache-Control': 'no-store' })"
+    )
+    expect(copierBranch).not.toContain('withCache(')
   })
 
   it('hardens the definer and leaves an exact public reader ACL', () => {

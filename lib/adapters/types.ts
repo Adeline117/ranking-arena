@@ -1,9 +1,10 @@
 /**
  * Exchange Adapter Types
  * Unified interface for fetching authorized trader data from exchanges.
- * Used by trader/sync route and batch-5min cron for API-key-based data sync.
+ * Used by the authorized trader-sync path. The legacy batch-5min refresh-job
+ * consumer is retired during the V1 source hold.
  *
- * Note: These are distinct from lib/connectors/ which handle public leaderboard scraping.
+ * Note: These are distinct from connectors/ which handle public leaderboard scraping.
  * Adapters handle authenticated exchange API access (user-bound API keys).
  */
 

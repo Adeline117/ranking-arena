@@ -402,39 +402,35 @@ describe('GET /api/v3 cache and publication boundaries', () => {
     )
   })
 
-  it('keeps legacy daily history unavailable instead of querying raw snapshots or exporting a blank CSV', async () => {
+  // History uses the V1 fail-closed 503 contract (route.ts `endpoint === 'history'`).
+  it('fails closed before reading unproven daily history', async () => {
     const response = await GET(
-      request('/api/v3?endpoint=history&platform=binance_futures&trader_key=alice&days=30')
+      request('/api/v3?endpoint=history&platform=bybit&trader_key=cached-trader&days=30', {
+        'x-api-key': 'would-consume-usage',
+      })
     )
     const body = await response.json()
 
-    expect(response.status).toBe(200)
+    expect(response.status).toBe(503)
     expect(response.headers.get('cache-control')).toBe(PRIVATE_NO_STORE)
+    expect(response.headers.get('CDN-Cache-Control')).toBe('no-store')
+    expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
+    expect(body.error.code).toBe('TRADER_HISTORY_NOT_PUBLISHED')
+    expect(body.error.message).toContain('snapshot provenance is unverified')
     expect(mockFrom).not.toHaveBeenCalled()
-    expect(body.data).toEqual([])
-    expect(body.meta).toEqual(
-      expect.objectContaining({
-        endpoint: 'history',
-        total: 0,
-        historical_metric_publication: {
-          state: 'unknown',
-          reason: 'historical_metric_publication_unavailable',
-        },
-      })
-    )
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockCheckRateLimitFull).not.toHaveBeenCalled()
+  })
 
-    const csvResponse = await GET(
-      request(
-        '/api/v3?endpoint=history&platform=binance_futures&trader_key=alice&days=30&format=csv'
-      )
+  it('keeps the quarantined history response as JSON when CSV is requested', async () => {
+    const response = await GET(
+      request('/api/v3?endpoint=history&platform=bybit&trader_key=cached-trader&format=csv')
     )
-    const csvBody = await csvResponse.json()
+    const body = await response.json()
 
-    expect(csvResponse.headers.get('content-type')).not.toBe('text/csv; charset=utf-8')
-    expect(csvBody.meta.historical_metric_publication).toEqual({
-      state: 'unknown',
-      reason: 'historical_metric_publication_unavailable',
-    })
-    expect(mockFrom).not.toHaveBeenCalled()
+    expect(response.status).toBe(503)
+    expect(response.headers.get('content-type')).not.toBe('text/csv; charset=utf-8')
+    expect(body.error.code).toBe('TRADER_HISTORY_NOT_PUBLISHED')
+    expect(mockCheckRateLimitFull).not.toHaveBeenCalled()
   })
 })

@@ -3,7 +3,7 @@
  *
  * 每个用例对应一个已修复的根因类，防止回归：
  * 1. i18n 非法 locale 导致整页崩溃（t('locale') / formatTimeAgo monthsAgo TypeError）
- * 2. 本地路径头像被误裹进 /api/avatar 代理（400）
+ * 2. V1 头像渲染不再发起 /api/avatar 请求
  * 3. 匿名访客触发 auth-required API（translate/interactions 401/403 console 噪音）
  */
 
@@ -46,20 +46,18 @@ test.describe('回归 1: /hot 多语言渲染不崩溃（monthsAgo TypeError 类
   }
 })
 
-test.describe('回归 2: 本地路径头像不进 /api/avatar 代理（avatarSrc 类）', () => {
-  test('首页 + /hot 无 /api/avatar?url=%2F...（本地路径误代理 = 必然 400）', async ({ page }) => {
-    const proxiedLocalPaths: string[] = []
+test.describe('回归 2: V1 头像不请求已退役代理', () => {
+  test('首页 + /hot 不发起 canonical 或 versioned avatar proxy 请求', async ({ page }) => {
+    const retiredAvatarRequests: string[] = []
     page.on('request', (r) => {
       const u = r.url()
-      // /api/avatar?url=<encoded> 且 decoded 以 / 开头（本地路径）即违规
-      const m = u.match(/\/api\/avatar\?url=([^&]+)/)
-      if (m && decodeURIComponent(m[1]).startsWith('/')) proxiedLocalPaths.push(u)
+      if (/\/api\/(?:v1\/)?avatar(?:\?|$)/.test(u)) retiredAvatarRequests.push(u)
     })
     for (const path of ['/', '/hot']) {
       await page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' })
       await page.waitForTimeout(5000)
     }
-    expect(proxiedLocalPaths).toEqual([])
+    expect(retiredAvatarRequests).toEqual([])
   })
 })
 

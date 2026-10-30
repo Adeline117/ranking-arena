@@ -36,7 +36,10 @@ export async function fetchWithTimeout(
     return response
   } catch (error) {
     clearTimeout(timeoutId)
-    if (error instanceof Error && (error.name === 'AbortError' || error.message === 'The user aborted a request.')) {
+    if (
+      error instanceof Error &&
+      (error.name === 'AbortError' || error.message === 'The user aborted a request.')
+    ) {
       const timeoutError = new Error(t('errorTimeoutCheckNetwork'))
       timeoutError.name = 'TimeoutError'
       throw timeoutError
@@ -49,15 +52,21 @@ export async function fetchWithTimeout(
 // 通用 fetcher
 // ============================================
 
-export async function fetcher<T>(url: string): Promise<T> {
+export async function fetcher<T>(url: string, options: RequestInit = {}): Promise<T> {
   const startTime = performance.now()
   try {
     const response = await fetchWithTimeout(url, {
+      ...options,
       credentials: 'include',
     })
 
     if (!response.ok) {
-      const error = new Error(t('errorRequestFailed')) as Error & { status: number; info: unknown; url: string; duration: number }
+      const error = new Error(t('errorRequestFailed')) as Error & {
+        status: number
+        info: unknown
+        url: string
+        duration: number
+      }
       error.status = response.status
       error.url = url
       error.duration = Math.round(performance.now() - startTime)
@@ -78,7 +87,11 @@ export async function fetcher<T>(url: string): Promise<T> {
       if (!enriched.url) enriched.url = url
       if (!enriched.duration) enriched.duration = Math.round(performance.now() - startTime)
 
-      if (error.name === 'TimeoutError' || error.message.includes('timeout') || error.message.includes('超时')) {
+      if (
+        error.name === 'TimeoutError' ||
+        error.message.includes('timeout') ||
+        error.message.includes('超时')
+      ) {
         throw new Error(t('errorTimeout'))
       }
       if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
@@ -105,7 +118,7 @@ export async function fetcherWithAuth<T>(url: string, token?: string): Promise<T
     if (response.status === 401 && token && typeof window !== 'undefined') {
       const newToken = await tokenRefreshCoordinator.forceRefresh()
       if (newToken) {
-        const retryHeaders: HeadersInit = { 'Authorization': `Bearer ${newToken}` }
+        const retryHeaders: HeadersInit = { Authorization: `Bearer ${newToken}` }
         const retryResponse = await fetchWithTimeout(url, {
           credentials: 'include',
           headers: retryHeaders,
@@ -129,7 +142,11 @@ export async function fetcherWithAuth<T>(url: string, token?: string): Promise<T
   } catch (error) {
     // 处理超时和网络错误
     if (error instanceof Error) {
-      if (error.name === 'TimeoutError' || error.message.includes('timeout') || error.message.includes('超时')) {
+      if (
+        error.name === 'TimeoutError' ||
+        error.message.includes('timeout') ||
+        error.message.includes('超时')
+      ) {
         throw new Error(t('errorTimeout'))
       }
       if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {

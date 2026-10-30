@@ -2,15 +2,16 @@ jest.mock('next/server', () => {
   class MockNextResponse {
     _body: unknown
     status: number
-    headers = new Map<string, string>()
-    constructor(body: unknown, init: { status?: number } = {}) {
+    headers: Headers
+    constructor(body: unknown, init: { status?: number; headers?: HeadersInit } = {}) {
       this._body = body
       this.status = init.status ?? 200
+      this.headers = new Headers(init.headers)
     }
     async json() {
       return this._body
     }
-    static json(body: unknown, init?: { status?: number }) {
+    static json(body: unknown, init?: { status?: number; headers?: HeadersInit }) {
       return new MockNextResponse(body, init)
     }
   }
@@ -86,40 +87,60 @@ describe('PATCH /api/profile/notification-preferences', () => {
     mockMaybeSingle.mockResolvedValue({ data: { id: USER_ID }, error: null })
   })
 
-  it.each([
-    'notify_follow',
-    'notify_like',
-    'notify_comment',
-    'notify_mention',
-    'notify_message',
-    'notify_trader_events',
-  ])('updates only the authenticated profile field %s', async (field) => {
-    const req = request({ field, value: false })
-    const response = await PATCH(req)
-
-    expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ success: true })
-    expect(mockGetAuthUser).toHaveBeenCalledWith(req)
-    expect(mockGetAuthUser.mock.invocationCallOrder[0]).toBeLessThan(
-      mockGetSupabaseAdmin.mock.invocationCallOrder[0]
-    )
-    expect(mockUpdate).toHaveBeenCalledWith({ [field]: false })
-    expect(mockEq).toHaveBeenCalledWith('id', USER_ID)
-    expect(mockSelect).toHaveBeenCalledWith('id')
-  })
-
-  it.each(['none', 'daily', 'weekly'])(
-    'updates email digest to the allowlisted value %s',
-    async (value) => {
-      const req = request({ field: 'email_digest', value })
+  it.each(['notify_follow', 'notify_like', 'notify_comment', 'notify_mention', 'notify_message'])(
+    'updates only the authenticated profile field %s',
+    async (field) => {
+      const req = request({ field, value: false })
       const response = await PATCH(req)
 
       expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({ success: true })
       expect(mockGetAuthUser).toHaveBeenCalledWith(req)
-      expect(mockUpdate).toHaveBeenCalledWith({ email_digest: value })
+      expect(mockGetAuthUser.mock.invocationCallOrder[0]).toBeLessThan(
+        mockGetSupabaseAdmin.mock.invocationCallOrder[0]
+      )
+      expect(mockUpdate).toHaveBeenCalledWith({ [field]: false })
       expect(mockEq).toHaveBeenCalledWith('id', USER_ID)
+      expect(mockSelect).toHaveBeenCalledWith('id')
     }
   )
+
+  it.each([
+    { field: 'notify_trader_events', value: true },
+    { field: 'email_digest', value: 'weekly' },
+  ])(
+    'rejects an unpublished trader-notification preference without a profile write',
+    async (body) => {
+      const response = await PATCH(request(body))
+
+      expect(response.status).toBe(503)
+      expect(await response.json()).toEqual({
+        success: false,
+        available: false,
+        code: 'TRADER_NOTIFICATIONS_NOT_PUBLISHED',
+        error:
+          'Trader alerts, ranking-change notifications, and personalized digests are temporarily unavailable during V1 verification.',
+      })
+      expect(mockGetAuthUser).toHaveBeenCalled()
+      expect(mockGetSupabaseAdmin).not.toHaveBeenCalled()
+      expect(mockUpdate).not.toHaveBeenCalled()
+      expect(response.headers.get('Cache-Control')).toBe(
+        'private, no-store, max-age=0, must-revalidate'
+      )
+      expect(response.headers.get('CDN-Cache-Control')).toBe('no-store')
+      expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
+    }
+  )
+
+  it.each(['none', 'daily'])('updates email digest to the allowlisted value %s', async (value) => {
+    const req = request({ field: 'email_digest', value })
+    const response = await PATCH(req)
+
+    expect(response.status).toBe(200)
+    expect(mockGetAuthUser).toHaveBeenCalledWith(req)
+    expect(mockUpdate).toHaveBeenCalledWith({ email_digest: value })
+    expect(mockEq).toHaveBeenCalledWith('id', USER_ID)
+  })
 
   it('does not initialize admin access for an unauthenticated request', async () => {
     mockGetAuthUser.mockResolvedValue(null)

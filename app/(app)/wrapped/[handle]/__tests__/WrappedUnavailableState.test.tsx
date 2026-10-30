@@ -49,7 +49,7 @@ describe('WrappedUnavailableState', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(mockRefresh).toHaveBeenCalledTimes(1)
-    expect(screen.getByRole('link', { name: 'Rankings' })).toHaveAttribute('href', '/rankings')
+    expect(screen.getByRole('link', { name: 'Rankings' })).toHaveAttribute('href', '/')
   })
 
   it('uses the server-unavailable explanation for non-timeout failures', () => {

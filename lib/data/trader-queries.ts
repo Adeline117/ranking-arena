@@ -175,7 +175,7 @@ export async function getTraderPerformance(
  * 获取交易员统计数据 (cached)
  */
 export async function getTraderStats(handle: string): Promise<DataResult<TraderStats>> {
-  const cacheKey = CacheKey.traders.detail(handle) + ':stats'
+  const cacheKey = CacheKey.traders.detail(handle) + ':stats:v2'
 
   return cache.getOrSet(
     cacheKey,
@@ -187,30 +187,20 @@ export async function getTraderStats(handle: string): Promise<DataResult<TraderS
           return success({ additionalStats: {} })
         }
 
-        // Phase 1: latest 90D + daily history in parallel. Migrated off retiring
-        // trader_latest / trader_snapshots_v2 → leaderboard_ranks (latest) +
-        // trader_daily_snapshots (history). (monthly/yearly tables long dropped.)
-        const [latestSnapshotResult, historySnapshotsResult] = await Promise.all([
-          supabase
-            .from('leaderboard_ranks')
-            .select('roi, computed_at, pnl, win_rate, max_drawdown, trades_count')
-            .eq('source', source.source)
-            .eq('source_trader_id', source.source_trader_id)
-            .eq('season_id', '90D')
-            .maybeSingle(),
-          supabase
-            .from('trader_daily_snapshots')
-            .select('roi, date')
-            .eq('platform', source.source)
-            .eq('trader_key', source.source_trader_id)
-            .order('date', { ascending: false })
-            .limit(200),
-        ])
+        // Only the current published 90D rank is trusted here. Legacy daily
+        // rows have no cohort/publication proof, so active-since and profitable
+        // period claims stay unavailable.
+        const latestSnapshotResult = await supabase
+          .from('leaderboard_ranks')
+          .select('roi, computed_at, pnl, win_rate, max_drawdown, trades_count')
+          .eq('source', source.source)
+          .eq('source_trader_id', source.source_trader_id)
+          .eq('season_id', '90D')
+          .maybeSingle()
 
         const latestSnapshot = latestSnapshotResult.data
-        const snapshots = historySnapshotsResult.data || []
 
-        if (!latestSnapshot && snapshots.length === 0) {
+        if (!latestSnapshot) {
           return success({ additionalStats: {} })
         }
 
@@ -248,18 +238,6 @@ export async function getTraderStats(handle: string): Promise<DataResult<TraderS
           }
         }
 
-        let activeSince: string | undefined = undefined
-        let profitableWeeksPct: number | undefined = undefined
-        if (snapshots.length > 0) {
-          const earliest = snapshots[snapshots.length - 1]
-          const d = new Date(earliest.date)
-          activeSince = `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear().toString().slice(-2)}`
-          if (snapshots.length > 1) {
-            const profitableWeeks = snapshots.filter((s) => (s.roi ?? 0) > 0).length
-            profitableWeeksPct = (profitableWeeks / snapshots.length) * 100
-          }
-        }
-
         const frequentlyTraded = frequentlyTradedData.map((item) => ({
           symbol: item.symbol,
           weightPct: item.weight_pct ?? 0,
@@ -285,8 +263,8 @@ export async function getTraderStats(handle: string): Promise<DataResult<TraderS
           additionalStats: {
             tradesPerWeek: undefined,
             avgHoldingTime: undefined,
-            activeSince,
-            profitableWeeksPct,
+            activeSince: undefined,
+            profitableWeeksPct: undefined,
             riskScore: undefined,
             volume90d: undefined,
             maxDrawdown: latestSnapshot?.max_drawdown ?? undefined,

@@ -4,13 +4,17 @@ name: Post-Deploy Smoke Test
 # Tests 5 critical URLs. If ANY returns a non-2xx/3xx status, sends Telegram alert.
 # This is the "root cause of root cause" fix: ensures no deployment
 # goes live without automated verification of core paths.
+# SECURITY SUSPENDED (V1 NO-GO): deployment_status is an externally created
+# event and this job holds rollback/database capabilities. Restore only after
+# exact protected-main deployment identity and reviewer-gated environment-only
+# secrets are enforced; no runner or secret is provisioned while suspended.
 
 on:
   deployment_status:
 
 jobs:
   smoke-test:
-    if: github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Production'
+    if: ${{ false }}
     runs-on: ubuntu-latest
     # 45s propagation + five bounded retries + rollback + public SHA
     # verification + notification. Keep a hard cap while leaving enough room
@@ -194,52 +198,3 @@ jobs:
         env:
           SMOKE_TOTAL: ${{ steps.smoke.outputs.total }}
         run: echo "✅ All $SMOKE_TOTAL critical paths healthy after deployment"
-
-      # 写路径金丝雀(P2):GET smoke 过后,用 QA 账号真跑 发帖→赞→评论→删
-      # (自动清理)—— 在部署当下(分钟级)抓住"发帖对全员 500"这类写路径中断,
-      # 而非靠每日哨兵 24h 后才发现。本次整件事的起点正是这类(/hot 发帖崩)。
-      # continue-on-error + 仅告警不自动回滚:写金丝雀的误报不该回滚好部署;
-      # 首次确认稳定后再考虑收紧。脚本零依赖(纯 node+fetch),无需 npm ci。
-      - name: Write-path canary (post→like→comment→delete)
-        id: canary
-        if: steps.smoke.outputs.fail == '0'
-        continue-on-error: true
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: node scripts/openclaw/schema-canary-sentinel.mjs
-
-      - name: Alert if write-path canary failed
-        if: steps.canary.outcome == 'failure'
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
-          DEPLOYMENT_SHA: ${{ github.event.deployment.sha }}
-        run: |
-          send_telegram_alert() {
-            local message="$1"
-            if [ -z "${TELEGRAM_BOT_TOKEN:-}" ] || [ -z "${TELEGRAM_ALERT_CHAT_ID:-}" ]; then
-              echo "::warning title=Telegram alert delivery failed::required secret is missing"
-              echo "### Telegram alert delivery failed — required secret is missing" >> "$GITHUB_STEP_SUMMARY"
-              return 0
-            fi
-            local curl_rc=0
-            local http
-            http=$(curl --silent --show-error \
-              --connect-timeout 5 --max-time 10 \
-              --output /dev/null --write-out '%{http_code}' \
-              --request POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-              --data-urlencode "chat_id=${TELEGRAM_ALERT_CHAT_ID}" \
-              --data-urlencode "text=${message}") || curl_rc=$?
-            if [ "$curl_rc" -ne 0 ] || [[ "${http:-000}" != 2* ]]; then
-              echo "::warning title=Telegram alert delivery failed::curl=$curl_rc HTTP=${http:-000}"
-              echo "### Telegram alert delivery failed — curl=$curl_rc HTTP=${http:-000}" >> "$GITHUB_STEP_SUMMARY"
-            else
-              echo "Telegram alert delivered HTTP $http"
-            fi
-            return 0
-          }
-          MSG=$(printf '⚠️ 写路径金丝雀失败（部署后）\n\nGET 路径正常，但发帖/赞/评论/删链路有问题\nDeployment: %.8s\n未自动回滚——人工确认写路径（可能是 schema/RLS/依赖）。' "$DEPLOYMENT_SHA")
-          send_telegram_alert "$MSG"
-          echo "::warning::Post-deploy write-path canary failed — 见上方日志"

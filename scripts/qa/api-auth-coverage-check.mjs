@@ -22,6 +22,7 @@ const AUTH_PATTERNS = [
   /\brequireAuth\b/, // lib/supabase/server.ts
   /\bverifyAuth\b/, // lib/api/auth.ts
   /\bwithCron\b/, // lib/api/with-cron.ts — timing-safe cron
+  /\bv1CronExecutionGate\b/, // V1 auth-first cron retirement gate
   /\bverifyCronSecret\b/,
   /\bverifyEdgeCronSecret\b/, // lib/auth/edge-cron-auth.ts — Web Crypto for Edge routes
   /\bwithAdminAuth\b/, // lib/api/with-admin-auth.ts
@@ -47,19 +48,29 @@ const PUBLIC_API_ROUTES = new Set([
   // —— 首次全量判定 2026-07-02（逐个人工核查 handler：全部仅 GET 或自验证/已限流）——
   // 公开市场数据（只读，产品核心是公开榜单）
   'market',
+  // V1 public-egress compatibility tombstones; fixed 410/no-store with no
+  // request handling, data-store/cache, logging, exchange, or market-provider work.
   'market/alpha',
+  // The desktop card renders a local unavailable state and makes no endpoint call.
   'market/arbitrage',
   'market/candles',
+  // TokenSidePanel shows local unavailable data; it makes no coin-detail or OHLC request.
   'market/coin/[id]',
-  'market/defi',
-  'market/exchanges',
-  'market/fear-greed',
-  'market/futures',
   'market/ohlc/[id]',
+  'market/futures',
+  // The Fear & Greed card renders a local unavailable state and makes no endpoint call.
+  'market/fear-greed',
+  // SpotMarket renders a local unavailable 7D marker and makes no endpoint call.
+  'market/sparklines',
+  // SectorPerformance renders a local unavailable state and makes no endpoint call.
+  'market/sectors',
+  // DefiOverview renders a local unavailable state and makes no endpoint call.
+  'market/defi',
+  // Fund Flow and ExchangeVolume render local unavailable states and make no endpoint call.
+  'market/exchanges',
+  // GlobalMarketBar renders a local unavailable state and makes no endpoint call.
   'market/overview',
   'market/realtime',
-  'market/sectors',
-  'market/sparklines',
   'market/spot',
   // 公开聚合统计(交易员数/交易所数,首页 hero + 跨所百分位徽章用;无用户数据,CDN 缓存 1h)
   'hero-stats',
@@ -68,6 +79,9 @@ const PUBLIC_API_ROUTES = new Set([
   'rankings/live',
   'rankings/movers',
   'rankings/platform-stats',
+  // V1 compatibility response: fixed empty no-store payload, no user data or
+  // serving-side recommendation work while legacy daily evidence is quarantined.
+  'recommendations/hot',
   'trader/[platform]/[trader_key]/history',
   'traders/[handle]/badges',
   'traders/[handle]/equity',
@@ -110,19 +124,38 @@ const PUBLIC_API_ROUTES = new Set([
   'stream/prices',
   'stream/rankings',
   'ws/market',
-  // 代理类（域名/前缀白名单 + public 限流，已核 SSRF 防护）
+  // Public V1 compatibility response: fixed no-store 410 with no request
+  // parsing, source lookup, or user data.
   'avatar',
+  // V1 public compatibility tombstones: fixed no-store 410 with no request
+  // parsing, outbound fetch/DNS, logging, cache, rate-limit, CORS, or social work.
   'cdn-proxy',
   'posts/link-preview',
+  // Attestation verification is a fixed public-egress 410: it does not read a
+  // UID or invoke EAS, viem, logging, or Base RPC verification.
+  'attestation/[uid]',
+  // Anonymous EVM portfolio acquisition is a fixed public-egress 410: it does
+  // not read a path value or invoke the EVM adapter, cache, logger, or RPC.
+  'portfolio/[address]',
   // 自验证型（token/签名即凭证，无会话可言）
   'auth/siwe/nonce',
   'auth/siwe/verify',
   'email/unsubscribe',
-  'attestation/[uid]',
   // 有意公开的计算端点（sensitive 限流 15/min fail-close + 30min dedup，防成本放大）
   'trader/onchain-enrich',
   // 已退役（恒 410 Gone）
   'pipeline/ingest',
+  'exchange/connect',
+  'exchange/oauth/authorize',
+  'exchange/oauth/callback',
+  'exchange/oauth/refresh',
+  'trader/bind-api-key',
+  'trader/sync',
+  // Legacy credential-derived projections are fixed 410 responses. They never
+  // inspect the request, credentials, portfolio rows, or any exchange service.
+  'portfolio/positions',
+  'portfolio/snapshots',
+  'portfolio/sync',
 ])
 
 function walk(dir, out = []) {

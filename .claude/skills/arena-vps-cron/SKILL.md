@@ -1,90 +1,39 @@
-# Arena VPS Cron Management
+# Arena external-worker schedule review
 
-VPS 数据抓取 cron 管理经验。
+This skill is for repository-side and approved read-only review of external worker
+cadence. Historical IPs, filesystem layouts, LaunchAgents, and crontabs are not
+source of truth and must not be copied into commands.
 
-## 基础设施
+## Evidence hierarchy
 
-| 服务器 | IP | 用途 |
-|--------|-----|------|
-| Singapore | 45.76.152.169 | Arena crons, news |
-| Japan | 149.28.27.242 | Polymarket 订单 |
-| Mac Mini | localhost | Puppeteer tasks, enrichment |
+1. Current worker code and registry in the repository
+2. Versioned deployment/runbook configuration
+3. An approved, timestamped read-only host inventory
+4. Process/heartbeat evidence bound to an exact release
 
-## VPS 文件结构
+A stale note or old host path is not authorization to connect.
 
-```
-/opt/arena/
-├── cron_refresh.sh          # 主 cron 入口
-├── scripts/import/          # 导入脚本
-├── scripts/lib/shared.mjs   # 共享工具
-├── node_modules/            # 依赖
-└── .env                     # 环境变量
-```
+## Safe review
 
-**⚠ VPS 有两个路径**: `/opt/arena/` (cron) + `/opt/ranking-arena/` (git clone)
-push 后必须同步两边！
+- Inspect worker/src/ingest-worker.ts and lib/ingest/adapters/register.ts.
+- Inspect checked-in health/heartbeat verification scripts and their tests.
+- Compare the expected owner/region set, release SHA, heartbeat time, and queue state.
+- Report missing visibility as unknown, not healthy.
+- Keep Vercel schedules separate from external worker schedules.
 
-## Crontab
+## Changes
 
-```bash
-# 每小时主刷新
-0 * * * * flock -n /tmp/arena_major.lock /opt/arena/cron_refresh.sh major >> /opt/arena/logs/cron.log 2>&1
+Worker cadence or topology changes require a reviewed config/code change, bounded
+concurrency and overlap protection, rollback steps, and exact release evidence.
+Do not edit a remote crontab, copy files between host directories, restart a process,
+SSH to a host, or deploy from this workflow without explicit authorization.
 
-# 每3小时次要刷新
-0 */3 * * * flock -n /tmp/arena_minor.lock /opt/arena/cron_refresh.sh minor >> /opt/arena/logs/cron.log 2>&1
-```
+Never read or print env files, connection strings, tokens, private payloads, or
+credential-bearing process arguments.
 
-**关键**: 用 `flock` 防止重叠执行！
+## Verification
 
-## 常用运维命令
-
-```bash
-# SSH 进入
-ssh root@45.76.152.169
-
-# 查看 cron 日志
-tail -50 /opt/arena/logs/cron.log
-
-# 手动跑一次
-bash /opt/arena/cron_refresh.sh major
-
-# 同步代码
-cd /opt/ranking-arena && git pull && cp -r scripts/ /opt/arena/scripts/
-
-# 检查进程
-ps aux | grep node
-```
-
-## Mac Mini Cron (LaunchAgent)
-
-```bash
-# 位置
-~/Library/LaunchAgents/com.arena.daily-checkpoint.plist
-
-# 查看状态
-launchctl list | grep arena
-
-# 重启
-launchctl unload ~/Library/LaunchAgents/com.arena.daily-checkpoint.plist
-launchctl load ~/Library/LaunchAgents/com.arena.daily-checkpoint.plist
-```
-
-## Enrichment Master Loop
-
-```bash
-# 脚本
-~/ranking-arena/scripts/import/enrich_master_loop.mjs
-
-# 日志
-tail -f /tmp/enrich_master.log
-
-# 坑: 30分钟 backoff sleep
-# 如果3轮无进展会睡30分钟，需要手动重启
-```
-
-## 踩坑
-
-- VPS Puppeteer 已损坏 — bybit_spot/bitget_spot 移到 Mac Mini
-- VPS node 版本需要和本地一致
-- `DATABASE_URL` 在 .env 里，不要硬编码
-- cron 输出必须 redirect 到日志，否则 crontab 邮件爆炸
+Use repository tests and mocked/local fixtures first. Any host-level check must be
+read-only, scoped to the approved machine, and recorded with timestamp and release
+identity. A restart, manual job run, queue mutation, or scheduler cleanup is an
+external-state change and a separate gate.

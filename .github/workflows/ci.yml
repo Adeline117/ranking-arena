@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 # Per-SHA group, no cancel: 7 个并发会话高频直推 main，per-ref cancel-in-progress
 # 会让每个 run 都被下一次 push 取消——CI 在忙碌时段永远跑不完（2026-07-02 差距
 # 审计发现"CI 全红"的一半根因是 cancelled 而非 failure）。快速作业必须每个
@@ -25,27 +28,31 @@ jobs:
     name: Types generation contract (offline, no secrets)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
-          cache: 'npm'
       - run: npm ci --ignore-scripts
       - run: npm run gen:types:contract
 
-  # 真实生产 diff 只允许在已合入 main 的可信代码上运行。secret 在各 step
-  # 显式最小化注入；attestor 缺 DB/URL/key 任一项都会 fail-closed。
+  # SECURITY SUSPENDED (V1 NO-GO): repository-level production secrets are not
+  # a trust boundary against same-repository workflow edits. Restore only after
+  # these values are environment-only behind a required reviewer and protected
+  # main, then update Deploy Gate's required-job contract in the same change.
   types-live-drift:
     name: Types live drift check (push main only)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
-          cache: 'npm'
       - run: npm ci --ignore-scripts
       - name: Regenerate from attested production and diff
         env:
@@ -95,7 +102,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Check migration versions
         run: |
@@ -117,10 +126,16 @@ jobs:
       - name: Security — npm audit (blocks on critical/high)
         run: |
           npm install --package-lock-only --ignore-scripts 2>/dev/null || true
-          npm audit --audit-level=high || {
-            echo "::error::npm audit found high/critical vulnerabilities — fix before merging"
+          # Shipped (production) dependencies block on high/critical. Dev-only
+          # tooling is reported but not blocking: the eslint-config-next →
+          # fast-glob → micromatch → braces chain has no upstream fix (braces
+          # 3.0.3 is latest) and never reaches the runtime bundle.
+          npm audit --omit=dev --audit-level=high || {
+            echo "::error::npm audit found high/critical vulnerabilities in production dependencies — fix before merging"
             exit 1
           }
+          npm audit --audit-level=high || \
+            echo "::warning::npm audit found high/critical vulnerabilities in dev-only dependencies (non-blocking)"
 
       - name: Security — no unsafe secret comparison
         run: |
@@ -229,6 +244,56 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:records-page-quarantine-pg17
 
+      - name: Prove all legacy position-history relations are frozen
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:legacy-position-history-freeze-pg17
+
+      - name: Prove legacy daily-snapshot quarantine
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:legacy-daily-snapshot-quarantine-pg17
+
+      - name: Prove V1 trader-alert browser mutation containment
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:v1-trader-alert-browser-mutations-pg17
+
+      - name: Prove live serving resolver and capability boundaries
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:serving-boundary-pg17
+
+      - name: Prove fail-closed copier containment and atomic publication
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:copier-publication-pg17
+
+      - name: Prove exchange connection service-only ACL prerequisite
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:exchange-connection-acl-pg17
+
+      - name: Prove trader authorization service-only ACL
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:trader-authorization-acl-pg17
+
+      - name: Prove legacy portfolio V1 retirement boundary
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:legacy-portfolio-retirement-pg17
+
+      - name: Prove trader claim V2 immutable-deployment cutoff
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:trader-claim-v2-pg17
+
+      - name: Prove B2C activation v2 measurement
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:b2c-activation-v2-pg17
+
       - name: Prove notification ranking-change reader fence
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
@@ -267,11 +332,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: pre-checks
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
-          cache: 'npm'
       - run: npm ci --ignore-scripts
       # The repository ruleset already requires this job. Keep the offline
       # contract here as well as in its named job so PRs cannot merge while an
@@ -300,6 +367,10 @@ jobs:
         run: npm run lint:ingest-worker
       - name: Type-check ingest worker and ownership control plane
         run: npm run type-check:ingest-worker
+      - name: V1 ranking command-chain containment
+        run: node --test worker/tests/v1-ranking-command-chain-containment.test.mjs
+      - name: V1 native ingest execution containment
+        run: node --test scripts/qa/v1-ingest-execution-containment.test.mjs
       - name: VPS process topology safety
         run: npm run qa:vps-topology
       - name: UI sweep unit contracts
@@ -320,18 +391,9 @@ jobs:
 
       - name: Migration lint — block dangerous DDL
         run: |
-          CHANGED=$(git diff --name-only origin/main -- 'supabase/migrations/' 2>/dev/null || true)
-          if [ -n "$CHANGED" ]; then
-            DANGEROUS=$(echo "$CHANGED" | xargs grep -iEn 'DROP TABLE|DROP COLUMN|ALTER.*NOT NULL(?!.*DEFAULT)' 2>/dev/null || true)
-            if [ -n "$DANGEROUS" ]; then
-              echo "::error::Dangerous migration patterns detected (review manually before merging):"
-              echo "$DANGEROUS"
-              exit 1
-            fi
-            echo "Migration lint passed — no dangerous DDL found"
-          else
-            echo "No migration changes to lint"
-          fi
+          set -euo pipefail
+          node scripts/qa/migration-dangerous-ddl-check.mjs \
+            --event "$GITHUB_EVENT_PATH" HEAD
 
   # ─────────────────────────────────────────────
   # Stage 3a: Unit Tests (parallel with build)
@@ -351,29 +413,33 @@ jobs:
           --health-timeout 2s
           --health-retries 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
-          cache: 'npm'
       - run: npm ci --ignore-scripts
 
       - name: Run tests with coverage
         env:
           WORKER_OWNERSHIP_REDIS_TEST_URL: redis://127.0.0.1:6379/15
-        run: npm test -- --coverage --coverageReporters=text --coverageReporters=lcov --ci
+        # Keep jsdom/webpack transforms inside the hosted-runner memory budget.
+        # Unbounded CPU-derived workers caused deterministic 10s RTL timeouts
+        # under coverage despite the same files passing alone.
+        run: npm test -- --coverage --coverageReporters=text --coverageReporters=lcov --ci --maxWorkers=2
 
       - name: Upload coverage artifact
-        uses: actions/upload-artifact@v6
-        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           name: coverage-report
           path: coverage/
           retention-days: 7
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v6
-        if: always()
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6.0.2
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           files: coverage/lcov.info
           fail_ci_if_error: false
@@ -388,11 +454,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint-typecheck
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
-          cache: 'npm'
       - run: npm ci --ignore-scripts
       - name: Build application
         env:
@@ -429,7 +496,8 @@ jobs:
         run: |
           find .next -name '*:*' -delete 2>/dev/null || true
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           name: nextjs-build
           path: .next
@@ -442,7 +510,10 @@ jobs:
   e2e:
     name: Production E2E Canary (read-only)
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # V1 NO-GO：该作业直接访问生产站，属于生产读取；在 owner 另行批准只读取证前
+    # 保持关闭（与 types-live-drift / data-consistency 同一处理）。恢复时改回
+    # github.event_name == 'push' && github.ref == 'refs/heads/main'。
+    if: ${{ false }}
     # 关键路径只跑 desktop smoke-critical-path（当前 5 用例），~3-5min 就
     # 完成。此前跑全量 46 spec × 4 端设备 × workers=1 × retries=2 → 永远跑不完、必到
     # 30min job 超时被取消：既不给真实 green/red 信号，又让 CI「完成」晚 30min → 每次
@@ -457,11 +528,12 @@ jobs:
       group: ci-e2e-${{ github.ref }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
-          cache: 'npm'
       - run: npm ci --ignore-scripts
 
       # Desktop smoke only → chromium is enough. Nightly installs webkit for the
@@ -477,7 +549,7 @@ jobs:
           PLAYWRIGHT_BASE_URL: https://www.arenafi.org
 
       - name: Upload Playwright report
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: always()
         with:
           name: playwright-report
@@ -487,7 +559,7 @@ jobs:
           retention-days: 7
 
       - name: Upload screenshots on failure
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: failure()
         with:
           name: playwright-screenshots
@@ -502,18 +574,21 @@ jobs:
     name: Data Consistency Check
     runs-on: ubuntu-latest
     needs: unit-tests
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # SECURITY SUSPENDED (V1 NO-GO): restore only with reviewer-gated,
+    # environment-only production read/hook/alert credentials.
+    if: ${{ false }}
     env:
       NEXT_PUBLIC_SITE_URL: https://www.arenafi.org
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
-          cache: 'npm'
       - run: npm ci --ignore-scripts
 
       - name: E2E data consistency verification

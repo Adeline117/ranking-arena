@@ -44,7 +44,7 @@ export interface InitialTrader {
   source: string
   source_type: 'futures' | 'spot' | 'web3'
   avatar_url: string | null
-  /** Our own Supabase-Storage mirror (no proxy, no 429). Preferred over avatar_url. */
+  /** Existing Supabase-Storage mirror, preferred when it remains direct-safe. */
   avatar_url_mirror?: string | null
   /** Null means the source did not publish a score we can safely present. */
   arena_score: number | null
@@ -364,11 +364,6 @@ export async function getInitialTraders(
     return unknownInitialTradersResult()
   }
 
-  // Capture before the first cache read and before any database query. If a
-  // publication advances this generation while the request is in flight, its
-  // eventual fire-and-forget writes are rejected atomically by Redis.
-  const writeFence = await cache.readSharedCacheWriteFence(PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY)
-
   // Try Redis cache first — fresh hit returns immediately.
   // Two-tier cache strategy:
   //   1. Primary cache (2h TTL) — normal serving
@@ -376,18 +371,30 @@ export async function getInitialTraders(
   const safeLimit = normalizeInitialPageLimit(limit)
   const safePage = normalizeInitialPage(page)
   const { cacheKey, fallbackKey } = homeInitialTradersCacheKeys(timeRange, safePage, safeLimit)
+
+  // ONE Redis round trip: the publication write fence plus both cache tiers
+  // from a single atomic MGET snapshot (previously fence SET NX + GET, primary
+  // GET, fallback GET ran sequentially). The fence is captured no later than
+  // the entries and before any database query; if a publication advances this
+  // generation while the request is in flight, its eventual fire-and-forget
+  // writes are rejected atomically by Redis.
+  const snapshot = await cache.readSharedCacheWriteFenceWithEntries<InitialTradersResult>(
+    PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
+    [cacheKey, fallbackKey]
+  )
+  const writeFence = snapshot.fence
   let cached: InitialTradersResult | null = null
   let fallbackCached: InitialTradersResult | null = null
   if (writeFence !== null) {
     try {
-      cached = await cache.get<InitialTradersResult>(cacheKey, { skipMemory: true })
+      cached = snapshot.entries[0] ?? null
       if (cached && cached.traders && cached.traders.length > 0) {
         const safeCached = sanitizeInitialTradersResult(cached, timeRange, { fromCache: true })
         if (safeCached && safeCached.traders.length > 0) return safeCached
         cached = safeCached
       }
-      // Primary cache miss — try fallback (longer TTL, may be stale but better than empty)
-      fallbackCached = await cache.get<InitialTradersResult>(fallbackKey, { skipMemory: true })
+      // Primary cache miss — use fallback (longer TTL, may be stale but better than empty)
+      fallbackCached = snapshot.entries[1] ?? null
       if (fallbackCached) {
         fallbackCached = sanitizeInitialTradersResult(fallbackCached, timeRange, {
           fromCache: true,
@@ -396,7 +403,7 @@ export async function getInitialTraders(
         if (stale) return stale
       }
     } catch (_err) {
-      // Redis unavailable — fall through to DB
+      // Malformed cache payload — fall through to DB
     }
   }
 

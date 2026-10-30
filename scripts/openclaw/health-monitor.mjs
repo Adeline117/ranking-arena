@@ -2,25 +2,29 @@
 /**
  * OpenClaw Health Monitor
  *
- * Runs on Mac Mini via OpenClaw scheduler.
- * Checks Arena health every 30 minutes, sends Telegram alerts on issues.
- *
- * Usage (standalone):
- *   CRON_SECRET=xxx TELEGRAM_BOT_TOKEN=xxx TELEGRAM_ALERT_CHAT_ID=xxx node scripts/openclaw/health-monitor.mjs
- *
- * Usage (OpenClaw):
- *   Configure as a skill that runs every 30 minutes
+ * V1 NO-GO: do not install or restore an OpenClaw/cron schedule for this script.
+ * An owner-approved controlled observation may check Arena health and report
+ * issues without starting remediation.
  *
  * Flags:
  *   check              Health check mode (default)
  *   daily              Daily report mode
- *   --with-auto-fix    Trigger auto-fix for failing fetchers after alert
+ *   --with-auto-fix    Retired: exits 2 without running a remediation
  */
 
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { config as dotenvConfig } from 'dotenv'
-import { findStaleActivePlatforms, getActiveFetcherFailures } from './health-monitor-contract.mjs'
+import { findStaleActivePlatforms } from './health-monitor-contract.mjs'
+
+if (process.argv.includes('--with-auto-fix')) {
+  console.error('[RETIRED] health-monitor --with-auto-fix is disabled during the V1 NO-GO.')
+  console.error(
+    'Observation must not trigger remediation, code changes, or external state changes.'
+  )
+  process.exit(2)
+}
+
+const { config: dotenvConfig } = await import('dotenv')
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenvConfig({ path: path.resolve(__dirname, '../../.env') })
@@ -29,10 +33,6 @@ const ARENA_URL = process.env.ARENA_URL || 'https://www.arenafi.org'
 const CRON_SECRET = process.env.CRON_SECRET
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_ALERT_CHAT_ID
-
-// Auto-fix cooldown: 6 hours between fix attempts per platform
-const AUTO_FIX_COOLDOWN_MS = 6 * 60 * 60 * 1000
-const fixAttempts = new Map() // platform -> last attempt timestamp
 
 // Alert dedup: don't re-send same issue within cooldown
 import fs from 'fs'
@@ -97,8 +97,8 @@ if (!CRON_SECRET) {
 }
 
 async function checkBasicHealth() {
-  // 30s timeout — /api/health runs DB + Redis + freshness + VPS checks,
-  // each with 5s internal cap, so worst case ~20s. 15s was too tight.
+  // 30s timeout — public /api/health reports API, DB, Redis, and freshness only.
+  // Its source does not probe VPS; the independent OpenClaw VPS probes below are outside this route contract.
   const res = await fetch(`${ARENA_URL}/api/health`, {
     headers: { 'Cache-Control': 'no-cache' },
     signal: AbortSignal.timeout(30000),
@@ -272,31 +272,7 @@ async function runHealthCheck() {
     }
   }
 
-  // 3b. Crontab validation — detect dead script references
-  try {
-    const { execSync } = await import('child_process')
-    const crontab = execSync('crontab -l 2>/dev/null', { encoding: 'utf8', timeout: 5000 })
-    const deadScripts = []
-    for (const line of crontab.split('\n')) {
-      const match = line.match(/scripts\/openclaw\/([^\s>]+\.mjs)/)
-      if (match) {
-        const scriptPath = path.resolve(__dirname, match[1])
-        try {
-          await import('fs').then((fs) => fs.accessSync(scriptPath))
-        } catch {
-          deadScripts.push(match[1])
-        }
-      }
-    }
-    if (deadScripts.length > 0) {
-      issues.push(`🚨 Crontab dead scripts: ${deadScripts.join(', ')}`)
-      categories.add('infra:crontab-dead')
-    }
-  } catch {
-    /* crontab check non-critical */
-  }
-
-  // 3c. Stale platform detection — catch silent data source death
+  // 3b. Stale platform detection — catch silent data source death
   // Root cause fix: currentCount is always 0 (per-platform count queries were removed
   // from /api/health/pipeline to reduce DB load). Only use ageHours as signal.
   // Alert if a platform has no lastUpdate (ageHours=null) or is stale >threshold.
@@ -331,11 +307,6 @@ async function runHealthCheck() {
       console.log('ALERT DEDUPED (same category within 2h):', issues.join(' | '))
     }
 
-    // 4. Trigger auto-fix if --with-auto-fix flag is set
-    if (process.argv.includes('--with-auto-fix') && pipelineHealth) {
-      await triggerAutoFix(pipelineHealth)
-    }
-
     return { status: 'alert', issues }
   }
 
@@ -345,54 +316,6 @@ async function runHealthCheck() {
 
   console.log(`✅ All healthy (basic: ${basicHealth?.status}, pipeline: ${pipelineHealth?.status})`)
   return { status: 'healthy' }
-}
-
-async function triggerAutoFix(pipelineHealth) {
-  const { spawn } = await import('child_process')
-  const autoFixScript = path.join(__dirname, 'auto-fix.mjs')
-  const failingJobs = getActiveFetcherFailures(pipelineHealth).map((failure) => ({
-    platform: failure.platform,
-    reason: classifyErrorMsg(failure.errorMessage),
-  }))
-  if (failingJobs.length === 0) {
-    console.log('[auto-fix] No fetcher failures')
-    return
-  }
-  const seen = new Set()
-  for (const { platform, reason } of failingJobs) {
-    if (seen.has(platform)) continue
-    seen.add(platform)
-    const lastAttempt = fixAttempts.get(platform) || 0
-    if (Date.now() - lastAttempt < AUTO_FIX_COOLDOWN_MS) {
-      console.log('[auto-fix] Cooldown: ' + platform)
-      continue
-    }
-    fixAttempts.set(platform, Date.now())
-    console.log('[auto-fix] Fixing ' + platform + ' (' + reason + ')')
-    try {
-      const proc = spawn('node', [autoFixScript, platform, '--reason', reason], {
-        cwd: path.dirname(__dirname),
-        stdio: 'inherit',
-        timeout: 300000,
-      })
-      proc.on('close', (code) => console.log('[auto-fix] ' + platform + ' exit: ' + code))
-    } catch (err) {
-      console.error('[auto-fix] Launch failed for ' + platform, err.message)
-    }
-  }
-}
-
-function classifyErrorMsg(msg) {
-  if (!msg) return 'unknown'
-  const m = msg.toLowerCase()
-  if (m.includes('geo') || m.includes('451')) return 'geo_blocked'
-  if (m.includes('waf') || m.includes('cloudflare') || m.includes('access denied'))
-    return 'waf_blocked'
-  if (m.includes('404') || m.includes('not found')) return 'endpoint_gone'
-  if (m.includes('429') || m.includes('rate limit')) return 'rate_limited'
-  if (m.includes('timeout') || m.includes('abort')) return 'timeout'
-  if (m.includes('401') || m.includes('unauthorized')) return 'auth_required'
-  return 'unknown'
 }
 
 // ============================================

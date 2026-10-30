@@ -393,7 +393,7 @@ describe('TraderLinksSection viewer ownership', () => {
       ...linkedTrader('user-a', 'Same label', false),
       id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       trader_id: 'wallet/account',
-      source: 'gmx',
+      source: 'binance_spot',
       stats: null,
     }
     mockAuthedFetch.mockResolvedValue(listResult([primary, secondary]))
@@ -414,9 +414,12 @@ describe('TraderLinksSection viewer ownership', () => {
       'href',
       '/trader/user-a-trader?platform=binance_futures'
     )
-    expect(profileLinks[1]).toHaveAttribute('href', '/trader/wallet%2Faccount?platform=gmx')
+    expect(profileLinks[1]).toHaveAttribute(
+      'href',
+      '/trader/wallet%2Faccount?platform=binance_spot'
+    )
     expect(screen.getByText('binance_futures:user-a-trader')).toBeInTheDocument()
-    expect(screen.getByText('gmx:wallet/account')).toBeInTheDocument()
+    expect(screen.getByText('binance_spot:wallet/account')).toBeInTheDocument()
     expect(profileLinks[0]).toHaveAccessibleName(/user-a-trader/)
     expect(profileLinks[1]).toHaveAccessibleName(/wallet\/account/)
     expect(screen.getByRole('button', { name: 'linkNewAccount' }).tagName).toBe('BUTTON')

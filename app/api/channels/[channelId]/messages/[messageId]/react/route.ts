@@ -89,7 +89,7 @@ export async function POST(
     }
 
     // Toggle: check existing reaction
-    const { data: existing } = await supabase
+    const { data: existing, error: existingError } = await supabase
       .from('channel_message_reactions')
       .select('id')
       .eq('message_id', messageId)
@@ -97,21 +97,45 @@ export async function POST(
       .eq('emoji', emoji)
       .maybeSingle()
 
+    if (existingError) {
+      logger.error('Reaction lookup failed', { messageId, error: existingError.message })
+      return NextResponse.json({ error: 'Failed to update reaction' }, { status: 500 })
+    }
+
+    // A concurrent identical insert (23505) means the reaction already exists:
+    // treat as success but never notify twice.
+    let addedNow = false
     if (existing) {
-      await supabase.from('channel_message_reactions').delete().eq('id', existing.id)
+      const { error: deleteError } = await supabase
+        .from('channel_message_reactions')
+        .delete()
+        .eq('id', existing.id)
+      if (deleteError) {
+        logger.error('Reaction delete failed', { messageId, error: deleteError.message })
+        return NextResponse.json({ error: 'Failed to update reaction' }, { status: 500 })
+      }
     } else {
-      await supabase.from('channel_message_reactions').insert({
+      const { error: insertError } = await supabase.from('channel_message_reactions').insert({
         message_id: messageId,
         user_id: user.id,
         emoji,
       })
+      if (insertError && insertError.code !== '23505') {
+        logger.error('Reaction insert failed', { messageId, error: insertError.message })
+        return NextResponse.json({ error: 'Failed to update reaction' }, { status: 500 })
+      }
+      addedNow = !insertError
     }
 
     // Re-aggregate counts for this message
-    const { data: reactions } = await supabase
+    const { data: reactions, error: reactionsError } = await supabase
       .from('channel_message_reactions')
       .select('emoji, user_id')
       .eq('message_id', messageId)
+    if (reactionsError) {
+      logger.error('Reaction re-aggregate failed', { messageId, error: reactionsError.message })
+      return NextResponse.json({ error: 'Failed to load reactions' }, { status: 500 })
+    }
 
     const counts: Record<string, number> = {}
     const userEmojis: string[] = []
@@ -122,7 +146,7 @@ export async function POST(
 
     // Notify the message author when a reaction is ADDED (skip self-reactions).
     // Single-recipient only — never fan out to all channel members.
-    if (!existing && parentMsg.sender_id && parentMsg.sender_id !== user.id) {
+    if (addedNow && parentMsg.sender_id && parentMsg.sender_id !== user.id) {
       fireAndForget(
         getUserHandle(user.id, user.email ?? undefined).then((handle) => {
           sendNotification(

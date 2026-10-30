@@ -12,6 +12,8 @@
 #     bash worker/deploy-ingest-local.sh --target-sha=<40hex> --dry-run
 #   ARENA_NODE_BIN=/absolute/path/to/node22 \
 #     bash worker/deploy-ingest-local.sh --target-sha=<40hex>
+#   ARENA_NODE_BIN=/absolute/path/to/node22 \
+#     bash worker/deploy-ingest-local.sh --target-sha=<40hex> --recover-from-stopped
 
 set -Eeuo pipefail
 umask 077
@@ -36,14 +38,21 @@ PM2_APP='arena-ingest-worker'
 AUTHORITY_HANDOFF_TIMEOUT_SECONDS=300
 TARGET_SHA=''
 DRY_RUN=0
+RECOVER_FROM_STOPPED=0
 
 for arg in "$@"; do
   case "$arg" in
     --target-sha=*) TARGET_SHA="${arg#*=}" ;;
     --dry-run) DRY_RUN=1 ;;
+    --recover-from-stopped) RECOVER_FROM_STOPPED=1 ;;
     *) echo "unknown arg: $arg" >&2; exit 2 ;;
   esac
 done
+
+if [ "$DRY_RUN" = 1 ] && [ "$RECOVER_FROM_STOPPED" = 1 ]; then
+  echo '✗ --dry-run and --recover-from-stopped are mutually exclusive' >&2
+  exit 2
+fi
 
 if [[ ! "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]; then
   echo '✗ --target-sha must be exactly 40 lowercase hexadecimal characters' >&2
@@ -165,6 +174,23 @@ SHARED_ENV_FILE="$SHARED_DIR/worker/.env"
   fail 'shared .arena-ingest must be a real directory'
 [ "$(canonical_directory "$SHARED_STATE_DIR" 'shared .arena-ingest')" = "$SHARED_STATE_DIR" ] || \
   fail 'shared .arena-ingest must already be canonical'
+
+# This host-owned marker is intentionally outside every immutable release. An
+# incident operator can arm it without changing Git or PM2; mutating deploys
+# then fail closed even when an otherwise valid current-main release is used.
+# Removal is an explicit owner operation after the incident release gate is
+# satisfied. Dry-runs remain available for read-only comparison.
+INCIDENT_HOLD_FILE="$SHARED_STATE_DIR/ingest-deploy.hold"
+RECOVERY_GO_FILE="$SHARED_STATE_DIR/recover-from-stopped.go"
+assert_no_incident_hold() {
+  if [ -e "$INCIDENT_HOLD_FILE" ] || [ -L "$INCIDENT_HOLD_FILE" ]; then
+    fail "local ingest deploy is blocked by incident hold: $INCIDENT_HOLD_FILE"
+  fi
+}
+if [ "$DRY_RUN" = 0 ] && [ "$RECOVER_FROM_STOPPED" = 0 ]; then
+  assert_no_incident_hold
+fi
+
 [ -d "$SHARED_WORKER_DIR" ] && [ ! -L "$SHARED_WORKER_DIR" ] || \
   fail 'shared worker must be a real directory'
 [ "$(canonical_directory "$SHARED_WORKER_DIR" 'shared worker')" = "$SHARED_WORKER_DIR" ] || \
@@ -310,8 +336,15 @@ pm2_referenced_cwds() {
 BASELINE_SNAPSHOT="$(pm2_snapshot)" || fail "PM2 must contain exactly one $PM2_APP process"
 IFS=$'\x1f' read -r OLD_PID OLD_STATUS OLD_CWD OLD_INTERPRETER OLD_EXEC_PATH OLD_RESTARTS \
   OLD_ARGS_JSON OLD_NODE_ARGS_JSON OLD_EXEC_MODE OLD_INSTANCES <<<"$BASELINE_SNAPSHOT"
-[ "$OLD_STATUS" = online ] || fail "$PM2_APP must be online before deployment"
-[[ "$OLD_PID" =~ ^[1-9][0-9]*$ ]] || fail 'existing PM2 pid is malformed'
+if [ "$RECOVER_FROM_STOPPED" = 1 ]; then
+  [ "$OLD_STATUS" = stopped ] && [ "$OLD_PID" = 0 ] || \
+    fail "--recover-from-stopped requires exactly one stopped $PM2_APP baseline"
+elif [ "$DRY_RUN" = 1 ] && [ "$OLD_STATUS" = stopped ] && [ "$OLD_PID" = 0 ]; then
+  : # A stopped incident baseline is valid for a read-only release preview.
+else
+  [ "$OLD_STATUS" = online ] || fail "$PM2_APP must be online before deployment"
+  [[ "$OLD_PID" =~ ^[1-9][0-9]*$ ]] || fail 'existing PM2 pid is malformed'
+fi
 require_absolute_path "$OLD_CWD" 'existing PM2 cwd'
 require_absolute_path "$OLD_INTERPRETER" 'existing PM2 interpreter'
 require_absolute_path "$OLD_EXEC_PATH" 'existing PM2 executable'
@@ -384,7 +417,11 @@ RECOVERY_REQUIRED=0
 DEPLOY_SUCCEEDED=0
 ROLLBACK_SUCCEEDED=0
 RECOVERY_JOURNAL_WRITTEN=0
+STOPPED_RECOVERY_SESSION=0
+STOPPED_RECOVERY_CUTOVER=0
+STOPPED_RECOVERY_QUARANTINED=0
 RECOVERY_BLOCK_FILE="$RELEASE_ROOT/.arena-ingest-deploy-blocked"
+RECOVERY_GO_CONSUMED="$LOCK_DIR/recover-from-stopped.go"
 
 assert_no_recovery_block() {
   if [ -e "$RECOVERY_BLOCK_FILE" ] || [ -L "$RECOVERY_BLOCK_FILE" ]; then
@@ -392,7 +429,9 @@ assert_no_recovery_block() {
   fi
 }
 
-assert_no_recovery_block
+if [ "$RECOVER_FROM_STOPPED" = 0 ]; then
+  assert_no_recovery_block
+fi
 
 assert_local_lock() {
   [ -f "$LOCK_DIR/owner" ] && [ "$(sed -n '1p' "$LOCK_DIR/owner")" = "$LOCK_TOKEN" ] || {
@@ -418,6 +457,194 @@ acquire_local_lock() {
   mv "$LOCK_DIR/owner.tmp" "$LOCK_DIR/owner"
   LOCK_HELD=1
   assert_local_lock
+}
+
+validate_recovery_go_file() {
+  local path="$1" now expires line_count owner_uid
+  [ -f "$path" ] && [ ! -L "$path" ] || return 1
+  [ "$(portable_mode "$path")" = 600 ] || return 1
+  if stat -f '%u' "$path" >/dev/null 2>&1; then
+    owner_uid="$(stat -f '%u' "$path")"
+  else
+    owner_uid="$(stat -c '%u' "$path")"
+  fi
+  [ "$owner_uid" = "$(id -u)" ] || return 1
+  [ "$(wc -c < "$path" | tr -d ' ')" -le 1024 ] || return 1
+  line_count="$(awk 'END { print NR }' "$path")"
+  [ "$line_count" = 4 ] || return 1
+  [ "$(sed -n '1p' "$path")" = 'arena.ingest-recover-from-stopped@1' ] || return 1
+  [ "$(sed -n '2p' "$path")" = "target_sha=$SHA" ] || return 1
+  expires="$(sed -n '3s/^expires_epoch=//p' "$path")"
+  [[ "$expires" =~ ^[1-9][0-9]*$ ]] || return 1
+  grep -Eq '^nonce=[0-9a-f]{64}$' "$path" || return 1
+  now="$(date +%s)"
+  [[ "$now" =~ ^[1-9][0-9]*$ ]] || return 1
+  [ "$expires" -ge "$now" ] && [ "$expires" -le $((now + 900)) ] || return 1
+}
+
+consume_stopped_recovery_go() {
+  assert_local_lock || return 1
+  if ! validate_recovery_go_file "$RECOVERY_GO_FILE"; then
+    fail "--recover-from-stopped requires a fresh owner-only mode-0600 confirmation at $RECOVERY_GO_FILE"
+  fi
+  [ -e "$INCIDENT_HOLD_FILE" ] || [ -L "$INCIDENT_HOLD_FILE" ] || \
+    fail '--recover-from-stopped requires the primary incident hold to remain armed'
+  [ -e "$RECOVERY_BLOCK_FILE" ] || [ -L "$RECOVERY_BLOCK_FILE" ] || \
+    fail '--recover-from-stopped requires the compatibility recovery guard to remain armed'
+  mv "$RECOVERY_GO_FILE" "$RECOVERY_GO_CONSUMED" || \
+    fail 'unable to atomically consume the stopped-recovery confirmation'
+  validate_recovery_go_file "$RECOVERY_GO_CONSUMED" || \
+    fail 'consumed stopped-recovery confirmation failed validation'
+  STOPPED_RECOVERY_SESSION=1
+}
+
+assert_stopped_recovery_go() {
+  assert_local_lock || return 1
+  validate_recovery_go_file "$RECOVERY_GO_CONSUMED" || {
+    echo '✗ stopped-recovery confirmation is missing, expired, or changed' >&2
+    return 1
+  }
+}
+
+assert_no_local_ingest_os_process() {
+  local process_snapshot line pid command
+  process_snapshot="$(ps -axo pid=,command=)" || return 1
+  while IFS= read -r line; do
+    pid="${line%% *}"
+    command="${line#* }"
+    case "$command" in
+      *'/worker/src/'*'ingest-worker.ts'*|*'tsx worker/src/'*'ingest-worker.ts'*)
+        echo "✗ stopped recovery found a live ingest OS process (pid=${pid:-unknown})" >&2
+        return 1
+        ;;
+    esac
+  done <<<"$process_snapshot"
+}
+
+assert_no_local_ingest_container() {
+  local snapshot
+  command -v docker >/dev/null 2>&1 || return 0
+  snapshot="$(docker ps --format '{{.Names}}|{{.Label "com.arenafi.role"}}')" || {
+    echo '✗ stopped recovery could not prove Docker ingest ownership absence' >&2
+    return 1
+  }
+  if awk -F '|' '$1 ~ /^arena-ingest-worker([_-].*)?$/ || $2 == "ingest-worker" { found=1 } END { exit !found }' \
+      <<<"$snapshot"; then
+    echo '✗ stopped recovery found a running ingest container' >&2
+    return 1
+  fi
+}
+
+assert_no_fresh_local_roster_owner() {
+  (cd "$OLD_CWD" && env -i \
+    HOME="$HOME" USER="$DEPLOY_USER" LOGNAME="$DEPLOY_LOGNAME" NODE_ENV=production \
+    PATH="$(dirname "$NODE_BIN"):/usr/bin:/bin" \
+    "$NODE_BIN" -e '
+      const path = require("node:path")
+      require("dotenv").config({ path: process.argv[1], override: true, quiet: true })
+      const Redis = require("ioredis")
+      const url = process.env.REDIS_URL
+      if (!url) process.exit(41)
+      const redis = new Redis(url, { maxRetriesPerRequest: 1, enableReadyCheck: false,
+        connectTimeout: 5000, commandTimeout: 5000, tls: url.startsWith("rediss://") ? {} : undefined })
+      redis.on("error", () => {})
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 5000))
+      Promise.race([redis.hgetall("arena:worker:roster"), timeout]).then((roster) => {
+        const now = Date.now()
+        for (const raw of Object.values(roster)) {
+          let value
+          try { value = JSON.parse(raw) } catch { process.exitCode = 42; return }
+          if (!value || typeof value !== "object" || !Array.isArray(value.regions) ||
+              !Number.isSafeInteger(value.ts)) { process.exitCode = 42; return }
+          if (value.regions.includes("local") && value.ts >= now - 120000) {
+            process.exitCode = 43; return
+          }
+        }
+      }).catch(() => { process.exitCode = 44 }).finally(() => redis.disconnect(false))
+    ' "$SHARED_ENV_FILE") >/dev/null 2>&1 || {
+    echo '✗ stopped recovery could not prove absence of a fresh local Redis roster owner' >&2
+    return 1
+  }
+}
+
+assert_stopped_pm2_dumps() {
+  "$NODE_BIN" -e '
+    // arena-stopped-recovery-stopped-dumps@1
+    const fs = require("node:fs")
+    const path = require("node:path")
+    const [home, appName, cwd] = process.argv.slice(1)
+    for (const name of ["dump.pm2", "dump.pm2.bak"]) {
+      const apps = JSON.parse(fs.readFileSync(path.join(home, name), "utf8"))
+      const matches = apps.filter((app) => app?.name === appName ||
+        JSON.stringify([app?.pm_exec_path, app?.args, app?.script]).includes("ingest-worker.ts"))
+      if (matches.length !== 1 || matches[0].name !== appName ||
+          matches[0].status !== "stopped" || matches[0].pm_cwd !== cwd)
+        process.exit(45)
+    }
+  ' "$PM2_HOME_VALUE" "$PM2_APP" "$OLD_CWD" >/dev/null || return 1
+}
+
+prove_stopped_local_baseline() {
+  local snapshot node_id
+  assert_stopped_recovery_go || return 1
+  snapshot="$(pm2_snapshot)" || return 1
+  [ "$snapshot" = "$BASELINE_SNAPSHOT" ] || return 1
+  [ "$(hash_shared_env)" = "$SHARED_ENV_SHA256" ] || return 1
+  [ "$(sed -n '1p' "$OLD_CWD/DEPLOYED_SHA" 2>/dev/null || true)" = "$OLD_SHA" ] || return 1
+  if [ -n "$OLD_RELEASE_ID" ]; then
+    [ "$(sed -n '1p' "$OLD_CWD/WORKER_RELEASE_ID" 2>/dev/null || true)" = "$OLD_RELEASE_ID" ] || return 1
+  fi
+  assert_no_local_ingest_os_process || return 1
+  assert_no_local_ingest_container || return 1
+  assert_no_fresh_local_roster_owner || return 1
+  pm2_command save --force >/dev/null || return 1
+  pm2_command save --force >/dev/null || return 1
+  assert_stopped_pm2_dumps || return 1
+  [ "$(pm2_snapshot)" = "$BASELINE_SNAPSHOT" ] || return 1
+  [ "$(hash_shared_env)" = "$SHARED_ENV_SHA256" ] || return 1
+  [ "$(sed -n '1p' "$OLD_CWD/DEPLOYED_SHA" 2>/dev/null || true)" = "$OLD_SHA" ] || return 1
+  if [ -n "$OLD_RELEASE_ID" ]; then
+    [ "$(sed -n '1p' "$OLD_CWD/WORKER_RELEASE_ID" 2>/dev/null || true)" = "$OLD_RELEASE_ID" ] || return 1
+  fi
+  assert_no_local_ingest_os_process || return 1
+  assert_no_local_ingest_container || return 1
+  node_id="$(sed -n 's/^WORKER_NODE_ID=\([A-Za-z0-9][A-Za-z0-9._-]*\)$/\1/p' "$SHARED_ENV_FILE")"
+  [[ "$node_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] || return 1
+  OLD_NODE_ID="$node_id"
+  OLD_HEARTBEAT_PID=0
+  OLD_ROSTER_IDENTITY='stopped-baseline'
+}
+
+arm_local_recovery_holds() {
+  local hold_tmp="$SHARED_STATE_DIR/.ingest-deploy.hold.$LOCK_TOKEN.tmp"
+  local block_tmp="$RELEASE_ROOT/.arena-ingest-deploy-blocked.$LOCK_TOKEN.tmp"
+  assert_local_lock || return 1
+  printf '%s\n' 'arena.ingest-incident-hold@1' > "$hold_tmp" || return 1
+  mv "$hold_tmp" "$INCIDENT_HOLD_FILE" || return 1
+  if [ -f "$RECOVERY_BLOCK_FILE" ] && [ ! -L "$RECOVERY_BLOCK_FILE" ]; then
+    rm -f "$block_tmp"
+  elif [ ! -e "$RECOVERY_BLOCK_FILE" ] || [ -L "$RECOVERY_BLOCK_FILE" ]; then
+    printf '%s\n%s\n' 'arena.local-ingest-recovery-block@1' "target_sha=$SHA" > "$block_tmp" || return 1
+    mv "$block_tmp" "$RECOVERY_BLOCK_FILE" || return 1
+  else
+    return 1
+  fi
+  chmod 600 "$INCIDENT_HOLD_FILE" "$RECOVERY_BLOCK_FILE" || return 1
+  [ -f "$INCIDENT_HOLD_FILE" ] && [ ! -L "$INCIDENT_HOLD_FILE" ] || return 1
+  [ -f "$RECOVERY_BLOCK_FILE" ] && [ ! -L "$RECOVERY_BLOCK_FILE" ] || return 1
+  [ "$(portable_mode "$INCIDENT_HOLD_FILE")" = 600 ] || return 1
+  [ "$(portable_mode "$RECOVERY_BLOCK_FILE")" = 600 ] || return 1
+  [ "$(sed -n '1p' "$INCIDENT_HOLD_FILE")" = 'arena.ingest-incident-hold@1' ] || return 1
+  assert_local_lock
+}
+
+release_local_incident_hold_for_cutover() {
+  assert_stopped_recovery_go || return 1
+  prove_stopped_local_baseline || return 1
+  write_cutover_journal || return 1
+  rm -f "$INCIDENT_HOLD_FILE" || return 1
+  [ ! -e "$INCIDENT_HOLD_FILE" ] && [ ! -L "$INCIDENT_HOLD_FILE" ] || return 1
+  STOPPED_RECOVERY_CUTOVER=1
 }
 
 persist_recovery_record() {
@@ -474,7 +701,12 @@ persist_recovery_record() {
 }
 
 write_cutover_journal() {
-  assert_no_recovery_block
+  if [ "$RECOVER_FROM_STOPPED" = 1 ]; then
+    assert_stopped_recovery_go || return 1
+    [ -e "$RECOVERY_BLOCK_FILE" ] || [ -L "$RECOVERY_BLOCK_FILE" ] || return 1
+  else
+    assert_no_recovery_block
+  fi
   persist_recovery_record 'arena.local-ingest-cutover-journal@1' 'cutover_pending' || return 1
   RECOVERY_JOURNAL_WRITTEN=1
 }
@@ -551,6 +783,8 @@ pm2_exact_pid_once() {
 require_candidate_stability() {
   local i observed_pid
   for i in $(seq 1 11); do
+    if [ -n "${INCIDENT_HOLD_FILE:-}" ] && \
+       { [ -e "$INCIDENT_HOLD_FILE" ] || [ -L "$INCIDENT_HOLD_FILE" ]; }; then return 1; fi
     observed_pid="$(wait_for_pm2_exact "$RELEASE_DIR" "$NODE_BIN" "$CANDIDATE_EXEC_PATH" \
       "$CANDIDATE_ARGS_JSON" "$CANDIDATE_EXEC_MODE" "$CANDIDATE_INSTANCES" \
       "$CANDIDATE_NODE_ARGS_JSON" 0)" || return 1
@@ -775,6 +1009,8 @@ wait_for_stamped_ready() {
   esac
   [[ "$timeout" =~ ^[1-9][0-9]*$ ]] || return 1
   for i in $(seq 1 "$timeout"); do
+    if [ -n "${INCIDENT_HOLD_FILE:-}" ] && \
+       { [ -e "$INCIDENT_HOLD_FILE" ] || [ -L "$INCIDENT_HOLD_FILE" ]; }; then return 1; fi
     awk -v mode="$mode" -v marker="$marker" -v sha="$expected_sha" -v pid="$expected_pid" \
       -v release="$expected_release" -v node="$expected_node" \
       -v region="$expected_region" '
@@ -1162,17 +1398,86 @@ safe_remove_generated_release() {
   rm -rf "$candidate"
 }
 
+assert_no_online_local_pm2_owner() {
+  pm2_command jlist | "$NODE_BIN" -e '
+    // arena-stopped-recovery-zero-owner@1
+    const appName = process.argv[1]
+    let raw = ""
+    process.stdin.on("data", (chunk) => { raw += chunk })
+    process.stdin.on("end", () => {
+      const apps = JSON.parse(raw).filter((app) => app.name === appName ||
+        JSON.stringify([app?.pm2_env?.pm_exec_path, app?.pm2_env?.args,
+          app?.pm_exec_path, app?.script, app?.args]).includes("ingest-worker.ts"))
+      if (apps.length > 1 || apps.some((app) => app.name !== appName ||
+          app.pm2_env?.status !== "stopped" || app.pid > 0))
+        process.exit(46)
+    })
+  ' "$PM2_APP"
+}
+
+assert_no_online_local_pm2_dumps() {
+  "$NODE_BIN" -e '
+    // arena-stopped-recovery-zero-dump-owner@1
+    const fs = require("node:fs")
+    const path = require("node:path")
+    const [home, appName] = process.argv.slice(1)
+    for (const name of ["dump.pm2", "dump.pm2.bak"]) {
+      const apps = JSON.parse(fs.readFileSync(path.join(home, name), "utf8"))
+      const matches = apps.filter((app) => app?.name === appName ||
+        JSON.stringify([app?.pm_exec_path, app?.args, app?.script]).includes("ingest-worker.ts"))
+      if (matches.length > 1 || matches.some((app) => app.name !== appName ||
+          app.status !== "stopped")) process.exit(47)
+    }
+  ' "$PM2_HOME_VALUE" "$PM2_APP" >/dev/null
+}
+
+quarantine_stopped_local_recovery() {
+  local ok=1 active_pid active_tree=''
+  assert_local_lock || return 1
+  active_pid="$(pm2_command pid "$PM2_APP" 2>/dev/null | tr -d '[:space:]' || true)"
+  if [[ "$active_pid" =~ ^[1-9][0-9]*$ ]]; then
+    active_tree="$(process_tree_pids "$active_pid" 2>/dev/null || printf '%s\n' "$active_pid")"
+  fi
+  pm2_command stop "$PM2_APP" >/dev/null 2>&1 || true
+  if [ -n "$active_tree" ]; then
+    wait_for_pid_set_exit "$active_tree" || ok=0
+  fi
+  assert_no_online_local_pm2_owner || ok=0
+  pm2_command save --force >/dev/null || ok=0
+  pm2_command save --force >/dev/null || ok=0
+  assert_no_online_local_pm2_dumps || ok=0
+  assert_no_local_ingest_os_process || ok=0
+  arm_local_recovery_holds || ok=0
+  assert_local_lock || ok=0
+  rm -f "$RECOVERY_GO_CONSUMED" || ok=0
+  [ ! -e "$RECOVERY_GO_CONSUMED" ] && [ ! -L "$RECOVERY_GO_CONSUMED" ] || ok=0
+  assert_local_lock || ok=0
+  if [ "$ok" = 1 ]; then
+    STOPPED_RECOVERY_QUARANTINED=1
+    echo '✗ stopped-recovery candidate quarantined; worker remains stopped and both holds remain armed' >&2
+    return 0
+  fi
+  echo '✗✗ stopped-recovery quarantine is incomplete; both holds were re-armed where possible' >&2
+  return 1
+}
+
 finish_deploy() {
   local status=$? candidate
   trap - EXIT INT TERM
   set +e
-  if [ "$status" -ne 0 ] && [ "$RECOVERY_REQUIRED" = 1 ] && \
-     [ "$DEPLOY_SUCCEEDED" = 0 ]; then
-    if ! recover_previous_release; then
-      status=1
-      write_failed_recovery_block || \
-        echo '✗✗ unable to update the durable recovery record; preserving existing journal' >&2
-      echo "✗✗ further local deploys blocked: $RECOVERY_BLOCK_FILE" >&2
+  if [ "$status" -ne 0 ] && [ "$DEPLOY_SUCCEEDED" = 0 ]; then
+    if { [ "$RECOVER_FROM_STOPPED" = 0 ] || [ "$STOPPED_RECOVERY_SESSION" = 1 ]; } && \
+       { [ -e "$INCIDENT_HOLD_FILE" ] || [ -L "$INCIDENT_HOLD_FILE" ]; }; then
+      quarantine_stopped_local_recovery || status=1
+    elif [ "$STOPPED_RECOVERY_SESSION" = 1 ]; then
+      quarantine_stopped_local_recovery || status=1
+    elif [ "$RECOVERY_REQUIRED" = 1 ]; then
+      if ! recover_previous_release; then
+        status=1
+        write_failed_recovery_block || \
+          echo '✗✗ unable to update the durable recovery record; preserving existing journal' >&2
+        echo "✗✗ further local deploys blocked: $RECOVERY_BLOCK_FILE" >&2
+      fi
     fi
   fi
   if [ -d "$STAGING_DIR" ] && [ ! -L "$STAGING_DIR" ]; then
@@ -1186,16 +1491,23 @@ finish_deploy() {
     fi
   fi
   if [ "$LOCK_HELD" = 1 ] && [ "$(sed -n '1p' "$LOCK_DIR/owner" 2>/dev/null)" = "$LOCK_TOKEN" ]; then
+    rm -f "$RECOVERY_GO_CONSUMED"
     rm -rf "$LOCK_DIR"
   fi
   exit "$status"
 }
 
 acquire_local_lock
-assert_no_recovery_block
 trap finish_deploy EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+if [ "$RECOVER_FROM_STOPPED" = 1 ]; then
+  consume_stopped_recovery_go
+  prove_stopped_local_baseline || fail 'stopped local baseline proof failed'
+else
+  assert_no_recovery_block
+  assert_no_incident_hold
+fi
 
 echo "=== local ingest candidate $SHA ==="
 echo '1/8 materializing exact committed runtime inputs'
@@ -1256,13 +1568,15 @@ ln -s "$SHARED_LOG_DIR" "$STAGING_DIR/worker/logs"
 ln -s "$SHARED_ENV_FILE" "$STAGING_DIR/worker/.env"
 [ ! -e "$STAGING_DIR/.env.local" ] || fail 'candidate must not contain .env.local'
 
-OLD_ROSTER_IDENTITY="$(discover_existing_runtime_identity "$STAGING_DIR" "$OLD_PID")" || \
-  fail 'unable to prove the current logical worker identity from Redis'
-IFS=$'\x1f' read -r OLD_NODE_ID OLD_HEARTBEAT_PID <<<"$OLD_ROSTER_IDENTITY"
-[[ "$OLD_NODE_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] || \
-  fail 'current Redis-proven logical worker identity is malformed'
-[[ "$OLD_HEARTBEAT_PID" =~ ^[1-9][0-9]*$ ]] || \
-  fail 'current Redis-proven heartbeat pid is malformed'
+if [ "$RECOVER_FROM_STOPPED" = 0 ]; then
+  OLD_ROSTER_IDENTITY="$(discover_existing_runtime_identity "$STAGING_DIR" "$OLD_PID")" || \
+    fail 'unable to prove the current logical worker identity from Redis'
+  IFS=$'\x1f' read -r OLD_NODE_ID OLD_HEARTBEAT_PID <<<"$OLD_ROSTER_IDENTITY"
+  [[ "$OLD_NODE_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] || \
+    fail 'current Redis-proven logical worker identity is malformed'
+  [[ "$OLD_HEARTBEAT_PID" =~ ^[1-9][0-9]*$ ]] || \
+    fail 'current Redis-proven heartbeat pid is malformed'
+fi
 
 echo '5/8 proving browser and production database readiness before PM2 stop'
 (cd "$STAGING_DIR" && env -i \
@@ -1277,10 +1591,17 @@ read -r FREE_KB DISK_USED_PCT <<<"$(df -Pk "$RELEASE_ROOT" | awk 'END {gsub(/%/,
 
 echo '6/8 rechecking PM2 baseline, lock, and exact main'
 assert_local_lock
+if [ "$RECOVER_FROM_STOPPED" = 1 ]; then
+  prove_stopped_local_baseline || fail 'stopped local baseline changed during candidate preparation'
+else
+  assert_no_incident_hold
+fi
 require_exact_main
 [ "$(pm2_snapshot)" = "$BASELINE_SNAPSHOT" ] || fail 'PM2 owner changed during candidate preparation'
-[ "$(discover_existing_runtime_identity "$STAGING_DIR" "$OLD_PID")" = "$OLD_ROSTER_IDENTITY" ] || \
-  fail 'current Redis-proven worker identity changed during candidate preparation'
+if [ "$RECOVER_FROM_STOPPED" = 0 ]; then
+  [ "$(discover_existing_runtime_identity "$STAGING_DIR" "$OLD_PID")" = "$OLD_ROSTER_IDENTITY" ] || \
+    fail 'current Redis-proven worker identity changed during candidate preparation'
+fi
 [ "$(hash_shared_env)" = "$SHARED_ENV_SHA256" ] || \
   fail 'shared worker environment changed during candidate preparation'
 rm -rf "$INSTALL_HOME"
@@ -1291,18 +1612,32 @@ DEPLOY_MARKER="arena-local-deploy-$TS-${SHA:0:9}"
 DEPLOY_LOG="$RELEASE_DIR/worker/logs/ingest-out.log"
 
 echo '7/8 stopping the exact previous owner and switching PM2 cwd'
-OLD_PROCESS_TREE="$(process_tree_pids "$OLD_PID")" || \
-  fail 'unable to capture the complete previous process tree'
-printf '%s\n' "$OLD_PROCESS_TREE" | grep -Fqx "$OLD_HEARTBEAT_PID" || \
-  fail 'Redis-proven heartbeat pid is not in the previous process tree'
-write_cutover_journal || fail 'unable to persist the pre-cutover recovery journal'
-RECOVERY_REQUIRED=1
-pm2_command stop "$PM2_APP" >/dev/null
-wait_for_pid_set_exit "$OLD_PROCESS_TREE" || fail 'a previous worker descendant did not stop'
-wait_for_profile_owners_exit "$OLD_CWD" || fail 'a previous browser still owns a shared profile'
-pm2_command delete "$PM2_APP" >/dev/null 2>&1 || true
-wait_for_pm2_absent "$OLD_PID" || fail 'previous PM2 owner was not deleted exactly'
+if [ "$RECOVER_FROM_STOPPED" = 1 ]; then
+  release_local_incident_hold_for_cutover || \
+    fail 'stopped-recovery cutover authorization failed'
+  RECOVERY_REQUIRED=1
+  pm2_command delete "$PM2_APP" >/dev/null 2>&1 || \
+    fail 'unable to remove the stopped PM2 baseline'
+  wait_for_pm2_absent 0 || fail 'stopped PM2 baseline was not removed exactly'
+  pm2_command save --force >/dev/null || fail 'unable to clear the primary PM2 resurrection state'
+  pm2_command save --force >/dev/null || fail 'unable to clear the backup PM2 resurrection state'
+  assert_no_online_local_pm2_dumps || fail 'PM2 resurrection state still contains an active ingest owner'
+else
+  assert_no_incident_hold
+  OLD_PROCESS_TREE="$(process_tree_pids "$OLD_PID")" || \
+    fail 'unable to capture the complete previous process tree'
+  printf '%s\n' "$OLD_PROCESS_TREE" | grep -Fqx "$OLD_HEARTBEAT_PID" || \
+    fail 'Redis-proven heartbeat pid is not in the previous process tree'
+  write_cutover_journal || fail 'unable to persist the pre-cutover recovery journal'
+  RECOVERY_REQUIRED=1
+  pm2_command stop "$PM2_APP" >/dev/null
+  wait_for_pid_set_exit "$OLD_PROCESS_TREE" || fail 'a previous worker descendant did not stop'
+  wait_for_profile_owners_exit "$OLD_CWD" || fail 'a previous browser still owns a shared profile'
+  pm2_command delete "$PM2_APP" >/dev/null 2>&1 || true
+  wait_for_pm2_absent "$OLD_PID" || fail 'previous PM2 owner was not deleted exactly'
+fi
 assert_local_lock
+assert_no_incident_hold
 printf '%s\n' "$DEPLOY_MARKER" >> "$DEPLOY_LOG"
 CANDIDATE_EXEC_PATH="$RELEASE_DIR/worker/src/ingest-worker.ts"
 CANDIDATE_ARGS_JSON='[]'
@@ -1316,6 +1651,7 @@ HEARTBEAT_NOT_BEFORE_MS="$("$NODE_BIN" -p 'Date.now()')" || \
   fail 'unable to capture the candidate start boundary'
 [[ "$HEARTBEAT_NOT_BEFORE_MS" =~ ^[1-9][0-9]*$ ]] || \
   fail 'candidate start boundary is malformed'
+assert_no_incident_hold
 start_release_config "$RELEASE_DIR" "$NODE_BIN" \
   "$RELEASE_DIR/worker/ecosystem.local-ingest.config.cjs"
 NEW_PID="$(wait_for_pm2_exact "$RELEASE_DIR" "$NODE_BIN" "$CANDIDATE_EXEC_PATH" \
@@ -1326,6 +1662,7 @@ NEW_PROCESS_TREE="$(process_tree_pids "$NEW_PID")" || \
   fail 'unable to capture the candidate process tree'
 
 echo '8/8 requiring fresh exact identity and committing PM2 state'
+assert_no_incident_hold
 wait_for_stamped_ready native "$DEPLOY_MARKER" "$DEPLOY_LOG" \
   "$SHA" "$WORKER_RELEASE_ID" "$OLD_NODE_ID" "$NEW_PID" || \
   fail 'candidate lacks ordered database, heartbeat, local authority, and ready evidence'
@@ -1335,16 +1672,28 @@ wait_for_stamped_ready native "$DEPLOY_MARKER" "$DEPLOY_LOG" \
   "$NODE_BIN" node_modules/tsx/dist/cli.mjs worker/verify-local-heartbeat.ts \
   "$NEW_PID" "$SHA" "$WORKER_RELEASE_ID" "$OLD_NODE_ID" "$HEARTBEAT_NOT_BEFORE_MS") || \
   fail 'candidate lacks a fresh exact Redis roster identity'
+assert_no_incident_hold
 [ "$(hash_shared_env)" = "$SHARED_ENV_SHA256" ] || \
   fail 'shared worker environment changed during cutover verification'
 require_candidate_stability || fail 'candidate was not stable for the configured minimum uptime'
+assert_no_incident_hold
 require_exact_main
+assert_no_incident_hold
 [ "$(wait_for_pm2_exact "$RELEASE_DIR" "$NODE_BIN" "$CANDIDATE_EXEC_PATH" \
   "$CANDIDATE_ARGS_JSON" "$CANDIDATE_EXEC_MODE" "$CANDIDATE_INSTANCES" \
   "$CANDIDATE_NODE_ARGS_JSON" 0)" = "$NEW_PID" ] || \
   fail 'candidate PM2 identity changed during readiness verification'
+assert_no_incident_hold
 pm2_command save >/dev/null
+assert_no_incident_hold
 clear_recovery_journal || fail 'candidate committed but the durable cutover journal could not be cleared'
+if [ "$RECOVER_FROM_STOPPED" = 1 ]; then
+  assert_local_lock
+  rm -f "$RECOVERY_GO_CONSUMED" || fail 'unable to destroy the consumed stopped-recovery confirmation'
+  [ ! -e "$RECOVERY_GO_CONSUMED" ] && [ ! -L "$RECOVERY_GO_CONSUMED" ] || \
+    fail 'consumed stopped-recovery confirmation still exists'
+  assert_local_lock
+fi
 DEPLOY_SUCCEEDED=1
 RECOVERY_REQUIRED=0
 

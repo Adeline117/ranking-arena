@@ -8,6 +8,7 @@ import { withAdminAuth } from '@/lib/api/with-admin-auth'
 import { success as apiSuccess } from '@/lib/api/response'
 import { ApiError } from '@/lib/api/errors'
 import { createLogger } from '@/lib/utils/logger'
+import { recordAdminLog } from '@/lib/admin/audit-log'
 
 const logger = createLogger('admin-ban-user')
 
@@ -15,10 +16,7 @@ export const dynamic = 'force-dynamic'
 
 // withAdminAuth expects (request: NextRequest) => Promise<NextResponse>
 // But this route has params, so we use a wrapper pattern
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const handler = withAdminAuth(
     async ({ admin, supabase }) => {
       const { id: userId } = await params
@@ -65,7 +63,7 @@ export async function POST(
       }
 
       // Log the action
-      await supabase.from('admin_logs').insert({
+      await recordAdminLog(supabase, {
         admin_id: admin.id,
         action: 'ban_user',
         target_type: 'user',

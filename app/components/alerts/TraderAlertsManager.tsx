@@ -1,12 +1,12 @@
 'use client'
 
 /**
- * Account settings surface for real trader alerts.
+ * Account settings surface for legacy trader-alert cleanup.
  *
  * AlertConfig deliberately lives on a trader profile, where the user can see
  * the account they are configuring. This component provides the missing other
- * half: a truthful list of persisted alerts and a way to remove one. It never
- * manufactures local-only alert state.
+ * half: a truthful list of persisted configurations and a way to remove one.
+ * V1 does not publish monitoring or delivery for these rows.
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -25,6 +25,7 @@ import {
   type SettingsViewerSnapshot,
 } from '@/app/(app)/settings/hooks/settings-viewer-scope'
 import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
+import { TRADER_ALERTS_PUBLISHED } from '@/lib/alerts/trader-alert-publication'
 
 interface TraderAlert {
   id: string
@@ -294,13 +295,8 @@ export default function TraderAlertsManager() {
     return (
       <EmptyState
         variant="card"
-        title={t('traderAlertsProRequired')}
-        description={t('pricingProAlerts')}
-        action={
-          <Link href="/pricing" style={ctaStyle}>
-            {t('upgrade')}
-          </Link>
-        }
+        title={t('traderAlertsUnavailableTitle')}
+        description={t('traderAlertsUnavailableDesc')}
       />
     )
   }
@@ -319,18 +315,28 @@ export default function TraderAlertsManager() {
       <EmptyState
         variant="card"
         title={t('traderAlertsNone')}
-        description={t('traderAlertsDesc2')}
-        action={
-          <Link href="/rankings" style={ctaStyle}>
-            {t('watchlistBrowseRankings')}
-          </Link>
-        }
+        description={t('traderAlertsUnavailableDesc')}
       />
     )
   }
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+      {!TRADER_ALERTS_PUBLISHED && (
+        <Box
+          role="note"
+          style={{
+            padding: tokens.spacing[3],
+            borderRadius: tokens.radius.md,
+            border: `1px solid ${tokens.colors.border.primary}`,
+            background: alpha(tokens.colors.bg.tertiary, 55),
+          }}
+        >
+          <Text size="sm" color="secondary">
+            {t('traderAlertsUnavailableDesc')}
+          </Text>
+        </Box>
+      )}
       {ui.alerts.map((alert) => {
         const conditions = [
           alert.alert_roi_change && t('alertRoiChangeLabel'),
@@ -364,9 +370,7 @@ export default function TraderAlertsManager() {
                 {alert.trader_id}
               </Link>
               <Text size="xs" color="tertiary">
-                {[alert.source, alert.enabled ? t('traderAlertsEnabled') : t('traderAlertsPaused')]
-                  .filter(Boolean)
-                  .join(' · ')}
+                {[alert.source, t('traderAlertsStoredNotMonitored')].filter(Boolean).join(' · ')}
               </Text>
               <Text size="xs" color="secondary">
                 {conditions.length > 0 ? conditions.join(' · ') : t('traderAlertsNoConditions')}

@@ -67,26 +67,31 @@ export const POST = withAuth(
       return badRequest('2FA is not enabled')
     }
 
-    // Disable 2FA: set enabled to false and delete secret from secure table
-    const [{ error: updateError }] = await Promise.all([
-      supabase.from('user_profiles').update({ totp_enabled: false }).eq('id', user.id),
-      supabase.from('user_2fa_secrets').delete().eq('user_id', user.id),
-    ])
+    // Disable 2FA first (so a later cleanup failure can never leave 2FA
+    // enabled without a secret = lockout), then delete the secret and backup
+    // codes. Every step is checked; any failure fails the request.
+    const { error: updateError } = await supabase
+      .from('user_profiles')
+      .update({ totp_enabled: false })
+      .eq('id', user.id)
 
     if (updateError) {
       logger.error('[2FA Disable] Update error:', updateError)
       return serverError('Failed to disable 2FA')
     }
 
-    // Delete all backup codes for this user
-    const { error: deleteError } = await supabase
-      .from('backup_codes')
-      .delete()
-      .eq('user_id', user.id)
+    const [{ error: secretDeleteError }, { error: codesDeleteError }] = await Promise.all([
+      supabase.from('user_2fa_secrets').delete().eq('user_id', user.id),
+      supabase.from('backup_codes').delete().eq('user_id', user.id),
+    ])
 
-    if (deleteError) {
-      logger.error('[2FA Disable] Backup codes deletion error:', deleteError)
-      // Non-critical: 2FA is already disabled
+    if (secretDeleteError || codesDeleteError) {
+      logger.error('[2FA Disable] Credential cleanup failed', {
+        userId: user.id,
+        secretDeleteError: secretDeleteError?.message,
+        codesDeleteError: codesDeleteError?.message,
+      })
+      return serverError('Failed to fully disable 2FA')
     }
 
     return NextResponse.json({ success: true })

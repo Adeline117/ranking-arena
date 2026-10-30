@@ -12,6 +12,11 @@ export const BACKUP_TARGET_MODEL_UNPROVEN = 'unproven'
 export const BACKUP_RECOVERY_CERTIFIED_FALSE = 'false'
 export const PG_DUMP_RESTRICT_TOKEN_PATTERN = /^[0-9A-Za-z]{1,256}$/
 export const ARENA_BACKUP_COMPLETION_TOKEN_PATTERN = /^[0-9a-f]{64}$/
+export const MINIMUM_APPLICATION_BACKUP_RELATIONS = Object.freeze([
+  'arena.traders',
+  'arena.trader_stats',
+  'public.leaderboard_ranks',
+])
 export const IMMUTABLE_BACKUP_FILENAME_PATTERN =
   /^arena-backup-(\d{8}T\d{9}Z)-([0-9a-f]{32})-(schemas|full)\.sql\.gz$/
 export const LEGACY_COMPLETE_BACKUP_FILENAME_PATTERN =
@@ -291,17 +296,53 @@ export function preparePostgresConnection(databaseUrl, label = 'database URL') {
   }
 }
 
-function createCompletionWindowSink() {
+function normalizeRequiredRelations(requiredRelations) {
+  if (!Array.isArray(requiredRelations)) {
+    throw new Error('backup required-relations contract is invalid')
+  }
+  const normalized = [...new Set(requiredRelations)]
+  if (normalized.some((relation) => !/^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$/.test(relation))) {
+    throw new Error('backup required-relations contract is invalid')
+  }
+  return normalized
+}
+
+function createCompletionWindowSink(requiredRelations) {
   const headChunks = []
   let headBytes = 0
   let tailChunks = []
   let tailBytes = 0
   let uncompressedBytes = 0
+  const relationMarkers = new Map(
+    requiredRelations.map((relation) => [
+      relation,
+      [`\nCREATE TABLE ${relation} (`, `\nCOPY ${relation} (`],
+    ])
+  )
+  const longestMarker = Math.max(
+    0,
+    ...[...relationMarkers.values()].flat().map((marker) => marker.length)
+  )
+  const foundRelations = new Set()
+  let relationCarry = ''
 
   const sink = new Writable({
     write(value, _encoding, callback) {
       const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value)
       uncompressedBytes += chunk.length
+
+      if (foundRelations.size < relationMarkers.size) {
+        const searchable = relationCarry + chunk.toString('latin1')
+        for (const [relation, markers] of relationMarkers) {
+          if (
+            !foundRelations.has(relation) &&
+            markers.some((marker) => searchable.includes(marker))
+          ) {
+            foundRelations.add(relation)
+          }
+        }
+        relationCarry = searchable.slice(-longestMarker)
+      }
 
       if (headBytes < COMPLETION_WINDOW_BYTES) {
         const slice = chunk.subarray(0, COMPLETION_WINDOW_BYTES - headBytes)
@@ -339,13 +380,20 @@ function createCompletionWindowSink() {
       // the complete gzip stream (including CRC/ISIZE) has been consumed.
       tail: Buffer.concat(tailChunks, tailBytes).toString('latin1'),
       uncompressedBytes,
+      missingRelations: requiredRelations.filter((relation) => !foundRelations.has(relation)),
     }),
   }
 }
 
-function assertPgDumpCompletion({ head, tail, uncompressedBytes }, completionToken) {
+function assertPgDumpCompletion(
+  { head, tail, uncompressedBytes, missingRelations },
+  completionToken
+) {
   if (uncompressedBytes === 0 || !head.startsWith(PG_DUMP_PREFIX)) {
     throw new Error('PostgreSQL dump prefix is missing')
+  }
+  if (missingRelations.length > 0) {
+    throw new Error(`PostgreSQL dump is missing required relations: ${missingRelations.join(', ')}`)
   }
 
   const afterPrefix = head.slice(PG_DUMP_PREFIX.length)
@@ -391,7 +439,7 @@ function assertPgDumpCompletion({ head, tail, uncompressedBytes }, completionTok
 export async function assertBackupArtifact(
   localPath,
   minimumBytes,
-  { completionToken, timeoutMs = 10 * 60_000 } = {}
+  { completionToken, requiredRelations = [], timeoutMs = 10 * 60_000 } = {}
 ) {
   const size = statSync(localPath).size
   if (!Number.isSafeInteger(minimumBytes) || minimumBytes < 1) {
@@ -411,18 +459,21 @@ export async function assertBackupArtifact(
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1) {
     throw new Error('backup verification timeout contract is invalid')
   }
+  const normalizedRequiredRelations = normalizeRequiredRelations(requiredRelations)
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
   timeout.unref()
-  const { sink, windows } = createCompletionWindowSink()
+  const { sink, windows } = createCompletionWindowSink(normalizedRequiredRelations)
   try {
     await pipeline(createReadStream(localPath), createGunzip(), sink, {
       signal: controller.signal,
     })
     assertPgDumpCompletion(windows(), completionToken)
-  } catch {
-    throw new Error('backup artifact failed gzip or pg_dump completion verification')
+  } catch (error) {
+    throw new Error(
+      `backup artifact failed gzip or pg_dump completion verification: ${error.message}`
+    )
   } finally {
     clearTimeout(timeout)
   }

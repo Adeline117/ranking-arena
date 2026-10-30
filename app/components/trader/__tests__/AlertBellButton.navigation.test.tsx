@@ -2,7 +2,6 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 const mockAuthedFetch = jest.fn()
 const mockOpenLoginModal = jest.fn()
-const mockTrackEvent = jest.fn()
 const mockAlertConfig = jest.fn(() => null)
 
 function jwt(userId: string): string {
@@ -68,6 +67,12 @@ jest.mock('@/lib/api/client', () => ({
   authedFetch: (...args: unknown[]) => mockAuthedFetch(...args),
 }))
 
+// This suite exercises the legacy active-status and configuration flow. V1
+// containment is covered separately with the real publication boundary false.
+jest.mock('@/lib/alerts/trader-alert-publication', () => ({
+  TRADER_ALERTS_PUBLISHED: true,
+}))
+
 jest.mock('@/lib/hooks/useLoginModal', () => ({
   useLoginModal: {
     getState: () => ({ openLoginModal: mockOpenLoginModal }),
@@ -106,10 +111,6 @@ jest.mock('@/app/components/ui/ModalOverlay', () => ({
         <button onClick={onClose}>Close alert dialog</button>
       </div>
     ) : null,
-}))
-
-jest.mock('@/lib/analytics/track', () => ({
-  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
 }))
 
 import AlertBellButton from '../AlertBellButton'
@@ -159,12 +160,6 @@ describe('AlertBellButton durable navigation', () => {
         userId: 'user-1',
       })
     )
-    expect(mockTrackEvent).toHaveBeenCalledWith('create_trader_alert', {
-      traderId: 'trader-1',
-      source: 'binance',
-      step: 'open',
-    })
-
     fireEvent.click(screen.getByRole('link', { name: 'View all alerts' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 

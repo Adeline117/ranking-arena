@@ -7,8 +7,14 @@
  * arena.* — the page header/hero above it already rendered from Tier-A
  * first-screen data with zero on-demand fetching. This panel owns:
  *
- *   2. Core modules — ONE request per timeframe (useTraderCore), local
- *      skeletons, module-level degradation only.
+ *   2. Core modules — the public /api/traders/[handle]/core route currently
+ *      returns ONE static structural projection for every timeframe
+ *      (lib/data/serving/core-quarantine: historical core evidence is not
+ *      publicly sealed). Like useServingTabData, this panel builds that
+ *      projection locally (pure, client-safe) with NO network request and
+ *      renders the explicit "under verification" state instead of
+ *      skeleton → empty grid. When the core publication chain is restored,
+ *      switch back to useTraderCore (lib/hooks/useTraderCore, kept for that).
  *   3. Heavy record tabs — fetched ONLY when the tab is opened
  *      (capability-driven sub-tabs; copiers is aggregate-only).
  *   4. Timeframe lazy — query key includes tf; switching fetches just
@@ -19,7 +25,7 @@ import { useMemo, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { useTraderCore } from '@/lib/hooks/useTraderCore'
+import { quarantinedPublicCoreModules } from '@/lib/data/serving/core-quarantine'
 import { useBotHeader } from '@/lib/hooks/useBotHeader'
 import { PeriodSelector, type Period } from '@/app/components/trader/performance/PeriodSelector'
 import {
@@ -42,8 +48,8 @@ import DrawdownModule from './DrawdownModule'
 import AssetPreference from './AssetPreference'
 import HoldingDistribution from './HoldingDistribution'
 import AbilityRadar from './AbilityRadar'
-import ModuleDegraded from './ModuleDegraded'
 import ServingRecordsSection from './ServingRecordsSection'
+import HistoryVerificationNotice from '@/app/components/trader/HistoryVerificationNotice'
 import BotHeaderCard from './BotHeaderCard'
 import ProvenanceFooter from '@/app/components/common/ProvenanceFooter'
 import AntiGamingBadge from '@/app/components/ranking/AntiGamingBadge'
@@ -53,21 +59,6 @@ import type {
   SourceCapability,
   TraderFirstScreen,
 } from '@/lib/data/serving/types'
-
-function ModuleSkeleton({ height }: { height: number }) {
-  return (
-    <div
-      style={{
-        height,
-        borderRadius: tokens.radius.lg,
-        background:
-          'linear-gradient(90deg, var(--color-bg-tertiary) 25%, var(--color-bg-secondary) 50%, var(--color-bg-tertiary) 75%)',
-        backgroundSize: '200% 100%',
-        animation: 'servingPulse 1.4s ease infinite',
-      }}
-    />
-  )
-}
 
 export interface ServingProfilePanelProps {
   firstScreen: TraderFirstScreen
@@ -177,12 +168,28 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
     inceptionSelected
   )
 
-  const core = useTraderCore({
-    source,
-    exchangeTraderId,
-    tf,
-    enabled: timeframeRequestEnabled,
-  })
+  // Identical to what the quarantined /core route would return, built locally
+  // (no request). null when the timeframe is not provided by the source.
+  const coreModules = useMemo(
+    () => (timeframeRequestEnabled ? quarantinedPublicCoreModules(tf) : null),
+    [timeframeRequestEnabled, tf]
+  )
+  const coreQuarantined = coreModules?.cacheState === 'quarantined'
+  // Rendered only once a non-quarantined (published) projection exists.
+  const publishedCore = coreQuarantined ? null : coreModules
+
+  // Only sealed public-cohort values (verified rank + ROI) may accompany the
+  // under-verification notice — same rule as TraderProfileClient's tabs.
+  const verificationEntry =
+    coreQuarantined && typeof tf === 'number'
+      ? firstScreen.entries?.find((entry) => entry.timeframe === tf)
+      : undefined
+  const sealedCurrentRanking =
+    verificationEntry?.rankingVisibility === 'verified' &&
+    typeof verificationEntry.rank === 'number' &&
+    typeof verificationEntry.headlineRoi === 'number'
+      ? { period, rank: verificationEntry.rank, roi: verificationEntry.headlineRoi }
+      : null
 
   // Bot profile header (spec §1.3) — only fetched for bot traders.
   const isBot = firstScreen.traderKind === 'bot'
@@ -194,11 +201,11 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
   // adapters already capture; the qualitative signals (style labels, last
   // liquidation) render as SignalChips. Both NULL-collapse with no signal.
   const gridStats = useMemo<Record<string, number | string | null>>(() => {
-    if (!core.modules) return {}
-    return promoteExtrasMetrics(core.modules.stats, core.modules.extras)
-  }, [core.modules])
+    if (!publishedCore) return {}
+    return promoteExtrasMetrics(publishedCore.stats, publishedCore.extras)
+  }, [publishedCore])
   const gridCapabilityMetrics = [
-    ...(capability?.metrics ?? Object.keys(core.modules?.stats ?? {})),
+    ...(capability?.metrics ?? Object.keys(publishedCore?.stats ?? {})),
     // Extras-sourced metrics aren't in the capability RPC's trader_stats
     // column scan — allow them when present.
     ...EXTRAS_PROMOTABLE_KEYS,
@@ -208,28 +215,28 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
   )
   const pnlDisclosure =
     typeof tf === 'number' && pnlActuallyVisible
-      ? readGmxRealizedNetModuleDisclosure(source, tf, core.modules)
+      ? readGmxRealizedNetModuleDisclosure(source, tf, publishedCore)
       : null
   const roiActuallyVisible = displayableMetrics(gridCapabilityMetrics, gridStats).some(
     (def) => def.key === 'roi'
   )
   const roiDisclosure =
     typeof tf === 'number' && roiActuallyVisible
-      ? readGmxMaxCapitalRoiModuleDisclosure(source, tf, core.modules)
+      ? readGmxMaxCapitalRoiModuleDisclosure(source, tf, publishedCore)
       : null
 
   // Dormant trader (e.g. Bitget "*不活跃"): every core metric is 0 and the
   // series is flat. Show one honest line instead of a grid of 0.00% that
   // reads like a render failure. We do NOT fabricate data.
   const isDormant = useMemo(() => {
-    if (!core.modules) return false
+    if (!publishedCore) return false
     const core_keys = ['roi', 'pnl', 'win_rate', 'total_positions', 'aum'] as const
     const allZero = core_keys.every((k) => {
       const v = gridStats[k]
       return v === undefined || v === null || Number(v) === 0
     })
     return allZero && core_keys.some((k) => gridStats[k] !== undefined)
-  }, [core.modules, gridStats])
+  }, [publishedCore, gridStats])
 
   // Trust-facing anti-gaming ⚠️ flags for the CURRENTLY-VIEWED period — same
   // pure heuristic + badge as the ranking cards, kept consistent everywhere.
@@ -266,7 +273,7 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
       {/* ── Bot header (spec §1.3): strategy/pair/runtime/profit-share/owner ── */}
       {isBot && bot && <BotHeaderCard bot={bot} style={{ marginBottom: tokens.spacing[3] }} />}
 
-      {/* ── Core modules (spec §2.4-2): one request per timeframe ── */}
+      {/* ── Core modules (spec §2.4-2): static quarantined projection, no request ── */}
       <PeriodSelector
         period={period}
         onPeriodChange={(p) => {
@@ -274,7 +281,7 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
           setTimeframeSelection({ scope: timeframeScope, period: p, inception: false })
         }}
         source={source}
-        lastUpdated={core.modules?.provenance.asOf}
+        lastUpdated={publishedCore?.provenance.asOf}
         availability={availability}
         showInception={showInception}
         inceptionSelected={inceptionSelected}
@@ -296,13 +303,10 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
             {t('tfNotProvided')}
           </Text>
         </Box>
-      ) : core.modules ? (
+      ) : !publishedCore ? (
+        <HistoryVerificationNotice currentRanking={sealedCurrentRanking} compact />
+      ) : (
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
-          {core.isPendingUpstream && (
-            <Text size="xs" color="tertiary" style={{ opacity: 0.7 }}>
-              {t('moduleDataPending')}
-            </Text>
-          )}
           {antiGamingFlags.length > 0 && (
             <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2] }}>
               <AntiGamingBadge
@@ -312,10 +316,10 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
               />
             </Box>
           )}
-          <SignalChips source={source} extras={core.modules.extras} />
-          <TraderMetaStrip extras={core.modules.extras} currency={core.modules.currency} />
-          <CopyTradingCard extras={core.modules.extras} currency={core.modules.currency} />
-          <OnchainInsights extras={core.modules.extras} currency={core.modules.currency} />
+          <SignalChips source={source} extras={publishedCore.extras} />
+          <TraderMetaStrip extras={publishedCore.extras} currency={publishedCore.currency} />
+          <CopyTradingCard extras={publishedCore.extras} currency={publishedCore.currency} />
+          <OnchainInsights extras={publishedCore.extras} currency={publishedCore.currency} />
           {isDormant && (
             <Text size="sm" color="tertiary">
               {t('traderDormantForPeriod')}
@@ -324,7 +328,7 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
           <MetricGrid
             stats={gridStats}
             capabilityMetrics={gridCapabilityMetrics}
-            currency={core.modules.currency}
+            currency={publishedCore.currency}
             metricLabelKeys={
               pnlDisclosure || roiDisclosure
                 ? {
@@ -343,13 +347,13 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
             }
           />
           {pnlDisclosure && <PnlContractNotice disclosure={pnlDisclosure} compact />}
-          <CoreCharts series={core.modules.series} timeframe={tf} />
-          <DrawdownModule series={core.modules.series} />
-          <AbilityRadar extras={core.modules.extras} />
-          <AssetPreference extras={core.modules.extras} />
-          <HoldingDistribution extras={core.modules.extras} />
+          <CoreCharts series={publishedCore.series} timeframe={tf} />
+          <DrawdownModule series={publishedCore.series} />
+          <AbilityRadar extras={publishedCore.extras} />
+          <AssetPreference extras={publishedCore.extras} />
+          <HoldingDistribution extras={publishedCore.extras} />
           <ProvenanceFooter
-            provenance={core.modules.provenance}
+            provenance={publishedCore.provenance}
             exchangeName={capability?.exchangeName}
             // Myfxbook-style data-authenticity tier. Prod currently has 0
             // API-verified traders (verified_traders/trader_authorizations both
@@ -358,13 +362,6 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
             // flag through the serving data → flip verified rows to 'verified'.
             verificationTier="tracked"
           />
-        </Box>
-      ) : core.isDegraded ? (
-        <ModuleDegraded onRetry={() => core.refetch()} />
-      ) : (
-        <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-          <ModuleSkeleton height={120} />
-          <ModuleSkeleton height={220} />
         </Box>
       )}
 

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { ARENA_CONFIG, ARENA_V4_CONFIG } from '@/lib/utils/arena-score'
 
 /* ---------- shared section model (stable, language-independent ids) ---------- */
 
@@ -273,11 +274,11 @@ export default function MethodologyPageClient() {
           <p style={{ marginTop: tokens.spacing[2] }}>{t('scoreV4QualityDesc')}</p>
           {renderList(
             [
-              `${t('scoreV4DimPnl')} — 0.30`,
-              `${t('scoreV4DimRoi')} — 0.20`,
-              `${t('scoreV4DimDrawdown')} — 0.20`,
-              `${t('scoreV4DimSharpe')} — 0.20`,
-              `${t('scoreV4DimConsistency')} — 0.10`,
+              `${t('scoreV4DimPnl')} — ${ARENA_V4_CONFIG.W.pnl.toFixed(2)}`,
+              `${t('scoreV4DimRoi')} — ${ARENA_V4_CONFIG.W.roi.toFixed(2)}`,
+              `${t('scoreV4DimDrawdown')} — ${ARENA_V4_CONFIG.W.dd.toFixed(2)}`,
+              `${t('scoreV4DimSharpe')} — ${ARENA_V4_CONFIG.W.sharpe.toFixed(2)}`,
+              `${t('scoreV4DimConsistency')} — ${ARENA_V4_CONFIG.W.con.toFixed(2)}`,
             ].join('\n')
           )}
 
@@ -301,9 +302,9 @@ export default function MethodologyPageClient() {
         <div style={bodyStyle}>
           <p>{t('methodologySec4Intro')}</p>
           <div style={badgeRowStyle}>
-            <WeightBadge period="90D" weight="70%" />
-            <WeightBadge period="30D" weight="25%" />
-            <WeightBadge period="7D" weight="5%" />
+            <WeightBadge period="90D" weight={`${ARENA_CONFIG.OVERALL_WEIGHTS['90D'] * 100}%`} />
+            <WeightBadge period="30D" weight={`${ARENA_CONFIG.OVERALL_WEIGHTS['30D'] * 100}%`} />
+            <WeightBadge period="7D" weight={`${ARENA_CONFIG.OVERALL_WEIGHTS['7D'] * 100}%`} />
           </div>
           <p style={{ marginTop: tokens.spacing[4] }}>{t('methodologySec4Outro')}</p>
         </div>
@@ -371,7 +372,7 @@ export default function MethodologyPageClient() {
         }}
       >
         <Link
-          href="/rankings"
+          href="/"
           className={anchorClass}
           style={{
             color: 'var(--color-accent-primary)',

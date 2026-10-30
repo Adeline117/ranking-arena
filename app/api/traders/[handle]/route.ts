@@ -59,6 +59,7 @@ function requestCarriesLinkedMembership(request: NextRequest): boolean {
     .split(',')
     .map((value) => value.trim().toLowerCase())
   return (
+    includes.includes('claim') ||
     includes.includes('aggregate') ||
     request.nextUrl.searchParams.get('e2e_fixture') === 'linked_accounts'
   )

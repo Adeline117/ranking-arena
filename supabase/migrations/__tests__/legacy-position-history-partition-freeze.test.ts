@@ -191,13 +191,23 @@ describe('legacy trader-position-history relation freeze', () => {
       }))
 
     for (const candidate of laterMigrations) {
-      expect(candidate.sql, candidate.name).not.toMatch(/\bcreate_next_tph_partition\b/i)
-      expect(candidate.sql, candidate.name).not.toMatch(
-        /GRANT\s+[\s\S]{0,180}\b(?:trader_position_history(?:_partitioned|_old)?|tph_[a-zA-Z0-9_]+)\b/i
-      )
-      expect(candidate.sql, candidate.name).not.toMatch(
-        /DROP\s+TRIGGER\s+(?:reject_legacy_position_history_before_write|reject_legacy_position_history_before_truncate)\b/i
-      )
+      expect({
+        migration: candidate.name,
+        reopensPartitionCreator: /\bcreate_next_tph_partition\b/i.test(candidate.sql),
+        grantsLegacyRelation:
+          /GRANT\s+[\s\S]{0,180}\b(?:trader_position_history(?:_partitioned|_old)?|tph_[a-zA-Z0-9_]+)\b/i.test(
+            candidate.sql
+          ),
+        dropsFreezeTrigger:
+          /DROP\s+TRIGGER\s+(?:reject_legacy_position_history_before_write|reject_legacy_position_history_before_truncate)\b/i.test(
+            candidate.sql
+          ),
+      }).toEqual({
+        migration: candidate.name,
+        reopensPartitionCreator: false,
+        grantsLegacyRelation: false,
+        dropsFreezeTrigger: false,
+      })
     }
   })
 })

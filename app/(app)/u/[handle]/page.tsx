@@ -240,10 +240,10 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
           .limit(1)
           .maybeSingle(),
         supabase
-          .from('trader_authorizations')
-          .select('id, trader_id, platform')
+          .from('verified_traders')
+          .select('id, trader_id, source')
           .eq('user_id', userProfile.id)
-          .eq('status', 'active')
+          .order('created_at', { ascending: true })
           .limit(1)
           .maybeSingle(),
       ]),
@@ -256,14 +256,14 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
     hasClaimedTrader = !!claimedTraderRes?.data
 
     // If user has a claimed trader, fetch the trader handle
-    if (claimedTraderRes?.data?.trader_id && claimedTraderRes?.data?.platform) {
-      traderPlatform = claimedTraderRes.data.platform
+    if (claimedTraderRes?.data?.trader_id && claimedTraderRes?.data?.source) {
+      traderPlatform = claimedTraderRes.data.source
       traderSourceId = claimedTraderRes.data.trader_id
       try {
         const { data: traderRow } = await supabase
           .from('trader_sources')
           .select('handle')
-          .eq('source', claimedTraderRes.data.platform)
+          .eq('source', claimedTraderRes.data.source)
           .eq('source_trader_id', claimedTraderRes.data.trader_id)
           .maybeSingle()
         if (traderRow?.handle) {
@@ -271,26 +271,6 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
         }
       } catch {
         // Intentionally swallowed: claimed trader handle lookup is optional enrichment
-      }
-    } else {
-      // M1-1b (unified profile): an exchange-BOUND user (verified API-key bind,
-      // no claim yet) also gets the trader-detail view — identity comes from the
-      // verified UID on the connection. Claim remains what sets the verified badge.
-      try {
-        const { data: conn } = await supabase
-          .from('user_exchange_connections')
-          .select('exchange, verified_uid')
-          .eq('user_id', userProfile.id)
-          .eq('is_active', true)
-          .not('verified_uid', 'is', null)
-          .limit(1)
-          .maybeSingle()
-        if (conn?.verified_uid && conn.exchange) {
-          traderPlatform = conn.exchange
-          traderSourceId = conn.verified_uid
-        }
-      } catch {
-        // Optional enrichment — bound-trader lookup failure never blocks the page.
       }
     }
   } catch (err) {
@@ -404,7 +384,7 @@ export default async function UserHomePage({ params }: { params: Promise<{ handl
       ])
       // Synthesize a minimal first-screen on timeout — same root-cause fix as
       // /trader/page.tsx: never fall back to the legacy 404 path for a serving
-      // trader; the client fetches /core with its own skeletons.
+      // trader; the client renders the static quarantined core projection (no /core request).
       const firstScreen: TraderFirstScreen = firstScreenRaw ?? {
         source: servingResolved.source,
         exchangeTraderId: servingResolved.exchangeTraderId,

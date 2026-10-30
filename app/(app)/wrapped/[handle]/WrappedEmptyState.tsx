@@ -107,7 +107,7 @@ export default function WrappedEmptyState({ handle }: { handle: string }) {
             {t('wrappedEmptyHome')}
           </Link>
           <Link
-            href="/rankings"
+            href="/"
             style={{
               padding: '13px 26px',
               borderRadius: tokens.radius.lg,

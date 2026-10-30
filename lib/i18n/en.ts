@@ -113,9 +113,9 @@ const en = {
   writeComment: 'Write a comment...',
   // Exchange binding related
   bindExchangeAccount: 'Bind Exchange Account',
-  bindExchangeDescription: 'After binding, you can view detailed trading statistics',
+  bindExchangeDescription: 'Save a private, read-only exchange account connection',
   bindExchangeAccountFull:
-    'After binding your exchange account, you can view detailed trading statistics',
+    'Save a read-only exchange connection and manually verify or refresh its connection status.',
   bindExchange: 'Bind',
   goToSettings: 'Go to Settings',
   connected: 'Connected',
@@ -126,14 +126,13 @@ const en = {
   disconnectFailed: 'Disconnect failed',
   disconnected: 'Disconnected',
   pleaseLogin: 'Please login first',
-  syncSuccess: 'Data synced successfully!',
+  syncSuccess: 'Connection status refreshed.',
   syncError: 'Sync failed',
   lastSync: 'Last sync: ',
   syncErrorMsg: 'Sync error: ',
-  clickToBind:
-    'Click the button to jump to {exchange} login page. After successful login, the system will automatically obtain your trading data.',
-  bindSuccess: 'Binding successful! Data has been synced.',
-  bindSuccessSyncing: 'Binding successful! Data is syncing...',
+  clickToBind: "Open Arena's {exchange} API-key guide to save a read-only account connection.",
+  bindSuccess: 'Read-only account connection saved.',
+  bindSuccessSyncing: 'Read-only account connection saved.',
   completeBind: 'Complete',
   binding: 'Binding...',
   bindTip:
@@ -206,7 +205,7 @@ const en = {
   userReviews: 'reviews',
   // Claim trader
   claimTrader: 'Claim Account',
-  referral: 'Referral',
+  referral: 'Referral status',
   claiming: 'Claiming...',
   claimSubmitted: 'Claim Submitted',
   claimSuccess: 'Claim successful! Your account has been linked to this trader.',
@@ -346,7 +345,7 @@ const en = {
   // API Key binding related
   apiKeyBindTitle: 'Bind Exchange with API Key',
   apiKeyBindDesc:
-    'Follow the steps below to create a read-only API Key and sync your trading data securely',
+    'Create a read-only API Key for your private account connection. It does not claim or publish a leaderboard profile.',
   selectExchange: 'Select Exchange',
   operationStepsLabel: 'Steps',
   estimatedTime: '~2 minutes',
@@ -409,10 +408,10 @@ const en = {
   unlockProFeatures: 'Unlock Pro Features',
   proRequired: 'Pro membership required',
   // PremiumGate contextual benefits (audit P1-PROD-1)
-  gateAdvancedAlertsTitle: 'Unlock Advanced Alerts',
-  gateBenefitAlertsRealtime: 'Push and email after 30-minute checks detect a change',
-  gateBenefitAlertsConditions: 'Combine 5+ conditions per alert',
-  gateBenefitAlertsHistory: 'Full alert history & analytics',
+  gateAdvancedAlertsTitle: 'Trader Alerts Unavailable',
+  gateBenefitAlertsRealtime: 'Trader alerts are temporarily unavailable during V1 verification',
+  gateBenefitAlertsConditions: 'New alert configurations are not published',
+  gateBenefitAlertsHistory: 'Saved legacy configurations can be removed',
   gateComparisonTitle: 'Compare Traders Side-by-Side',
   gateBenefitCompareSideBySide: 'Up to 4 traders, all metrics',
   gateBenefitCompareMetrics: 'Risk-adjusted score breakdown',
@@ -466,7 +465,7 @@ const en = {
   tagHighReturns: 'High ROI',
   // Trader alerts
   traderAlerts: 'Trader Alerts',
-  traderAlertsDesc: 'Get notified when followed traders have significant changes',
+  traderAlertsDesc: 'Trader alerts are temporarily unavailable during V1 verification',
   alertSettings: 'Alert Settings',
   alertThreshold: 'Change Threshold',
   alertEnabled: 'Alerts enabled',
@@ -553,7 +552,7 @@ const en = {
   featureCategoryRanking: 'Category Ranking',
   featureCategoryRankingDesc: 'View rankings by Futures/Spot/On-chain',
   featureTraderAlerts: 'Trader Alerts',
-  featureTraderAlertsDesc: 'Get notified on significant trader changes',
+  featureTraderAlertsDesc: 'Temporarily unavailable during V1 verification',
   featureScoreBreakdown: 'Arena Score Details',
   featureScoreBreakdownDesc: 'View sub-scores and percentile rankings',
   featureProBadge: 'Pro Badge',
@@ -993,7 +992,8 @@ const en = {
   postCommentedNotify: 'Notify me when my posts receive comments',
   mentionedNotify: 'Notify me when I am mentioned',
   newMessageNotify: 'Notify me when I receive messages',
-  traderEventsNotify: 'Notify me about big moves from traders I follow',
+  traderEventsNotify:
+    'Trader-event notifications are temporarily unavailable during V1 verification',
   // Privacy settings
   showFollowerList: 'Show followers list',
   showFollowingList: 'Show following list',
@@ -1053,6 +1053,8 @@ const en = {
   digestNone: 'None',
   digestDaily: 'Daily digest',
   digestWeekly: 'Weekly digest',
+  weeklyDigestUnavailable:
+    'Weekly personalized digests are temporarily unavailable during V1 verification.',
   unsubscribeSuccess: 'You have been unsubscribed successfully',
   unsubscribeFromDigest: 'Unsubscribe from email digest',
   unsubscribeFromAll: 'Unsubscribe from all emails',
@@ -1165,11 +1167,16 @@ const en = {
   linkedAccountCount: 'accounts',
   // Alerts
   traderAlertsTitle: 'Trader Alerts',
-  traderAlertsDesc2: 'Set custom alert conditions to track trader activities (Pro feature)',
+  traderAlertsDesc2:
+    'Trader-alert monitoring and delivery are temporarily unavailable during V1 verification. You can view or remove saved configurations.',
   traderAlertsConfigureOnProfile:
-    'Set alerts from a trader profile so each notification is tied to the correct exchange account.',
+    'New trader-alert configurations are disabled during V1 verification. Use this page only to remove saved configurations.',
   traderAlertsBrowse: 'Browse traders',
-  traderAlertsNone: 'No trader alerts configured yet.',
+  traderAlertsNone: 'No saved legacy trader-alert configurations.',
+  traderAlertsUnavailableTitle: 'Trader alerts are temporarily unavailable',
+  traderAlertsUnavailableDesc:
+    'V1 verification has paused trader-alert monitoring and delivery. You can view or remove saved legacy configurations.',
+  traderAlertsStoredNotMonitored: 'Saved configuration — not monitored',
   traderAlertsEnabled: 'Enabled',
   traderAlertsPaused: 'Paused',
   traderAlertsNoConditions: 'No active conditions',
@@ -1177,7 +1184,7 @@ const en = {
   traderAlertsRemoveConfirm: 'Remove this trader alert?',
   traderAlertsRemoveFailed: 'Could not remove the trader alert. Please try again.',
   traderAlertsLoadFailed: 'Could not load trader alerts. Please try again.',
-  traderAlertsProRequired: 'Trader alert management is available with Pro.',
+  traderAlertsProRequired: 'Trader alerts are temporarily unavailable during V1 verification.',
   alertScoreChangeLabel: 'Arena Score change',
   alertScoreChangeDesc: "Notify me when this trader's Arena Score moves by this many points.",
   alertScoreUnit: 'pts',
@@ -1739,13 +1746,13 @@ const en = {
 
   // AdvancedAlerts
   alertMonitoring: 'Monitoring: {handle}',
-  alertCheckCadence: 'Checked every 30 minutes for active Pro members.',
+  alertCheckCadence: 'Trader-alert monitoring is temporarily unavailable during V1 verification.',
   alertRoiChangeLabel: 'ROI Change',
   alertRoiChangeDesc: 'Alert when ROI changes by threshold',
   alertDrawdownLabel: 'Drawdown Alert',
   alertDrawdownDesc: 'Alert when drawdown exceeds threshold',
   alertRankChangeLabel: 'Rank Change',
-  alertRankChangeDesc: 'Alert when rank changes by threshold',
+  alertRankChangeDesc: 'Unavailable during V1 verification',
   alertChangesBy: 'changes by',
   alertChangesByDisplay: 'Changes by',
   alertEmailNotification: 'Email notification',
@@ -1768,7 +1775,7 @@ const en = {
   alertNoAlerts: 'No alerts configured',
   alertLastTriggered: 'Last triggered',
   alertNewPositionLabel: 'New Position Alert',
-  alertNewPositionDesc: 'Alert when trader opens a new position',
+  alertNewPositionDesc: 'Unavailable during V1 verification',
 
   // ProFeaturesPanel
   proFeaturesTitle: 'Pro Features',
@@ -1998,7 +2005,7 @@ const en = {
   adminAlertTriggerTitle: 'Alert Trigger Conditions',
   adminStaleAlertDesc: 'Stale alert: Data not updated for over 12 hours',
   adminCriticalAlertDesc: 'Critical alert: Data not updated for over 24 hours',
-  adminAlertCronNote: 'Alerts triggered via /api/cron/check-data-freshness scheduled task',
+  adminAlertCronNote: 'V1 verification hold: automatic freshness alerts are unavailable',
 
   // Login / Register page
   loginRegisterTitle: 'Login / Register',
@@ -2131,9 +2138,9 @@ const en = {
   helpCompareQ: 'How do I use the Trader Comparison feature?',
   helpCompareA:
     'Click the "Compare Traders" button on the homepage, search and add up to 5 traders, and the system will display their metrics side by side.',
-  helpAlertsQ: 'What are Trader Alerts?',
+  helpAlertsQ: 'Are Trader Alerts available?',
   helpAlertsA:
-    'When traders you follow experience significant ranking changes, ROI fluctuations, or other important changes, the system will automatically send you private message alerts.',
+    'Trader-alert monitoring and delivery are temporarily unavailable during V1 verification. Signed-in users may only view or remove saved legacy configurations.',
   helpScoreBreakdownQ: 'What does Arena Score Breakdown show?',
   helpScoreBreakdownA:
     "Score Breakdown shows a trader's Return Score, Drawdown Score, and Stability Score, along with their percentile ranking among traders of the same type.",
@@ -2645,12 +2652,12 @@ const en = {
   viewGroupInfoAria: 'View group info & rules',
   viewGroupMembersAria: 'View member list',
 
-  // Trader page i18n - TraderPageV2, TraderRefreshButton, TraderFeed, etc.
+  // Trader page i18n - TraderPageV2, TraderFeed, etc.
   aumLabel: 'AUM',
   verifiedAccounts: 'verified accounts',
   mddLabel: 'MDD',
   tradesLabel: 'Trades',
-  dataOutdatedBanner: 'Data may be outdated. Refresh to get the latest.',
+  dataOutdatedBanner: 'Data may be outdated. Manual refresh is unavailable during V1 verification.',
   platformDataUnavailable:
     'Data for this platform is temporarily unavailable. Historical data shown below may be outdated.',
   rankTrend: 'Rank trend (7d)',
@@ -2755,8 +2762,8 @@ const en = {
   compProAnomalyDetection: 'Anomaly detection',
   compFeatureTraderCompare: 'Trader Comparison',
   compProUpTo10Traders: 'Up to 10 traders',
-  compFeatureTraderAlerts: 'Trader Change Alerts',
-  compProInAppEmailPush: 'In-app + Email + Push',
+  compFeatureTraderAlerts: 'Trader Alerts (V1 unavailable)',
+  compProInAppEmailPush: 'Not published during V1 verification',
   compFeatureArenaScore: 'Arena Score',
   compFreeTotalScore: 'Total Score',
   compProBreakdownPercentile: 'Breakdown + Percentile',
@@ -2787,7 +2794,7 @@ const en = {
   congratsProMember: 'Congratulations! You are now a Pro member',
   nowYouCan: 'Now you can:',
   proBenefit1: 'View rankings by category',
-  proBenefit2: 'Get trader change alerts',
+  proBenefit2: 'Trader alerts are temporarily unavailable during V1 verification',
   proBenefit3: 'View detailed score analysis',
   proBenefit4: 'Use advanced filters',
   proBenefit5: 'Compare multiple traders',
@@ -2844,7 +2851,7 @@ const en = {
   pollDuration7d: '7 days',
   myWatchlist: 'My Watchlist',
   savedHubTitle: 'Saved',
-  savedHubSubtitle: 'Keep your traders, posts, and performance alerts together.',
+  savedHubSubtitle: 'Keep your traders and posts together.',
   savedTabTraders: 'Traders',
   savedTabPosts: 'Posts',
   savedTabAlerts: 'Alerts',
@@ -3068,7 +3075,7 @@ const en = {
   benefitFeature: 'Feature',
   benefitFollowTraders: 'Follow Traders',
   benefitHistoricalData: 'Historical Data',
-  benefitTraderAlerts: 'Trader Change Alerts',
+  benefitTraderAlerts: 'Trader Alerts (V1 unavailable)',
   benefitTraderCompare: 'Trader Compare',
   benefitArenaScore: 'Arena Score Details',
   benefitApiAccess: 'API Access',
@@ -3148,9 +3155,9 @@ const en = {
     'Compare up to 4 traders side by side with detailed metric breakdowns and performance charts.',
   aboutFeature4Title: 'Portfolio Tracking',
   aboutFeature4Desc: 'Build and track custom portfolios of top traders across multiple exchanges.',
-  aboutFeature5Title: 'Smart Alerts',
+  aboutFeature5Title: 'Alert Publication Hold',
   aboutFeature5Desc:
-    'Get notified when traders you follow hit milestones, change positions, or enter the top rankings.',
+    'Trader alerts and personalized delivery are temporarily unavailable during V1 verification.',
   aboutFeature6Title: 'Knowledge Library',
   aboutFeature6Desc:
     '56K+ curated educational resources on trading strategies, risk management, and market analysis.',
@@ -3220,7 +3227,7 @@ const en = {
   // Exchange binding banner
   bindExchangeBannerTitle: 'Connect your exchange account',
   bindExchangeBannerDesc:
-    'Sync your live positions and performance to your portfolio via read-only API (different from claiming a trader identity on the leaderboard)',
+    'Save a private read-only connection and manually check its status. It does not publish a portfolio or leaderboard profile.',
   goToBind: 'Connect',
 
   // Search dropdown
@@ -3239,8 +3246,8 @@ const en = {
   pushNotificationError: 'Failed to set up push notifications, please try again',
   pushNotificationsDisabled: 'Push notifications disabled',
   hapticFeedbackTitle: 'Haptic Feedback',
-  hapticFeedbackDesc: 'Feel vibrations when followed traders open positions',
-  tradeAlertVibration: 'Trade Alert Vibration',
+  hapticFeedbackDesc: 'Use vibration feedback for supported in-app interactions',
+  tradeAlertVibration: 'Haptic Feedback',
 
   // Messaging system
   messageSent: 'Sent',
@@ -3632,16 +3639,16 @@ const en = {
   adminReportOther2: 'Other',
 
   // Trader Authorize Page
-  authorizeTitle: 'Authorize Real Trading Data',
+  authorizeTitle: 'Save Read-Only Exchange Connection',
   authorizeDesc:
-    'After authorization, your real trading data will be displayed on the leaderboard in real-time, gaining higher credibility and attention.',
-  authorizeBenefits: 'Benefits:',
-  authorizeRealTimePositions: 'Real-time position display',
-  authorizeSuccess: 'Authorization successful! Redirecting to settings...',
+    'Save a private account connection. This does not claim or publish a leaderboard profile.',
+  authorizeBenefits: 'Connection scope:',
+  authorizeRealTimePositions: 'Read-only account access',
+  authorizeSuccess: 'Connection saved! Redirecting to settings...',
   authorizeSecurityNote:
     'Your API credentials will be stored encrypted with AES-256, used only for reading trading data. We cannot perform any trading operations. We recommend creating a read-only API Key.',
-  authorizeSubmitSuccess: 'Authorization successful!',
-  authorizeSubmitButton: 'Authorize Data Display',
+  authorizeSubmitSuccess: 'Connection saved!',
+  authorizeSubmitButton: 'Save Connection',
   authorizeStep1: 'Log in to your exchange account and go to API management',
   authorizeStep2: 'Permissions: Only check "Read" permission, do not enable trading or withdrawal',
   authorizeStep3: 'Optional: Set IP whitelist for enhanced security',
@@ -3921,13 +3928,13 @@ const en = {
   // Round 18 i18n - trader/authorize (unique keys only)
   pleaseLoginTitle: 'Please Login',
   loginToAuthorize: 'You need to login to authorize trading accounts',
-  authorizeRealData: 'Authorize Real Trading Data',
-  authBenefitsTitle: 'Benefits:',
-  authBenefitRealtime: 'Real-time position display',
-  authBenefitWeight: 'Higher ranking weight',
-  authBenefitBadge: 'Official verification badge',
-  authBenefitPriority: 'Priority recommendation',
-  authSuccessRedirecting: 'Authorization successful! Redirecting to settings...',
+  authorizeRealData: 'Save Read-Only Exchange Connection',
+  authBenefitsTitle: 'Connection scope:',
+  authBenefitRealtime: 'Read-only account access',
+  authBenefitWeight: 'No leaderboard weight',
+  authBenefitBadge: 'No verification badge',
+  authBenefitPriority: 'No public-profile publishing',
+  authSuccessRedirecting: 'Connection saved! Redirecting to settings...',
   connectExchange: 'Connect Exchange',
   apiKey: 'API Key',
   apiSecret: 'API Secret',
@@ -4246,7 +4253,7 @@ const en = {
   noFollowers: 'No followers yet',
   noMessagesHint: 'No messages yet',
   noAlertsDesc:
-    'Follow traders from the rankings page to receive alerts when their performance changes',
+    'Trader-alert monitoring and delivery are temporarily unavailable during V1 verification.',
 
   // Errors
   invalidResponse: 'Invalid response',
@@ -4510,9 +4517,8 @@ const en = {
 
   // Guest signup prompt
   guestSignupTitle: 'Track Top Traders',
-  guestSignupSubtitle:
-    'Create a free account to follow traders and get alerts when their performance changes',
-  guestSignupFeature1: 'Follow traders and get rank change alerts',
+  guestSignupSubtitle: 'Create a free account to follow traders and organize your research.',
+  guestSignupFeature1: 'Follow traders and organize your research',
   guestSignupFeature2: 'Compare up to 5 traders side by side',
   guestSignupFeature3: 'Save watchlists and personalize rankings',
   guestSignupButton: 'Sign Up Free',
@@ -4590,8 +4596,24 @@ const en = {
   statusActiveIncidents: 'Active Incidents',
   statusNoIncidents: 'No active incidents',
   statusNoIncidentsDesc: 'All monitored services and data feeds are operating normally.',
-  statusServices: 'Services',
+  statusServices: 'Core API & Dependencies',
+  statusCoreApiNote:
+    'The public /api/rankings and /api/traders paths depend on the API, database, and freshness authorities shown above. This page does not infer a green endpoint state when an authority is unavailable.',
   statusDataFreshness: 'Data Freshness',
+  statusSourceBoardCoverage: 'Ranking source-board coverage',
+  statusBoardsVisible: '{visible}/{expected} expected boards visible',
+  statusRankingSourceFreshness: 'Ranking source freshness',
+  statusSourcesFresh: '{fresh}/{total} sources fresh',
+  statusLatestPublication: 'Latest successful {season} publication',
+  statusRankingAuthority: 'Ranking freshness & publication authority',
+  statusAuthorityUnavailable: 'Unknown — authority unavailable',
+  statusKnownLimitations: 'Known Limitations',
+  statusLimitationCadence:
+    'Leaderboards are recomputed every {leaderboard}; upstream source boards typically refresh every {sources}, and individual sources may differ.',
+  statusLimitationCoverage:
+    'Coverage and available metrics vary by source. Missing, stale, or unproven source windows fail closed.',
+  statusLimitationAvailability:
+    'Availability here is a current snapshot, not historical uptime, an SLA, or a claim of real-time data.',
   statusUnableToLoad: 'Unable to load status',
   statusLastChecked: 'Last checked {ago}',
   statusAutoRefresh: 'Auto-refreshes every 30 seconds',
@@ -4774,6 +4796,12 @@ const en = {
   // Portfolio page
   portfolioPageTitle: 'Portfolio',
   portfolioTitle: 'Portfolio',
+  portfolioLegacyCleanup: 'Legacy connection cleanup',
+  portfolioLegacyTitle: 'Legacy portfolio connections are retired in V1',
+  portfolioLegacyDescription:
+    'New connections and syncing are disabled. Existing encrypted credentials are listed only so you can remove the Arena copy; they are not used for V1 ranking or profile verification. Also revoke or rotate each legacy key at its exchange.',
+  portfolioLegacySuccessor: 'Open the V1 private connection flow',
+  portfolioLegacyEmpty: 'No legacy portfolio connections remain.',
   portfolioConnectExchange: 'Connect Exchange',
   portfolioEmptyTitle: 'Connect an exchange to track your portfolio',
   portfolioConnectedExchanges: 'Connected Exchanges',
@@ -5079,21 +5107,24 @@ const en = {
   claimWalletMismatch: 'Your wallet address does not match this trader account.',
   claimWalletSuccess: 'Wallet verification successful!',
   claimWalletExpired: 'Signature expired. Please sign again.',
-  claimApiKeyVerifyTitle: 'Verify API Key Ownership',
+  claimApiKeyVerifyTitle: 'Connect a CEX Account',
   claimApiKeyVerifyDesc:
-    'Enter your exchange API Key and Secret to verify you own this trader account. We only use read-only permissions.',
-  claimApiKeyMismatch: 'The API key does not belong to this trader account.',
+    'A read-only API key connects first-party account data for sync. It does not prove ownership of a public leaderboard profile and cannot be used for a V1 claim.',
+  claimApiKeyMismatch: 'The API key could not be matched to this exchange account.',
   claimWalletToVerifyLabel: 'Wallet to verify:',
   claimExchangeErrorPrefix: 'Exchange returned:',
-  claimApiKeySuccess: 'API key verification successful!',
-  claimVerifyMethodApi: 'API Key',
+  claimApiKeySuccess: 'CEX account connection verified!',
+  claimVerifyMethodApi: 'CEX Account Connection',
   claimVerifyMethodWallet: 'Wallet Signature',
   claimVerifyAndClaim: 'Verify & Claim',
   claimFormSafeNote:
-    'We only require read-only API keys (no trading or withdrawal permissions). Keys are encrypted with AES-256-GCM and never logged.',
+    'Read-only CEX keys are encrypted and used only for first-party account sync. They are not accepted as V1 leaderboard-claim proof.',
   claimSupportedExchanges: 'Supported Exchanges',
-  claimDexPlatforms: 'DEX Platforms (Wallet Verification)',
-  claimCexPlatforms: 'CEX Platforms (API Key Verification)',
+  claimDexPlatforms: 'V1 Claims (Hyperliquid and GMX Wallets)',
+  claimCexPlatforms: 'CEX Account Connections (Not V1 Claims)',
+  claimSourceUnsupportedTitle: 'Claims are not available for this source yet',
+  claimSourceUnsupportedBody:
+    'V1 profile claims support only Hyperliquid and GMX wallet signatures. A CEX API-key connection can sync first-party account data, but cannot prove ownership of a public leaderboard profile.',
 
   // Claim Landing Page
   claimPageTitle: 'Claim Your Trader Profile on Arena',
@@ -5109,21 +5140,20 @@ const en = {
   change: 'Change',
   redirectingToProfile: 'Redirecting to your profile...',
   claimReadOnlyWarning:
-    'For security, please use a READ-ONLY API key. Trading permissions are NOT required.',
-  claimSolanaWalletRequired: 'Please install a Solana wallet (e.g. Phantom) to verify.',
+    'CEX API keys are for first-party account sync only and are not accepted as V1 profile-claim proof.',
   claimPageFaqTitle: 'Frequently Asked Questions',
   claimPageFaqWhat: 'What is claiming a profile?',
   claimPageFaqWhatAnswer:
     'Claiming verifies that you are the real person behind a trader profile on Arena. Once verified, you get a badge, can edit your profile, and access exclusive features.',
   claimPageFaqHow: 'How do I verify my identity?',
   claimPageFaqHowAnswer:
-    'For CEX traders (Binance, Bybit, OKX, etc.), provide a read-only API key. For DEX traders (Hyperliquid, GMX, etc.), sign a message with your wallet. Both methods confirm you own the trading account. After verification, claims go through a quick manual review (usually within 24h) before your badge activates.',
-  claimPageFaqExchanges: 'Which exchanges are supported?',
+    'In V1, choose a Hyperliquid or GMX leaderboard profile and sign the exact server-issued challenge with the same wallet address. A successful signature enters manual owner review before any badge activates.',
+  claimPageFaqExchanges: 'Which sources support V1 claims?',
   claimPageFaqExchangesAnswer:
-    'CEX: Binance, Bybit, OKX, Bitget, Gate.io, HTX. DEX: Hyperliquid, GMX, Gains, Aevo, Kwenta, Vertex, dYdX, Jupiter Perps, Drift.',
-  claimPageFaqSafe: 'Is it safe to provide my API key?',
+    'Hyperliquid and GMX only. Binance, Bybit, OKX, Bitget, Gate.io, HTX, and other CEX API keys may be used for separate first-party account connections, not leaderboard-profile claims.',
+  claimPageFaqSafe: 'Can I use a CEX API key to claim a profile?',
   claimPageFaqSafeAnswer:
-    'Yes. We only require read-only API keys (no trading or withdrawal permissions). Keys are encrypted with AES-256-GCM and never logged.',
+    'No. A CEX account UID does not prove it is the same identity used by a public leaderboard profile. V1 fails closed instead of making that ownership claim.',
   claimPageCta: 'Find Your Profile',
   claimPageSeoTitle: 'Claim Your Crypto Trader Profile | Arena',
   claimPageSeoDesc:
@@ -5169,7 +5199,7 @@ const en = {
   traderShareFactRoi: '{roi} ROI',
   pricingProUnlockTitle: 'What Pro unlocks',
   pricingProDetailedAnalytics: 'Detailed trader analytics & score breakdowns',
-  pricingProAlerts: 'Trader alerts checked every 30 minutes',
+  pricingProAlerts: 'Trader alerts temporarily unavailable during V1 verification',
   pricingProApiAccess: 'API access (coming soon)',
   pricingProCsvExport: 'CSV data export',
   pricingProAdvancedFilters: 'Advanced multi-condition filters',
@@ -5185,7 +5215,7 @@ const en = {
     'Yes, you can switch between monthly and yearly anytime. We will prorate the difference.',
   pricingFaqApiQ: 'Does Pro include API access?',
   pricingFaqApiA:
-    'No. Data API plans are sold separately from Arena Pro. Pro is for trader discovery, alerts, comparison, and deeper analytics.',
+    'No. Data API plans are sold separately from Arena Pro. Pro is for trader discovery, comparison, and deeper analytics; trader alerts are temporarily unavailable during V1 verification.',
   pricingLimitedTimeBanner: 'Limited Time: All Pro features are currently free!',
   pricingStatTradersRanked: 'Traders Ranked',
   pricingStatExchangesTracked: 'Live Ranking Boards',
@@ -5332,7 +5362,6 @@ const en = {
   noGroupsFollowedYet: 'No groups followed yet',
   groupActionsTitle: 'Group Actions',
   newPostButton: '+ New Post',
-  fetchingLinkPreview: 'Fetching link preview...',
   stickerButton: 'Sticker',
   stickersButton: 'Stickers',
   deleteButton: 'Delete',
@@ -5420,6 +5449,11 @@ const en = {
   snapshotViewLive: 'View Current Leaderboard',
 
   // Token Rankings
+  tokenRankingsContainmentLabel: 'Verification hold',
+  tokenRankingsContainmentTitle: 'Token rankings are temporarily withheld',
+  tokenRankingsContainmentDescription:
+    'We are rebuilding and independently verifying the ranking authority snapshots. No token ranking is published until that verification is complete.',
+  tokenRankingsContainmentBack: 'Return to trader rankings',
   tokenRankingsTitle: 'Token Rankings',
   tokenRankingsSubtitle: 'Discover the best traders for every token. Who trades BTC best?',
   tokenRankingsSearchPlaceholder: 'Search tokens (BTC, ETH, SOL...)',
@@ -5506,7 +5540,7 @@ const en = {
   dataSourceDerived: 'Derived Data',
   dataSourceHistorical: 'Historical Data',
   dataSourceVerifiedTooltip:
-    'This trader has verified their identity and authorized real-time data access',
+    'This data has reviewed identity and direct-account provenance; check the displayed as-of time.',
   dataSourcePublicTooltip: 'Data sourced from public exchange APIs',
   bindApiKey: 'Bind API Key',
   connectWallet: 'Connect Wallet',
@@ -5518,8 +5552,8 @@ const en = {
   copyBackupCodes: 'Copy all codes',
   bioTooLong: 'Bio must be 200 characters or less',
   invalidEmailFormat: 'Invalid email format',
-  referralTitle: 'Referral Program',
-  referralDesc: 'Invite friends and earn Pro rewards',
+  referralTitle: 'Referral status',
+  referralDesc: 'Referral invitations and rewards are unavailable during the V1 verification hold.',
   copyText: 'Copy',
   auditLog: 'Audit Log',
   moderationQueue: 'Moderation Queue',
@@ -5532,7 +5566,7 @@ const en = {
   watchlistSignInTitle: 'Sign in to view your watchlist',
   watchlistSignInDesc: 'Create an account or log in to save and track your favorite traders.',
   traderAlertsSignInTitle: 'Sign in to view trader alerts',
-  traderAlertsSignInDesc: 'Log in to create and manage performance alerts for traders you follow.',
+  traderAlertsSignInDesc: 'Log in to view or remove saved trader-alert configurations.',
   watchlistEmptyTitle: 'Your watchlist is empty',
   watchlistEmptyDesc:
     'Browse the rankings and click the star icon on any trader profile to add them here.',
@@ -6151,10 +6185,10 @@ const en = {
   recordProvenanceUnknown: 'unknown',
   provenanceTracked: 'Tracked',
   provenanceTrackedTip:
-    'Metrics are scraped from the exchange’s public leaderboard and have NOT been independently verified via API access. Connect a read-only API key to earn a ✓ Verified badge.',
+    'Metrics come from the exchange’s public leaderboard. A separate private CEX connection does not verify, change, or publish this profile.',
   provenanceVerified: 'Verified',
   provenanceVerifiedTip:
-    'Trades confirmed via read-only API access — these numbers are pulled directly from the exchange account, not scraped.',
+    'Direct-account data published only after a reviewed identity mapping; the displayed as-of time governs freshness.',
   derivedBoardBadge: 'Derived',
   derivedBoardTooltip: 'Derived from profile data — coverage limited to recently ranked traders.',
   tfNotProvided: 'Not provided by this exchange',
@@ -6413,28 +6447,33 @@ const en = {
   tokenRankingsSortTrades: 'Trades',
   tokenRankingsSortPnl: 'PnL',
   tokenRankingsNoActivity: 'No activity yet',
-  referralRewardBannerTitle: 'Refer {count} friends, get {days} days of Pro free',
+  // V1 referral-program publication hold
+  referralUnavailableTitle: 'Referral program unavailable',
+  referralUnavailableDescription:
+    'Referral invitations and rewards are unavailable during the V1 verification hold.',
+  referralUnavailableHistoryNote: 'Existing referral history does not promise automatic rewards.',
+  referralRewardBannerTitle: 'Referral program unavailable',
   referralRewardBannerSubtitle:
-    'Invite friends to Arena. When {count} sign up with your link, you get {days} days of Arena Pro — free.',
-  referralHowItWorks: 'How it works',
-  referralStep1: 'Copy your referral link below',
-  referralStep2: 'Share it with friends who love crypto',
-  referralStep3: 'When {count} friends sign up, you unlock {days} days of Pro',
-  referralFriendsReferred: 'Friends Referred',
-  referralRewardUnlocked: 'Reward unlocked!',
-  referralInviteFriends: 'Invite Friends',
-  referralReferredCount: '{count} referred',
+    'New referral invitations and rewards are unavailable during the V1 verification hold.',
+  referralHowItWorks: 'Program status',
+  referralStep1: 'New referral links are unavailable.',
+  referralStep2: 'New referral invitations are unavailable.',
+  referralStep3: 'Referral rewards are not issued automatically.',
+  referralFriendsReferred: 'Referral history',
+  referralRewardUnlocked: 'Reward unavailable',
+  referralInviteFriends: 'Referral program unavailable',
+  referralReferredCount: '{count} historical referrals',
   referralFriendTrialNote:
-    'Bonus: your friends get a {days}-day Pro trial when they join via your link.',
-  referralPromoNote:
-    'Pro is currently free for everyone during our promo. The Pro days you earn are banked and automatically applied once the promo ends — they never expire.',
-  referralPageSubtitle: 'Invite friends to Arena and track your referrals.',
-  referralSignInGateTitle: 'Sign in to get your referral link',
-  referralSignInGateDesc: 'Create an account or log in to start inviting friends.',
-  referralYourLink: 'Your Referral Link',
-  referralGenerating: 'Generating...',
-  referralRegenerate: 'Regenerate Code',
-  referralGenerate: 'Generate Referral Link',
+    'Referral trial rewards are unavailable during the V1 verification hold.',
+  referralPromoNote: 'Existing referral history does not promise automatic rewards.',
+  referralPageSubtitle:
+    'Referral invitations and rewards are unavailable during the V1 verification hold.',
+  referralSignInGateTitle: 'Referral program unavailable',
+  referralSignInGateDesc: 'Signing in cannot create a referral link while the V1 hold is active.',
+  referralYourLink: 'Referral links unavailable',
+  referralGenerating: 'Unavailable',
+  referralRegenerate: 'Unavailable',
+  referralGenerate: 'Unavailable',
   referralShareText: 'Check out Arena - the crypto trader ranking platform!',
   referralShareEmailSubject: 'Check out Arena',
 
@@ -6442,11 +6481,11 @@ const en = {
   proGetStarted: 'Get started with Pro',
   proStep1: 'Explore rankings with advanced Pro filters',
   proStep2: 'Compare top traders side by side',
-  proStep3: 'Set up trader alerts & preferences',
+  proStep3: 'Review notification preferences',
   exploreProRankings: 'Explore Pro rankings',
-  inviteFriendsTitle: 'Invite friends to Arena',
-  inviteFriendsDesc: 'Share Arena and unlock referral rewards',
-  inviteFriendsCta: 'Invite',
+  inviteFriendsTitle: 'Referral program unavailable',
+  inviteFriendsDesc: 'Referral invitations and rewards are paused during V1 verification.',
+  inviteFriendsCta: 'View status',
   receiptSentTo: 'Receipt sent to {email}',
   receiptEmailed: 'A receipt has been emailed to you',
   tipSentAmount: 'You sent {amount}',
@@ -6605,7 +6644,7 @@ const en = {
   privacySec2Title: '2. Information We Collect',
   privacySec2ProvidedLabel: 'Information you provide:',
   privacySec2ProvidedList:
-    'Email address when you create an account\nWallet addresses when you connect via Web3 login (Privy)\nProfile information you choose to add (display name, avatar)\nContent you post (comments, group posts)\nExchange API keys you connect for portfolio sync or trader claiming (read-only; encrypted with AES-256-GCM at rest and never written to logs)',
+    'Email address when you create an account\nWallet addresses when you connect via Web3 login (Privy)\nProfile information you choose to add (display name, avatar)\nContent you post (comments, group posts)\nExchange API keys you connect for first-party account or portfolio sync (read-only; encrypted with AES-256-GCM at rest and never written to logs; not accepted as V1 leaderboard-profile claim proof)',
   privacySec2AutoLabel: 'Information collected automatically:',
   privacySec2AutoList:
     'Usage analytics (page views, feature interactions) via Vercel Analytics\nDevice and browser information (user agent, screen resolution)\nIP address (used for security and anti-abuse, not stored long-term)',
@@ -6787,7 +6826,8 @@ const en = {
   wauSub: 'users with a real heartbeat in the last 7 days',
   newSignups7d: 'New signups (7d)',
   activation7d: '7-day activation',
-  activationSub: '{activated}/{eligible} eligible users active on 2+ days',
+  activationSub: '{activated}/{eligible} viewed and retained a trader across 2 UTC dates',
+  activationMeasuredSince: 'Activation v2 is measured from {time}; earlier activity is excluded.',
   journeyFunnel: 'B2C journey (distinct people)',
   collectionSince:
     'First-party events are collected since {time}; earlier funnel history is not backfilled.',
@@ -6807,6 +6847,21 @@ const en = {
   u2detail_chartMedian: 'Median',
   u2detail_chartDays: 'Days',
   u13admin_accessRequired: 'Admin access required',
+  rankingsRefreshingTitle: 'Rankings are being refreshed',
+  rankingsRefreshingDesc:
+    'We only publish rankings after the latest exchange data passes verification. Please check back shortly.',
+  rankingsEmptyPeriodTitle: 'No ranked traders for this period yet',
+  pricingLifetimeMemberLabel: 'You have Lifetime Pro',
+  quizBadgeMatchLegend: 'Match a Legend',
+  quizNoTradersFound: 'No matching traders found yet. Check out our rankings to discover traders.',
+  quizRoiExtreme: 'Extreme',
+  quizShareChallenge:
+    "Just scored {match}% {type} on Arena's trader personality test. My trading soulmate: {master}. Bet you can't beat my match {url}",
+  quizShareOnX: 'Share on X',
+  historyVerificationTitle: 'Historical data under verification',
+  historyVerificationDesc:
+    'Charts and detailed statistics for this trader will appear once their historical data passes verification.',
+  historyVerificationCurrentRanking: 'Current ranking ({period})',
 } as const
 
 export default en

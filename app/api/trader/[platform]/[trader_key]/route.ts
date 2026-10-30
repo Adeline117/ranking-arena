@@ -17,7 +17,6 @@ import type {
   TraderDetailResponse,
   TraderProfileRow,
   SnapshotMetrics,
-  RefreshJobSummary,
 } from '@/lib/types/trading-platform'
 import { getStalenessSeconds, STALENESS_THRESHOLDS } from '@/lib/types/trading-platform'
 import { ALL_SOURCES } from '@/lib/constants/exchanges'
@@ -71,12 +70,13 @@ export async function GET(
       // Do not reuse a cached response here. The current request must observe
       // the sealed public cohort before it can expose rank/ROI/score/count.
 
-      // Fire only identity, operational refresh, and sealed-cohort reads. The
-      // deprecated route formerly replayed raw `trader_timeseries`, equity,
-      // daily-PnL, and asset data here; none carries a public completeness
-      // proof, so it is structurally quarantined below instead of being read.
+      // Fire only identity and sealed-cohort reads. The deprecated route
+      // formerly replayed raw `trader_timeseries`, equity, daily-PnL, and asset
+      // data here; none carries a public completeness proof, so it is
+      // structurally quarantined below instead of being read. V1 also never
+      // exposes legacy refresh-queue state.
       const windows: SnapshotWindow[] = ['7D', '30D', '90D']
-      const [profileResult, sourceIdentityResult, jobResult, rankingCohort] = await Promise.all([
+      const [profileResult, sourceIdentityResult, rankingCohort] = await Promise.all([
         supabase
           .from('trader_profiles_v2')
           .select(
@@ -92,15 +92,6 @@ export async function GET(
           .select('handle, avatar_url')
           .eq('source', platform)
           .eq('source_trader_id', trader_key)
-          .maybeSingle(),
-        supabase
-          .from('refresh_jobs')
-          .select('id, status, attempts, last_error, created_at, updated_at')
-          .eq('platform', platform)
-          .eq('trader_key', trader_key)
-          .in('status', ['pending', 'running'])
-          .order('created_at', { ascending: false })
-          .limit(1)
           .maybeSingle(),
         fetchPublicProfileRankingRows(supabase, {
           source: platform,
@@ -229,18 +220,6 @@ export async function GET(
       const stalenessSeconds = getStalenessSeconds(latestUpdate)
       const isStale = stalenessSeconds > STALENESS_THRESHOLDS.STALE
 
-      // Build refresh job summary
-      const refreshJob: RefreshJobSummary | null = jobResult.data
-        ? {
-            id: jobResult.data.id,
-            status: jobResult.data.status,
-            attempts: jobResult.data.attempts,
-            last_error: jobResult.data.last_error,
-            created_at: jobResult.data.created_at,
-            updated_at: jobResult.data.updated_at,
-          }
-        : null
-
       const response: PublicTraderDetailResponse = {
         profile,
         snapshots,
@@ -248,7 +227,8 @@ export async function GET(
         updated_at: latestUpdate,
         is_stale: isStale,
         staleness_seconds: stalenessSeconds,
-        refresh_job: refreshJob,
+        // Compatibility field: V1 never exposes legacy refresh queue state.
+        refresh_job: null,
         ranking_visibility: rankingCohort.rankingVisibility,
         ranking_visibility_reason: rankingCohort.rankingVisibilityReason,
       }

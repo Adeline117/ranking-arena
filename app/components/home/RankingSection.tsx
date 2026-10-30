@@ -1,9 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
-import { apiFetch } from '@/lib/utils/api-fetch'
 import type { Trader } from '../ranking/RankingTableTypes'
 import type { TimeRange } from './hooks/useTraderData'
 import type { CategoryCounts } from '@/lib/getInitialTraders'
@@ -26,9 +25,6 @@ const ProUpsellModal = dynamic(
   { ssr: false }
 )
 const RankingFooter = dynamic(() => import('./RankingFooter'), { ssr: false })
-const LeaderboardChangelog = dynamic(() => import('../ranking/LeaderboardChangelog'), {
-  ssr: false,
-})
 
 interface RankingSectionProps {
   traders: Trader[]
@@ -143,51 +139,6 @@ export default function RankingSection({
     handleProRequired() // tracking only
     setProUpsellOpen(true)
   }, [handleProRequired])
-
-  // Leaderboard movers
-  const [movers, setMovers] = useState<{
-    risers: Array<{
-      platform: string
-      trader_key: string
-      rank: number
-      arena_score: number | null
-      roiDelta: number
-      handle: string | null
-      avatar_url: string | null
-    }>
-    fallers: Array<{
-      platform: string
-      trader_key: string
-      rank: number
-      arena_score: number | null
-      roiDelta: number
-      handle: string | null
-      avatar_url: string | null
-    }>
-  }>({ risers: [], fallers: [] })
-  useEffect(() => {
-    const doFetch = () => {
-      apiFetch<{ risers?: typeof movers.risers; fallers?: typeof movers.fallers }>(
-        '/api/rankings/movers'
-      )
-        .then((data) => {
-          if (data?.risers || data?.fallers)
-            setMovers({ risers: data.risers || [], fallers: data.fallers || [] })
-        })
-        .catch((err) => {
-          if (err instanceof Error && err.name === 'AbortError') return
-          console.warn('[RankingSection] movers fetch failed:', err)
-        })
-    }
-    if ('requestIdleCallback' in window) {
-      const id = requestIdleCallback(doFetch, { timeout: 5000 })
-      return () => cancelIdleCallback(id)
-    } else {
-      const id = setTimeout(doFetch, 2000)
-      return () => clearTimeout(id)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   const handleCategoryChange = useCallback(
     (nextCategory: CategoryType) => {
@@ -330,7 +281,20 @@ export default function RankingSection({
             lineHeight: 1.6,
           }}
         >
-          {hasActiveFilters ? t('noTradersMatchFilters') : t('failedToLoadRankings')}
+          {hasActiveFilters ? (
+            t('noTradersMatchFilters')
+          ) : (
+            // No `error` here: the request succeeded but returned an empty
+            // cohort. The API withholds rows (sealed-empty projection) while
+            // source freshness/publication is unverified (`isStale`), so this
+            // is a refresh state — not a load failure.
+            <>
+              <div style={{ color: tokens.colors.text.secondary, marginBottom: 4 }}>
+                {isStale ? t('rankingsRefreshingTitle') : t('rankingsEmptyPeriodTitle')}
+              </div>
+              <div style={{ fontSize: 13 }}>{t('rankingsRefreshingDesc')}</div>
+            </>
+          )}
           {hasActiveFilters ? (
             <button
               onClick={handleResetFilters}
@@ -403,14 +367,6 @@ export default function RankingSection({
         categoryCounts={categoryCounts}
         categoryCountsAreExact={categoryCountsAreExact}
       />
-
-      <div className="contain-layout-style">
-        {(movers.risers.length > 0 || movers.fallers.length > 0) && (
-          <div style={{ marginTop: 16, marginBottom: 16 }}>
-            <LeaderboardChangelog risers={movers.risers} fallers={movers.fallers} />
-          </div>
-        )}
-      </div>
 
       <div
         className="contain-layout-style"

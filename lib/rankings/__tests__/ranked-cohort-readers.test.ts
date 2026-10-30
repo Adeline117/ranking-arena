@@ -42,7 +42,8 @@ describe('public ranked-cohort reader contract', () => {
     'app/api/rankings/live/route.ts',
     'app/api/v2/rankings/route.ts',
     'app/api/v3/route.ts',
-    'app/api/export/rankings/route.ts',
+    // The homepage SSR reads through getLeaderboard (asserted below).
+    'lib/data/trader/queries.ts',
     'app/api/sidebar/top-traders/route.ts',
     'app/api/traders/[handle]/badges/route.ts',
     'app/(quiz)/quiz/result/page.tsx',
@@ -88,8 +89,6 @@ describe('public ranked-cohort reader contract', () => {
     'app/api/rankings/live/route.ts',
     'app/api/v2/rankings/route.ts',
     'app/api/v3/route.ts',
-    'app/api/export/rankings/route.ts',
-    'app/api/rankings/movers/route.ts',
     'app/api/sidebar/top-traders/route.ts',
     'app/api/traders/[handle]/badges/route.ts',
     'app/(quiz)/quiz/result/page.tsx',
@@ -102,13 +101,17 @@ describe('public ranked-cohort reader contract', () => {
     expect(source(path).match(rankNotNull)?.length ?? 0).toBeGreaterThanOrEqual(1)
   })
 
-  it('movers can cache only an unavailable historical-ranking state, never raw rank rows', () => {
+  // Movers is a V1 containment stub (see app/api/rankings/movers/__tests__/
+  // quarantined-route.test.ts): it reads no relation at all, so it is stricter
+  // than a sealed-view reader and has no persisted-rank prefilter to assert.
+  it('movers returns only an unavailable, uncached state and reads no rank rows', () => {
     const movers = source('app/api/rankings/movers/route.ts')
 
-    expect(movers).toMatch(publicRankedViewRead)
-    expect(movers).toContain('unavailableMovers')
     expect(movers).toMatch(/risers:\s*\[\]/)
     expect(movers).toMatch(/fallers:\s*\[\]/)
+    expect(movers).toContain('available: false')
+    expect(movers).toContain("'Cache-Control': 'private, no-store, max-age=0, must-revalidate'")
+    expect(movers).not.toMatch(/\.from\(|\.rpc\(/)
     expect(movers).not.toContain('@/lib/analytics/queries')
     expectNoRawPublicRankingRelation(movers)
   })

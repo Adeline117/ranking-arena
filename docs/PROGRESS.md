@@ -19,6 +19,326 @@
 详细阶段只在对应权威文档维护；`EXCHANGE_FIELD_COVERAGE.md` 是机器生成快照，禁止手改。旧日期段落保留
 为历史记录，不覆盖本表。
 
+## V1 LCP measurement CLI source containment（2026-08-17）
+
+本轮只封存 `scripts/performance/measure-lcp.mjs` 这一没有当前操作 caller 的 legacy compatibility path。
+它无论传入何种参数，均只向 stderr 输出 `[RETIRED] scripts/performance/measure-lcp.mjs`、stdout 保持为空，
+并以 exit `2` 结束；不解析目标、不加载 Lighthouse、不访问网络、不安装依赖、不启动或控制浏览器，
+也不生成、读取、覆盖或上传报告。
+
+这是单一脚本的 source-only boundary：它不改变真正的 Lighthouse CI/workflow、其他性能工具、Vercel
+Analytics、Chrome DevTools、部署或浏览器状态，也不删除、检查或证明已生成报告或任何外部状态。下方历史
+性能、CI、部署或报告陈述不能作为当前执行或外部状态的证据；未来任何测量、CI 或报告工作均须由 owner
+在独立 ADR-023 计划中重新定义并保全单独证据。
+
+## V1 stuck-log diagnostic CLI source containment（2026-08-17）
+
+本轮只封存 `scripts/archive/check-stuck-simple.mjs` 这一没有当前操作 caller 的 legacy diagnostic
+compatibility path。它无论传入何种参数，均只向 stderr 输出
+`[RETIRED] scripts/archive/check-stuck-simple.mjs`、stdout 保持为空，并以 exit `2` 结束；不再读取、
+查询或变更 `pipeline_logs`，也不调用 current monitoring API、worker 或 meta-monitor。
+
+这是单一脚本的 source-only boundary：它不改变、检查或证明 `pipeline_logs`、当前 monitoring API、
+worker、meta-monitor、deployment、数据或任何外部状态。下方历史诊断、监控或 pipeline 记录不能作为
+当前运行或数据状态的证据；未来任何诊断或修复工作均须由 owner 在独立 ADR-023 计划中重新定义并保全
+单独证据。此边界不退休或评估 `lib/services/pipeline-logger.ts`、`/api/health/pipeline`、admin
+monitoring readers（包括 enrichment-completeness）、`lib/cron/auto-cleanup-stuck.ts`，或已单独 held 的
+`/api/cron/cleanup-stuck-logs`。
+
+## V1 archive service-role diagnostic CLIs source containment（2026-08-17）
+
+本轮只封存 `scripts/archive/check-failed-jobs.mjs`、
+`scripts/archive/check-failed-tasks.mjs`、`scripts/archive/check-latest-errors.mjs` 与
+`scripts/archive/check-rankings.mjs` 这四个 legacy service-role diagnostic compatibility path。
+每个脚本无论传入何种参数，均只向 stderr 输出对应固定的
+`[RETIRED] scripts/archive/check-failed-jobs.mjs`、
+`[RETIRED] scripts/archive/check-failed-tasks.mjs`、
+`[RETIRED] scripts/archive/check-latest-errors.mjs` 或
+`[RETIRED] scripts/archive/check-rankings.mjs` notice、stdout 保持为空，并以 exit `2` 结束。
+
+这是只覆盖这四个文件的 source-only boundary：它不退休、评估、改变、检查或证明当前
+`PipelineLogger`、`/api/health/pipeline`、`/api/cron/meta-monitor`、package 中当前 diagnostic scripts、
+`leaderboard_ranks` 或 public rankings，也不触及已单独 held 的 cleanup/compute cron。它同样不停止、
+检查、改变或证明 deployed database、cron 或任何外部状态；下方历史诊断、排名或 pipeline 记录不能作为
+当前运行或数据状态的证据。未来诊断或修复工作须由 owner 在独立 ADR-023 计划中重新定义并保全单独证据。
+
+## V1 homepage regression archive CLI source containment（2026-08-17）
+
+本轮只封存 `scripts/archive/check-homepage-regression.mjs` 这一 legacy homepage diagnostic
+compatibility path。它无论传入何种参数，均只向 stderr 输出
+`[RETIRED] scripts/archive/check-homepage-regression.mjs`、stdout 保持为空，并以 exit `2` 结束。
+
+这是单一文件的 source-only boundary：它不退休、评估、改变、检查或证明 `app/page.tsx`、`HomePage`、
+`HomePageLoader`、SSR ranking surface、homepage Jest/E2E、真正的 Lighthouse CI、`/api/health`、
+`/api/health/pipeline` 或当前 workflows。它同样不停止、检查、改变或证明 deployment、browser 或任何
+external state；下方历史 homepage、测试或性能记录不能作为当前运行或外部状态的证据。未来任何检查、CI
+或修复工作须由 owner 在独立 ADR-023 计划中重新定义并保全单独证据。
+
+## V1 ranking authority cache-purge source containment（2026-08-17）
+
+本轮只封存 `scripts/maintenance/purge-ranking-authority-caches.sh` 这一 legacy compatibility path。
+它无论传入何种参数均只向 stderr 输出 `[RETIRED]` 并以 exit `2` 结束；不再读取环境、运行 Vercel/Git、
+访问网络、清除 cache 或进行 host 工作。
+
+这是 source-only boundary：它不清除、检查或证明任何已部署 Data/CDN cache、release、project 或外部状态，
+也不改变 public ranking route、cache policy、cache key 或部署流程。下方的历史部署陈述不能作为当前 cache
+或 release 状态的证据；未来任何 cache 操作都必须由 owner 在独立 ADR-023 计划中定义并保全单独证据。
+
+## V1 migration-ledger repair artifact source containment（2026-08-17）
+
+本轮只封存 `scripts/migration-reconcile/ledger-repair-20260702.sql` 这一历史账本路径。该文件现为
+`[RETIRED]` 的纯注释来源记录，在 V1 NO-GO 下没有可运行内容；外部 SQL-file launcher 可能因注释
+是 no-op 而报告 exit 0，但这不是 ledger、catalog、数据库或任何 live-state 的证据，也不是工作入口。
+
+这是 source-only boundary：不运行、检查、变更或证明任何数据库、迁移、已部署服务、host、worker 或
+scheduler 的状态。它不触及 `supabase/migrations/*`、现有 ledger 或生产控制面；未来的 ledger 事项
+只能由 owner 以独立 ADR-023 计划和单独证据处理，不能从这个历史文件推断当前状态。
+
+## V1 ClickHouse schema source containment（2026-08-17）
+
+本轮只封存 `scripts/clickhouse/schema.sql`。该文件现为 `[RETIRED]` 的纯注释来源记录，
+在 V1 NO-GO 下没有可运行内容；外部 SQL-file launcher 可能因注释是 no-op 而报告 exit 0，
+但这不是 ClickHouse catalog、数据、配置或任何 live-state 的证据，也不是验证或工作入口。
+
+这是 source-only boundary：它不调用、配置、变更、检查或证明 ClickHouse client、dual-write、
+`PipelineLogger`、deployed ClickHouse instance、host 或 credentials 的状态。本次不运行 CLI，
+也不触及 analytics runtime、已部署实例或控制面；未来任何该类事项只能由 owner 在独立 ADR-023
+计划中重新定义并保全单独证据。
+
+## V1 public health VPS probe scope（2026-08-17）
+
+公开 `GET /api/health` 的 `checks` 只报告 API transport、database、Redis 与排名 freshness；本源码
+不读取 VPS scraper/proxy 配置，也不向 VPS 发起 health probe。该 public route 的状态不再把 VPS
+连通性作为补充检查或总体状态输入。
+
+这只是 source-only route scope：不停止、不检查也不证明任何已部署 VPS、host process、external
+monitor 或 scheduler 的状态。OpenClaw 与 harness 的独立 VPS probe 不属于 `/api/health` contract，
+不在本变更范围内；下方的主机、worker、生产验证或历史部署陈述不可用于推断当前运行状态或生成操作步骤。
+
+## V1 legacy proxy/import source containment（2026-08-16）
+
+本轮只在源码中封存指定的历史 acquisition entrypoint：`GET /api/proxy/phemex`、
+`cloudflare-worker/src/index.ts`、`scripts/import/import_all_platforms.mjs`、
+`scripts/import/refresh.sh`、`scripts/import/import-all-blocked.sh`、
+`scripts/import/run_hl_enrichment.sh`、`scripts/vps-deploy/scraper-v16-parallel.js`、
+`scripts/vps-deploy/arena-proxy.mjs`、`scripts/archive/test-vps-scrapers.ts` 与
+`scripts/archive/verify-data-accuracy.mjs`。Phemex 保持 auth-first `401/410
+LEGACY_PROXY_ACQUISITION_NOT_PUBLISHED` 和三层 `no-store`；checked-in Cloudflare Worker
+固定 `410 LEGACY_PROXY_IMPORT_NOT_PUBLISHED`、不做 upstream fetch；列出的 scripts 固定
+`RETIRED`/exit `2`，不启动 proxy、browser、import 或 host work。
+
+这不是已部署状态：它不停止、检查或证明 VPS scraper/proxy、Cloudflare Worker、host process、
+queue 或 schedule，也不封存所有 source write。worker `avatar-mirror` 已由下方单独 source-only
+封存；下方 avatar-proxy route 也有独立 source-only boundary。其他 avatar-related API path/helper、
+UI/read RPC、adapter 与未列 writer 都在范围外，需独立审查。
+下方的主机、worker、生产验证或历史部署陈述仍是带日期的历史记录，不能用来推断当前运行状态或
+生成操作步骤。
+
+## V1 avatar-backfill source containment（2026-08-16）
+
+本轮另将 canonical `GET /api/cron/backfill-avatars` 及其
+`/api/v1/cron/backfill-avatars` rewrite alias 作为同一 source-only tombstone handler：
+先校验 service authentication，缺失或无效认证固定返回 `401`；有效认证固定返回 `410
+CRON_EXECUTION_NOT_PUBLISHED`。两条路径均有三层 `no-store`，并在参数解析、数据库、logging 或
+upstream fetch 前结束。
+
+这同样不是已部署状态：它不停止、检查或证明 host、external scheduler 或 healthcheck。worker
+`avatar-mirror` 已由下方单独 source-only 封存；avatar-proxy route 也有独立 boundary。其他
+avatar-related API path/helper、UI/read RPC、adapter 与未列 writer 保持范围外。下方主机、worker、
+生产验证或历史部署陈述不可用于推断当前运行状态或生成操作步骤。
+
+## V1 avatar-mirror worker source containment（2026-08-17）
+
+checked-in `avatar-mirror` worker execution 已单独 source-only retired：processor 为 no-op，
+scheduler 不再生产 avatar-mirror job；legacy queued avatar-mirror job 在 `route()` 内以 no-op 返回，
+早于该 handler 调用 `getConnection()`、获取 per-job source lease 或加载 processor。这不声称外围
+worker 或 BullMQ 尚未建立或使用 shared Redis，或尚未获取 job lock。它不停止、检查或证明任何已运行
+worker、Redis、host process 或 schedule 已停止。
+avatar-proxy route 有单独 boundary；其他 avatar-related API path/helper、UI/read RPC、adapter 与
+未列 writer 仍在该 worker 边界范围外。下方主机、worker、生产验证或历史部署陈述不可用于推断
+当前运行状态或生成操作步骤。
+
+## V1 avatar-proxy source containment（2026-08-17）
+
+本轮将匿名 `GET /api/avatar` 及其 `/api/v1/avatar` rewrite alias 封存为同一 fixed `410`
+source-only response：两条路径均有 `Cache-Control`、`CDN-Cache-Control`、
+`Vercel-CDN-Cache-Control` 三层 `no-store`，并在 query 解析、DNS lookup、upstream fetch 或
+logging 前结束。matching proxy bypass 只保持这个匿名 no-store response contract，不表示可以使用
+upstream proxy。已登记 helper 与已知 UI/OG consumer 不再生成 proxy request；没有 mirror 的
+proxy-required origin 退回 local、inline 或 default fallback。
+
+这不声称所有 avatar browser/network request 都已停止：existing Supabase mirror 和 direct allowed
+raw-avatar URL 仍可能 render；其他 avatar-related API path/helper、adapter 与未列 writer 仍在范围外。
+这只是源码状态，不能清除旧 CDN cache、停止 older deployed code，或证明 external state；下方的主机、
+worker、生产验证或历史部署陈述不可用于推断当前运行状态或生成操作步骤。
+
+## V1 direct service-auth cron ingress source containment（2026-08-17）
+
+本轮仅在源码中将下列十个 direct service-auth cron ingress handler 纳入固定、非环境的
+`V1_CRON_EXECUTION_PUBLISHED=false` boundary：`GET /api/cron/batch-5min`、`GET
+/api/cron/check-data-freshness`、`GET /api/cron/cleanup-data`、`GET
+/api/cron/cleanup-stuck-logs`、`GET /api/cron/detect-contracts`、`GET`/`POST
+/api/cron/fetch-funding-rates`、`GET`/`POST /api/cron/fetch-market-data`、`GET`/`POST
+/api/cron/fetch-open-interest`、`GET /api/cron/qualify-referrals` 与 `GET
+/api/cron/smoke-test`。
+
+这些入口均 auth-first：缺失或无效 service authentication 固定返回 `401`；valid service
+secret 固定返回 `410 CRON_EXECUTION_NOT_PUBLISHED`。两条路径均有
+`Cache-Control`、`CDN-Cache-Control`、`Vercel-CDN-Cache-Control` 三层 `no-store`，并在
+query/body 解析、lock、`PipelineLogger`、database、cache、provider 或 network 工作前结束。
+该 source-only boundary 只覆盖这十个入口，不把其他 cron 描述为已退休；它不停止、检查或证明
+任何已部署 scheduler、host、queue 或 worker。下方主机、worker、生产验证或历史部署陈述仍不可用于
+推断当前运行状态或生成操作步骤。
+
+## V1 direct rankings-export source containment（2026-08-17）
+
+本轮将 direct service-auth `GET /api/export/rankings` 及其 `/api/v1/export/rankings`
+rewrite alias 纳入固定、非环境的 `V1_RANKINGS_EXPORT_PUBLISHED=false` source boundary。
+缺失或无效 Edge service secret 返回 `401`；有效 secret 固定返回
+`410 RANKINGS_EXPORT_NOT_PUBLISHED`。两种响应均有三层 `no-store`，并在 query、Redis rate
+limit、Supabase ranked-cohort read、CSV/JSON 生成或 logging 前结束。
+
+该边界只覆盖这一个 arbitrary service-auth export ingress；V3 CSV endpoint 和 authenticated
+`/api/settings/export` 保持范围外。它不停止、检查或证明已部署 route、仓库外 automation、cache 或
+数据读取状态。
+
+## V1 legacy Library collector source containment（2026-08-17）
+
+本轮只封存五个 legacy Library collector compatibility path：
+`scripts/library/collect_arxiv.mjs`、`scripts/library/collect_books.mjs`、
+`scripts/library/collect_research.mjs`、`scripts/library/collect_whitepapers.mjs` 与
+`scripts/library/seed_bulk.mjs`。它们不再 import、读取环境、连接数据库或 fetch；无论传入何种参数
+（含空环境）均只向 stderr 输出 `[RETIRED]` 并以 exit `2` 结束，stdout 保持为空。
+
+这是 source-only boundary：不停止、检查或证明任何已部署 collector、数据库、schedule 或历史数据状态；
+其他 Library helper、数据库结构和历史 archive 文档均不在此次范围内。
+
+## V1 standalone Flash News CLI source boundary（2026-08-17）
+
+本轮只封存六个 standalone Flash News CLI compatibility path：
+`scripts/flash-news/collect.mjs`、`scripts/flash-news/retranslate-all.mjs`、
+`scripts/backfill-flash-news-classify.mjs`、`scripts/backfill-flash-news-translate.mjs`、
+`scripts/purge-flash-news-noncrypto.mjs` 与 `scripts/dedup-hot-posts.mjs`。无论传入何种参数，
+它们均固定输出 `RETIRED` 并以 exit `2` 结束，不发起 fetch，亦不进行 database 或 file mutation。
+
+该边界不触及 `app/api/cron/flash-news-fetch`、`/api/flash-news` 或 Flash News UI，且不改变共享
+classifier/translator 的运行时行为；它们仍需独立审查。这只是 checked-in source 状态，不停止、检查或证明任何
+仓库外、已部署 script 或 scheduler 的状态。
+
+## V1 legacy worker deploy source containment（2026-08-17）
+
+`worker/deploy.sh` 是旧 Mac full-pipeline compatibility path，现固定输出 `RETIRED` 并以 exit `2`
+结束；它不再安装 host tooling、读取 worker environment、连接 Redis 或改变 process manager state。
+
+这只是 checked-in source containment：不停止、检查或证明任何已部署 worker、host、Redis、process
+manager 或 scheduler 的状态。`worker/deploy-ingest-local.sh`、`worker/deploy-ingest-sg.sh`、其各自安全
+契约以及其他 runtime ownership 路径均不在此次范围内。
+
+## V1 social seed CLI source containment（2026-08-17）
+
+本轮只封存 `scripts/seed-quality-content.ts` 与 `scripts/social-seed/generate-posts.ts` 两个 social
+seed compatibility path。它们无论传入何种参数均固定输出 `RETIRED` 并以 exit `2` 结束，不读取环境、
+fetch 或读写 posts/comments。
+
+此 source-only boundary 不改变正常 social API、UI、RLS、cache 或既有 posts/comments；也不停止、检查
+或证明仓库外 cron、已部署 script、数据库或历史 seed 数据的状态。
+
+## V1 legacy VPS monitor source containment（2026-08-17）
+
+`scripts/vps/health-ping.sh` 与 `scripts/vps/healthcheck.mjs` 是 legacy VPS monitor
+compatibility path，现固定输出 `RETIRED` 并以 exit `2` 结束；它们不再发网络请求、读写 host 文件、
+发送 alert 或启动 HTTP server。
+
+这只是 source-only containment：不停止、检查或证明已部署 host/process、crontab、UptimeRobot 或其他
+external monitor 的状态。`/api/health`、OpenClaw、harness、infra topology，以及
+`scripts/vps-deploy/setup.sh`、`setup-env.sh`、`check-vps.sh` 与 `deploy.sh` 均是各自独立封存的 source path。
+
+## V1 legacy VPS bootstrap source containment（2026-08-17）
+
+本轮只封存 `scripts/vps-deploy/setup.sh` 这一旧 VPS bootstrap compatibility path。它现固定输出
+`RETIRED` 并以 exit `2` 结束，不再安装软件、建立 host 文件、载入环境或进行网络工作。
+
+这只是 source-only containment：不停止、检查或证明任何 deployed host、PM2、credentials、scheduler
+或 infra topology 的状态。`setup-env.sh`、`check-vps.sh` 与 `deploy.sh` 均已各自封存。
+
+## V1 legacy VPS environment provisioning source containment（2026-08-17）
+
+本轮只封存 `scripts/vps-deploy/setup-env.sh` 这一 legacy VPS environment-provisioning
+compatibility path。它现固定输出 `RETIRED` 并以 exit `2` 结束，不再执行 legacy setup 工作。
+
+这只是 source-only containment：不停止、检查或证明 infra topology、任何 deployed host、PM2、credentials
+或 scheduler 的状态。`setup.sh`、`check-vps.sh` 与 `deploy.sh` 均已各自封存。
+
+## V1 legacy VPS inspection CLI source containment（2026-08-17）
+
+`scripts/vps-deploy/check-vps.sh` 是旧 VPS inspection compatibility path，现固定输出 `RETIRED`
+并以 exit `2` 结束；它不再连接远程主机、读取环境或日志、检查 process state，或发起网络请求。
+
+这只是 source-only containment：`scripts/vps-deploy/setup.sh`、`scripts/vps-deploy/setup-env.sh` 与
+`scripts/vps-deploy/check-vps.sh`、`scripts/vps-deploy/deploy.sh` 均已各自封存；它不停止、检查或证明
+infra topology、任何 deployed host、PM2、credentials 或 scheduler 的状态。
+
+## V1 legacy VPS deploy CLI source containment（2026-08-17）
+
+`scripts/vps-deploy/deploy.sh` 是旧 VPS deploy CLI compatibility path，现固定向 stderr 输出
+`[RETIRED]` 并以 exit `2` 结束；它不再连接 remote host、传输文件、变更 PM2 或进行 health request。
+
+`scripts/vps-deploy/setup.sh`、`scripts/vps-deploy/setup-env.sh`、`scripts/vps-deploy/check-vps.sh` 与
+`scripts/vps-deploy/deploy.sh` 现均是 retired source path。这个 source-only boundary 不停止、检查或证明
+`infra/vps-playwright` ecosystem configs、deployed hosts、PM2、credentials、schedulers，或
+`worker/deploy.sh`、`worker/deploy-ingest-local.sh`、`worker/deploy-ingest-sg.sh` 等 worker deploy paths 的状态。
+
+## V1 archive on-chain probe source containment（2026-08-17）
+
+`scripts/archive/test-onchain-apis.mjs` 是历史 provider probe compatibility path，现固定输出
+`RETIRED` 并以 exit `2` 结束；它不再向 Hyperliquid、Aevo、dYdX、Drift、Jupiter 或 Graph API 发请求。
+
+此 source-only boundary 不改变 `app/api/trader/onchain-enrich` 的既有 hold、worker/on-chain source
+logic、页面或证据链；也不停止、检查或证明任何已部署 probe、host、scheduler 或 provider 的状态。
+
+## V1 archive enrich probe source containment（2026-08-17）
+
+本轮只封存 `scripts/archive/test-enrich-fix.sh` 这一历史 compatibility path。它无论传入何种参数均只向
+stderr 输出 `[RETIRED]` 并以 exit `2` 结束，stdout 保持为空。
+
+这是 source-only boundary：只描述该 checked-in script，不是可恢复的工作入口，也不改变、检查或证明任何
+API route、on-chain pipeline、worker、deploy flow 或产品行为；这些均不在范围内，也不能从此推断仓库外或
+已部署状态。
+
+## V1 enrichment monitor and stale runbook source containment（2026-08-17）
+
+`scripts/monitor-enrichment.sh` 是历史 enrichment monitor compatibility path，现为 retired V1 NO-GO
+source path，而非 status monitor：它固定向 stderr 输出 `[RETIRED]`、stdout 保持为空并以 exit `2` 结束。
+旧的 `scripts/enrich-onchain-all.mjs` runtime 已不在本仓库；
+`scripts/DEPLOY_TO_VPS.md` 与 `scripts/ONCHAIN_ENRICHMENT_README.md` 也已移除历史运行配方，只保留
+不可恢复的边界说明。
+
+这是 source-only boundary：不改变、停止、检查或证明任何 application on-chain API、worker、adapter、
+deployed host、scheduler、credential、database、provider、历史数据或产品行为；也不改变既有
+`app/api/trader/onchain-enrich` hold，不能据此推断任何仓库外或已部署状态。
+
+## V1 exchange-logo sync source containment（2026-08-17）
+
+`scripts/sync-exchange-logos.sh` 是单条历史 exchange-logo sync compatibility path，现为 retired V1
+NO-GO source path：无论传入何种参数，均只向 stderr 输出 `[RETIRED]`、stdout 保持为空并以 exit `2`
+结束。
+
+这是 source-only boundary：既有 checked-in `public/icons/exchanges/*` icon assets 与使用这些本地
+assets 的产品 UI 仍在本次范围外。本次不下载、刷新、删除、检查或证明任何已部署 asset、cache、外部
+来源或 provenance，也不能据此推断任何其他 logo acquisition/refresh workflow 已停止。
+
+## V1 monthly dependency update source containment（2026-08-17）
+
+本轮只封存无当前操作 caller 的 `scripts/monthly-deps-update.mjs` 这一 legacy compatibility path。它现为
+source-only exit `2` tombstone：无论传入何种参数，均只向 stderr 输出 `[RETIRED]`、stdout 保持为空；不会运行
+`npm audit` 或 `npm audit fix`、`npm outdated` 或 `npm update`、`git checkout`、`npm install`，也不会写入依赖
+更新报告。
+
+该边界不移除或改变 package `security:fix`、独立 CI `npm audit`、Dependabot 或人工依赖审查、任何已部署
+依赖或产品运行时；也不检查、变更或证明 lockfile、已安装 package、漏洞状态、发布版本或仓库外环境。未来
+任何依赖修复、更新或报告均须由 owner 在独立 ADR-023 计划中定义并保全单独证据，不能通过这个已退役入口
+执行或推断。
+
 ## 可信度六维提升 P1-P6（2026-07-10，全部落地）
 
 计划: `~/.claude/plans/typed-sleeping-meadow.md`（六维记分卡 + 提升杠杆）

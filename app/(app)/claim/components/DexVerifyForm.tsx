@@ -8,22 +8,9 @@ import { supabase } from '@/lib/supabase/client'
 import { Box, Text } from '@/app/components/base'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from '@/app/components/ui/Toast'
-import { SearchResult, isSolanaDex, walletMatchesTrader } from './types'
+import { SearchResult, walletMatchesTrader } from './types'
 import { trackEvent } from '@/lib/analytics/track'
 import { buildTraderClaimLoginHref } from '@/lib/auth/trader-claim-login'
-
-declare global {
-  interface Window {
-    phantom?: { solana?: SolanaProvider }
-    solana?: SolanaProvider
-  }
-}
-
-interface SolanaProvider {
-  isPhantom?: boolean
-  signMessage?: (message: Uint8Array, encoding?: string) => Promise<{ signature: Uint8Array }>
-  connect: () => Promise<{ publicKey: { toString: () => string } }>
-}
 
 export function DexVerifyForm({
   trader,
@@ -37,7 +24,6 @@ export function DexVerifyForm({
   const router = useRouter()
   const [loading, setLoading] = useState(false)
 
-  const isSolana = isSolanaDex(trader.source)
   const redirectToLogin = () => {
     showToast(t('loginExpiredPleaseRelogin'), 'error')
     router.push(
@@ -61,72 +47,69 @@ export function DexVerifyForm({
         return
       }
 
+      const challengeRes = await fetch('/api/traders/claim/wallet-challenge', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+          ...getCsrfHeaders(),
+        },
+        body: JSON.stringify({
+          trader_id: trader.source_trader_id,
+          source: trader.source,
+        }),
+      })
+      const challengeBody: {
+        data?: { challenge_id?: string; message?: string; expires_at?: string }
+        error?: string | { message?: string }
+      } = await challengeRes.json().catch(() => ({}))
+
+      if (challengeRes.status === 401) {
+        redirectToLogin()
+        return
+      }
+      const challengeId = challengeBody.data?.challenge_id
+      const message = challengeBody.data?.message
+      if (!challengeRes.ok || !challengeId || !message) {
+        const challengeError =
+          typeof challengeBody.error === 'string'
+            ? challengeBody.error
+            : challengeBody.error?.message
+        showToast(challengeError || t('claimFailed'), 'error')
+        return
+      }
+
       let walletAddress: string
       let signature: string
-      const timestamp = Date.now()
-      const message = `I am claiming trader profile ${trader.source_trader_id} on Arena. Timestamp: ${timestamp}`
 
-      if (isSolana) {
-        // Solana wallet signing (Phantom, Solflare, etc.)
-        const solanaProvider = window.phantom?.solana ?? window.solana
-        if (!solanaProvider?.signMessage) {
-          showToast(t('claimSolanaWalletRequired'), 'warning')
-          return
-        }
-
-        const connectTimeout = new Promise<never>((_, reject) =>
-          setTimeout(
-            () => reject(new Error('Wallet connection timed out. Please try again.')),
-            30000
-          )
-        )
-        const resp = await Promise.race([solanaProvider.connect(), connectTimeout])
-        walletAddress = resp.publicKey.toString()
-
-        if (!walletMatchesTrader(walletAddress, trader.source_trader_id, trader.source)) {
-          showToast(t('claimWalletMismatch'), 'error')
-          return
-        }
-
-        const encodedMessage = new TextEncoder().encode(message)
-        const signedMessage = await solanaProvider.signMessage(encodedMessage, 'utf8')
-        // Convert Uint8Array signature to base64 for transmission
-        // Use btoa instead of Buffer.from to avoid Node.js-only API in browser
-        signature = btoa(String.fromCharCode(...signedMessage.signature))
-      } else {
-        // EVM wallet signing
-        if (!window.ethereum) {
-          showToast(t('claimWalletConnectFirst'), 'warning')
-          return
-        }
-
-        const ethTimeout = new Promise<never>((_, reject) =>
-          setTimeout(
-            () => reject(new Error('Wallet connection timed out. Please try again.')),
-            30000
-          )
-        )
-        const accounts = (await Promise.race([
-          window.ethereum.request({ method: 'eth_requestAccounts' }),
-          ethTimeout,
-        ])) as string[]
-        walletAddress = accounts[0]
-
-        if (!walletAddress) {
-          showToast(t('claimWalletConnectFirst'), 'warning')
-          return
-        }
-
-        if (!walletMatchesTrader(walletAddress, trader.source_trader_id, trader.source)) {
-          showToast(t('claimWalletMismatch'), 'error')
-          return
-        }
-
-        signature = (await window.ethereum.request({
-          method: 'personal_sign',
-          params: [message, walletAddress],
-        })) as string
+      if (!window.ethereum) {
+        showToast(t('claimWalletConnectFirst'), 'warning')
+        return
       }
+
+      const ethTimeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Wallet connection timed out. Please try again.')), 30000)
+      )
+      const accounts = (await Promise.race([
+        window.ethereum.request({ method: 'eth_requestAccounts' }),
+        ethTimeout,
+      ])) as string[]
+      walletAddress = accounts[0]
+
+      if (!walletAddress) {
+        showToast(t('claimWalletConnectFirst'), 'warning')
+        return
+      }
+
+      if (!walletMatchesTrader(walletAddress, trader.source_trader_id, trader.source)) {
+        showToast(t('claimWalletMismatch'), 'error')
+        return
+      }
+
+      signature = (await window.ethereum.request({
+        method: 'personal_sign',
+        params: [message, walletAddress],
+      })) as string
 
       // The claim endpoint verifies and consumes the signed proof exactly once
       // before atomically creating the review submission. A separate preflight
@@ -145,7 +128,7 @@ export function DexVerifyForm({
           verification_data: {
             wallet_address: walletAddress,
             signature,
-            message,
+            challenge_id: challengeId,
           },
         }),
       })

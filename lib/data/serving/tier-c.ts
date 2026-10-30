@@ -20,6 +20,7 @@
 import type { ConnectionOptions, Queue } from 'bullmq'
 import type { Redis } from 'ioredis'
 import { logger } from '@/lib/logger'
+import { isV1IngestExecutionPublished } from '@/lib/ingest/v1-execution-publication'
 import { isIngestRegion, type IngestRegion } from '@/lib/ingest/core/regions'
 import { tierCQueueName } from '@/lib/ingest/core/tier-c-routing'
 import type { RecordKind, TraderCoreModules } from './types'
@@ -113,6 +114,12 @@ export async function requestTierCWithProvider(
   opts: RequestTierCOptions,
   bridgeProvider: TierCBridgeProvider
 ): Promise<Record<string, unknown> | null> {
+  // The V1 hold deliberately precedes region validation, bridge construction,
+  // Redis reads, BullMQ enqueueing, and polling. Callers already treat null as
+  // a graceful pending response, so withholding an unpublished source fetch
+  // cannot turn a public request into a 5xx.
+  if (!isV1IngestExecutionPublished()) return null
+
   try {
     if (!isIngestRegion(req.fetchRegion)) {
       logger.error('[tier-c] request rejected: missing or invalid fetch region', {

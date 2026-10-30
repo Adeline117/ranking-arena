@@ -128,7 +128,7 @@ export default function TraderProfileView({
       >
         <Breadcrumb
           items={[
-            { label: t('userProfileLeaderboard'), href: '/rankings' },
+            { label: t('userProfileLeaderboard'), href: '/' },
             { label: traderProfile?.handle || profile.handle || handle },
           ]}
         />

@@ -59,5 +59,5 @@ test('facade delegates to the exact patched upstream release', () => {
   const upstream = require('brace-expansion-safe/package.json')
 
   assert.equal(upstream.name, 'brace-expansion')
-  assert.equal(upstream.version, '5.0.8')
+  assert.equal(upstream.version, '5.0.12')
 })

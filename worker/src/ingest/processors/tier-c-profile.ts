@@ -389,11 +389,13 @@ async function processHeavySurface(
       await publishPositions(src, traderId, positions, sourceAsOf ?? observedAt)
     } else {
       const kind = surface as import('@/lib/ingest/core/types').HistoryKind
-      // Copier tables are snapshots, not append-only event streams. A stored
-      // per-person timestamp cursor can truncate the very aggregate we are
-      // rebuilding, so every on-demand copier capture starts without one and
-      // never advances arena.ingest_cursors.
-      const cursor = kind === 'copiers' ? null : await getHistoryCursor(traderId, kind)
+      // Copier snapshots must be rebuilt from an untruncated capture, while
+      // receipt-bound position history is an immutable RAW acquisition. Neither
+      // surface may consult or advance the legacy serving cursor.
+      const cursor =
+        kind === 'copiers' || kind === 'position_history'
+          ? null
+          : await getHistoryCursor(traderId, kind)
       if (kind === 'position_history') {
         const acquisition = await captureHistoryAcquisition({
           source: src,

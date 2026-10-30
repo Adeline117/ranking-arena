@@ -15,6 +15,7 @@ import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import type { PortfolioItem, PositionHistoryItem } from '@/lib/data/trader-types'
 import type { HistoryCompleteness } from '@/lib/data/serving/types'
+import HistoryVerificationNotice from '@/app/components/trader/HistoryVerificationNotice'
 
 const PortfolioTable = dynamic(() => import('@/app/components/trader/PortfolioTable'), {
   loading: () => <RankingSkeleton />,
@@ -28,6 +29,9 @@ export interface PortfolioTabProps {
   source: string
   isPro: boolean
   onUnlock: () => void
+  /** Historical data is quarantined: an empty portfolio shows the
+   *  verification placeholder rather than "no portfolio data". */
+  historyUnderVerification?: boolean
 }
 
 const PortfolioTab = React.memo(function PortfolioTab({
@@ -38,6 +42,7 @@ const PortfolioTab = React.memo(function PortfolioTab({
   source,
   isPro,
   onUnlock,
+  historyUnderVerification = false,
 }: PortfolioTabProps) {
   const { t } = useLanguage()
 
@@ -47,6 +52,10 @@ const PortfolioTab = React.memo(function PortfolioTab({
 
   const hasHistoryLimitation =
     historyCompleteness !== null && historyCompleteness.state !== 'complete'
+
+  if (historyUnderVerification && portfolio.length === 0 && positionHistory.length === 0) {
+    return <HistoryVerificationNotice />
+  }
 
   if (portfolio.length === 0 && positionHistory.length === 0 && !hasHistoryLimitation) {
     return (

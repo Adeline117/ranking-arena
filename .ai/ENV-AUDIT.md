@@ -38,7 +38,7 @@
 
 ## 待改进项（低优先级）
 
-**22 处 `process.env.XXX` 直接访问**应改为使用 `lib/env.ts` 的 `env.XXX`：
+**20 处 `process.env.XXX` 直接访问**应改为使用 `lib/env.ts` 的 `env.XXX`：
 
 涉及文件（其他 session 的代码，避免并行修改冲突）：
 
@@ -47,10 +47,12 @@
 - `app/api/exchange/oauth/authorize/route.ts` (2 处)
 - `app/api/health/detailed/route.ts` (2 处)
 - `app/api/stream/prices/route.ts` (2 处)
-- `app/api/admin/sync-subscription/route.ts` (2 处)
 - `app/api/translate/route.ts` (1 处)
 - `app/api/health/route.ts` (2 处)
 - `app/api/test/route-matrix/route.ts` (3 处)
 - `app/api/pipeline/ingest/route.ts` (1 处)
+
+`app/api/admin/sync-subscription/route.ts` 已改为 V1 source-only hold，不再直接访问
+`process.env`；其保留的 service/admin 凭据语义由 `verifyAdminAuth` 专属处理。
 
 **改法**：把 `process.env.XXX` 替换为 `env.XXX`（从 `@/lib/env` 导入），如果 `env.ts` 里没有定义这个变量就先加上。

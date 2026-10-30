@@ -111,8 +111,8 @@ const ja = {
   overview: '概要',
   writeComment: 'コメントを書く...',
   bindExchangeAccount: '取引所アカウントを連携',
-  bindExchangeDescription: '連携後、詳細な取引統計を確認できます',
-  bindExchangeAccountFull: '取引所アカウントを連携すると、詳細な取引統計を確認できます',
+  bindExchangeDescription: '非公開の読み取り専用取引所アカウント接続を保存します',
+  bindExchangeAccountFull: '読み取り専用の取引所接続を保存し、接続状態を手動で確認・更新できます。',
   bindExchange: '連携',
   goToSettings: '設定へ移動',
   connected: '接続済み',
@@ -123,14 +123,13 @@ const ja = {
   disconnectFailed: '接続解除に失敗しました',
   disconnected: '接続解除済み',
   pleaseLogin: 'ログインしてください',
-  syncSuccess: 'データの同期に成功しました！',
+  syncSuccess: '接続状態を更新しました。',
   syncError: '同期に失敗しました',
   lastSync: '最終同期：',
   syncErrorMsg: '同期エラー：',
-  clickToBind:
-    'ボタンをクリックして{exchange}のログインページに移動します。ログイン成功後、システムが自動的に取引データを取得します。',
-  bindSuccess: '連携に成功しました！データが同期されました。',
-  bindSuccessSyncing: '連携に成功しました！データを同期中...',
+  clickToBind: 'Arenaの{exchange} API Keyガイドを開き、読み取り専用のアカウント接続を保存します。',
+  bindSuccess: '読み取り専用のアカウント接続を保存しました。',
+  bindSuccessSyncing: '読み取り専用のアカウント接続を保存しました。',
   completeBind: '完了',
   binding: '連携中...',
   bindTip:
@@ -198,7 +197,7 @@ const ja = {
   userNumber: 'ユーザー番号',
   userReviews: 'レビュー',
   claimTrader: 'アカウント申請',
-  referral: '紹介',
+  referral: '紹介の状況',
   claiming: '申請中...',
   claimSubmitted: '申請が送信されました',
   claimSuccess: '申請に成功しました！アカウントがこのトレーダーにリンクされました。',
@@ -330,7 +329,8 @@ const ja = {
   languageKo: '韓国語',
   filterByLanguage: '言語でフィルター',
   apiKeyBindTitle: 'API Keyで取引所を連携',
-  apiKeyBindDesc: '以下の手順に従って、読み取り専用のAPI Keyを作成し、取引データを安全に同期します',
+  apiKeyBindDesc:
+    'プライベートなアカウント接続用の読み取り専用API Keyを作成します。ランキングプロフィールの認証や公開には使用されません。',
   selectExchange: '取引所を選択',
   operationStepsLabel: '手順',
   estimatedTime: '約2分',
@@ -404,7 +404,7 @@ const ja = {
   tagHighWinRate: '高勝率',
   tagHighReturns: '高ROI',
   traderAlerts: 'トレーダーアラート',
-  traderAlertsDesc: 'フォロー中のトレーダーに大きな変化があった際に通知を受け取れます',
+  traderAlertsDesc: 'V1 検証中はトレーダーアラートを利用できません',
   alertSettings: 'アラート設定',
   alertThreshold: '変動閾値',
   alertEnabled: 'アラートが有効になりました',
@@ -478,7 +478,7 @@ const ja = {
   featureCategoryRanking: 'カテゴリランキング',
   featureCategoryRankingDesc: '先物/現物/オンチェーン別のランキングを表示',
   featureTraderAlerts: 'トレーダーアラート',
-  featureTraderAlertsDesc: 'トレーダーに大きな変化があった際に通知を受け取れます',
+  featureTraderAlertsDesc: 'V1 検証中は一時的に利用できません',
   featureScoreBreakdown: 'Arena Score詳細',
   featureScoreBreakdownDesc: 'サブスコアとパーセンタイルランキングを表示',
   featureProBadge: 'Proバッジ',
@@ -891,7 +891,7 @@ const ja = {
   postCommentedNotify: '投稿にコメントされたら通知',
   mentionedNotify: 'メンションされたら通知',
   newMessageNotify: 'メッセージを受信したら通知',
-  traderEventsNotify: 'フォロー中のトレーダーに大きな動きがあったら通知',
+  traderEventsNotify: 'V1 検証中はトレーダーイベント通知を利用できません',
   showFollowerList: 'フォロワーリストを表示',
   showFollowingList: 'フォロー中リストを表示',
   dmPermissions: 'ダイレクトメッセージの権限',
@@ -949,6 +949,7 @@ const ja = {
   digestNone: 'なし',
   digestDaily: '日次ダイジェスト',
   digestWeekly: '週次ダイジェスト',
+  weeklyDigestUnavailable: 'V1 検証中はパーソナライズされた週次ダイジェストを利用できません。',
   unsubscribeSuccess: '配信停止が完了しました',
   unsubscribeFromDigest: 'メールダイジェストの配信を停止',
   unsubscribeFromAll: 'すべてのメール配信を停止',
@@ -1053,11 +1054,16 @@ const ja = {
   alreadyClaimed: 'このアカウントは既に他のユーザーに申請されています',
   linkedAccountCount: 'アカウント',
   traderAlertsTitle: 'トレーダーアラート',
-  traderAlertsDesc2: 'カスタムアラート条件を設定してトレーダーの活動をトラッキング（Pro機能）',
+  traderAlertsDesc2:
+    'V1 検証中はトレーダーアラートの監視と配信が停止されています。保存済みの設定は表示または削除できます。',
   traderAlertsConfigureOnProfile:
-    '各通知を正しい取引所アカウントに紐づけるため、トレーダープロフィールからアラートを設定してください。',
+    'V1 検証中は新しいトレーダーアラートを設定できません。このページでは保存済みの設定のみ削除できます。',
   traderAlertsBrowse: 'トレーダーを探す',
-  traderAlertsNone: '設定済みのトレーダーアラートはありません。',
+  traderAlertsNone: '保存済みの旧トレーダーアラート設定はありません。',
+  traderAlertsUnavailableTitle: 'トレーダーアラートは一時的に利用できません',
+  traderAlertsUnavailableDesc:
+    'V1 検証中はトレーダーアラートの監視と配信が停止されています。保存済みの旧設定は表示または削除できます。',
+  traderAlertsStoredNotMonitored: '保存済みの設定 — 監視されていません',
   traderAlertsEnabled: '有効',
   traderAlertsPaused: '一時停止中',
   traderAlertsNoConditions: '有効な条件はありません',
@@ -1065,7 +1071,7 @@ const ja = {
   traderAlertsRemoveConfirm: 'このトレーダーアラートを削除しますか？',
   traderAlertsRemoveFailed: 'トレーダーアラートを削除できませんでした。もう一度お試しください。',
   traderAlertsLoadFailed: 'トレーダーアラートを読み込めませんでした。もう一度お試しください。',
-  traderAlertsProRequired: 'トレーダーアラートの管理には Pro が必要です。',
+  traderAlertsProRequired: 'V1 検証中はトレーダーアラートを利用できません。',
   alertScoreChangeLabel: 'Arena Score の変動',
   alertScoreChangeDesc: 'このトレーダーの Arena Score が指定ポイント以上変動したら通知します。',
   alertScoreUnit: 'pt',
@@ -1579,13 +1585,13 @@ const ja = {
   sendMediaFile: '画像/動画/ファイルを送信',
 
   alertMonitoring: '監視中：{handle}',
-  alertCheckCadence: '有効な Pro メンバーは 30 分ごとにチェックされます。',
+  alertCheckCadence: 'V1 検証中はトレーダーアラートの監視を一時停止しています。',
   alertRoiChangeLabel: 'ROI変動',
   alertRoiChangeDesc: 'ROIが閾値を超えて変動した際にアラート',
   alertDrawdownLabel: 'ドローダウンアラート',
   alertDrawdownDesc: 'ドローダウンが閾値を超えた際にアラート',
   alertRankChangeLabel: '順位変動',
-  alertRankChangeDesc: '順位が閾値を超えて変動した際にアラート',
+  alertRankChangeDesc: 'V1 検証中は利用できません',
   alertChangesBy: '変動幅',
   alertChangesByDisplay: '変動幅',
   alertEmailNotification: 'メール通知',
@@ -1608,7 +1614,7 @@ const ja = {
   alertNoAlerts: 'アラートが設定されていません',
   alertLastTriggered: '最終トリガー',
   alertNewPositionLabel: '新規ポジションアラート',
-  alertNewPositionDesc: 'トレーダーが新しいポジションを開いた際にアラート',
+  alertNewPositionDesc: 'V1 検証中は利用できません',
 
   proFeaturesTitle: 'Pro機能',
   unlockAllPremiumFeatures: 'すべてのプレミアム機能をロック解除',
@@ -1822,7 +1828,7 @@ const ja = {
   adminAlertTriggerTitle: 'アラートトリガー条件',
   adminStaleAlertDesc: '古いアラート：12時間以上データが更新されていません',
   adminCriticalAlertDesc: '緊急アラート：24時間以上データが更新されていません',
-  adminAlertCronNote: 'アラートは/api/cron/check-data-freshnessの定期タスクでトリガーされます',
+  adminAlertCronNote: 'V1 検証保留中：自動データ鮮度アラートは利用できません',
 
   loginRegisterTitle: 'ログイン / 登録',
   loginEmail: 'メールアドレス',
@@ -1955,9 +1961,9 @@ const ja = {
   helpCompareQ: 'トレーダー比較機能の使い方は？',
   helpCompareA:
     'ホームページの「トレーダーを比較」ボタンをクリックし、最大5人のトレーダーを検索・追加すると、指標が並べて表示されます。',
-  helpAlertsQ: 'トレーダーアラートとは？',
+  helpAlertsQ: 'トレーダーアラートは現在利用できますか？',
   helpAlertsA:
-    'フォロー中のトレーダーの順位が大きく変動したり、ROIが変動したり、その他重要な変化があった場合に、プライベートメッセージで自動通知を受け取れます。',
+    'V1 検証中はトレーダーアラートの監視と配信を利用できません。ログインしたユーザーは保存済みの旧設定を表示または削除することのみできます。',
   helpScoreBreakdownQ: 'Arena Score内訳に表示される内容は？',
   helpScoreBreakdownA:
     'Score内訳には、トレーダーのリターンスコア、ドローダウンスコア、安定性スコアが表示され、同タイプのトレーダー間でのパーセンタイルランキングも確認できます。',
@@ -2443,7 +2449,7 @@ const ja = {
   verifiedAccounts: '認証済みアカウント',
   mddLabel: 'MDD',
   tradesLabel: '取引数',
-  dataOutdatedBanner: 'データが古い可能性があります。更新して最新情報を取得してください。',
+  dataOutdatedBanner: 'データが古い可能性があります。V1 検証中は手動更新を利用できません。',
   platformDataUnavailable:
     'このプラットフォームのデータは一時的に利用できません。以下の履歴データは古い場合があります。',
   rankTrend: 'ランク推移（7日）',
@@ -2540,8 +2546,8 @@ const ja = {
   compProAnomalyDetection: '異常検知',
   compFeatureTraderCompare: 'トレーダー比較',
   compProUpTo10Traders: '最大10人',
-  compFeatureTraderAlerts: 'トレーダー変動アラート',
-  compProInAppEmailPush: 'アプリ内 + メール + プッシュ',
+  compFeatureTraderAlerts: 'トレーダーアラート（V1では利用不可）',
+  compProInAppEmailPush: 'V1 検証中は未公開',
   compFeatureArenaScore: 'Arena Score',
   compFreeTotalScore: '総合スコア',
   compProBreakdownPercentile: '内訳 + パーセンタイル',
@@ -2570,7 +2576,7 @@ const ja = {
   congratsProMember: 'おめでとうございます！Proメンバーになりました',
   nowYouCan: '利用可能な機能：',
   proBenefit1: 'カテゴリ別のランキング表示',
-  proBenefit2: 'トレーダー変動アラートの受信',
+  proBenefit2: 'V1 検証中はトレーダーアラートを利用できません',
   proBenefit3: '詳細なスコア分析の表示',
   proBenefit4: '高度なフィルターの利用',
   proBenefit5: '複数のトレーダーの比較',
@@ -2622,7 +2628,7 @@ const ja = {
   pollDuration7d: '7日',
   myWatchlist: 'マイウォッチリスト',
   savedHubTitle: '保存済み',
-  savedHubSubtitle: 'トレーダー、投稿、パフォーマンスアラートをまとめて管理します。',
+  savedHubSubtitle: 'トレーダーと投稿をまとめて管理します。',
   savedTabTraders: 'トレーダー',
   savedTabPosts: '投稿',
   savedTabAlerts: 'アラート',
@@ -2821,7 +2827,7 @@ const ja = {
   benefitFeature: '機能',
   benefitFollowTraders: 'トレーダーフォロー',
   benefitHistoricalData: '過去データ',
-  benefitTraderAlerts: 'トレーダー変動アラート',
+  benefitTraderAlerts: 'トレーダーアラート（V1 では利用不可）',
   benefitTraderCompare: 'トレーダー比較',
   benefitArenaScore: 'Arena Score詳細',
   benefitApiAccess: 'APIアクセス',
@@ -2896,9 +2902,8 @@ const ja = {
     '最大4人のトレーダーを並べて比較、詳細な指標の内訳とパフォーマンスチャート付き。',
   aboutFeature4Title: 'ポートフォリオ追跡',
   aboutFeature4Desc: '複数の取引所のトップトレーダーでカスタムポートフォリオを構築・追跡。',
-  aboutFeature5Title: 'スマートアラート',
-  aboutFeature5Desc:
-    'フォロー中のトレーダーがマイルストーンに達したり、ポジションを変更したり、トップランキングに入った際に通知を受信。',
+  aboutFeature5Title: 'アラート公開の保留',
+  aboutFeature5Desc: 'V1 検証中はトレーダーアラートとパーソナライズされた配信を利用できません。',
   aboutFeature6Title: 'ナレッジライブラリ',
   aboutFeature6Desc:
     'トレーディング戦略、リスク管理、マーケット分析に関する56K+の厳選された教育リソース。',
@@ -2963,7 +2968,7 @@ const ja = {
 
   bindExchangeBannerTitle: '取引所アカウントを接続',
   bindExchangeBannerDesc:
-    '読み取り専用APIで実際のポジションと実績をポートフォリオに同期します（リーダーボードのトレーダーID申請とは別です）',
+    '非公開の読み取り専用接続を保存し、状態を手動で確認します。ポートフォリオやランキングプロフィールは公開されません。',
   goToBind: '接続',
 
   searchDropdownResults: '検索結果',
@@ -2981,8 +2986,8 @@ const ja = {
   pushNotificationError: 'プッシュ通知の設定に失敗しました。もう一度お試しください',
   pushNotificationsDisabled: 'プッシュ通知が無効になりました',
   hapticFeedbackTitle: 'ハプティックフィードバック',
-  hapticFeedbackDesc: 'フォロー中のトレーダーがポジションを開いた際にバイブレーションを感じる',
-  tradeAlertVibration: 'トレードアラートバイブレーション',
+  hapticFeedbackDesc: '対応しているアプリ内操作でバイブレーションフィードバックを使用します',
+  tradeAlertVibration: 'ハプティックフィードバック',
 
   messageSent: '送信済み',
   messageRead: '既読',
@@ -3354,16 +3359,16 @@ const ja = {
   adminReportNsfw: '不適切',
   adminReportOther2: 'その他',
 
-  authorizeTitle: 'リアル取引データを認証',
+  authorizeTitle: '読み取り専用の取引所接続を保存',
   authorizeDesc:
-    '認証後、あなたのリアルな取引データがリーダーボードにリアルタイムで表示され、より高い信頼性と注目を得られます。',
-  authorizeBenefits: '特典：',
-  authorizeRealTimePositions: 'リアルタイムポジション表示',
-  authorizeSuccess: '認証に成功しました！設定にリダイレクトします...',
+    '非公開のアカウント接続を保存します。リーダーボードのプロフィールを認証・公開するものではありません。',
+  authorizeBenefits: '接続範囲：',
+  authorizeRealTimePositions: '読み取り専用のアカウントアクセス',
+  authorizeSuccess: '接続を保存しました！設定にリダイレクトします...',
   authorizeSecurityNote:
     'API認証情報はAES-256で暗号化して保存され、取引データの読み取りのみに使用されます。取引操作は一切行えません。読み取り専用のAPI Key作成をお勧めします。',
-  authorizeSubmitSuccess: '認証に成功しました！',
-  authorizeSubmitButton: 'データ表示を認証',
+  authorizeSubmitSuccess: '接続を保存しました！',
+  authorizeSubmitButton: '接続を保存',
   authorizeStep1: '取引所アカウントにログインしてAPI管理に移動',
   authorizeStep2: '権限：「読み取り」権限のみチェック、取引や出金は有効にしない',
   authorizeStep3: '任意：セキュリティ向上のためIPホワイトリストを設定',
@@ -3611,13 +3616,13 @@ const ja = {
 
   pleaseLoginTitle: 'ログインしてください',
   loginToAuthorize: '取引アカウントを認証するにはログインが必要です',
-  authorizeRealData: 'リアル取引データを認証',
-  authBenefitsTitle: '特典：',
-  authBenefitRealtime: 'リアルタイムポジション表示',
-  authBenefitWeight: 'ランキングウェイトの向上',
-  authBenefitBadge: '公式認証バッジ',
-  authBenefitPriority: '優先おすすめ',
-  authSuccessRedirecting: '認証に成功しました！設定にリダイレクトします...',
+  authorizeRealData: '読み取り専用の取引所接続を保存',
+  authBenefitsTitle: '接続範囲：',
+  authBenefitRealtime: '読み取り専用のアカウントアクセス',
+  authBenefitWeight: 'ランキングウェイトへの影響なし',
+  authBenefitBadge: '認証バッジの付与なし',
+  authBenefitPriority: '公開プロフィールへの掲載なし',
+  authSuccessRedirecting: '接続を保存しました！設定にリダイレクトします...',
   connectExchange: '取引所を接続',
   apiKey: 'API Key',
   apiSecret: 'API Secret',
@@ -3914,8 +3919,7 @@ const ja = {
   linkedAt: 'リンク日',
   noFollowers: 'フォロワーがまだいません',
   noMessagesHint: 'メッセージがまだありません',
-  noAlertsDesc:
-    'ランキングページでトレーダーをフォローすると、パフォーマンスが変化した時に通知を受け取れます',
+  noAlertsDesc: 'V1 検証中はトレーダーアラートの監視と配信を利用できません。',
 
   invalidResponse: '無効なレスポンス',
   loadConnectionsFailed: '接続の読み込みに失敗しました',
@@ -4144,9 +4148,8 @@ const ja = {
   hotDiscussionsTagActive: 'アクティブ',
 
   guestSignupTitle: 'トップトレーダーを追跡',
-  guestSignupSubtitle:
-    '無料アカウントを作成して、トレーダーをフォローしパフォーマンス変動時にアラートを受け取りましょう',
-  guestSignupFeature1: 'トレーダーをフォローしてランク変動アラートを受信',
+  guestSignupSubtitle: '無料アカウントを作成して、トレーダーをフォローし調査を整理しましょう。',
+  guestSignupFeature1: 'トレーダーをフォローして調査を整理',
   guestSignupFeature2: '最大5名のトレーダーを並べて比較',
   guestSignupFeature3: 'ウォッチリストを保存してランキングをカスタマイズ',
   guestSignupButton: '無料登録',
@@ -4323,6 +4326,12 @@ const ja = {
 
   portfolioPageTitle: 'ポートフォリオ',
   portfolioTitle: 'ポートフォリオ',
+  portfolioLegacyCleanup: '旧接続のクリーンアップ',
+  portfolioLegacyTitle: '旧ポートフォリオ接続は V1 で廃止されました',
+  portfolioLegacyDescription:
+    '新規接続と同期は無効です。既存の暗号化済み認証情報は Arena 上のコピーを削除するためだけに表示され、V1 のランキングやプロフィール認証には使用されません。各取引所でも旧キーを失効またはローテーションしてください。',
+  portfolioLegacySuccessor: 'V1 の非公開接続フローを開く',
+  portfolioLegacyEmpty: '旧ポートフォリオ接続は残っていません。',
   portfolioConnectExchange: '取引所を接続',
   portfolioEmptyTitle: '取引所を接続してポートフォリオを追跡',
   portfolioConnectedExchanges: '接続済みの取引所',
@@ -4646,8 +4655,24 @@ const ja = {
   statusActiveIncidents: '発生中の障害',
   statusNoIncidents: '発生中の障害はありません',
   statusNoIncidentsDesc: '監視中のすべてのサービスとデータフィードは正常に稼働しています。',
-  statusServices: 'サービス',
+  statusServices: 'コア API と依存関係',
+  statusCoreApiNote:
+    '公開 /api/rankings と /api/traders は、上記の API・データベース・鮮度オーソリティに依存します。オーソリティが利用できない場合、正常とは推定しません。',
   statusDataFreshness: 'データ鮮度',
+  statusSourceBoardCoverage: 'ランキングソースボードのカバレッジ',
+  statusBoardsVisible: '想定 {expected} ボード中 {visible} ボードが表示可能',
+  statusRankingSourceFreshness: 'ランキングソースの鮮度',
+  statusSourcesFresh: '{fresh}/{total} ソースが新鮮',
+  statusLatestPublication: '最新の成功した {season} 公開',
+  statusRankingAuthority: 'ランキング鮮度・公開オーソリティ',
+  statusAuthorityUnavailable: '不明 — オーソリティ利用不可',
+  statusKnownLimitations: '既知の制約',
+  statusLimitationCadence:
+    'ランキングは {leaderboard} ごとに再計算され、上流ボードは通常 {sources} ごとに更新されます。個別ソースは異なる場合があります。',
+  statusLimitationCoverage:
+    'カバレッジと利用可能な指標はソースごとに異なります。欠損・古い・未証明の時間枠はフェイルクローズします。',
+  statusLimitationAvailability:
+    'ここでの可用性は現在のスナップショットであり、過去の稼働率、SLA、リアルタイム性の保証ではありません。',
   statusUnableToLoad: 'ステータスを読み込めません',
   statusLastChecked: '最終確認 {ago}',
   statusAutoRefresh: '30秒ごとに自動更新',
@@ -4690,23 +4715,26 @@ const ja = {
   claimWalletExpired: '署名の有効期限が切れました。もう一度署名してください。',
 
   // Claim - API key verification
-  claimApiKeyVerifyTitle: 'APIキー所有権の確認',
+  claimApiKeyVerifyTitle: 'CEXアカウントを接続',
   claimApiKeyVerifyDesc:
-    '取引所のAPIキーとシークレットを入力して、このトレーダーアカウントの所有者であることを確認してください。読み取り専用権限のみ使用します。',
-  claimApiKeyMismatch: 'このAPIキーはこのトレーダーアカウントに属していません。',
+    '読み取り専用APIキーはファーストパーティのアカウント同期専用です。公開ランキングのプロフィール所有権を証明できず、V1申請には使えません。',
+  claimApiKeyMismatch: 'APIキーをこの取引所アカウントと照合できませんでした。',
   claimWalletToVerifyLabel: '検証するウォレット：',
   claimExchangeErrorPrefix: '取引所からの応答：',
-  claimApiKeySuccess: 'APIキー認証に成功しました！',
+  claimApiKeySuccess: 'CEXアカウント接続を確認しました！',
 
   // Claim - Methods
-  claimVerifyMethodApi: 'APIキー',
+  claimVerifyMethodApi: 'CEXアカウント接続',
   claimVerifyMethodWallet: 'ウォレット署名',
   claimVerifyAndClaim: '認証して認領',
   claimFormSafeNote:
-    '読み取り専用APIキー（取引や出金権限なし）のみ必要です。キーはAES-256-GCMで暗号化され、ログに記録されません。',
+    '読み取り専用CEXキーは暗号化され、ファーストパーティ同期にのみ使用されます。V1ランキング申請の証明にはなりません。',
   claimSupportedExchanges: '対応取引所',
-  claimDexPlatforms: 'DEXプラットフォーム（ウォレット認証）',
-  claimCexPlatforms: 'CEXプラットフォーム（APIキー認証）',
+  claimDexPlatforms: 'V1申請（Hyperliquid・GMXウォレット）',
+  claimCexPlatforms: 'CEXアカウント接続（V1申請ではありません）',
+  claimSourceUnsupportedTitle: 'このソースの申請はまだ利用できません',
+  claimSourceUnsupportedBody:
+    'V1プロフィール申請はHyperliquidとGMXのウォレット署名のみ対応します。CEX APIキーはアカウント同期用で、公開ランキングプロフィールの所有権証明にはなりません。',
 
   // Claim page
   claimPageTitle: 'Arenaでトレーダープロフィールを申請',
@@ -4722,22 +4750,20 @@ const ja = {
   change: '変更',
   redirectingToProfile: 'プロフィールにリダイレクト中...',
   claimReadOnlyWarning:
-    'セキュリティのため、読み取り専用のAPIキーをご使用ください。取引権限は不要です。',
-  claimSolanaWalletRequired:
-    '確認のためにSolanaウォレット（Phantomなど）をインストールしてください。',
+    'CEX APIキーはファーストパーティ同期専用で、V1プロフィール申請の証明には使えません。',
   claimPageFaqTitle: 'よくある質問',
   claimPageFaqWhat: 'プロフィールの申請とは？',
   claimPageFaqWhatAnswer:
     '申請とは、Arenaのトレーダープロフィールの本人であることを確認するものです。認証されると、バッジが付与され、プロフィールの編集や限定機能へのアクセスが可能になります。',
   claimPageFaqHow: '本人確認の方法は？',
   claimPageFaqHowAnswer:
-    'CEXトレーダー（Binance、Bybit、OKXなど）は読み取り専用APIキーを提供します。DEXトレーダー（Hyperliquid、GMXなど）はウォレットでメッセージに署名します。どちらの方法でも、取引アカウントの所有権を確認できます。 認証後、簡単な手動レビュー(通常24時間以内)を経てバッジが有効になります。',
-  claimPageFaqExchanges: '対応している取引所は？',
+    'V1ではHyperliquidまたはGMXのプロフィールを選び、同じウォレットでサーバー発行の正確なchallengeに署名します。署名後も手動審査が完了するまでバッジは有効になりません。',
+  claimPageFaqExchanges: 'V1申請に対応するソースは？',
   claimPageFaqExchangesAnswer:
-    'CEX: Binance、Bybit、OKX、Bitget、Gate.io、HTX。DEX: Hyperliquid、GMX、Gains、Aevo、Kwenta、Vertex、dYdX、Jupiter Perps、Drift。',
-  claimPageFaqSafe: 'APIキーの提供は安全ですか？',
+    'HyperliquidとGMXのみです。Binance、Bybit、OKXなどのCEX APIキーは別のアカウント同期には使えますが、ランキングプロフィール申請には使えません。',
+  claimPageFaqSafe: 'CEX APIキーでプロフィールを申請できますか？',
   claimPageFaqSafeAnswer:
-    'はい。読み取り専用APIキー（取引や出金権限なし）のみ必要です。キーはAES-256-GCMで暗号化され、ログに記録されません。',
+    'できません。CEXのアカウントUIDと公開ランキングのプロフィール識別子が同一だと証明できないため、V1は安全側に拒否します。',
   claimPageCta: 'プロフィールを検索',
   claimPageSeoTitle: 'クリプトトレーダープロフィールを申請 | Arena',
   claimPageSeoDesc:
@@ -4774,7 +4800,7 @@ const ja = {
   // Pricing Pro features
   pricingProUnlockTitle: 'Pro で解放される機能',
   pricingProDetailedAnalytics: '詳細なトレーダー分析とスコア内訳',
-  pricingProAlerts: 'トレーダーアラートを30分ごとにチェック',
+  pricingProAlerts: 'V1 検証中はトレーダーアラートを一時停止しています',
   pricingProApiAccess: 'API アクセス（近日公開）',
   pricingProCsvExport: 'CSV データエクスポート',
   pricingProAdvancedFilters: '高度なマルチ条件フィルター',
@@ -4792,7 +4818,7 @@ const ja = {
   pricingFaqSwitchA: 'はい、月額と年額はいつでも切り替えられます。差額は日割り計算されます。',
   pricingFaqApiQ: 'Pro には API アクセスが含まれますか？',
   pricingFaqApiA:
-    'いいえ。データ API プランは Arena Pro とは別売りです。Pro はトレーダーの発見、アラート、比較、詳細分析向けです。',
+    'いいえ。データ API プランは Arena Pro とは別売りです。Pro はトレーダーの発見、比較、詳細分析向けで、トレーダーアラートは V1 検証中は利用できません。',
   pricingLimitedTimeBanner: '期間限定：すべての Pro 機能が現在無料です！',
   pricingStatTradersRanked: 'ランク付けされたトレーダー',
   pricingStatExchangesTracked: '稼働中ランキングボード',
@@ -4976,7 +5002,6 @@ const ja = {
   noGroupsFollowedYet: 'フォロー中のグループはありません',
   groupActionsTitle: 'グループ操作',
   newPostButton: '+ 新規投稿',
-  fetchingLinkPreview: 'リンクプレビューを取得中...',
   stickerButton: 'スタンプ',
   stickersButton: 'スタンプ',
   deleteButton: '削除',
@@ -5017,6 +5042,11 @@ const ja = {
   writeFirstPostButton: '最初の投稿を書く',
 
   // Token Rankings
+  tokenRankingsContainmentLabel: '検証のため一時停止中',
+  tokenRankingsContainmentTitle: 'トークンランキングは一時的に非公開です',
+  tokenRankingsContainmentDescription:
+    'ランキングの正式スナップショットを再構築し、独立した検証を行っています。検証が完了するまで、トークンランキングは公開されません。',
+  tokenRankingsContainmentBack: 'トレーダーランキングに戻る',
   tokenRankingsTitle: 'トークンランキング',
   tokenRankingsSubtitle:
     '各トークンのベストトレーダーを発見。誰がBTCを最もうまくトレードしているか？',
@@ -5099,7 +5129,7 @@ const ja = {
   dataSourceDerived: '派生データ',
   dataSourceHistorical: '履歴データ',
   dataSourceVerifiedTooltip:
-    'このトレーダーは本人確認済みで、リアルタイムデータへのアクセスを許可しています',
+    'このデータには審査済みの本人確認と口座直結の来歴があります。鮮度は表示時刻を確認してください。',
   dataSourcePublicTooltip: '公開取引所APIからのデータ',
   bindApiKey: 'APIキーをバインド',
   connectWallet: 'ウォレットを接続',
@@ -5114,8 +5144,8 @@ const ja = {
   copyBackupCodes: 'すべてのコードをコピー',
   bioTooLong: '自己紹介は200文字以内にしてください',
   invalidEmailFormat: 'メールアドレスの形式が無効です',
-  referralTitle: '紹介プログラム',
-  referralDesc: '友達を招待してProリワードを獲得',
+  referralTitle: '紹介プログラムの状況',
+  referralDesc: 'V1 検証保留中のため、紹介の招待と特典は利用できません。',
   copyText: 'コピー',
 
   // Watchlist page
@@ -5126,8 +5156,7 @@ const ja = {
   watchlistSignInDesc:
     'アカウントを作成またはログインして、お気に入りのトレーダーを保存・追跡しましょう。',
   traderAlertsSignInTitle: 'トレーダーアラートを表示するにはログインしてください',
-  traderAlertsSignInDesc:
-    'ログインして、フォロー中のトレーダーのパフォーマンスアラートを作成・管理します。',
+  traderAlertsSignInDesc: 'ログインして、保存済みのトレーダーアラート設定を表示または削除します。',
   watchlistEmptyTitle: 'ウォッチリストは空です',
   watchlistEmptyDesc:
     'ランキングを閲覧し、トレーダーページの星アイコンをクリックして追加してください。',
@@ -5246,10 +5275,10 @@ const ja = {
   winrate: '勝率',
 
   // ── 2026-06-02: 433 missing keys batch (synced with en.ts) ──
-  gateAdvancedAlertsTitle: '高度なアラートを解放',
-  gateBenefitAlertsRealtime: '30分ごとのチェックで変化を検出後、プッシュとメールで通知',
-  gateBenefitAlertsConditions: '1つのアラートに5つ以上の条件を組み合わせ可能',
-  gateBenefitAlertsHistory: 'アラート履歴と分析の完全版',
+  gateAdvancedAlertsTitle: 'トレーダーアラートは利用できません',
+  gateBenefitAlertsRealtime: 'V1 検証中はトレーダーアラートを一時停止しています',
+  gateBenefitAlertsConditions: '新しいアラート設定は公開されません',
+  gateBenefitAlertsHistory: '保存済みの旧設定は削除できます',
   gateComparisonTitle: 'トレーダーを並べて比較',
   gateBenefitCompareSideBySide: '最大4人のトレーダーを全指標で比較',
   gateBenefitCompareMetrics: 'リスク調整済みスコアの内訳',
@@ -5794,10 +5823,10 @@ const ja = {
   provenanceSource: 'データ提供元',
   provenanceTracked: '追跡データ',
   provenanceTrackedTip:
-    '指標は取引所の公開ランキングから取得したもので、API による独立した検証はされていません。読み取り専用 API キーを接続すると ✓ 認証済み バッジを獲得できます。',
+    '指標は取引所の公開ランキングから取得しています。別の非公開 CEX 接続で、このプロフィールが認証・変更・公開されることはありません。',
   provenanceVerified: '認証済み',
   provenanceVerifiedTip:
-    '読み取り専用 API で約定を確認——数値は取引所口座から直接取得したもので、スクレイピングではありません。',
+    '口座直結データは本人対応の審査後にのみ公開されます。鮮度は表示時刻に従います。',
   provenanceAsOf: '更新',
   recordProvenanceSourceAsOf: '提供元データ基準',
   recordProvenanceObservedAt: 'Arena 取得時刻',
@@ -6060,29 +6089,29 @@ const ja = {
   tokenRankingsSortTrades: '取引数',
   tokenRankingsSortPnl: '損益',
   tokenRankingsNoActivity: 'まだ取引なし',
-  referralRewardBannerTitle: '友達を{count}人招待して、Proを{days}日間無料でゲット',
-  referralRewardBannerSubtitle:
-    '友達をArenaに招待しましょう。{count}人があなたのリンクから登録すると、Arena Proが{days}日間無料になります。',
-  referralHowItWorks: '仕組み',
-  referralStep1: '下の紹介リンクをコピー',
-  referralStep2: '暗号資産好きの友達にシェア',
-  referralStep3: '友達が{count}人登録すると、Proが{days}日間解除されます',
-  referralFriendsReferred: '招待した友達',
-  referralRewardUnlocked: '特典をゲット！',
-  referralInviteFriends: '友達を招待',
-  referralReferredCount: '{count}人を招待',
-  referralFriendTrialNote:
-    '特典：友達があなたのリンクから参加すると、{days}日間のProトライアルを獲得できます。',
-  // TODO i18n ja/ko
-  referralPromoNote:
-    'キャンペーン期間中、Pro は全員無料です。獲得した Pro 特典日数はアカウントに記録され、キャンペーン終了後に自動的に適用されます。有効期限はありません。',
-  referralPageSubtitle: '友達をArenaに招待して、紹介状況をトラッキングしましょう。',
-  referralSignInGateTitle: 'ログインして紹介リンクを取得',
-  referralSignInGateDesc: 'アカウントを作成またはログインして、友達の招待を始めましょう。',
-  referralYourLink: 'あなたの紹介リンク',
-  referralGenerating: '生成中...',
-  referralRegenerate: 'コードを再生成',
-  referralGenerate: '紹介リンクを生成',
+  // V1 紹介プログラム公開保留
+  referralUnavailableTitle: '紹介プログラムは利用できません',
+  referralUnavailableDescription: 'V1 検証保留中のため、紹介の招待と特典は利用できません。',
+  referralUnavailableHistoryNote: '既存の紹介履歴は、特典が自動付与されることを意味しません。',
+  referralRewardBannerTitle: '紹介プログラムは利用できません',
+  referralRewardBannerSubtitle: 'V1 検証保留中のため、新しい紹介の招待と特典は利用できません。',
+  referralHowItWorks: 'プログラムの状況',
+  referralStep1: '新しい紹介リンクは利用できません。',
+  referralStep2: '新しい紹介の招待は利用できません。',
+  referralStep3: '紹介特典が自動的に付与されることはありません。',
+  referralFriendsReferred: '紹介履歴',
+  referralRewardUnlocked: '特典は利用できません',
+  referralInviteFriends: '紹介プログラムは利用できません',
+  referralReferredCount: '過去の紹介 {count} 件',
+  referralFriendTrialNote: 'V1 検証保留中は、紹介によるトライアルと特典を利用できません。',
+  referralPromoNote: '既存の紹介履歴は、特典が自動付与されることを意味しません。',
+  referralPageSubtitle: 'V1 検証保留中のため、紹介の招待と特典は利用できません。',
+  referralSignInGateTitle: '紹介プログラムは利用できません',
+  referralSignInGateDesc: 'V1 保留中は、ログインしても紹介リンクは作成されません。',
+  referralYourLink: '紹介リンクは利用できません',
+  referralGenerating: '利用できません',
+  referralRegenerate: '利用できません',
+  referralGenerate: '利用できません',
   referralShareText: 'Arenaをチェック——暗号資産トレーダーランキングプラットフォーム！',
   referralShareEmailSubject: 'Arenaをチェック',
 
@@ -6090,11 +6119,11 @@ const ja = {
   proGetStarted: 'Proを使い始める',
   proStep1: '高度なProフィルターでランキングを見る',
   proStep2: 'トップトレーダーを並べて比較',
-  proStep3: 'トレーダーアラートと設定を行う',
+  proStep3: '通知設定を確認する',
   exploreProRankings: 'Proランキングを見る',
-  inviteFriendsTitle: '友達をArenaに招待',
-  inviteFriendsDesc: 'Arenaを共有して紹介特典を獲得',
-  inviteFriendsCta: '招待',
+  inviteFriendsTitle: '紹介プログラムは利用できません',
+  inviteFriendsDesc: '紹介の招待と特典は、V1 検証中に停止しています。',
+  inviteFriendsCta: '状況を見る',
   receiptSentTo: '領収書を {email} に送信しました',
   receiptEmailed: '領収書をメールでお送りしました',
   tipSentAmount: '{amount} を送りました',
@@ -6438,7 +6467,8 @@ const ja = {
   wauSub: '過去7日間に実際のハートビートがあるユーザー',
   newSignups7d: '新規登録（7日）',
   activation7d: '7日間の活性化',
-  activationSub: '対象 {eligible} 人中 {activated} 人が2日以上利用',
+  activationSub: '対象 {eligible} 人中 {activated} 人が2つのUTC日付で詳細閲覧と追跡を完了',
+  activationMeasuredSince: 'アクティベーションV2は{time}から計測し、それ以前の活動は除外します。',
   journeyFunnel: 'B2C ジャーニー（ユニーク人数）',
   collectionSince: 'ファーストパーティーイベントは {time} 以降を収集し、それ以前は遡及しません。',
   collectionPending: 'イベントはまだ未受信です。0は過去の利用者ゼロを意味しません。',
@@ -6457,6 +6487,22 @@ const ja = {
   u2detail_chartMedian: '中央値',
   u2detail_chartDays: '日数',
   u13admin_accessRequired: '管理者権限が必要です',
+  rankingsRefreshingTitle: 'ランキングを更新中です',
+  rankingsRefreshingDesc:
+    '最新の取引所データが検証を通過した後にランキングを公開します。しばらくしてから再度ご確認ください。',
+  rankingsEmptyPeriodTitle: 'この期間のランキングはまだありません',
+  pricingLifetimeMemberLabel: 'ライフタイム Pro 会員です',
+  quizBadgeMatchLegend: 'レジェンドとマッチ',
+  quizNoTradersFound:
+    '一致するトレーダーはまだ見つかりません。ランキングでトレーダーを探してみましょう。',
+  quizRoiExtreme: '極端値',
+  quizShareChallenge:
+    'Arena のトレーダー性格診断で {type} に {match}% 一致しました。私のトレード・ソウルメイトは {master}。この一致率を超えられる？ {url}',
+  quizShareOnX: 'X でシェア',
+  historyVerificationTitle: '履歴データを検証中',
+  historyVerificationDesc:
+    'このトレーダーの履歴データが検証を通過すると、チャートと詳細な統計がここに表示されます。',
+  historyVerificationCurrentRanking: '現在のランキング（{period}）',
 } as const
 
 export default ja

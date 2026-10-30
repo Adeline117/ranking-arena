@@ -54,6 +54,15 @@ function request(body: unknown): NextRequest {
   return { json: jest.fn().mockResolvedValue(body) } as unknown as NextRequest
 }
 
+function mockSingleRpcResult(result: {
+  data: Record<string, unknown> | null
+  error: { code?: string; message?: string } | null
+}) {
+  const single = jest.fn().mockResolvedValue(result)
+  mockRpc.mockReturnValue({ single })
+  return single
+}
+
 function responseHeaders() {
   const values = new Map<string, string>()
   return {
@@ -162,15 +171,16 @@ describe('/api/traders/linked atomic mutations', () => {
 
   it('selects a primary through the ownership-validating RPC without table prewrites', async () => {
     const linkedTrader = { id: LINK_ID, user_id: USER_ID, is_primary: true }
-    mockRpc.mockResolvedValue({ data: linkedTrader, error: null })
+    const single = mockSingleRpcResult({ data: linkedTrader, error: null })
 
     const response = await PATCH(request({ id: LINK_ID, is_primary: true }))
 
     expect(response.status).toBe(200)
-    expect(mockRpc).toHaveBeenCalledWith('set_primary_linked_trader', {
+    expect(mockRpc).toHaveBeenCalledWith('set_primary_linked_trader_v2', {
       p_link_id: LINK_ID,
       p_user_id: USER_ID,
     })
+    expect(single).toHaveBeenCalledTimes(1)
     expect(mockFrom).not.toHaveBeenCalled()
     expect(mockInvalidateLinkedTraderCache).toHaveBeenCalledWith(USER_ID)
     await expect(response.json()).resolves.toMatchObject({
@@ -180,7 +190,7 @@ describe('/api/traders/linked atomic mutations', () => {
   })
 
   it('maps a foreign or missing primary target to not found with no fallback writes', async () => {
-    mockRpc.mockResolvedValue({
+    const single = mockSingleRpcResult({
       data: null,
       error: { code: 'P0002', message: 'linked trader not found' },
     })
@@ -188,6 +198,7 @@ describe('/api/traders/linked atomic mutations', () => {
     const response = await PATCH(request({ id: LINK_ID, is_primary: true }))
 
     expect(response.status).toBe(404)
+    expect(single).toHaveBeenCalledTimes(1)
     expect(mockFrom).not.toHaveBeenCalled()
     expect(mockInvalidateLinkedTraderCache).not.toHaveBeenCalled()
   })
@@ -200,28 +211,54 @@ describe('/api/traders/linked atomic mutations', () => {
     expect(mockFrom).not.toHaveBeenCalled()
   })
 
-  it('allowlists and owner-scopes ordinary label updates', async () => {
-    const result = Promise.resolve({
+  it('allowlists and owner-scopes ordinary label updates through the metadata RPC', async () => {
+    const single = mockSingleRpcResult({
       data: { id: LINK_ID, user_id: USER_ID, label: 'Alpha' },
       error: null,
     })
-    const builder: Record<string, jest.Mock> = {}
-    builder.update = jest.fn(() => builder)
-    builder.eq = jest.fn(() => builder)
-    builder.select = jest.fn(() => builder)
-    builder.maybeSingle = jest.fn(() => result)
-    mockFrom.mockReturnValue(builder)
 
     const response = await PATCH(request({ id: LINK_ID, label: '  Alpha  ' }))
 
     expect(response.status).toBe(200)
-    expect(mockFrom).toHaveBeenCalledWith('user_linked_traders')
-    expect(builder.update).toHaveBeenCalledWith(
-      expect.objectContaining({ label: 'Alpha', updated_at: expect.any(String) })
-    )
-    expect(builder.eq).toHaveBeenNthCalledWith(1, 'id', LINK_ID)
-    expect(builder.eq).toHaveBeenNthCalledWith(2, 'user_id', USER_ID)
+    expect(mockRpc).toHaveBeenCalledWith('update_linked_trader_metadata_v1', {
+      p_user_id: USER_ID,
+      p_link_id: LINK_ID,
+      p_update_label: true,
+      p_label: 'Alpha',
+      p_update_display_order: false,
+      p_display_order: null,
+    })
+    expect(single).toHaveBeenCalledTimes(1)
+    expect(mockFrom).not.toHaveBeenCalled()
     expect(mockInvalidateLinkedTraderCache).toHaveBeenCalledWith(USER_ID)
+  })
+
+  it('distinguishes an omitted label from an explicit clear', async () => {
+    const single = mockSingleRpcResult({
+      data: { id: LINK_ID, user_id: USER_ID },
+      error: null,
+    })
+
+    await PATCH(request({ id: LINK_ID, display_order: 7 }))
+    expect(mockRpc).toHaveBeenLastCalledWith('update_linked_trader_metadata_v1', {
+      p_user_id: USER_ID,
+      p_link_id: LINK_ID,
+      p_update_label: false,
+      p_label: null,
+      p_update_display_order: true,
+      p_display_order: 7,
+    })
+
+    await PATCH(request({ id: LINK_ID, label: null }))
+    expect(mockRpc).toHaveBeenLastCalledWith('update_linked_trader_metadata_v1', {
+      p_user_id: USER_ID,
+      p_link_id: LINK_ID,
+      p_update_label: true,
+      p_label: null,
+      p_update_display_order: false,
+      p_display_order: null,
+    })
+    expect(single).toHaveBeenCalledTimes(2)
   })
 
   it('unlinks only through the atomic service RPC', async () => {
@@ -240,7 +277,7 @@ describe('/api/traders/linked atomic mutations', () => {
     const response = await DELETE(request({ id: LINK_ID }))
 
     expect(response.status).toBe(200)
-    expect(mockRpc).toHaveBeenCalledWith('unlink_linked_trader', {
+    expect(mockRpc).toHaveBeenCalledWith('unlink_linked_trader_v2', {
       p_link_id: LINK_ID,
       p_user_id: USER_ID,
     })

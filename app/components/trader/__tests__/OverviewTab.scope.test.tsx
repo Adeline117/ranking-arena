@@ -154,4 +154,26 @@ describe('OverviewTab account scope', () => {
 
     expect(screen.getByTestId('primary-performance')).toBeInTheDocument()
   })
+
+  it('replaces the performance card and history charts with the verification placeholder', () => {
+    render(
+      <OverviewTab
+        {...baseProps}
+        hasMultipleAccounts={false}
+        activeAccount="bybit:primary"
+        aggregatedData={null}
+        suppressAccountContent={false}
+        historyUnderVerification
+        sealedRankingPeriod="90D"
+        sealedRank={12}
+        sealedRoi={34.5}
+      />
+    )
+
+    expect(screen.queryByTestId('primary-performance')).not.toBeInTheDocument()
+    expect(screen.queryByText('noChartDataAvailable')).not.toBeInTheDocument()
+    expect(screen.getByText('historyVerificationTitle')).toBeInTheDocument()
+    expect(screen.getByText('#12')).toBeInTheDocument()
+    expect(screen.getByText('+34.50%')).toBeInTheDocument()
+  })
 })

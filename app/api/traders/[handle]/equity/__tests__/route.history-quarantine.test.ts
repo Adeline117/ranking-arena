@@ -5,8 +5,6 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const mockCheckRateLimit = jest.fn()
-
 jest.mock('next/server', () => ({
   NextResponse: {
     json: (body: unknown, init: { status?: number; headers?: Record<string, string> } = {}) => ({
@@ -17,24 +15,12 @@ jest.mock('next/server', () => ({
   },
 }))
 
-jest.mock('@/lib/api', () => ({
-  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
-  RateLimitPresets: { public: {} },
-}))
-
-import type { NextRequest } from 'next/server'
 import { dynamic, GET, revalidate } from '../route'
 
+// Shared envelope contract: lib/rankings/daily-publication-contract.ts.
 describe('trader equity publication quarantine', () => {
-  beforeEach(() => {
-    jest.clearAllMocks()
-    mockCheckRateLimit.mockResolvedValue(null)
-  })
-
-  it('returns no historical price, ROI, PnL, or drawdown series', async () => {
-    const response = await GET({} as NextRequest, {
-      params: Promise.resolve({ handle: 'alice' }),
-    })
+  it('returns the fixed unavailable daily-publication envelope', async () => {
+    const response = GET()
 
     expect(dynamic).toBe('force-dynamic')
     expect(revalidate).toBe(0)
@@ -42,25 +28,25 @@ describe('trader equity publication quarantine', () => {
     expect(response.headers).toMatchObject({
       'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
     })
-    await expect(response.json()).resolves.toEqual({
+    await expect(response.json()).resolves.toMatchObject({
+      contract: 'arena.daily-history-publication@1',
+      available: false,
+      code: 'DAILY_SERIES_NOT_PUBLISHED',
+      publication: null,
       equity: [],
       pnl: [],
       drawdown: [],
-      publication: {
-        state: 'unknown',
-        reason: 'historical_metric_publication_unavailable',
-      },
-      cacheState: 'quarantined',
     })
   })
 
-  it('does not retain a raw daily-snapshot reader or server cache replay path', () => {
+  it('does not retain a raw daily-snapshot reader, calculation, or cache replay path', () => {
     const route = readFileSync(
       join(process.cwd(), 'app/api/traders/[handle]/equity/route.ts'),
       'utf8'
     )
 
     expect(route).not.toContain(".from('trader_daily_snapshots')")
+    expect(route).not.toContain('computeEquity')
     expect(route).not.toContain('getServerCache')
     expect(route).not.toContain('setServerCache')
     expect(route).not.toContain('getSupabaseAdmin')

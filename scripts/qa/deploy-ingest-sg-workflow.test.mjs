@@ -6,7 +6,7 @@ import { parse } from 'yaml'
 const workflow = readFileSync('.github/workflows/deploy-ingest-sg.yml', 'utf8')
 const parsedWorkflow = parse(workflow)
 
-test('SG dispatch is bound to one exact current-main commit throughout deployment', () => {
+test('suspended SG release input remains bound to one exact current-main commit', () => {
   assert.match(workflow, /target_sha:\n\s+description:[^\n]+\n\s+required: true\n\s+type: string/)
   assert.equal((workflow.match(/ref: \$\{\{ inputs\.target_sha \}\}/g) ?? []).length, 2)
   assert.equal(
@@ -25,10 +25,14 @@ test('SG dispatch is bound to one exact current-main commit throughout deploymen
   assert.match(workflow, /origin\/main advanced after transactional success/)
 })
 
-test('production secrets are gated by a main-only deployment environment contract', () => {
+test('production deployment is suspended behind its environment contract', () => {
   const deployJob = parsedWorkflow.jobs['deploy-sg']
   assert.equal(deployJob.environment, 'ingest-sg-production')
-  assert.equal(parsedWorkflow.on.workflow_dispatch.inputs.target_sha.required, true)
+  assert.deepEqual(Object.keys(parsedWorkflow.on), ['workflow_call'])
+  assert.equal(parsedWorkflow.on.workflow_call.inputs.target_sha.required, true)
+  assert.equal(parsedWorkflow.on.workflow_call.secrets, undefined)
+  assert.equal(parsedWorkflow.jobs['build-deps'].if, '${{ false }}')
+  assert.equal(deployJob.if, '${{ false }}')
   assert.match(workflow, /\[ "\$GITHUB_REF" = 'refs\/heads\/main' \]/)
   assert.match(workflow, /\[ "\$GITHUB_SHA" = "\$TARGET_SHA" \]/)
 })
@@ -42,8 +46,6 @@ test('third-party actions are pinned to immutable full commit SHAs', () => {
 })
 
 test('code-only accepts only an intentionally skipped dependency build', () => {
-  assert.match(workflow, /if: \$\{\{ inputs\.mode != 'code-only' \}\}/)
-  assert.match(workflow, /if: \$\{\{ !cancelled\(\) \}\}/)
   assert.match(workflow, /full:success\|code-only:skipped/)
   assert.match(workflow, /if \[ "\$DEPLOY_MODE" = 'code-only' \]; then/)
   assert.match(workflow, /deploy-ingest-sg\.sh --target-sha="\$TARGET_SHA" --code-only/)

@@ -3,7 +3,7 @@
  */
 
 const mockJsonFn = jest.fn()
-const mockBuildFreshnessReport = jest.fn()
+const mockBuildFreshnessAuthoritySnapshot = jest.fn()
 const mockLoggerWarn = jest.fn()
 const mockFrom = jest.fn()
 const mockRedisPing = jest.fn()
@@ -16,6 +16,24 @@ function abortableResult<T>(result: T | Promise<T>) {
       observedSupabaseSignals.push(signal)
       return Promise.resolve(result)
     },
+  }
+}
+
+function freshnessSnapshot(
+  report: Record<string, unknown>,
+  overrides: Partial<{
+    coverage: { expectedSourceBoards: number; visibleSourceBoards: number }
+    latestSuccessfulPublication: { season: '90D'; publishedAt: string } | null
+  }> = {}
+) {
+  return {
+    report,
+    coverage: { expectedSourceBoards: 32, visibleSourceBoards: 32 },
+    latestSuccessfulPublication: {
+      season: '90D' as const,
+      publishedAt: '2026-07-21T20:00:00.000Z',
+    },
+    ...overrides,
   }
 }
 
@@ -44,7 +62,8 @@ function installFetchMock(implementation?: jest.Mock) {
 }
 
 jest.mock('@/lib/rankings/build-freshness-report', () => ({
-  buildFreshnessReport: (...args: unknown[]) => mockBuildFreshnessReport(...args),
+  buildFreshnessAuthoritySnapshot: (...args: unknown[]) =>
+    mockBuildFreshnessAuthoritySnapshot(...args),
 }))
 
 jest.mock('@/lib/logger', () => ({
@@ -103,13 +122,15 @@ describe('GET /api/health', () => {
     jest.resetModules()
     jest.clearAllMocks()
     observedSupabaseSignals.length = 0
-    mockBuildFreshnessReport.mockResolvedValue({
-      ok: true,
-      checked_at: '2026-07-21T20:00:00.000Z',
-      summary: { total: 32, fresh: 32, stale: 0, critical: 0, unknown: 0 },
-      thresholds: { stale_hours: 8, critical_hours: 24 },
-      platforms: [],
-    })
+    mockBuildFreshnessAuthoritySnapshot.mockResolvedValue(
+      freshnessSnapshot({
+        ok: true,
+        checked_at: '2026-07-21T20:00:00.000Z',
+        summary: { total: 32, fresh: 32, stale: 0, critical: 0, unknown: 0 },
+        thresholds: { stale_hours: 8, critical_hours: 24 },
+        platforms: [],
+      })
+    )
     mockFrom.mockImplementation((table: string) => {
       if (table !== 'trader_sources') throw new Error(`unexpected table: ${table}`)
       return {
@@ -160,6 +181,21 @@ describe('GET /api/health', () => {
     }
   })
 
+  it('exposes bounded ranking coverage, freshness, and publication evidence', async () => {
+    const { GET } = await import('../route')
+    const response = await GET()
+    const body = await response.json()
+
+    expect(body.checks.freshness.details).toMatchObject({
+      sourceSummary: { total: 32, fresh: 32, stale: 0, critical: 0, unknown: 0 },
+      coverage: { expectedSourceBoards: 32, visibleSourceBoards: 32 },
+      thresholds: { staleHours: 8, criticalHours: 24 },
+      publicationSeason: '90D',
+      latestSuccessfulPublicationAt: '2026-07-21T20:00:00.000Z',
+      sources: [],
+    })
+  })
+
   it('should set no-cache headers', async () => {
     const { GET } = await import('../route')
     const response = await GET()
@@ -194,13 +230,15 @@ describe('GET /api/health', () => {
   })
 
   it('degrades when any expected source authority is stale, critical, or unknown', async () => {
-    mockBuildFreshnessReport.mockResolvedValueOnce({
-      ok: false,
-      checked_at: '2026-07-21T20:00:00.000Z',
-      summary: { total: 32, fresh: 15, stale: 1, critical: 15, unknown: 1 },
-      thresholds: { stale_hours: 8, critical_hours: 24 },
-      platforms: [],
-    })
+    mockBuildFreshnessAuthoritySnapshot.mockResolvedValueOnce(
+      freshnessSnapshot({
+        ok: false,
+        checked_at: '2026-07-21T20:00:00.000Z',
+        summary: { total: 32, fresh: 15, stale: 1, critical: 15, unknown: 1 },
+        thresholds: { stale_hours: 8, critical_hours: 24 },
+        platforms: [],
+      })
+    )
 
     const { GET } = await import('../route')
     const response = await GET()
@@ -214,8 +252,88 @@ describe('GET /api/health', () => {
     })
   })
 
+  it('fails closed when source freshness is healthy but board coverage is incomplete', async () => {
+    mockBuildFreshnessAuthoritySnapshot.mockResolvedValueOnce(
+      freshnessSnapshot(
+        {
+          ok: true,
+          checked_at: '2026-07-21T20:00:00.000Z',
+          summary: { total: 32, fresh: 32, stale: 0, critical: 0, unknown: 0 },
+          thresholds: { stale_hours: 8, critical_hours: 24 },
+          platforms: [],
+        },
+        { coverage: { expectedSourceBoards: 32, visibleSourceBoards: 31 } }
+      )
+    )
+
+    const { GET } = await import('../route')
+    const response = await GET()
+    const body = await response.json()
+
+    expect(response.status).toBe(202)
+    expect(body.status).toBe('degraded')
+    expect(body.checks.freshness).toMatchObject({
+      status: 'fail',
+      message: '32/32 sources fresh; 0 stale; 0 critical; 0 unknown; 31/32 source boards visible',
+    })
+  })
+
+  it('fails closed when no expected source-board authority is available', async () => {
+    mockBuildFreshnessAuthoritySnapshot.mockResolvedValueOnce(
+      freshnessSnapshot(
+        {
+          ok: true,
+          checked_at: '2026-07-21T20:00:00.000Z',
+          summary: { total: 0, fresh: 0, stale: 0, critical: 0, unknown: 0 },
+          thresholds: { stale_hours: 8, critical_hours: 24 },
+          platforms: [],
+        },
+        { coverage: { expectedSourceBoards: 0, visibleSourceBoards: 0 } }
+      )
+    )
+
+    const { GET } = await import('../route')
+    const response = await GET()
+    const body = await response.json()
+
+    expect(response.status).toBe(202)
+    expect(body.status).toBe('degraded')
+    expect(body.checks.freshness).toMatchObject({
+      status: 'fail',
+      message:
+        '0/0 sources fresh; 0 stale; 0 critical; 0 unknown; Source-board coverage authority unavailable',
+    })
+  })
+
+  it('fails closed when source freshness and coverage are healthy but 90D proof is missing', async () => {
+    mockBuildFreshnessAuthoritySnapshot.mockResolvedValueOnce(
+      freshnessSnapshot(
+        {
+          ok: true,
+          checked_at: '2026-07-21T20:00:00.000Z',
+          summary: { total: 32, fresh: 32, stale: 0, critical: 0, unknown: 0 },
+          thresholds: { stale_hours: 8, critical_hours: 24 },
+          platforms: [],
+        },
+        { latestSuccessfulPublication: null }
+      )
+    )
+
+    const { GET } = await import('../route')
+    const response = await GET()
+    const body = await response.json()
+
+    expect(response.status).toBe(202)
+    expect(body.status).toBe('degraded')
+    expect(body.checks.freshness).toMatchObject({
+      status: 'fail',
+      message:
+        '32/32 sources fresh; 0 stale; 0 critical; 0 unknown; 90D publication proof unavailable',
+    })
+  })
+
   it('fails closed without exposing authority errors', async () => {
-    mockBuildFreshnessReport.mockRejectedValueOnce(
+    mockBuildFreshnessAuthoritySnapshot.mockRejectedValueOnce(
       new Error('postgres://service-role:secret@private-host')
     )
 
@@ -229,6 +347,7 @@ describe('GET /api/health', () => {
       status: 'fail',
       message: 'Freshness authority unavailable',
     })
+    expect(body.checks.freshness.details).toBeUndefined()
     expect(JSON.stringify(body)).not.toContain('private-host')
   })
 
@@ -250,7 +369,7 @@ describe('GET /api/health', () => {
 
   it('clears health timers after a fast authority rejection', async () => {
     jest.useFakeTimers()
-    mockBuildFreshnessReport.mockRejectedValueOnce(new Error('authority unavailable'))
+    mockBuildFreshnessAuthoritySnapshot.mockRejectedValueOnce(new Error('authority unavailable'))
 
     try {
       const { GET } = await import('../route')
@@ -267,7 +386,7 @@ describe('GET /api/health', () => {
 
   it('fails closed when the complete authority exceeds its health budget', async () => {
     jest.useFakeTimers()
-    mockBuildFreshnessReport.mockReturnValueOnce(new Promise(() => undefined))
+    mockBuildFreshnessAuthoritySnapshot.mockReturnValueOnce(new Promise(() => undefined))
 
     try {
       const { GET } = await import('../route')
@@ -281,14 +400,16 @@ describe('GET /api/health', () => {
         status: 'fail',
         message: 'Freshness authority timed out',
       })
-      expect((mockBuildFreshnessReport.mock.calls[0][0] as AbortSignal).aborted).toBe(true)
+      expect((mockBuildFreshnessAuthoritySnapshot.mock.calls[0][0] as AbortSignal).aborted).toBe(
+        true
+      )
       expect(jest.getTimerCount()).toBe(0)
     } finally {
       jest.useRealTimers()
     }
   })
 
-  it('returns unhealthy within the core budget and skips supplementary VPS work when DB hangs', async () => {
+  it('returns unhealthy within the core budget without probing configured VPS endpoints when DB hangs', async () => {
     jest.useFakeTimers()
     process.env.VPS_SCRAPER_SG = 'https://vps.example:3457'
     process.env.VPS_PROXY_KEY = 'vps-key'
@@ -313,10 +434,7 @@ describe('GET /api/health', () => {
         status: 'fail',
         message: 'DB check timed out (8s)',
       })
-      expect(body.checks.vps).toEqual({
-        status: 'skip',
-        message: 'Skipped because the core database is unavailable',
-      })
+      expect(body.checks).not.toHaveProperty('vps')
       expect(fetchMock).not.toHaveBeenCalled()
       expect(observedSupabaseSignals.some((signal) => signal.aborted)).toBe(true)
       expect(jest.getTimerCount()).toBe(0)
@@ -398,77 +516,11 @@ describe('GET /api/health', () => {
     })
   })
 
-  it('bounds the VPS database heartbeat fallback', async () => {
-    jest.useFakeTimers()
+  it('does not probe configured VPS endpoints or read their pipeline heartbeat', async () => {
     process.env.VPS_SCRAPER_SG = 'https://vps.example:3457'
     process.env.VPS_PROXY_KEY = 'vps-key'
-    const fetchMock = jest.fn().mockResolvedValue({ ok: false, status: 503 } as Response)
+    const fetchMock = jest.fn()
     const { restore } = installFetchMock(fetchMock)
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'trader_sources') {
-        return {
-          select: () => ({
-            limit: () => abortableResult(Promise.resolve({ data: [{ id: 1 }], error: null })),
-          }),
-        }
-      }
-      if (table === 'pipeline_logs') {
-        const chain = {
-          eq: () => chain,
-          or: () => chain,
-          gte: () => chain,
-          limit: () => chain,
-          abortSignal: (signal: AbortSignal) => {
-            observedSupabaseSignals.push(signal)
-            return chain
-          },
-          maybeSingle: () => new Promise(() => undefined),
-        }
-        return { select: () => chain }
-      }
-      throw new Error(`unexpected table: ${table}`)
-    })
-
-    try {
-      const { GET } = await import('../route')
-      const responsePromise = GET()
-      await jest.advanceTimersByTimeAsync(1_000)
-      const response = await responsePromise
-      const body = await response.json()
-
-      expect(response.status).toBe(200)
-      expect(body.checks.vps).toMatchObject({
-        status: 'skip',
-        message: expect.stringContaining('no recent heartbeat'),
-      })
-      expect(mockLoggerWarn).toHaveBeenCalledWith(
-        '[health] checkVpsHeartbeat timed out after 1000ms'
-      )
-      expect(observedSupabaseSignals.some((signal) => signal.aborted)).toBe(true)
-      expect(jest.getTimerCount()).toBe(0)
-    } finally {
-      restore()
-      jest.useRealTimers()
-    }
-  })
-
-  it('does not expose VPS heartbeat authority errors', async () => {
-    process.env.VPS_SCRAPER_SG = 'https://vps.example:3457'
-    process.env.VPS_PROXY_KEY = 'vps-key'
-    const internalError = 'postgres://vps-reader:private-secret@heartbeat-db.internal/postgres'
-    const fetchMock = jest.fn().mockResolvedValue({ ok: false, status: 503 } as Response)
-    const { restore } = installFetchMock(fetchMock)
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'trader_sources') {
-        return {
-          select: () => ({
-            limit: () => abortableResult(Promise.resolve({ data: [{ id: 1 }], error: null })),
-          }),
-        }
-      }
-      if (table === 'pipeline_logs') throw new Error(internalError)
-      throw new Error(`unexpected table: ${table}`)
-    })
 
     try {
       const { GET } = await import('../route')
@@ -476,32 +528,20 @@ describe('GET /api/health', () => {
       const body = await response.json()
 
       expect(response.status).toBe(200)
-      expect(body.checks.vps).toMatchObject({
-        status: 'skip',
-        message: 'VPS SG unavailable (supplementary)',
-      })
-      expect(JSON.stringify(body)).not.toContain('private-secret')
-      expect(JSON.stringify(body)).not.toContain('heartbeat-db.internal')
-      expect(mockLoggerWarn).toHaveBeenCalledWith('[health] VPS SG dependency threw', {
-        error: internalError,
-      })
+      expect(body.checks).not.toHaveProperty('vps')
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(mockFrom).toHaveBeenCalledWith('trader_sources')
+      expect(mockFrom).not.toHaveBeenCalledWith('pipeline_logs')
     } finally {
       restore()
     }
   })
 
-  it('bounds the full core-plus-VPS worst path below the 15s caller budget', async () => {
+  it('bounds the core worst path below the 15s caller budget without VPS work', async () => {
     jest.useFakeTimers()
     process.env.VPS_SCRAPER_SG = 'https://vps.example:3457'
     process.env.VPS_PROXY_KEY = 'vps-key'
-    const observedFetchSignals: AbortSignal[] = []
-    const fetchMock = jest.fn((_url: string, init?: RequestInit) => {
-      const signal = init?.signal as AbortSignal
-      observedFetchSignals.push(signal)
-      return new Promise<Response>((_resolve, reject) => {
-        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
-      })
-    })
+    const fetchMock = jest.fn()
     const { restore } = installFetchMock(fetchMock)
     const delayed = <T>(value: T) =>
       new Promise<T>((resolve) => setTimeout(() => resolve(value), 7_999))
@@ -513,14 +553,16 @@ describe('GET /api/health', () => {
     mockGetSharedRedis.mockImplementationOnce(() =>
       delayed({ ping: jest.fn().mockResolvedValue('PONG') })
     )
-    mockBuildFreshnessReport.mockImplementationOnce(() =>
-      delayed({
-        ok: true,
-        checked_at: '2026-07-28T00:00:00.000Z',
-        summary: { total: 32, fresh: 32, stale: 0, critical: 0, unknown: 0 },
-        thresholds: { stale_hours: 8, critical_hours: 24 },
-        platforms: [],
-      })
+    mockBuildFreshnessAuthoritySnapshot.mockImplementationOnce(() =>
+      delayed(
+        freshnessSnapshot({
+          ok: true,
+          checked_at: '2026-07-28T00:00:00.000Z',
+          summary: { total: 32, fresh: 32, stale: 0, critical: 0, unknown: 0 },
+          thresholds: { stale_hours: 8, critical_hours: 24 },
+          platforms: [],
+        })
+      )
     )
 
     try {
@@ -536,13 +578,8 @@ describe('GET /api/health', () => {
       expect(Date.now() - startedAt).toBeLessThanOrEqual(9_250)
       expect(15_000 - (Date.now() - startedAt)).toBeGreaterThanOrEqual(5_750)
       expect(response.status).toBe(200)
-      expect(body.checks.vps).toMatchObject({
-        status: 'skip',
-        message: expect.stringContaining('deadline was exhausted'),
-      })
-      expect(fetchMock).toHaveBeenCalledTimes(1)
-      expect(observedFetchSignals).toHaveLength(1)
-      expect(observedFetchSignals[0].aborted).toBe(true)
+      expect(body.checks).not.toHaveProperty('vps')
+      expect(fetchMock).not.toHaveBeenCalled()
       expect(jest.getTimerCount()).toBe(0)
     } finally {
       restore()
@@ -557,6 +594,9 @@ describe('GET /api/health', () => {
 
     expect(route).not.toContain('arena_latest_snapshot_at')
     expect(route).toContain("from '@/lib/rankings/build-freshness-report'")
+    expect(route).not.toMatch(/\bVPS_(?:SCRAPER|PROXY)/)
+    expect(route).not.toContain('pipeline_logs')
+    expect(route).not.toContain('fetch(')
   })
 })
 

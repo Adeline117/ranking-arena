@@ -27,6 +27,7 @@ const mockFetchAllExportRows = jest.fn()
 const mockFetchAllExportRowsByCursor = jest.fn()
 const mockFetchAllExportRowsForUuidParents = jest.fn()
 const mockFrom = jest.fn()
+const mockRpc = jest.fn()
 let profileStates: QueryState[]
 
 jest.mock('@/lib/supabase/server', () => ({
@@ -84,6 +85,15 @@ function request() {
     cookies: { get: () => ({ value: 'csrf-value' }) },
     headers: { get: () => 'csrf-value' },
   } as never
+}
+
+function expectPrivateNoStore(response: {
+  headers: { get(name: string): string | null | undefined }
+}) {
+  expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+  expect(response.headers.get('CDN-Cache-Control')).toBe('no-store')
+  expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
+  expect(response.headers.get('Pragma')).toBe('no-cache')
 }
 
 function installProfileQueries(options: {
@@ -164,7 +174,45 @@ describe('POST /api/settings/export', () => {
     mockCheckRateLimit.mockResolvedValue(null)
     mockGetProvisioningAuthUser.mockResolvedValue({ id: USER_ID })
     mockValidateCsrfToken.mockReturnValue(true)
-    mockGetSupabaseAdmin.mockReturnValue({ from: mockFrom })
+    mockGetSupabaseAdmin.mockReturnValue({ from: mockFrom, rpc: mockRpc })
+    mockRpc.mockResolvedValue({
+      data: {
+        portfolios: [
+          {
+            id: '19191919-1919-4919-8919-191919191919',
+            exchange: 'binance',
+            label: 'retired-main',
+            created_at: '2026-02-21T00:00:00.000Z',
+          },
+        ],
+        positions: [
+          {
+            id: '20202020-2020-4020-8020-202020202020',
+            portfolio_id: '19191919-1919-4919-8919-191919191919',
+            symbol: 'BTCUSDT',
+            side: 'long',
+            entry_price: '9007199254740993.0000000001',
+            mark_price: '9007199254740994.0000000002',
+            size: '1.25',
+            pnl: '0.5',
+            pnl_pct: '2.5',
+            leverage: '3',
+            updated_at: '2026-02-21T00:10:00.000Z',
+          },
+        ],
+        snapshots: [
+          {
+            id: '21212121-2121-4121-8121-212121212121',
+            portfolio_id: '19191919-1919-4919-8919-191919191919',
+            total_equity: '9007199254740993.0000000001',
+            total_pnl: '12.5',
+            total_pnl_pct: '1.25',
+            snapshot_at: '2026-02-21T00:20:00.000Z',
+          },
+        ],
+      },
+      error: null,
+    })
     mockFetchAllExportRows.mockImplementation(async (_client, dataset) => {
       const id = `${dataset.name}-1`
       switch (dataset.name) {
@@ -575,6 +623,9 @@ describe('POST /api/settings/export', () => {
       'account.push_subscriptions': 1,
       'account.backup_codes': 1,
       'account.recovery_tokens': 1,
+      'account.legacy_portfolios.portfolios': 1,
+      'account.legacy_portfolios.positions': 1,
+      'account.legacy_portfolios.snapshots': 1,
     })
     expect(body.manifest.datasets.every((dataset) => dataset.status === 'complete')).toBe(true)
     expect(profileStates[0]?.selection).toContain('email')
@@ -886,6 +937,41 @@ describe('POST /api/settings/export', () => {
       push_subscriptions: [{ id: 'account.push_subscriptions-1' }],
       backup_codes: [{ id: 'account.backup_codes-1' }],
       recovery_tokens: [{ id: 'account.recovery_tokens-1' }],
+      legacy_portfolios: {
+        portfolios: [
+          {
+            id: '19191919-1919-4919-8919-191919191919',
+            exchange: 'binance',
+            label: 'retired-main',
+            created_at: '2026-02-21T00:00:00.000Z',
+          },
+        ],
+        positions: [
+          {
+            id: '20202020-2020-4020-8020-202020202020',
+            portfolio_id: '19191919-1919-4919-8919-191919191919',
+            symbol: 'BTCUSDT',
+            side: 'long',
+            entry_price: '9007199254740993.0000000001',
+            mark_price: '9007199254740994.0000000002',
+            size: '1.25',
+            pnl: '0.5',
+            pnl_pct: '2.5',
+            leverage: '3',
+            updated_at: '2026-02-21T00:10:00.000Z',
+          },
+        ],
+        snapshots: [
+          {
+            id: '21212121-2121-4121-8121-212121212121',
+            portfolio_id: '19191919-1919-4919-8919-191919191919',
+            total_equity: '9007199254740993.0000000001',
+            total_pnl: '12.5',
+            total_pnl_pct: '1.25',
+            snapshot_at: '2026-02-21T00:20:00.000Z',
+          },
+        ],
+      },
     })
     expect(JSON.stringify(body.account.bindings)).not.toContain(
       'must-not-escape-binding-normalization'
@@ -893,13 +979,18 @@ describe('POST /api/settings/export', () => {
     expect(JSON.stringify(body.account.exchange_connections)).not.toMatch(
       /must-not-escape|"(?:user_id|api_key_encrypted|api_secret_encrypted|passphrase_encrypted|access_token_encrypted|refresh_token_encrypted|last_sync_error|future_secret)"/
     )
+    expect(JSON.stringify(body.account.legacy_portfolios)).not.toMatch(
+      /user_id|ciphertext|api_(?:key|secret|passphrase)|future_secret/
+    )
+    expect(mockRpc).toHaveBeenCalledWith('export_legacy_portfolio_data_v1', {
+      p_user_id: USER_ID,
+    })
     expect(mockFetchAllExportRows).toHaveBeenCalledTimes(12)
     expect(mockFetchAllExportRowsByCursor).toHaveBeenCalledTimes(16)
     expect(mockFetchAllExportRowsForUuidParents).toHaveBeenCalledTimes(1)
     expect(mockFrom).toHaveBeenCalledTimes(2)
     expect(response.headers.get('Content-Disposition')).not.toContain(USER_ID)
-    expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
-    expect(response.headers.get('Pragma')).toBe('no-cache')
+    expectPrivateNoStore(response)
     expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff')
 
     const datasets = mockFetchAllExportRows.mock.calls.map((call) => call[1])
@@ -1265,6 +1356,7 @@ describe('POST /api/settings/export', () => {
 
     expect(response.status).toBe(500)
     expect(await response.json()).toEqual({ error: 'Failed to prepare a complete export' })
+    expectPrivateNoStore(response)
     expect(mockFrom).toHaveBeenCalledTimes(1)
   })
 
@@ -1343,6 +1435,83 @@ describe('POST /api/settings/export', () => {
     expect(
       body.manifest.datasets.find((dataset) => dataset.name === 'account.exchange_connections')
     ).toEqual({ name: 'account.exchange_connections', status: 'complete', row_count: 0 })
+  })
+
+  it('maps the exact legacy RPC row-limit code to 413 without claiming cooldown', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: '54000', message: 'program limit exceeded' },
+    })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(413)
+    expect(await response.json()).toEqual({
+      error: 'Your export is too large to prepare synchronously. Please contact support.',
+    })
+    expect(mockFrom).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails the whole export on a legacy RPC error without claiming cooldown', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: 'XX001', message: 'legacy export failed' },
+    })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Failed to prepare a complete export' })
+    expect(mockFrom).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects legacy child rows outside the returned owner portfolio set', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: {
+        portfolios: [],
+        positions: [
+          {
+            id: '20202020-2020-4020-8020-202020202020',
+            portfolio_id: '29292929-2929-4929-8929-292929292929',
+            symbol: 'BTCUSDT',
+            side: 'long',
+            entry_price: '1',
+            mark_price: '1',
+            size: '1',
+            pnl: '0',
+            pnl_pct: '0',
+            leverage: '1',
+            updated_at: '2026-02-21T00:10:00.000Z',
+          },
+        ],
+        snapshots: [],
+      },
+      error: null,
+    })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Failed to prepare a complete export' })
+    expect(mockFrom).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects any unapproved legacy export field before serialization', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: {
+        portfolios: [],
+        positions: [],
+        snapshots: [],
+        api_key_encrypted: 'must-never-escape',
+      },
+      error: null,
+    })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Failed to prepare a complete export' })
+    expect(mockFrom).toHaveBeenCalledTimes(1)
   })
 
   it('fails closed without cooldown when outgoing blocks cannot be read completely', async () => {
@@ -1631,7 +1800,24 @@ describe('POST /api/settings/export', () => {
     const response = await POST(request())
 
     expect(response).toBe(limited)
+    expectPrivateNoStore(response)
     expect(mockGetProvisioningAuthUser).not.toHaveBeenCalled()
+    expect(mockGetSupabaseAdmin).not.toHaveBeenCalled()
+  })
+
+  it('marks authentication and CSRF failures private and non-cacheable', async () => {
+    mockGetProvisioningAuthUser.mockResolvedValueOnce(null)
+    const unauthorized = await POST(request())
+
+    expect(unauthorized.status).toBe(401)
+    expectPrivateNoStore(unauthorized)
+
+    mockGetProvisioningAuthUser.mockResolvedValueOnce({ id: USER_ID })
+    mockValidateCsrfToken.mockReturnValueOnce(false)
+    const forbidden = await POST(request())
+
+    expect(forbidden.status).toBe(403)
+    expectPrivateNoStore(forbidden)
     expect(mockGetSupabaseAdmin).not.toHaveBeenCalled()
   })
 })

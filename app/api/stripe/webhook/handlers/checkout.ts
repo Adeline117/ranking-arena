@@ -278,7 +278,7 @@ export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
       throw joinError
     }
 
-    await mintNFTForUser(userId, plan || 'monthly')
+    await mintNFTForUser(userId, plan || 'monthly', session.id)
 
     logger.info(`Checkout completed for user ${userId}`, { plan, subscriptionId })
 

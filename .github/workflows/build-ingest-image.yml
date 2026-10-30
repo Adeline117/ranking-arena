@@ -10,9 +10,13 @@ name: Build Ingest Worker Image
 # No extra secrets: pushing to ghcr.io uses the built-in GITHUB_TOKEN. The image is
 # private to the repo by default; the SG box pulls it with a read:packages PAT (set
 # during cutover — see the runbook).
+#
+# SECURITY SUSPENDED (V1 NO-GO): main currently has no enforceable protection,
+# so a push must not hand repository code a packages:write token. The job is
+# fixed false below. Restore only after main is protected and publication uses a
+# protected tag/release or an environment-only gate with a required reviewer.
 
 on:
-  workflow_dispatch: {}
   # Build only when an actual worker runtime input changes. The production Gate
   # compares the deterministic release ID, so app/docs-only commits safely reuse
   # the already-smoked image instead of forcing a meaningless fleet restart.
@@ -36,6 +40,7 @@ concurrency:
 
 jobs:
   build-push:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.image.outputs.name }}
@@ -46,27 +51,12 @@ jobs:
       contents: read
       packages: write # push to ghcr.io
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
-      # A manual run can otherwise select an arbitrary historical ref whose
-      # worker-input release ID matches main while its baked audit SHA differs.
-      # Refuse that ambiguous image before spending build or registry capacity.
-      - name: Require manual dispatch to target exact origin/main
-        if: github.event_name == 'workflow_dispatch'
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch --no-tags --prune origin \
-            '+refs/heads/main:refs/remotes/origin/main'
-          main_sha="$(git rev-parse --verify refs/remotes/origin/main^{commit})"
-          if [ "$GITHUB_SHA" != "$main_sha" ]; then
-            echo "::error::manual worker image source is not exact origin/main"
-            exit 1
-          fi
+          persist-credentials: false
       # Push builds may finish after an app/docs-only commit advances main; the
-      # triggering commit remains an immutable main commit. Manual builds are
-      # rechecked again immediately before formal aliases are promoted.
+      # triggering commit remains an immutable main commit.
       - name: Derive deterministic worker release ID
         id: worker_release
         shell: bash
@@ -89,9 +79,9 @@ jobs:
           repo=$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')
           image="ghcr.io/$repo/ingest-worker"
           printf 'name=%s\n' "$image" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       - name: Log in to ghcr.io
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -110,7 +100,7 @@ jobs:
       # image remains quarantined; this workflow never gives it a release/SHA alias.
       - name: Build + push quarantine image
         id: build_quarantine
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: worker/Dockerfile.ingest
@@ -152,18 +142,6 @@ jobs:
           }
           docker run --rm --entrypoint node "$digest_ref" --import tsx --input-type=module -e \
             "for (const m of ['bullmq','ioredis','viem','abitype','luxon','playwright','tsx','dotenv','pg','ccxt']) await import(m); await import('./worker/src/ingest/heartbeat.ts'); console.log('worker-modules-loaded')"
-      - name: Recheck manual dispatch exact main before promotion
-        if: github.event_name == 'workflow_dispatch'
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch --no-tags --prune origin \
-            '+refs/heads/main:refs/remotes/origin/main'
-          main_sha="$(git rev-parse --verify refs/remotes/origin/main^{commit})"
-          if [ "$GITHUB_SHA" != "$main_sha" ]; then
-            echo "::error::manual worker image source stopped being exact origin/main"
-            exit 1
-          fi
       # Check every formal alias before creating any of them. An existing alias
       # may be reused only when it already resolves to this exact digest; a
       # different digest is a release collision and fails without retagging it.
@@ -270,7 +248,7 @@ jobs:
             echo "- Audit SHA: \`$AUDIT_SHA\`"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload digest deployment record
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ingest-worker-release-${{ steps.worker_release.outputs.id }}
           path: worker-image-release.json

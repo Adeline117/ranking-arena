@@ -1,10 +1,10 @@
 /**
- * 健康检查 API (轻量版)
+ * Public launch health API.
  *
- * GET /api/health - 返回应用健康状态
- * 只检查：数据库连通性 + Redis 连通性
- * 详细信息（平台新鲜度、cron状态等）请用 /api/health/detailed
- * 目标响应时间 <200ms
+ * GET /api/health checks the API transport, database, Redis, complete source
+ * registry freshness/coverage, and complete current 90D publication proof.
+ * Core checks share one bounded request deadline; deeper diagnostics remain
+ * available at /api/health/detailed.
  */
 
 import { NextResponse } from 'next/server'
@@ -12,7 +12,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getSharedRedis } from '@/lib/cache/redis-client'
 import { safeParseInt } from '@/lib/utils/safe-parse'
 import { logger } from '@/lib/logger'
-import { buildFreshnessReport } from '@/lib/rankings/build-freshness-report'
+import { buildFreshnessAuthoritySnapshot } from '@/lib/rankings/build-freshness-report'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'edge'
@@ -29,15 +29,12 @@ const deployTime = process.env.NEXT_PUBLIC_DEPLOY_TIME
   ? safeParseInt(process.env.NEXT_PUBLIC_DEPLOY_TIME, startTime)
   : startTime
 
-// The shortest production caller aborts at 15s. Core and supplementary checks
-// share one absolute handler deadline, leaving over five seconds for transport,
-// cold start, and response serialization.
+// The shortest production caller aborts at 15s. Core checks share one absolute
+// handler deadline, leaving over five seconds for transport, cold start, and
+// response serialization.
 const HANDLER_DEADLINE_MS = 9_500
 const RESPONSE_RESERVE_MS = 250
 const CORE_CHECK_TIMEOUT_MS = 8_000
-const VPS_SCRAPER_TIMEOUT_MS = 2_000
-const VPS_PROXY_TIMEOUT_MS = 1_000
-const VPS_HEARTBEAT_TIMEOUT_MS = 1_000
 
 interface RequestDeadline {
   signal: AbortSignal
@@ -224,6 +221,34 @@ async function checkFreshness(deadline: RequestDeadline): Promise<{
   status: 'pass' | 'fail'
   latency?: number
   message?: string
+  details?: {
+    checkedAt: string
+    sourceSummary: {
+      total: number
+      fresh: number
+      stale: number
+      critical: number
+      unknown: number
+    }
+    coverage: {
+      expectedSourceBoards: number
+      visibleSourceBoards: number
+    }
+    thresholds: {
+      staleHours: number
+      criticalHours: number
+    }
+    latestSuccessfulPublicationAt: string | null
+    publicationSeason: '90D'
+    sources: Array<{
+      platform: string
+      displayName: string
+      lastUpdate: string | null
+      ageHours: number | null
+      status: 'fresh' | 'stale' | 'critical' | 'unknown'
+      recordCount: number
+    }>
+  }
 }> {
   const t0 = Date.now()
   try {
@@ -232,16 +257,61 @@ async function checkFreshness(deadline: RequestDeadline): Promise<{
       CORE_CHECK_TIMEOUT_MS,
       null,
       'checkFreshness',
-      (signal) => buildFreshnessReport(signal)
+      (signal) => buildFreshnessAuthoritySnapshot(signal)
     )
     const latency = Date.now() - t0
     if (!report) {
       return { status: 'fail', latency, message: 'Freshness authority timed out' }
     }
 
-    const { total, fresh, stale, critical, unknown } = report.summary
-    const message = `${fresh}/${total} sources fresh; ${stale} stale; ${critical} critical; ${unknown} unknown`
-    return { status: report.ok ? 'pass' : 'fail', latency, message }
+    const { total, fresh, stale, critical, unknown } = report.report.summary
+    const coverageComplete =
+      report.coverage.expectedSourceBoards > 0 &&
+      report.coverage.visibleSourceBoards === report.coverage.expectedSourceBoards
+    const publicationProven = report.latestSuccessfulPublication !== null
+    const authorityProblems: string[] = []
+
+    if (report.coverage.expectedSourceBoards <= 0) {
+      authorityProblems.push('Source-board coverage authority unavailable')
+    } else if (!coverageComplete) {
+      authorityProblems.push(
+        `${report.coverage.visibleSourceBoards}/${report.coverage.expectedSourceBoards} source boards visible`
+      )
+    }
+    if (!publicationProven) {
+      authorityProblems.push('90D publication proof unavailable')
+    }
+
+    const message = [
+      `${fresh}/${total} sources fresh; ${stale} stale; ${critical} critical; ${unknown} unknown`,
+      ...authorityProblems,
+    ].join('; ')
+    const authorityComplete = report.report.ok && coverageComplete && publicationProven
+
+    return {
+      status: authorityComplete ? 'pass' : 'fail',
+      latency,
+      message,
+      details: {
+        checkedAt: report.report.checked_at,
+        sourceSummary: report.report.summary,
+        coverage: report.coverage,
+        thresholds: {
+          staleHours: report.report.thresholds.stale_hours,
+          criticalHours: report.report.thresholds.critical_hours,
+        },
+        latestSuccessfulPublicationAt: report.latestSuccessfulPublication?.publishedAt ?? null,
+        publicationSeason: '90D',
+        sources: report.report.platforms.map((source) => ({
+          platform: source.platform,
+          displayName: source.displayName,
+          lastUpdate: source.lastUpdate,
+          ageHours: source.ageHours,
+          status: source.status,
+          recordCount: source.recordCount,
+        })),
+      },
+    }
   } catch {
     return {
       status: 'fail',
@@ -271,137 +341,12 @@ export async function GET() {
       message: 'Responding',
     }
 
-    // VPS connectivity check (SG) — WAF-protected platforms depend on this.
-    // Do not serialize supplementary network work after a known core DB outage:
-    // the response is already unhealthy and must return within the core budget.
-    let vps: { status: 'pass' | 'fail' | 'skip'; latency?: number; message?: string }
-    const vpsHost = process.env.VPS_SCRAPER_SG || process.env.VPS_PROXY_SG
-    const vpsKey = process.env.VPS_PROXY_KEY
-    if (database.status === 'fail') {
-      vps = { status: 'skip', message: 'Skipped because the core database is unavailable' }
-    } else if (vpsHost && vpsKey && deadline.remaining(1) > 0) {
-      const t2 = Date.now()
-      try {
-        // Try scraper health first (:3457), then proxy (:3456) as fallback.
-        // Every probe is capped by the request's remaining absolute budget.
-        const scraperUrl = vpsHost.replace(/:\d+$/, ':3457') + '/health'
-        const proxyUrl = vpsHost.replace(/:\d+$/, ':3456') + '/health'
-        let res = await withTimeout(
-          deadline,
-          VPS_SCRAPER_TIMEOUT_MS,
-          null,
-          'checkVpsScraper',
-          (signal) =>
-            fetch(scraperUrl, {
-              headers: {
-                'x-api-key': vpsKey,
-                'X-Proxy-Key': vpsKey,
-                'User-Agent': 'Arena-Health/1.0',
-              },
-              signal,
-            }).catch(() => null)
-        )
-
-        if (!res?.ok && deadline.remaining(1) > 0) {
-          res = await withTimeout(deadline, VPS_PROXY_TIMEOUT_MS, null, 'checkVpsProxy', (signal) =>
-            fetch(proxyUrl, {
-              headers: {
-                'x-api-key': vpsKey,
-                'X-Proxy-Key': vpsKey,
-                'User-Agent': 'Arena-Health/1.0',
-              },
-              signal,
-            }).catch(() => null)
-          )
-        }
-
-        const lat = Date.now() - t2
-        if (res?.ok) {
-          vps = { status: 'pass', latency: lat, message: 'VPS SG responding' }
-        } else if (deadline.remaining(1) <= 0) {
-          vps = {
-            status: 'skip',
-            latency: lat,
-            message: 'VPS SG check skipped because the health response deadline was exhausted',
-          }
-        } else {
-          // Direct connection failed — check pipeline_logs for recent VPS-sourced successes
-          // If VPS cron wrote data in the last 15min, the VPS is actually working fine
-          // (Vultr intermittently blocks Vercel's Tokyo IPs)
-          // Check if any VPS-dependent pipeline succeeded recently
-          // Note: bybit removed 2026-04-08 (dead platform), kept bitget + binance_futures
-          const recentVpsJob = await withTimeout(
-            deadline,
-            VPS_HEARTBEAT_TIMEOUT_MS,
-            null,
-            'checkVpsHeartbeat',
-            (signal) =>
-              getSupabaseAdmin()
-                .from('pipeline_logs')
-                .select('job_name, started_at')
-                .eq('status', 'success')
-                .or(
-                  'job_name.like.enrich-bitget%,job_name.like.enrich-binance_futures%,job_name.like.batch-fetch-traders-b2%,job_name.like.batch-fetch-traders-a1%'
-                )
-                .gte('started_at', new Date(Date.now() - 30 * 60000).toISOString())
-                .limit(1)
-                .abortSignal(signal)
-                .maybeSingle()
-                .then(({ data, error }) => {
-                  if (error) throw error
-                  return data
-                })
-          )
-
-          if (recentVpsJob) {
-            vps = {
-              status: 'pass',
-              latency: lat,
-              message: `VPS SG OK (via pipeline heartbeat, direct ${res?.status || 'blocked'})`,
-            }
-          } else {
-            // ROOT CAUSE FIX (2026-04-09): Vultr intermittently blocks Vercel's
-            // Tokyo IPs which made this check flap to 'fail' even while the VPS
-            // scraper itself was fine (just not reachable from Vercel). VPS is
-            // supplementary infra (doesn't affect overall status per line ~186),
-            // but 'fail' still appeared in monitor's System degraded alerts.
-            // Demote to 'skip' to silence the noise — if the VPS is genuinely
-            // dead the cron failures will surface via /api/health/pipeline.
-            vps = {
-              status: 'skip',
-              latency: lat,
-              message: `VPS SG direct ${res?.status || 'unreachable'}, no recent heartbeat (supplementary, not flagged)`,
-            }
-          }
-        }
-      } catch (e: unknown) {
-        // Same reasoning as above — network errors reaching Vultr from Vercel are
-        // not a valid signal of VPS health; skip rather than fail.
-        logger.warn('[health] VPS SG dependency threw', {
-          error: e instanceof Error ? e.message : String(e),
-        })
-        vps = {
-          status: 'skip',
-          latency: Date.now() - t2,
-          message: 'VPS SG unavailable (supplementary)',
-        }
-      }
-    } else if (vpsHost && vpsKey) {
-      vps = {
-        status: 'skip',
-        message: 'VPS SG check skipped because the health response deadline was exhausted',
-      }
-    } else {
-      vps = { status: 'skip', message: 'VPS not configured' }
-    }
-
-    const checks = { api, database, redis, freshness, vps }
+    const checks = { api, database, redis, freshness }
 
     // Determine overall status:
     // - All pass → healthy (200)
     // - DB fail → unhealthy (503)
     // - Redis or freshness fail → degraded (202)
-    // - VPS fail → still healthy (VPS is supplementary, not core infrastructure)
     let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy'
     if (database.status === 'fail') {
       status = 'unhealthy'

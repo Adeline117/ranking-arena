@@ -483,7 +483,7 @@ export default function NotificationsList({
           {!loading && loadFailed && (
             <div style={{ padding: tokens.spacing[4] }}>
               <ErrorMessage
-                message={t('failedToLoadRetryShort')}
+                message={t('failedToLoadRetry')}
                 onRetry={() => void loadNotifications()}
               />
             </div>

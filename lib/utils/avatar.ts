@@ -4,6 +4,7 @@
  */
 
 import { canonicalizeLocalExchangeLogoPath } from './exchange-logo-path'
+import { isV1AvatarProxyPath } from '@/lib/security/v1-avatar-proxy-publication'
 
 /**
  * 根据用户ID生成一个确定性的颜色
@@ -212,7 +213,7 @@ export interface AvatarProps {
   userId: string
   name?: string | null
   avatarUrl?: string | null
-  /** Our own Supabase-Storage mirror (no proxy, no 429). Preferred over avatarUrl for traders. */
+  /** Existing Supabase-Storage mirror, preferred when it remains direct-safe. */
   avatarMirrorUrl?: string | null
   size?: number
   className?: string
@@ -221,7 +222,7 @@ export interface AvatarProps {
 }
 
 /**
- * Domains that can be loaded directly in the browser without the /api/avatar proxy.
+ * Domains that can be loaded directly in the browser without remote acquisition.
  * These have no CORS/Referrer restrictions for img src, or are self-hosted.
  * Note: dicebear.com and robohash.org are in next.config remotePatterns — no proxy needed.
  * Note: data: URIs (local identicons/blockies) are always direct.
@@ -245,8 +246,8 @@ const DIRECT_LOAD_DOMAINS = [
 ]
 
 /**
- * Exchange CDN domains that require the /api/avatar proxy due to CORS or Referrer restrictions.
- * These are whitelisted in the proxy's allowed domains list.
+ * Exchange CDN domains historically requiring an application proxy because of
+ * CORS or Referrer restrictions.
  */
 const PROXY_REQUIRED_DOMAINS = [
   // Binance
@@ -310,6 +311,15 @@ export function needsProxy(url: string | null | undefined): boolean {
     return PROXY_REQUIRED_DOMAINS.some((domain) => hostname.includes(domain))
   } catch (_err) {
     /* invalid URL format */
+    return false
+  }
+}
+
+function isDirectLoadAvatarUrl(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase()
+    return DIRECT_LOAD_DOMAINS.some((domain) => hostname.includes(domain))
+  } catch {
     return false
   }
 }
@@ -434,17 +444,24 @@ function isLikelyImageUrl(url: string): boolean {
 }
 
 /**
- * 获取交易员头像URL（通过代理以解决CORS问题）
+ * 获取交易员可直接渲染的头像 URL。
  * @param avatarUrl 原始头像URL
- * @returns 代理后的URL或原始URL
+ * @returns 可直载 URL；原本需要 V1 代理的值返回 null 供调用方显示本地 fallback
  */
 export function getTraderAvatarUrl(avatarUrl: string | null | undefined): string | null {
   if (!avatarUrl || avatarUrl.trim() === '') return null
   const normalizedAvatarUrl = canonicalizeLocalExchangeLogoPath(avatarUrl.trim())
 
+  // Legacy API values may be persisted in older rows or passed by callers.
+  // They are not local image assets and must not be rendered as rooted paths.
+  if (isV1AvatarProxyPath(normalizedAvatarUrl)) return null
+
   // Persisted exchange fallbacks are local assets, not remote avatars. Older
   // rows may still carry stale extensions or the old gateio basename.
   if (normalizedAvatarUrl.startsWith('/icons/exchanges/')) return normalizedAvatarUrl
+
+  // Other rooted local assets remain local after the retired endpoint check.
+  if (normalizedAvatarUrl.startsWith('/')) return normalizedAvatarUrl
 
   // data: URIs (e.g. inline SVG identicons/blockies) — return as-is, never proxy.
   // These are tiny inline images; proxying them creates absurdly long URLs that
@@ -464,39 +481,33 @@ export function getTraderAvatarUrl(avatarUrl: string | null | undefined): string
     return null // Reject generated avatars — fall back to gradient + initial letter
   }
 
-  // 如果是已知交易所域名，信任并直接代理（不需要 isLikelyImageUrl 检查）
+  // Known exchange CDNs historically relied on the retired V1 acquisition
+  // route. Keep the caller on its local gradient/initial fallback instead.
   if (needsProxy(normalizedAvatarUrl)) {
-    return `/api/avatar?url=${encodeURIComponent(normalizedAvatarUrl)}`
+    return null
   }
+
+  // Direct-load domains remain safe browser image sources. Keep this ahead of
+  // heuristic validation because CDNs often use extensionless image paths.
+  if (isDirectLoadAvatarUrl(normalizedAvatarUrl)) return normalizedAvatarUrl
 
   // 非交易所域名：检查是否像是有效的图片URL
   if (!isLikelyImageUrl(normalizedAvatarUrl)) {
     return null
   }
 
-  // Direct-load domains (dicebear, supabase, github, etc.) — serve without proxy
-  try {
-    const hostname = new URL(normalizedAvatarUrl).hostname.toLowerCase()
-    if (DIRECT_LOAD_DOMAINS.some((domain) => hostname.includes(domain))) {
-      return normalizedAvatarUrl
-    }
-  } catch (_err) {
-    /* invalid URL — fall through to proxy */
-  }
-
-  // Unknown domains with valid image URLs — proxy for safety (CORS/Referrer)
-  return `/api/avatar?url=${encodeURIComponent(normalizedAvatarUrl)}`
+  // Unknown remote image hosts would formerly be proxied. V1 intentionally
+  // withholds them rather than synthesizing a retired acquisition URL.
+  return null
 }
 
 /**
  * Serving-layer avatar chain (ARENA_DATA_SPEC v1.2 §1.4).
  *
  * Resolution order:
- *   1. `avatarMirrorUrl` — our own Supabase Storage mirror (`trader-avatars`
- *      public bucket, written by the ingest worker). No CORS/Referrer issues,
- *      CDN-cacheable — use directly.
- *   2. `avatarOriginUrl` — exchange CDN original. Routed through the
- *      `/api/avatar` proxy (CORS/Referrer/SSRF-safe, edge-cached).
+ *   1. `avatarMirrorUrl` — an existing Supabase Storage mirror in the
+ *      `trader-avatars` public bucket, used directly when safe.
+ *   2. `avatarOriginUrl` — direct-safe exchange origin when one is available.
  *   3. `null` — caller renders the gradient + initial fallback
  *      (`getAvatarGradient` + `getAvatarInitial`).
  */
@@ -508,30 +519,23 @@ export function getTraderAvatarSrc({
   avatarOriginUrl: string | null | undefined
 }): string | null {
   const mirror = avatarMirrorUrl?.trim()
-  if (mirror) return canonicalizeLocalExchangeLogoPath(mirror)
+  if (mirror) return getTraderAvatarUrl(mirror)
 
   const origin = avatarOriginUrl?.trim()
-  if (origin) {
-    const normalizedOrigin = canonicalizeLocalExchangeLogoPath(origin)
-    // Inline data URIs and already-local paths need no proxy hop.
-    if (normalizedOrigin.startsWith('data:') || normalizedOrigin.startsWith('/')) {
-      return normalizedOrigin
-    }
-    return `/api/avatar?url=${encodeURIComponent(normalizedOrigin)}`
-  }
+  if (origin) return getTraderAvatarUrl(origin)
 
   return null
 }
 
 /**
  * Render-time guard for the avatar chain: returns true when `src` is already
- * final and must be used as-is in an <img>/<Image> — i.e. it must NOT be
- * re-wrapped in `/api/avatar?url=` (double-proxying breaks the request).
+ * final and must be used as-is in an <img>/<Image>.
  *
- * Direct srcs: data URIs, rooted local paths (`/api/avatar?...`, `/icons/...`),
- * and our own Supabase Storage host (avatar mirror + user uploads).
+ * Direct srcs: data URIs, rooted local asset paths, and our own Supabase
+ * Storage host (avatar mirror + user uploads).
  */
 export function isDirectAvatarSrc(src: string): boolean {
+  if (isV1AvatarProxyPath(src)) return false
   if (src.startsWith('data:') || src.startsWith('/')) return true
   try {
     const host = new URL(src).hostname.toLowerCase()

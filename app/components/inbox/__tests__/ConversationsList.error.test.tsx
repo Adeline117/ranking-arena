@@ -66,7 +66,7 @@ jest.mock('@/app/components/Providers/LanguageProvider', () => ({
           allChats: 'All',
           createGroupChat: 'Create group chat',
           directMessages: 'Direct',
-          failedToLoadRetryShort: 'Failed to load, please retry',
+          failedToLoadRetry: 'Failed to load, please retry',
           groupMessages: 'Groups',
           loading: 'Loading...',
           noMessages: 'No messages',

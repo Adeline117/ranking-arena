@@ -1,67 +1,37 @@
 ---
 name: ccxt-typescript
-description: CCXT usage patterns for Arena. Arena uses CCXT only for market data (tickers, OHLCV, trading pairs) — NOT for copy trading APIs (custom connectors handle those).
+description: Reviews or changes Arena CCXT market-data usage without conflating it with leaderboard adapters.
 ---
 
 # CCXT in Arena
 
-## How Arena Uses CCXT
+CCXT is a market-data dependency, not the copy-trading/leaderboard ingest contract.
+Leaderboard sources use worker adapters under lib/ingest/adapters.
 
-Arena uses CCXT **only** for standardized market data:
-- Ticker data (price, volume, 24h change)
-- OHLCV candlestick data
-- Trading pair lists
-- Price lookups for PnL calculation
+## Discover current consumers
 
-**NOT for**: Copy trading/leaderboard APIs — those use custom connectors in `lib/connectors/`.
+Start with rg. Current consumers include the controlled read transport in
+lib/exchange/ccxt-read-transport.ts, first-party sync processors, market-candle
+routes, and arbitrage utilities. There is no single connector-class entrypoint.
 
-Key file: `lib/exchange/ccxt-client.ts` — lazy-loads ccxt to avoid 56MB cold start impact.
+## Loading and request rules
 
-## Supported Exchanges
+- Follow the existing consumer's loading boundary; do not copy a top-level import
+  example into a serverless route without checking bundle/cold-start impact.
+- Use CCXT's rate limiting plus the repository's bounded concurrency/timeout policy.
+- Classify network, exchange, rate-limit, and malformed-response failures separately.
+- Preserve exchange/symbol/timeframe identity and upstream observation time.
+- Never log API credentials, private account payloads, or secret-bearing proxy URLs.
 
-```typescript
-const SUPPORTED_EXCHANGES = [
-  'binance', 'bybit', 'okx', 'bitget', 'mexc',
-  'kucoin', 'gateio', 'htx', 'coinex', 'bingx',
-  'phemex', 'xt', 'lbank',
-]
-```
+## Scope boundary
 
-## Common Patterns
+- Do not use CCXT to invent copy-trader rankings or metrics.
+- Do not add a guessed proxy variable or deploy proxy/VPS infrastructure.
+- Do not call private trading methods from public market-data paths.
+- A source adapter change follows docs/ADAPTER_ONBOARDING.md, not this skill.
 
-### Fetch Ticker
-```typescript
-import ccxt from 'ccxt'
-const exchange = new ccxt.binance()
-await exchange.loadMarkets()
-const ticker = await exchange.fetchTicker('BTC/USDT')
-```
+## Verification
 
-### Fetch OHLCV
-```typescript
-const candles = await exchange.fetchOHLCV('BTC/USDT', '1h', undefined, 100)
-// Returns: [timestamp, open, high, low, close, volume][]
-```
-
-### Error Handling
-```typescript
-try {
-  const ticker = await exchange.fetchTicker(symbol)
-} catch (e) {
-  if (e instanceof ccxt.NetworkError) {
-    // Retry with backoff
-  } else if (e instanceof ccxt.ExchangeError) {
-    // Exchange-specific error (invalid symbol, etc.)
-  } else if (e instanceof ccxt.RateLimitExceeded) {
-    // Back off, reduce concurrency
-  }
-}
-```
-
-## Arena-Specific Notes
-
-- Lazy-load via `await import('ccxt')` — never top-level import (56MB)
-- Use `exchange.setSandboxMode(false)` — always production
-- Some exchanges need `defaultType: 'swap'` for futures data
-- Proxy: set `exchange.proxy = process.env.VPS_PROXY_URL` for geo-blocked exchanges
-- Rate limits: CCXT has built-in rate limiting, but Arena adds `p-limit` for extra control
+Use mocked exchange clients or deterministic fixtures, then run focused tests,
+typecheck, lint, and the affected API/worker contract tests. Live exchange calls,
+credentials, network routing, and deployment require separate authorization.

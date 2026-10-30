@@ -17,13 +17,6 @@ export interface PollOption {
   votes: number
 }
 
-export interface LinkPreview {
-  url: string
-  title: string
-  description: string
-  image: string
-}
-
 // ─── Constants ───────────────────────────────────────────────────────
 
 export const TITLE_MAX_LENGTH = 100

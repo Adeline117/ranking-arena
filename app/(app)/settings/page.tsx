@@ -545,21 +545,6 @@ export function SettingsContent() {
                 {t('traderAlertsConfigureOnProfile')}
               </Text>
               <TraderAlertsManager />
-              <Link
-                href="/"
-                style={{
-                  alignSelf: 'flex-start',
-                  padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-                  borderRadius: tokens.radius.md,
-                  background: tokens.colors.accent.primary,
-                  color: 'var(--color-on-accent)',
-                  fontSize: tokens.typography.fontSize.sm,
-                  fontWeight: Number(tokens.typography.fontWeight.semibold),
-                  textDecoration: 'none',
-                }}
-              >
-                {t('traderAlertsBrowse')} →
-              </Link>
             </Box>
           </SectionCard>
 

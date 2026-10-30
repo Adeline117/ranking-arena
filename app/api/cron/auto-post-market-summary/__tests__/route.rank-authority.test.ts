@@ -107,6 +107,16 @@ function queryChain(relation: string): unknown {
   return query
 }
 
+// 18be58f3e paused Arena Bot publication (owner: bot posts are retired). The
+// route must fail closed before any ranking read or post write, whatever the
+// public cohort would contain, until a publication receipt can prove content.
+const PAUSED_PUBLICATION = {
+  count: 0,
+  skipped: true,
+  reason: 'arena_bot_publication_evidence_unavailable',
+  ranking_visibility: 'unknown',
+}
+
 describe('GET /api/cron/auto-post-market-summary public ranking authority', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -124,20 +134,17 @@ describe('GET /api/cron/auto-post-market-summary public ranking authority', () =
     })
   })
 
-  it('writes ranking content only from the sealed public cohort', async () => {
+  it('does not read or publish even a fully verified public cohort', async () => {
     const response = await GET(
       new NextRequest('https://www.arenafi.org/api/cron/auto-post-market-summary')
     )
 
-    await expect(response.json()).resolves.toMatchObject({ count: 1, postId: 'post-1' })
-    expect(queryCalls).toContain('public_ranked_leaderboard')
-    expect(queryCalls).not.toContain('leaderboard_ranks')
-    expect(insertedPosts).toHaveLength(1)
-    expect(insertedPosts[0].content).toContain('Score: 80.0')
-    expect(insertedPosts[0].content).toContain('ROI: +25.00%')
+    await expect(response.json()).resolves.toEqual(PAUSED_PUBLICATION)
+    expect(queryCalls).toEqual([])
+    expect(insertedPosts).toHaveLength(0)
   })
 
-  it('posts only safe market data when every ranking row is unverified', async () => {
+  it('does not read or publish when every ranking row is unverified', async () => {
     rowsBySeason = {
       '7D': [{ ...verifiedRow('7D', 'unsafe'), metrics_estimated: true }],
       '30D': [{ ...verifiedRow('30D', 'unsafe'), metrics_estimated: true }],
@@ -147,15 +154,12 @@ describe('GET /api/cron/auto-post-market-summary public ranking authority', () =
       new NextRequest('https://www.arenafi.org/api/cron/auto-post-market-summary')
     )
 
-    await expect(response.json()).resolves.toMatchObject({ count: 1, postId: 'post-1' })
-    expect(queryCalls).not.toContain('leaderboard_ranks')
-    expect(insertedPosts).toHaveLength(1)
-    expect(insertedPosts[0].content).toContain('Verified ranking evidence is unavailable')
-    expect(insertedPosts[0].content).not.toContain('Score:')
-    expect(insertedPosts[0].content).not.toContain('ROI:')
+    await expect(response.json()).resolves.toEqual(PAUSED_PUBLICATION)
+    expect(queryCalls).toEqual([])
+    expect(insertedPosts).toHaveLength(0)
   })
 
-  it('posts only safe market data when the public ranking read errors', async () => {
+  it('does not read or publish when the public ranking read would error', async () => {
     rankingErrorsBySeason = {
       '7D': { message: 'public cohort unavailable' },
       '30D': { message: 'public cohort unavailable' },
@@ -165,11 +169,8 @@ describe('GET /api/cron/auto-post-market-summary public ranking authority', () =
       new NextRequest('https://www.arenafi.org/api/cron/auto-post-market-summary')
     )
 
-    await expect(response.json()).resolves.toMatchObject({ count: 1, postId: 'post-1' })
-    expect(queryCalls).not.toContain('leaderboard_ranks')
-    expect(insertedPosts).toHaveLength(1)
-    expect(insertedPosts[0].content).toContain('Verified ranking evidence is unavailable')
-    expect(insertedPosts[0].content).not.toContain('Score:')
-    expect(insertedPosts[0].content).not.toContain('ROI:')
+    await expect(response.json()).resolves.toEqual(PAUSED_PUBLICATION)
+    expect(queryCalls).toEqual([])
+    expect(insertedPosts).toHaveLength(0)
   })
 })

@@ -1,54 +1,40 @@
-# Arena Vercel Deployment
+# Arena Vercel Release Review
 
-## Standard Deploy Path
-```bash
-# 1. Gate check (mandatory)
-npx tsc --noEmit && npm run lint
-# 2. Commit
-git add -A && git commit -m "feat: <description>"
-# 3. Push → triggers Vercel auto-deploy via GitHub integration
-git push origin main
-```
-Monitor at: https://vercel.com/adeline-wens-projects/ranking-arena
+This skill prepares and verifies deployment evidence. It does not authorize a push
+to `main`, preview/production deployment, promotion, rollback, cancellation, cache
+purge, environment mutation, or secret access.
 
-## Manual Deploy
-```bash
-npx vercel deploy --prod --yes --token=$VERCEL_TOKEN
-touch .env  # gitignored, build needs it
-```
+## Preferred release path
 
-## Arena-Specific Pitfalls
+1. Verify a clean branch and exact commit SHA.
+2. Run focused tests, both typechecks when ingest is touched, lint, publication QA,
+   and a clean build in proportion to risk.
+3. Push the reviewed feature branch and use a draft PR.
+4. When a preview is explicitly authorized, prefer the GitHub/Vercel preview tied to
+   that exact SHA. A manual preview uses `vercel deploy --yes` only after confirming
+   the authenticated project/team.
+5. Keep `--prod`, promotion, rollback, and production environment changes behind a
+   separate explicit approval.
 
-1. **Pro plan 最多 3 regions** — 曾设 17 个导致部署失败好几天
-2. **Turbopack 编译**: Vercel 4核8GB 上需 95s（本地 17s），偶尔 hang
-3. **Stuck builds**: `curl -X PATCH "https://api.vercel.com/v13/deployments/{uid}/cancel" -H "Authorization: Bearer $TOKEN"`
-4. **`ssr: false` on provider wrappers**: 会杀掉所有 SSR
-5. **Top-level await in lib**: 会导致 build 无限挂起
-6. **Stripe**: 当前是 sandbox (pk_test_/sk_test_)
+## Cron and schedule verification
 
-## Common Deploy Failures
+- Treat `vercel.json` as the checked-in schedule candidate and verify path uniqueness,
+  handler existence, authentication, timeout/lock behavior, and schedule tests.
+- Test cron handlers locally with mocked authentication and dependencies.
+- Do not `curl` a production cron route. An unauthenticated 401 is not execution proof,
+  and an authenticated call may mutate data or trigger external work.
+- After an authorized release, use approved read-only deployment/log evidence and the
+  exact release identity; never expose the cron secret.
 
-### TypeScript error on Vercel but passes locally
-- Vercel uses a clean install; local `tsconfig.tsbuildinfo` may be stale
-- Fix: `rm tsconfig.tsbuildinfo && npx tsc --noEmit`
+## Environment and migration gates
 
-### Environment variables missing
-- `.env.local` is gitignored — set vars in Vercel Dashboard
-- Required: `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `STRIPE_SECRET_KEY`, `SENTRY_DSN`
-- After adding vars: re-deploy (vars don't apply retroactively)
-- Pull from prod: `npx vercel env pull .env.local --token=$TOKEN`
+Never create/touch environment files to make a build pass, pull production secrets,
+or print token values. A migration in the branch remains unapplied until its isolated
+proof, live catalog/ledger witness, owner approval, and controlled runner are all
+available.
 
-### Edge function size exceeded
-- Middleware runs on Edge — no heavy imports, move logic to API routes
+## Handoff
 
-### Cron jobs not firing
-- Check `vercel.json` cron definitions
-- Pro plan required for sub-hourly schedules
-- Test: `curl https://ranking-arena.vercel.app/api/cron/<name>`
-
-## Post-Deploy & Rollback
-```bash
-vercel ls              # deployment status
-vercel logs --follow   # tail logs
-vercel rollback        # instant rollback
-```
+Report commit, preview identity (if one was authorized), commands and results,
+remaining gates, migration status, and any production-only verification still
+required. Do not describe a local or unauthenticated probe as a successful release.

@@ -32,7 +32,7 @@ module.exports = {
         ...proxyKeyEnv,
       },
       max_memory_restart: '500M',
-      cron_restart: '0 */6 * * *', // auto-restart every 6h to prevent memory leak
+      // V1 NO-GO: no scheduled cron_restart. Normal PM2 crash/memory recovery remains service behavior.
       restart_delay: 10000,
       max_restarts: 20,
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
@@ -52,7 +52,7 @@ module.exports = {
         ...proxyKeyEnv,
       },
       max_memory_restart: '300M',
-      cron_restart: '0 */12 * * *', // restart every 12h
+      // V1 NO-GO: no scheduled cron_restart. Normal PM2 crash/memory recovery remains service behavior.
       restart_delay: 5000,
       max_restarts: 10,
       log_date_format: 'YYYY-MM-DD HH:mm:ss',

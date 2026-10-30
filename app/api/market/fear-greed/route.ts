@@ -1,34 +1,23 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-import { fetchFearGreedIndex } from '@/lib/utils/fear-greed'
-import { getOrSetWithLock } from '@/lib/cache'
-import { logger } from '@/lib/utils/logger'
+/**
+ * Retired anonymous market fear-and-greed acquisition ingress.
+ *
+ * V1 keeps this public compatibility endpoint fail-closed. This source-only
+ * boundary does not alter code already deployed, prior data, or external markets.
+ */
+
+import { NextResponse } from 'next/server'
+import {
+  V1_PUBLIC_EGRESS_NO_STORE_HEADERS,
+  V1_PUBLIC_EGRESS_UNAVAILABLE_BODY,
+} from '@/lib/security/v1-public-egress-publication'
 
 export const runtime = 'edge'
+export const dynamic = 'force-dynamic'
 
-export async function GET(request: NextRequest) {
-  try {
-    const rl = await checkRateLimit(request, RateLimitPresets.read)
-    if (rl) return rl
-    const result = await getOrSetWithLock(
-      'api:market:fear-greed',
-      async () => {
-        const data = await fetchFearGreedIndex(30)
-        return { current: data[0], history: data }
-      },
-      { ttl: 3600, lockTtl: 10 }
-    )
-
-    return NextResponse.json(result, {
-      headers: {
-        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=1800',
-      },
-    })
-  } catch (error) {
-    logger.error(
-      '[market/fear-greed] Failed:',
-      error instanceof Error ? error : new Error(String(error))
-    )
-    return NextResponse.json({ error: 'Failed to fetch Fear & Greed Index' }, { status: 500 })
-  }
+/** Keep this response independent of caller-controlled values and outbound operations. */
+export function GET(): NextResponse {
+  return NextResponse.json(V1_PUBLIC_EGRESS_UNAVAILABLE_BODY, {
+    status: 410,
+    headers: V1_PUBLIC_EGRESS_NO_STORE_HEADERS,
+  })
 }

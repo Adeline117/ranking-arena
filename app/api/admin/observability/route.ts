@@ -14,6 +14,11 @@ import { createLogger } from '@/lib/utils/logger'
 import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
 
 const logger = createLogger('api:observability')
+const PRIVATE_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+}
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -33,7 +38,10 @@ interface JobAggregate {
 
 export async function GET(req: NextRequest) {
   if (!(await verifyAuth(req))) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json(
+      { error: 'Unauthorized' },
+      { status: 401, headers: PRIVATE_NO_STORE_HEADERS }
+    )
   }
 
   try {
@@ -146,9 +154,21 @@ export async function GET(req: NextRequest) {
 
     // --- Table sizes ---
     const tableNames = ['trader_sources', 'leaderboard_ranks', 'trader_daily_snapshots'] as const
-    const tableSizes: Record<string, number> = {}
+    const tableSizes: Record<string, number | null> = {}
     for (let i = 0; i < tableNames.length; i++) {
-      tableSizes[tableNames[i]] = seasonResults[seasons.length + i]?.count ?? 0
+      tableSizes[tableNames[i]] = seasonResults[seasons.length + i]?.count ?? null
+    }
+    const dailyInventoryResult = seasonResults[seasons.length + 2]
+    const legacyDailySnapshotInventory = {
+      estimatedRows: dailyInventoryResult?.count ?? null,
+      countState:
+        dailyInventoryResult?.error || dailyInventoryResult?.count == null
+          ? ('unknown' as const)
+          : ('estimated' as const),
+      authority: 'none' as const,
+      publicationState: 'quarantined' as const,
+      producerState: 'retired' as const,
+      freshness: null,
     }
 
     // --- Failed jobs list (for quick triage) ---
@@ -182,9 +202,12 @@ export async function GET(req: NextRequest) {
           seasonCounts,
         },
         tableSizes,
+        legacyInventory: {
+          traderDailySnapshots: legacyDailySnapshotInventory,
+        },
       },
       {
-        headers: { 'Cache-Control': 'no-store' },
+        headers: PRIVATE_NO_STORE_HEADERS,
       }
     )
   } catch (error) {
@@ -193,7 +216,7 @@ export async function GET(req: NextRequest) {
     })
     return NextResponse.json(
       { error: 'Internal server error', code: 'INTERNAL_ERROR' },
-      { status: 500 }
+      { status: 500, headers: PRIVATE_NO_STORE_HEADERS }
     )
   }
 }

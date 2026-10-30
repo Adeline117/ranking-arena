@@ -9,6 +9,7 @@ import { isHapticSupported, haptic, setHapticsEnabled } from '@/lib/utils/haptic
 import { PushNotificationToggle } from '@/app/components/notifications/PushNotificationToggle'
 import { logger } from '@/lib/logger'
 import type { NotificationPreferenceField } from '@/lib/profile/notification-preferences'
+import { TRADER_ALERTS_PUBLISHED } from '@/lib/alerts/trader-alert-publication'
 
 interface NotificationsSectionProps {
   notifyFollow: boolean
@@ -82,13 +83,17 @@ export const NotificationsSection = React.memo(function NotificationsSection(
       value: props.notifyMessage,
       setter: props.setNotifyMessage,
     },
-    {
-      key: 'trader_events',
-      field: 'notify_trader_events' as const,
-      labelKey: 'traderEventsNotify',
-      value: props.notifyTraderEvents,
-      setter: props.setNotifyTraderEvents,
-    },
+    ...(TRADER_ALERTS_PUBLISHED
+      ? [
+          {
+            key: 'trader_events',
+            field: 'notify_trader_events' as const,
+            labelKey: 'traderEventsNotify',
+            value: props.notifyTraderEvents,
+            setter: props.setNotifyTraderEvents,
+          },
+        ]
+      : []),
   ]
 
   return (
@@ -231,14 +236,20 @@ export const NotificationsSection = React.memo(function NotificationsSection(
             description=""
             onChange={props.onEmailDigestChange}
           />
-          <RadioOption
-            name="emailDigest"
-            value="weekly"
-            currentValue={props.emailDigest}
-            label={t('digestWeekly')}
-            description=""
-            onChange={props.onEmailDigestChange}
-          />
+          {TRADER_ALERTS_PUBLISHED ? (
+            <RadioOption
+              name="emailDigest"
+              value="weekly"
+              currentValue={props.emailDigest}
+              label={t('digestWeekly')}
+              description=""
+              onChange={props.onEmailDigestChange}
+            />
+          ) : (
+            <Text size="xs" color="tertiary">
+              {t('weeklyDigestUnavailable')}
+            </Text>
+          )}
         </Box>
       </Box>
     </SectionCard>

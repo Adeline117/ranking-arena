@@ -55,7 +55,7 @@ describe('PricingPageClient anonymous plan intent', () => {
   })
 
   it('wires all four CTAs to a typed internal login return without auto-checkout', async () => {
-    const { container } = render(<PricingPageClient />)
+    const { container } = render(<PricingPageClient paymentsReady lifetimeCheckoutReady />)
     const expectedHrefs = [
       '/login?returnUrl=%2Fpricing%3Fplan%3Dfree%26billing%3Dmonthly',
       '/login?returnUrl=%2Fpricing%3Fplan%3Dpro%26billing%3Dmonthly',
@@ -81,7 +81,7 @@ describe('PricingPageClient anonymous plan intent', () => {
       throw new DOMException('Storage denied', 'SecurityError')
     })
 
-    const { container } = render(<PricingPageClient />)
+    const { container } = render(<PricingPageClient paymentsReady lifetimeCheckoutReady />)
 
     await waitFor(() => {
       const hrefs = Array.from(

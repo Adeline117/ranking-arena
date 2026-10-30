@@ -729,6 +729,52 @@ describe('POST /api/stripe/create-checkout', () => {
     expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
   })
 
+  it('returns 409 ALREADY_SUBSCRIBED for a lifetime member starting a recurring checkout', async () => {
+    mockSubscriptionQuery.maybeSingle.mockResolvedValue({
+      data: {
+        tier: 'pro',
+        status: 'active',
+        stripe_subscription_id: null,
+        plan: 'lifetime',
+      },
+      error: null,
+    })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly' }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(409)
+    await expect(res.json()).resolves.toMatchObject({ code: 'ALREADY_SUBSCRIBED' })
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+  })
+
+  it('allows upgrading from a non-Stripe referral Pro grant', async () => {
+    mockSubscriptionQuery.maybeSingle.mockResolvedValue({
+      data: {
+        tier: 'pro',
+        status: 'active',
+        stripe_subscription_id: null,
+        plan: 'referral_grant',
+      },
+      error: null,
+    })
+    mockListSubscriptions.mockResolvedValue({ data: [], has_more: false })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly' }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(200)
+    expect(mockCreateCheckoutSession).toHaveBeenCalled()
+  })
+
   it('isolates a non-terminal API-tier subscription by exact price', async () => {
     mockListSubscriptions.mockResolvedValue({
       data: [
