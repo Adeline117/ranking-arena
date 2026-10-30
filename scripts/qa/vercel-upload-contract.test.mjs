@@ -134,7 +134,7 @@ test('keeps Deploy Gate as the only writer of production domains', () => {
   assert.equal(parsedReleaseControl.on.workflow_call.secrets, undefined)
   assert.equal(parsedReleaseControl.jobs['enforce-single-production-writer'].if, '${{ false }}')
   assert.match(releaseControl, /cancel-in-progress: false/)
-  assert.match(releaseControl, /uses: actions\/checkout@v4/)
+  assert.match(releaseControl, /uses: actions\/checkout@[0-9a-f]{40} # v4\.\d+\.\d+/)
   assert.match(releaseControl, /run: node scripts\/ci\/enforce-vercel-release-control\.mjs/)
   assert.match(releaseControlScript, /https:\/\/api\.vercel\.com/)
   assert.match(
