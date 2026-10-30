@@ -6,7 +6,7 @@
  */
 
 import webpush from 'web-push'
-import { logger } from '@/lib/logger'
+import { logger } from './logger'
 import { BASE_URL } from '@/lib/constants/urls'
 
 // ── VAPID configuration ──

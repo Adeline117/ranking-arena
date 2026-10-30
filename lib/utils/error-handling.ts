@@ -4,7 +4,7 @@
  */
 
 import { t } from '@/lib/i18n'
-import { logger } from '@/lib/logger'
+import { logger } from './logger'
 
 // 错误类型定义
 export interface ErrorInfo {
@@ -32,7 +32,7 @@ function toErrorLike(error: unknown): ErrorLike | null {
 function isNetworkError(error: unknown): boolean {
   const e = toErrorLike(error)
   if (!e) return false
-  
+
   // 检查常见的网络错误标识
   const errorMessage = String(e.message || error).toLowerCase()
   const networkErrorPatterns = [
@@ -45,34 +45,34 @@ function isNetworkError(error: unknown): boolean {
     'host',
     'unreachable',
     'abort',
-    'cors'
+    'cors',
   ]
-  
-  return networkErrorPatterns.some(pattern => errorMessage.includes(pattern))
+
+  return networkErrorPatterns.some((pattern) => errorMessage.includes(pattern))
 }
 
 // 超时错误检测
 function isTimeoutError(error: unknown): boolean {
   const e = toErrorLike(error)
   if (!e) return false
-  
+
   const errorMessage = String(e.message || error).toLowerCase()
   const timeoutPatterns = ['timeout', 'timed out', 'deadline', 'request took too long']
-  
-  return timeoutPatterns.some(pattern => errorMessage.includes(pattern))
+
+  return timeoutPatterns.some((pattern) => errorMessage.includes(pattern))
 }
 
-// 服务器错误检测  
+// 服务器错误检测
 function isServerError(error: unknown): boolean {
   const e = toErrorLike(error)
   if (!e) return false
-  
+
   // 检查HTTP状态码
   const status = e.status || e.code || e.response?.status
   if (typeof status === 'number' && status >= 500) {
     return true
   }
-  
+
   // 检查错误消息
   const errorMessage = String(e.message || error).toLowerCase()
   const serverErrorPatterns = [
@@ -83,22 +83,22 @@ function isServerError(error: unknown): boolean {
     '503',
     '504',
     'service unavailable',
-    'bad gateway'
+    'bad gateway',
   ]
-  
-  return serverErrorPatterns.some(pattern => errorMessage.includes(pattern))
+
+  return serverErrorPatterns.some((pattern) => errorMessage.includes(pattern))
 }
 
 // 认证错误检测
 function isAuthError(error: unknown): boolean {
   const e = toErrorLike(error)
   if (!e) return false
-  
+
   const status = e.status || e.code || e.response?.status
   if (status === 401 || status === 403) {
     return true
   }
-  
+
   const errorMessage = String(e.message || error).toLowerCase()
   const authErrorPatterns = [
     'unauthorized',
@@ -107,32 +107,26 @@ function isAuthError(error: unknown): boolean {
     'permission',
     'access denied',
     'token',
-    'login'
+    'login',
   ]
-  
-  return authErrorPatterns.some(pattern => errorMessage.includes(pattern))
+
+  return authErrorPatterns.some((pattern) => errorMessage.includes(pattern))
 }
 
 // 验证错误检测
 function isValidationError(error: unknown): boolean {
   const e = toErrorLike(error)
   if (!e) return false
-  
+
   const status = e.status || e.code || e.response?.status
   if (status === 400 || status === 422) {
     return true
   }
-  
+
   const errorMessage = String(e.message || error).toLowerCase()
-  const validationErrorPatterns = [
-    'validation',
-    'invalid',
-    'required',
-    'format',
-    'bad request'
-  ]
-  
-  return validationErrorPatterns.some(pattern => errorMessage.includes(pattern))
+  const validationErrorPatterns = ['validation', 'invalid', 'required', 'format', 'bad request']
+
+  return validationErrorPatterns.some((pattern) => errorMessage.includes(pattern))
 }
 
 /**
@@ -142,7 +136,7 @@ export function parseError(error: unknown): ErrorInfo {
   if (!error) {
     return {
       type: 'unknown',
-      message: t('unknownErrorFriendly')
+      message: t('unknownErrorFriendly'),
     }
   }
 
@@ -151,16 +145,16 @@ export function parseError(error: unknown): ErrorInfo {
     return {
       type: 'network',
       message: t('networkErrorFriendly'),
-      originalError: error
+      originalError: error,
     }
   }
 
   // 超时错误
   if (isTimeoutError(error)) {
     return {
-      type: 'timeout', 
+      type: 'timeout',
       message: t('networkTimeoutFriendly'),
-      originalError: error
+      originalError: error,
     }
   }
 
@@ -171,7 +165,7 @@ export function parseError(error: unknown): ErrorInfo {
       type: 'server',
       message: t('serverErrorFriendly'),
       originalError: error,
-      code: el?.status || el?.code || el?.response?.status
+      code: el?.status || el?.code || el?.response?.status,
     }
   }
 
@@ -181,7 +175,7 @@ export function parseError(error: unknown): ErrorInfo {
       type: 'auth',
       message: t('authenticationFailed'),
       originalError: error,
-      code: el?.status || el?.code || el?.response?.status
+      code: el?.status || el?.code || el?.response?.status,
     }
   }
 
@@ -191,7 +185,7 @@ export function parseError(error: unknown): ErrorInfo {
       type: 'validation',
       message: el?.message || t('operationFailed'),
       originalError: error,
-      code: el?.status || el?.code || el?.response?.status
+      code: el?.status || el?.code || el?.response?.status,
     }
   }
 
@@ -199,7 +193,7 @@ export function parseError(error: unknown): ErrorInfo {
   return {
     type: 'unknown',
     message: t('unknownErrorFriendly'),
-    originalError: error
+    originalError: error,
   }
 }
 
@@ -215,7 +209,7 @@ export function getErrorMessage(error: unknown): string {
  */
 export function isRetryableError(error: unknown): boolean {
   const errorInfo = parseError(error)
-  
+
   // 网络错误、超时错误、服务器错误通常可以重试
   return ['network', 'timeout', 'server'].includes(errorInfo.type)
 }
@@ -225,38 +219,39 @@ export function isRetryableError(error: unknown): boolean {
  */
 export function reportError(error: unknown, context?: Record<string, unknown>) {
   const errorInfo = parseError(error)
-  
+
   // 只上报服务器错误和未知错误
   // 不上报: 网络错误(用户网络问题)、超时、认证(401/403)、验证(400)
   if (!['unknown', 'server'].includes(errorInfo.type)) {
     return
   }
-  
+
   // 延迟加载 Sentry (works on both client and server)
-  import('@sentry/nextjs').then((Sentry) => {
-    Sentry.captureException(errorInfo.originalError || error, {
-      level: errorInfo.type === 'server' ? 'error' : 'warning',
-      tags: {
-        errorType: errorInfo.type,
-        errorCode: String(errorInfo.code || 'unknown'),
-        source: context?.source as string || (typeof window !== 'undefined' ? 'client' : 'server'),
-      },
-      contexts: {
-        errorInfo: {
-          type: errorInfo.type,
-          message: errorInfo.message,
-          code: errorInfo.code,
+  import('@sentry/nextjs')
+    .then((Sentry) => {
+      Sentry.captureException(errorInfo.originalError || error, {
+        level: errorInfo.type === 'server' ? 'error' : 'warning',
+        tags: {
+          errorType: errorInfo.type,
+          errorCode: String(errorInfo.code || 'unknown'),
+          source:
+            (context?.source as string) || (typeof window !== 'undefined' ? 'client' : 'server'),
         },
-        additional: context
-      },
-      fingerprint: errorInfo.code
-        ? ['{{ default }}', String(errorInfo.code)]
-        : ['{{ default }}'],
+        contexts: {
+          errorInfo: {
+            type: errorInfo.type,
+            message: errorInfo.message,
+            code: errorInfo.code,
+          },
+          additional: context,
+        },
+        fingerprint: errorInfo.code ? ['{{ default }}', String(errorInfo.code)] : ['{{ default }}'],
+      })
+      // eslint-disable-next-line no-restricted-syntax -- Intentional: dynamic import, failure is non-critical
     })
-  // eslint-disable-next-line no-restricted-syntax -- Intentional: dynamic import, failure is non-critical
-  }).catch(() => {
-    // Sentry 加载失败时静默处理
-  })
+    .catch(() => {
+      // Sentry 加载失败时静默处理
+    })
 }
 
 /**
@@ -272,40 +267,40 @@ export function handleApiError(error: unknown): never {
  * 封装 fetch 请求，自动处理错误
  */
 export async function safeFetch(
-  url: string, 
+  url: string,
   options?: RequestInit,
   retries: number = 1
 ): Promise<Response> {
   let lastError: unknown
-  
+
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const response = await fetch(url, {
         ...options,
         signal: AbortSignal.timeout(30000), // 30秒超时
       })
-      
+
       if (!response.ok) {
         const errorData = await response.text().catch(() => response.statusText)
         const error = new Error(errorData || `HTTP ${response.status}`)
         ;(error as Error & { status?: number }).status = response.status
         throw error
       }
-      
+
       return response
     } catch (error) {
       lastError = error
-      
+
       // 如果不可重试或已达到最大重试次数，抛出错误
       if (!isRetryableError(error) || attempt === retries) {
         break
       }
-      
+
       // 重试前等待一段时间
-      await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)))
+      await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, attempt)))
     }
   }
-  
+
   handleApiError(lastError)
 }
 
@@ -316,7 +311,7 @@ export function createErrorHandler(onError?: (errorInfo: ErrorInfo) => void) {
   return (error: unknown, context?: Record<string, unknown>) => {
     const errorInfo = parseError(error)
     reportError(error, context)
-    
+
     if (onError) {
       onError(errorInfo)
     } else {

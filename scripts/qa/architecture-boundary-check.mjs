@@ -11,6 +11,42 @@ import ts from 'typescript'
 
 const DEFAULT_BASELINE = 'scripts/qa/architecture-boundary-baseline.json'
 const SOURCE_ROOTS = ['app', 'lib', 'worker']
+const SOURCE_EXTENSIONS = new Set(['.cjs', '.cts', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx'])
+
+function repositoryModuleAliases(file) {
+  const aliases = new Set([file])
+  let stem
+
+  if (file.endsWith('.d.mts')) {
+    stem = file.slice(0, -'.d.mts'.length)
+    aliases.add(`${stem}.mjs`)
+  } else if (file.endsWith('.d.cts')) {
+    stem = file.slice(0, -'.d.cts'.length)
+    aliases.add(`${stem}.cjs`)
+  } else if (file.endsWith('.d.ts')) {
+    stem = file.slice(0, -'.d.ts'.length)
+    aliases.add(stem)
+    aliases.add(`${stem}.js`)
+    aliases.add(`${stem}.jsx`)
+  } else if (file.endsWith('.ts') || file.endsWith('.tsx')) {
+    stem = file.slice(0, -path.posix.extname(file).length)
+    aliases.add(stem)
+    aliases.add(`${stem}.js`)
+    aliases.add(`${stem}.jsx`)
+  } else if (file.endsWith('.mts')) {
+    aliases.add(`${file.slice(0, -'.mts'.length)}.mjs`)
+  } else if (file.endsWith('.cts')) {
+    aliases.add(`${file.slice(0, -'.cts'.length)}.cjs`)
+  } else if (file.endsWith('.js') || file.endsWith('.jsx')) {
+    stem = file.slice(0, -path.posix.extname(file).length)
+    aliases.add(stem)
+    aliases.add(`${stem}.js`)
+    aliases.add(`${stem}.jsx`)
+  }
+
+  return aliases
+}
+
 const ROOT_RUNTIME_SOURCE_PATHS = [
   'instrumentation.ts',
   'proxy.ts',
@@ -20,11 +56,44 @@ const ROOT_RUNTIME_SOURCE_PATHS = [
 ]
 const ROOT_RUNTIME_SOURCES = new Set(ROOT_RUNTIME_SOURCE_PATHS)
 const ROOT_RUNTIME_TARGETS = new Set(
-  ROOT_RUNTIME_SOURCE_PATHS.flatMap((source) => [source, source.replace(/\.[^.]+$/u, '')])
+  ROOT_RUNTIME_SOURCE_PATHS.flatMap((source) => [...repositoryModuleAliases(source)])
 )
 const SOURCE_PATHS = [...SOURCE_ROOTS, ...ROOT_RUNTIME_SOURCE_PATHS]
-const REPOSITORY_IMPORT_ROOTS = new Set([...SOURCE_ROOTS, 'connectors', 'scripts', 'workers'])
-const SOURCE_EXTENSIONS = new Set(['.cjs', '.cts', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx'])
+const RUNTIME_TARGET_ROOTS = new Set(SOURCE_ROOTS)
+const RESERVED_REPOSITORY_BARE_IMPORT_ROOTS = [
+  '.claude',
+  '.cursor',
+  '.githooks',
+  '.github',
+  '.vscode',
+  '__tests__',
+  'android',
+  'appstore',
+  'cloudflare-worker',
+  'connectors',
+  'contracts',
+  'docs',
+  'e2e',
+  'infra',
+  'ios',
+  'k6',
+  'public',
+  'script',
+  'scripts',
+  'specs',
+  'supabase',
+  'tooling',
+  'vendor',
+  'workers',
+]
+const REPOSITORY_BARE_IMPORT_ROOTS = new Set([
+  ...RUNTIME_TARGET_ROOTS,
+  ...RESERVED_REPOSITORY_BARE_IMPORT_ROOTS,
+])
+const DEFAULT_REPOSITORY_BARE_IMPORTS = {
+  roots: REPOSITORY_BARE_IMPORT_ROOTS,
+  targets: ROOT_RUNTIME_TARGETS,
+}
 
 function toPosix(value) {
   return value.split(path.sep).join('/')
@@ -43,6 +112,30 @@ function trackedAndUntrackedSources(root) {
     .filter((file) => SOURCE_EXTENSIONS.has(path.extname(file)))
     .filter((file) => existsSync(path.join(root, file)))
     .sort()
+}
+
+function trackedAndUntrackedRepositoryBareImports(root) {
+  const output = execFileSync(
+    'git',
+    ['ls-files', '--cached', '--others', '--exclude-standard', '-z'],
+    { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] }
+  )
+  const imports = {
+    roots: new Set(REPOSITORY_BARE_IMPORT_ROOTS),
+    targets: new Set(ROOT_RUNTIME_TARGETS),
+  }
+
+  for (const file of output.split('\0').filter(Boolean)) {
+    const slash = file.indexOf('/')
+    if (slash !== -1) {
+      imports.roots.add(file.slice(0, slash))
+      continue
+    }
+
+    for (const alias of repositoryModuleAliases(file)) imports.targets.add(alias)
+  }
+
+  return imports
 }
 
 function scriptKind(file) {
@@ -112,15 +205,24 @@ export function collectModuleSpecifiers(source, file = 'source.ts') {
   return imports
 }
 
-export function resolveRepositoryTarget(source, specifier) {
+export function resolveRepositoryTarget(
+  source,
+  specifier,
+  repositoryBareImports = DEFAULT_REPOSITORY_BARE_IMPORTS
+) {
   let candidate
   if (specifier.startsWith('@/')) {
     candidate = specifier.slice(2).replace(/^\/+/, '')
-  } else if (specifier.startsWith('.')) {
+  } else if (
+    specifier === '.' ||
+    specifier === '..' ||
+    specifier.startsWith('./') ||
+    specifier.startsWith('../')
+  ) {
     candidate = path.posix.join(path.posix.dirname(source), specifier)
   } else if (
-    REPOSITORY_IMPORT_ROOTS.has(specifier.split('/')[0]) ||
-    ROOT_RUNTIME_TARGETS.has(specifier)
+    repositoryBareImports.roots.has(specifier.split('/')[0]) ||
+    repositoryBareImports.targets.has(specifier)
   ) {
     candidate = specifier
   } else {
@@ -139,6 +241,17 @@ export function classifyBoundary(source, target) {
   const sourceRoot = source.split('/')[0]
   const rootRuntimeSource = ROOT_RUNTIME_SOURCES.has(source)
   if (!SOURCE_ROOTS.includes(sourceRoot) && !rootRuntimeSource) return null
+
+  // lib/logger.ts is a backwards-compatibility facade over the canonical
+  // lib/utils/logger.ts implementation. Utilities must not depend back on the
+  // facade that wraps their own layer; sibling imports keep this boundary
+  // acyclic while the wider compatibility migration proceeds in small batches.
+  if (
+    source.startsWith('lib/utils/') &&
+    (target === 'lib/logger' || /^lib\/logger\.[cm]?[jt]sx?$/u.test(target))
+  ) {
+    return 'logger-utils-must-use-canonical-module'
+  }
 
   if (sourceRoot === 'lib' && (target === 'app' || target.startsWith('app/'))) {
     return 'lib-must-not-import-app'
@@ -177,7 +290,16 @@ export function classifyBoundary(source, target) {
   if (target === 'workers' || target.startsWith('workers/')) {
     return 'runtime-must-not-import-legacy-workers'
   }
-  return null
+
+  // resolveRepositoryTarget returns null for third-party bare imports. Once a
+  // specifier has resolved into the repository, runtime code may only depend
+  // on a deployed runtime root (or, for root entrypoints, another explicitly
+  // registered root runtime entrypoint). Everything else is fail-closed so a
+  // newly introduced tooling or isolated root cannot silently become runtime.
+  const targetRoot = target.split('/')[0]
+  if (RUNTIME_TARGET_ROOTS.has(targetRoot)) return null
+  if (rootRuntimeSource && ROOT_RUNTIME_TARGETS.has(target)) return null
+  return 'runtime-must-not-import-non-runtime-root'
 }
 
 export function violationKey(violation) {
@@ -186,11 +308,12 @@ export function violationKey(violation) {
 
 export async function scanArchitecture(root) {
   const violations = new Map()
+  const repositoryBareImports = trackedAndUntrackedRepositoryBareImports(root)
 
   for (const source of trackedAndUntrackedSources(root)) {
     const contents = await readFile(path.join(root, source), 'utf8')
     for (const dependency of collectModuleSpecifiers(contents, source)) {
-      const target = resolveRepositoryTarget(source, dependency.specifier)
+      const target = resolveRepositoryTarget(source, dependency.specifier, repositoryBareImports)
       const rule = classifyBoundary(source, target)
       if (!rule) continue
       const violation = {
