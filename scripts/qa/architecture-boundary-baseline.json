@@ -38,11 +38,6 @@
     },
     {
       "rule": "lib-must-not-import-app",
-      "source": "lib/stores/quizStore.ts",
-      "specifier": "@/app/(quiz)/quiz/components/types"
-    },
-    {
-      "rule": "lib-must-not-import-app",
       "source": "lib/web3/useOneClickSiwe.ts",
       "specifier": "@/app/components/Providers/LanguageProvider"
     },
