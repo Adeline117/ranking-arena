@@ -33,7 +33,7 @@ test('legacy generic secret rotator is executable but always fails closed', () =
     assert.equal(result.signal, null)
     assert.equal(result.stdout, '')
     assert.match(result.stderr, /retired and fail-closed/)
-    assert.match(result.stderr, /docs\/RUNBOOK\.md#manual-provider-atomic-secret-rotation/)
+    assert.match(result.stderr, /docs\/RUNBOOK\.md#credential-rotation--v1-no-go--owner-only/)
     assert.doesNotMatch(`${result.stdout}${result.stderr}`, new RegExp(sentinel))
     assert.deepEqual(readdirSync(scratch), [])
   } finally {
@@ -55,15 +55,15 @@ test('retired entrypoint has no credential, provider, or local-env mutation path
   assert.doesNotMatch(source, /(?:^|[^\\])\$(?:\*|@)/)
 })
 
-test('runbook requires a complete provider-atomic consumer handoff', () => {
+test('runbook keeps credential rotation retired and owner-only', () => {
   const runbook = readFileSync(runbookPath, 'utf8')
-  const section = runbook.split('### Manual/provider-atomic secret rotation')[1]
+  const section = runbook
+    .split('### Credential rotation — V1 NO-GO / owner-only')[1]
+    ?.split('\n### ')[0]
 
-  assert.ok(section, 'manual/provider-atomic rotation section must exist')
-  assert.match(section, /退出码 `2` fail closed/)
-  assert.match(section, /consumer manifest/)
-  assert.match(section, /不得先删除仍在服务的旧值/)
-  assert.match(section, /只有 manifest 全部通过后才在 provider 撤销旧版本/)
-  assert.match(section, /不得退化成 delete-then-add/)
-  assert.match(section, /不记录 secret 原文/)
+  assert.ok(section, 'credential rotation section must exist')
+  assert.match(section, /rotate-secrets\.sh` is RETIRED and exits `2`/)
+  assert.match(section, /complete consumer manifest/)
+  assert.match(section, /not secret material/)
+  assert.doesNotMatch(section, /delete-then-add|vercel env|openssl/)
 })
