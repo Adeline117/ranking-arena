@@ -23,21 +23,6 @@
     },
     {
       "rule": "lib-must-not-import-app",
-      "source": "lib/rankings/__tests__/daily-derived-consumer-containment.test.ts",
-      "specifier": "@/app/api/trader/[platform]/[trader_key]/history/route"
-    },
-    {
-      "rule": "lib-must-not-import-app",
-      "source": "lib/rankings/__tests__/daily-derived-consumer-containment.test.ts",
-      "specifier": "@/app/api/traders/[handle]/equity/route"
-    },
-    {
-      "rule": "lib-must-not-import-app",
-      "source": "lib/rankings/__tests__/daily-derived-consumer-containment.test.ts",
-      "specifier": "@/app/api/traders/[handle]/indicators/route"
-    },
-    {
-      "rule": "lib-must-not-import-app",
       "source": "lib/web3/useOneClickSiwe.ts",
       "specifier": "@/app/components/Providers/LanguageProvider"
     },
@@ -75,26 +60,6 @@
       "rule": "lib-must-not-import-worker",
       "source": "lib/ingest/serving/__tests__/publish-count-generation.test.ts",
       "specifier": "@/worker/src/ingest/worker-db-fence"
-    },
-    {
-      "rule": "runtime-module-must-not-import-root-entrypoint",
-      "source": "lib/api/__tests__/proxy-cron-alias-bypass.test.ts",
-      "specifier": "@/proxy"
-    },
-    {
-      "rule": "runtime-module-must-not-import-root-entrypoint",
-      "source": "lib/security/__tests__/tip-checkout-proxy.test.ts",
-      "specifier": "@/proxy"
-    },
-    {
-      "rule": "runtime-module-must-not-import-root-entrypoint",
-      "source": "lib/telemetry/__tests__/sentry-config-sanitization.test.ts",
-      "specifier": "../../../sentry.edge.config"
-    },
-    {
-      "rule": "runtime-module-must-not-import-root-entrypoint",
-      "source": "lib/telemetry/__tests__/sentry-config-sanitization.test.ts",
-      "specifier": "../../../sentry.server.config"
     }
   ]
 }
