@@ -72,14 +72,14 @@ describe('actual Sentry config recovery-token boundaries', () => {
 
   it('captures sanitizers from the imported server and edge configs', () => {
     jest.isolateModules(() => {
-      require('../../../sentry.server.config')
+      require('../sentry.server.config')
     })
     expect(mockInit).toHaveBeenCalledTimes(1)
     assertConfigScrubsRecoveryToken(mockInit.mock.calls[0][0] as SentryConfig)
 
     mockInit.mockClear()
     jest.isolateModules(() => {
-      require('../../../sentry.edge.config')
+      require('../sentry.edge.config')
     })
     expect(mockInit).toHaveBeenCalledTimes(1)
     assertConfigScrubsRecoveryToken(mockInit.mock.calls[0][0] as SentryConfig)
@@ -89,7 +89,7 @@ describe('actual Sentry config recovery-token boundaries', () => {
     jest.useFakeTimers()
     let initSentry!: () => Promise<void>
     jest.isolateModules(() => {
-      initSentry = require('../../sentry-init').initSentry as () => Promise<void>
+      initSentry = require('../lib/sentry-init').initSentry as () => Promise<void>
     })
 
     await initSentry()
