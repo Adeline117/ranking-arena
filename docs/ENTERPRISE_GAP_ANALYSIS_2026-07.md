@@ -131,7 +131,7 @@
   签名校验 + 原子幂等（unique 约束 23505）；timing-safe 服务鉴权；交易所凭证
   AES-256-GCM 加密；236/313 route 限流且区分 fail-close/open；HSTS/CSP/XFO 安全
   headers；无硬编码密钥（grep 全量验证）。
-- **可靠性工具**：circuit breaker（cockatiel）+ 重试 + 分布式锁；R2 异地备份
+- **可靠性工具**：circuit breaker（自研，原 cockatiel 已随 legacy 抓取退役移除）+ 重试 + 分布式锁；R2 异地备份
   （日备 14 天保留）；高质量 RUNBOOK；BullMQ 3x 重试。
 - **工程治理雏形**：三套棘轮（coverage/cast 禁令/design token）"只能升不能降"；
   pre-push 7+ 条根因 pattern guard（每条对应一次真实事故）；conventional
