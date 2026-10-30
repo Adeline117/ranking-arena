@@ -1,67 +1,48 @@
-# Deploy to Staging
+# Prepare an Arena Preview Deployment
 
-Deploy current branch to Vercel preview environment for testing.
+A preview deployment is an external state change. Do not create, promote, roll back,
+cancel, or delete a deployment unless the current task explicitly authorizes that
+action. Never assume a preview is isolated from production data.
 
-## Pre-Deploy Checklist
+## 1. Pre-deploy evidence
 
-1. **Code Quality**
-   ```bash
-   npm run type-check
-   npm run lint
-   npm run test
-   ```
-
-2. **Build Verification**
-   ```bash
-   npm run build
-   ```
-   - Fix any build errors before deploying
-   - Check bundle size if adding new dependencies
-
-3. **Database Migrations**
-   - If new migrations exist, note them for production sync
-   - Test migrations locally first with Supabase CLI
-
-## Deploy
+From a clean, pushed commit, record the branch and SHA and run the checks required by
+the change:
 
 ```bash
-# Deploy to preview (creates unique URL)
-vercel
-
-# Or deploy specific branch
-vercel --branch feature-branch
+npm run type-check
+npm run lint
+npm run test
+npm run build
 ```
 
-## Post-Deploy Verification
+Use focused and ingest/migration QA where applicable. A checked-in migration is not
+permission to apply it; record any migration, environment, secret, capacity, or data
+witness still required.
 
-1. **Check deployment status**
-   ```bash
-   vercel ls
-   ```
+## 2. Create a preview only when authorized
 
-2. **Test critical paths on preview URL:**
-   - [ ] Homepage loads
-   - [ ] Rankings page renders
-   - [ ] Trader profile pages work
-   - [ ] Auth flow works
-   - [ ] API endpoints respond
-
-3. **Check logs for errors**
-   ```bash
-   vercel logs [deployment-url]
-   ```
-
-## Rollback if Needed
+Vercel derives the Git branch from the current checkout; the CLI has no supported
+`--branch` deploy option. Use the project's GitHub preview integration when possible.
+If the task explicitly requires a manual preview and the authenticated project/team
+has been verified, the current CLI form is:
 
 ```bash
-# List recent deployments
-vercel ls
-
-# Promote previous deployment to current
-vercel rollback [deployment-url]
+vercel deploy --yes
 ```
 
-## Notes
-- Preview deployments auto-expire after 30 days
-- Environment variables must be set in Vercel dashboard
-- Database points to production Supabase (be careful with writes)
+Do not add `--prod`, pull production environment files, print tokens, or alter Vercel
+configuration as part of a preview request.
+
+## 3. Verify the exact preview release
+
+- Match the preview URL to the intended commit SHA.
+- Check homepage, published ranking API, trader detail, auth boundaries, and changed
+  endpoints.
+- Verify response bodies and cache/privacy headers, not only status codes.
+- Treat production-backed reads and all writes as out of scope unless separately
+  approved.
+- Record unavailable witnesses and logs without copying secrets or personal data.
+
+Promotion, production migration, cache purge, rollback, and custom-domain checks are
+separate reviewed operations.

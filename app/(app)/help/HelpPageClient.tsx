@@ -46,7 +46,6 @@ const getFaqData = (t: (key: string) => string) => {
       items: [
         { q: t('helpCategoryRankingQ'), a: t('helpCategoryRankingA') },
         { q: t('helpCompareQ'), a: t('helpCompareA') },
-        { q: t('helpAlertsQ'), a: t('helpAlertsA') },
         { q: t('helpScoreBreakdownQ'), a: t('helpScoreBreakdownA') },
         { q: t('helpAdvancedFilterQ'), a: t('helpAdvancedFilterA') },
         { q: t('helpProGroupsQ'), a: t('helpProGroupsA') },

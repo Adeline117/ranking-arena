@@ -2,6 +2,15 @@
 
 Welcome to Arena. This doc takes you from zero to productive.
 
+> **V1 NO-GO:** onboarding covers local development, isolated branches, and Draft
+> PR review only. Production dashboards, services, hosts, schedulers, workers, and
+> credentials are owner-controlled. Production evidence is allowed only when the
+> owner has approved the exact read-only query; no request in this guide authorizes
+> a write, deployment, migration, cache action, cron invocation, restart, fetch,
+> backfill, proxy, or recovery action. The checked-in V1 source configuration has
+> **0 Vercel schedules** and disables Git-triggered Vercel deployment; neither
+> source setting proves deployed control-plane state.
+
 ## Table of Contents
 
 - [1. Environment Setup](#1-environment-setup)
@@ -36,9 +45,9 @@ cd ranking-arena
 # 2. Install dependencies
 npm install
 
-# 3. Set up environment variables (ask Adeline for real values)
+# 3. Set up local development variables (ask the owner for non-production values)
 cp .env.example .env.local
-# Then edit .env.local and fill in the actual keys
+# Then edit .env.local with only the values needed for the local task
 
 # 4. Start dev server
 npm run dev
@@ -49,15 +58,17 @@ npm run dev
 
 `.env.example` has 190+ variables. **You don't need all of them.** Here's what matters:
 
-#### Required (app won't start without these)
+#### Local development values
+
+Ask the owner for the smallest set of **non-production** values needed to run the
+specific local task. Do not request, handle, or copy production service-role keys,
+cron secrets, dashboard tokens, or host keys.
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=...         # Supabase project URL
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...    # Supabase public key (used by frontend)
-SUPABASE_SERVICE_ROLE_KEY=...        # Supabase admin key (used by backend, bypasses RLS)
-UPSTASH_REDIS_REST_URL=...           # Redis cache URL
-UPSTASH_REDIS_REST_TOKEN=...         # Redis auth token
-CRON_SECRET=...                      # Auth token for cron job endpoints
+NEXT_PUBLIC_SUPABASE_URL=...         # Local/dev project URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...    # Local/dev public key
+UPSTASH_REDIS_REST_URL=...           # Local/dev cache URL, if needed
+UPSTASH_REDIS_REST_TOKEN=...         # Local/dev cache token, if needed
 ```
 
 #### Required only when working on payments
@@ -71,10 +82,8 @@ STRIPE_WEBHOOK_SECRET=whsec_...                # Stripe webhook signature
 #### Optional (app runs fine without these, but some features won't work)
 
 ```bash
-SENTRY_DSN=...              # Error tracking — without it, errors aren't reported
-TELEGRAM_BOT_TOKEN=...      # Pipeline alerts — without it, no Telegram notifications
-OPENAI_API_KEY=...          # Translation — without it, translation feature is disabled
-VPS_PROXY_KEY=...           # VPS scraper proxy — without it, some exchange data is unavailable
+SENTRY_DSN=...              # Local/dev error tracking, if provisioned
+OPENAI_API_KEY=...          # Local/dev translation feature, if provisioned
 ```
 
 #### Ignore for now
@@ -93,16 +102,16 @@ Web3 (RPC URLs, contract addresses, block explorer keys), HSM, QStash, Smart Sch
 
 ## 2. Accounts & Access
 
-Ask Adeline to grant you access to:
+Ask Adeline only for access that is approved and scoped to your local task:
 
-| Service      | Access needed                              | Purpose                                 | Required?                     |
-| ------------ | ------------------------------------------ | --------------------------------------- | ----------------------------- |
-| **GitHub**   | Collaborator on `Adeline117/ranking-arena` | Push branches, open PRs                 | Yes                           |
-| **Vercel**   | Team member                                | View deployments, logs, env vars        | Yes                           |
-| **Supabase** | Project member                             | Query database, check logs              | Yes                           |
-| **Sentry**   | Project member                             | View production errors and performance  | Recommended                   |
-| **Upstash**  | Read access                                | Check Redis cache and rate limit status | Optional                      |
-| **Stripe**   | Test mode access                           | Test payment flows                      | Only when working on payments |
+| Service      | Access needed                                | Purpose                                       | Required?                     |
+| ------------ | -------------------------------------------- | --------------------------------------------- | ----------------------------- |
+| **GitHub**   | Collaborator on `Adeline117/ranking-arena`   | Isolated branches and Draft PRs               | Yes                           |
+| **Vercel**   | No standing contributor access               | Owner-controlled; evidence only when approved | No                            |
+| **Supabase** | No standing contributor access               | Owner-controlled; evidence only when approved | No                            |
+| **Sentry**   | No standing contributor access               | Owner-controlled; evidence only when approved | No                            |
+| **Upstash**  | No standing contributor access               | Owner-controlled; evidence only when approved | No                            |
+| **Stripe**   | Test-mode access, if the owner provisions it | Local payment-flow development                | Only when working on payments |
 
 ---
 
@@ -122,16 +131,16 @@ Read in this order, don't skip:
 
 ### First Week — Read When Relevant
 
-| File                                                       | When to read                                                       |
-| ---------------------------------------------------------- | ------------------------------------------------------------------ |
-| [DECISIONS.md](./DECISIONS.md)                             | When you wonder "why was it built this way?"                       |
-| [RUNBOOK.md](./RUNBOOK.md)                                 | Before touching anything in production (has real IPs and commands) |
-| [SCRAPER.md](./SCRAPER.md)                                 | Before touching the data pipeline or exchange connectors           |
-| [API_BEST_PRACTICES.md](./API_BEST_PRACTICES.md)           | Before writing a new API route                                     |
-| [RLS_POLICIES.md](./RLS_POLICIES.md)                       | Before touching database tables or policies                        |
-| [SECURITY_BEST_PRACTICES.md](./SECURITY_BEST_PRACTICES.md) | Before touching auth, payments, or user data                       |
-| [system-principles.md](./system-principles.md)             | Before building UI with state management                           |
-| [EXCHANGE_FIELD_MAPPING.md](./EXCHANGE_FIELD_MAPPING.md)   | Before working with exchange data fields                           |
+| File                                                       | When to read                                                                   |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| [DECISIONS.md](./DECISIONS.md)                             | When you wonder "why was it built this way?"                                   |
+| [RUNBOOK.md](./RUNBOOK.md)                                 | V1 NO-GO boundary and owner escalation; do not execute its historical commands |
+| [SCRAPER.md](./SCRAPER.md)                                 | Data-pipeline architecture; not an instruction to operate connectors           |
+| [API_BEST_PRACTICES.md](./API_BEST_PRACTICES.md)           | Before writing a new API route                                                 |
+| [RLS_POLICIES.md](./RLS_POLICIES.md)                       | Before touching database tables or policies                                    |
+| [SECURITY_BEST_PRACTICES.md](./SECURITY_BEST_PRACTICES.md) | Before touching auth, payments, or user data                                   |
+| [system-principles.md](./system-principles.md)             | Before building UI with state management                                       |
+| [EXCHANGE_FIELD_MAPPING.md](./EXCHANGE_FIELD_MAPPING.md)   | Before working with exchange data fields                                       |
 
 Full doc index: [docs/README.md](./README.md)
 
@@ -151,19 +160,22 @@ npm run test             # Jest unit tests
 ### Occasional use
 
 ```bash
-npm run build            # Full production build
+npm run build            # Full local production-mode build
 npm run test:e2e         # Playwright E2E tests
-npm run diagnose         # Check data freshness across exchanges
-npm run check:platforms  # Platform status overview
+# `diagnose` and `check:platforms` can contact external services or controlled
+# credentials. Do not run either during V1 unless the owner has approved the exact
+# read-only evidence query.
 ```
 
-### Pipeline diagnostics (when data looks wrong)
+### Pipeline diagnostics (owner-scoped evidence only)
 
-```bash
-node scripts/pipeline-health-check.mjs          # Full health check
-node scripts/pipeline-health-check.mjs --quick   # Quick freshness check
-node scripts/pipeline-health-check.mjs --fix     # Generate fix script
-```
+The named `check:*` diagnostics may contact public services or controlled read
+credentials. Do not run one merely because this guide names it: the owner must first
+approve the exact read-only evidence query (for example `npm run check:freshness`
+for the published ranking freshness authority). No diagnostic authorizes a schedule,
+fetch, mutation, backfill, cleanup, or repair. Do not use the old health,
+local-recompute, source-fetch, checkpoint, or legacy-backfill paths as evidence or
+remediation; the V1 tombstone contract makes them report `RETIRED` and exit 2.
 
 ---
 
@@ -172,13 +184,13 @@ node scripts/pipeline-health-check.mjs --fix     # Generate fix script
 ```
 app/                    # Next.js pages and API routes
   api/                  #   100+ API endpoints
-    cron/               #   Scheduled jobs (62 Vercel crons)
+    cron/               #   53 route implementations; V1 schedules: 0
   components/           #   All React components
-  rankings/             #   Leaderboard pages
-  trader/[id]/          #   Trader profile pages
+  (app)/rankings/       #   Supplementary rankings routes
+  (app)/trader/[handle] #   Trader profile pages
 
 lib/                    # Core logic (imported as @/lib/...)
-  connectors/           #   Exchange API connectors
+  ingest/adapters/      #   SourceAdapter implementations
   data/                 #   Server-side data functions
   hooks/                #   React hooks (client-side)
   utils/                #   Shared utilities
@@ -198,9 +210,11 @@ Full directory breakdown: [CLAUDE.md > Directory Structure](../CLAUDE.md#directo
 ### Data flow
 
 ```
-32+ exchanges → cron jobs (fetch) → Supabase (store)
-              → enrichment (details) → Arena Score (compute)
-              → leaderboard (rank) → frontend (display)
+adapter/parser code → evidence and staging contracts → serving model
+                                                → leaderboard → frontend
+
+V1 does not authorize this flow to run. It has no Vercel schedules and no
+contributor-operated worker, host, proxy, fetch, backfill, or recovery path.
 ```
 
 ### Arena Score
@@ -218,12 +232,14 @@ Each trader is uniquely identified by `(source, source_trader_id)` — a composi
 
 ### Exchange connectors
 
-Each connector in [`lib/connectors/`](../lib/connectors/) implements:
+Each adapter in [`lib/ingest/adapters/`](../lib/ingest/adapters/) models:
 
 - `fetchLeaderboard(period)` — get ranked traders
 - `fetchTraderDetails(traderId)` — get trader profile
 
-Rate limiting and circuit breakers are built in. See [SCRAPER.md](./SCRAPER.md) for the full architecture.
+Rate limiting and circuit breakers are part of the code contract. See
+[SCRAPER.md](./SCRAPER.md) for architecture only; do not invoke a connector or
+work around source access during V1 NO-GO.
 
 ---
 
@@ -232,24 +248,23 @@ Rate limiting and circuit breakers are built in. See [SCRAPER.md](./SCRAPER.md) 
 Pick a small, low-risk issue to run through the full workflow end to end.
 
 ```bash
-# 1. Pull latest
-git checkout main && git pull
+# 1. Start an isolated feature branch from the reviewed base
+git fetch origin main
+git switch --create fix/my-first-fix --track origin/main
 
-# 2. Create a branch
-git checkout -b fix/my-first-fix
+# 2. Make your change (follow patterns in CLAUDE.md)
 
-# 3. Make your change (follow patterns in CLAUDE.md)
-
-# 4. Verify locally
+# 3. Verify locally
 npm run type-check && npm run test
 
-# 5. Push and open a PR
-git push -u origin fix/my-first-fix
-gh pr create --title "fix: describe what you changed" --body "## Summary\n- ..."
+# 4. Stop here unless the current task explicitly authorizes publishing
+#    A branch push and Draft PR are external writes; this document grants neither.
 
-# 6. Adeline reviews → address feedback → merge
+# 5. If publishing is authorized, Adeline reviews → address feedback → merge
 
-# 7. After merge, wait for Vercel deploy (5-8 min), then check live site
+# 6. After merge, record the PR/commit outcome. A merge does not prove a deployment.
+#    Do not invoke a production check or release action unless a separately recorded
+#    owner GO opens the V1 release gate.
 ```
 
 Look in [TASKS.md](./TASKS.md) for a P2/P3 task, or ask Adeline which one is good for getting started.
@@ -275,24 +290,25 @@ For the full git workflow details, see [GIT_WORKFLOW.md](./GIT_WORKFLOW.md).
 | Problem                        | Solution                                                                                                                                                         |
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Dev server runs out of memory  | Already handled — npm scripts set `--max-old-space-size=3584`                                                                                                    |
-| Binance/OKX API returns 403    | Geo-blocked. Use VPS proxy or Cloudflare Worker (see [SCRAPER.md](./SCRAPER.md))                                                                                 |
+| Binance/OKX API returns 403    | Do not work around it with a proxy, host, or worker. Record reproducible local evidence and ask the owner for a bounded, read-only evidence plan.                |
 | Push rejected by pre-push hook | The hook runs lint + type-check. Fix all errors before pushing                                                                                                   |
-| Database migration naming      | **Must** use `scripts/new-migration.sh <description>` — prevents timestamp collisions                                                                            |
+| Database migration naming      | **Must** use `scripts/new-migration.sh <description>` for a source candidate; never apply it during V1 NO-GO                                                     |
 | Modal scroll leak              | **Never** write `document.body.style.overflow = 'hidden'`. Use `<ModalOverlay>` or `useModalA11y`. The pre-push hook blocks this pattern                         |
 | Notifications in API routes    | **Never** use raw `supabase.from('notifications').insert()`. Use `sendNotification()` from `lib/data/notifications.ts`. The pre-push hook blocks the raw pattern |
 | First `npm run build` is slow  | Normal. Use `npm run dev` for daily work                                                                                                                         |
 
-For production emergencies, see [RUNBOOK.md](./RUNBOOK.md).
+For a production concern, record the evidence and notify the owner. During V1
+NO-GO, do not execute an emergency, recovery, proxy, worker, or deployment action.
 
 ---
 
 ## 10. Useful Links
 
-| Resource           | URL                                         |
-| ------------------ | ------------------------------------------- |
-| Live site          | https://www.arenafi.org                     |
-| GitHub repo        | https://github.com/Adeline117/ranking-arena |
-| Vercel dashboard   | Ask Adeline for invite                      |
-| Supabase dashboard | Ask Adeline for invite                      |
-| Sentry             | Ask Adeline for invite                      |
-| Full doc index     | [docs/README.md](./README.md)               |
+| Resource           | URL                                               |
+| ------------------ | ------------------------------------------------- |
+| Product reference  | Owner-approved read-only: https://www.arenafi.org |
+| GitHub repo        | https://github.com/Adeline117/ranking-arena       |
+| Vercel dashboard   | Owner-controlled; no standing contributor access  |
+| Supabase dashboard | Owner-controlled; no standing contributor access  |
+| Sentry             | Owner-controlled; no standing contributor access  |
+| Full doc index     | [docs/README.md](./README.md)                     |

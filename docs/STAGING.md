@@ -1,111 +1,43 @@
-# Staging & Preview Deployments
+# Staging & Preview — V1 NO-GO
 
-## Overview
+> This page is an incident boundary, not a deployment guide. During V1, no agent
+> may create, deploy, promote, roll back, inspect, or alter a Vercel Preview,
+> Production project, environment variable, deployment alias, cron, queue, or
+> provider integration. A local branch, build, or Draft PR is not a staging target
+> and does not establish any deployed state.
 
-Ranking Arena uses Vercel's built-in preview deployments for staging. Production lives at [arenafi.org](https://www.arenafi.org).
+The checked-in V1 configuration disables Git-triggered Vercel deployments and
+declares no Vercel schedules. Those source controls do not prove or change a
+provider control plane, an already-deployed schedule, a Preview environment, or a
+running host. Only a separately approved owner evidence record can establish such
+external state.
 
-## Branch Strategy
+## Allowed work
 
-| Branch | Environment | URL |
-|--------|------------|-----|
-| `main` | Production | https://www.arenafi.org |
-| `staging` | Staging/Preview | https://ranking-arena-git-staging-tyche1107s-projects.vercel.app |
-| Feature branches | Preview | Auto-generated per PR |
+- Use an isolated local worktree and branch.
+- Review source, committed fixtures, and local non-mutating tests.
+- Prepare a Draft PR only when the current task explicitly authorizes publishing.
+- Record a missing staging witness or failed local check as a release gate.
 
-## How It Works
+## Prohibited work
 
-Vercel automatically deploys every branch push:
+- Vercel dashboard, CLI, API, deploy hook, preview URL, promotion, rollback, or
+  alias action.
+- Reading, adding, changing, or testing any hosted environment value.
+- Invoking a cron endpoint, restoring a schedule, or treating a source diff as a
+  control-plane change.
+- Using a production or unknown-disposability database, Stripe, R2, Redis, queue,
+  or third-party key for a preview or test.
 
-- **Push to `main`** → Production deployment at arenafi.org
-- **Push to `staging`** → Preview deployment at a stable staging URL
-- **Open a PR** → Preview deployment with a unique URL (posted as a PR comment)
+## Conditions for a future staging proposal
 
-### Preview URL Patterns
+An owner-approved release plan must first name an isolated disposable project and
+database, test-mode payment and storage resources, staging-only credentials, no
+production queue or scheduler reachability, an exact candidate SHA, protected
+review/source boundaries, a bounded rollback target, and an evidence-retention
+plan. That future plan must be reviewed independently; this document contains no
+commands or provider-console procedure for creating it.
 
-- Branch deploys: `ranking-arena-git-<branch>-tyche1107s-projects.vercel.app`
-- PR deploys: `ranking-arena-<hash>-tyche1107s-projects.vercel.app`
-
-## Workflow
-
-### Testing a Feature
-
-1. Create feature branch from `main`:
-   ```bash
-   git checkout -b feature/my-change main
-   ```
-2. Develop and push — Vercel creates a preview automatically
-3. Open PR targeting `staging` for team review
-4. Once approved, merge to `staging` → team tests on staging URL
-5. When ready for production, merge `staging` → `main` (or PR feature branch → `main`)
-
-### Quick Staging Deploy
-
-```bash
-git checkout staging
-git merge main        # sync with latest production
-git push origin staging
-```
-
-## Environment Variables
-
-Vercel supports separate environment variables per environment:
-
-| Scope | Applies To |
-|-------|-----------|
-| **Production** | `main` branch deployments only |
-| **Preview** | All non-production deployments (staging, PRs, feature branches) |
-| **Development** | `vercel dev` locally |
-
-### Setting Environment Variables
-
-**Via Vercel Dashboard:**
-1. Go to [Vercel Project Settings → Environment Variables](https://vercel.com/tyche1107s-projects/ranking-arena/settings/environment-variables)
-2. Add variable and select which environments it applies to
-3. For staging-specific values (e.g., different Supabase project), set them under **Preview** scope
-
-**Via CLI:**
-```bash
-# Add a preview-only variable
-npx vercel env add NEXT_PUBLIC_SUPABASE_URL preview
-
-# Add a production-only variable
-npx vercel env add NEXT_PUBLIC_SUPABASE_URL production
-```
-
-### Recommended Staging Overrides
-
-For a true staging environment, consider separate values for Preview:
-
-| Variable | Production | Preview (Staging) |
-|----------|-----------|-------------------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Production Supabase | Staging Supabase (optional) |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Production key | Staging key (optional) |
-| `SUPABASE_SERVICE_ROLE_KEY` | Production key | Staging key (optional) |
-| `SENTRY_DSN` | Production DSN | Staging DSN or same |
-| `STRIPE_SECRET_KEY` | Live key | Test key |
-| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Live key | Test key |
-
-> **Note:** Preview environment variables apply to ALL preview deployments (staging branch, PRs, feature branches). Vercel does not natively support per-branch env vars. If you need branch-specific config, use `VERCEL_GIT_COMMIT_REF` in your code to conditionally load values.
-
-### Branch-Specific Config Pattern
-
-```typescript
-// lib/config.ts
-const isStaging = process.env.VERCEL_GIT_COMMIT_REF === 'staging';
-const isProduction = process.env.VERCEL_ENV === 'production';
-```
-
-## Cron Jobs
-
-⚠️ **Important:** Vercel cron jobs (defined in `vercel.json`) only run on **Production** deployments. They will NOT run on staging/preview. This is actually desirable — you don't want staging crons competing with production data fetching.
-
-To test cron endpoints on staging, call them manually:
-```bash
-curl https://ranking-arena-git-staging-tyche1107s-projects.vercel.app/api/cron/fetch-traders/binance_futures
-```
-
-## Troubleshooting
-
-- **Preview not deploying?** Check Vercel dashboard → Deployments for build errors
-- **Wrong env vars?** Verify in Settings → Environment Variables that Preview scope is set
-- **Staging out of date?** Merge latest `main` into `staging`
+For the launch gate and current owner escalation path, see
+[V1_EXECUTION_STATUS_2026-08-03.md](./V1_EXECUTION_STATUS_2026-08-03.md) and
+[RUNBOOK.md](./RUNBOOK.md).

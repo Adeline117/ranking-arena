@@ -53,7 +53,7 @@ describe('exact trader claim source selection', () => {
     expect(sources.authorizationClaimSource).toBeNull()
   })
 
-  it('keeps signed-in owner controls closed while the exact probe is pending', () => {
+  it('keeps public badges and owner controls closed while the exact probe is pending', () => {
     const cachedBundle = verifiedClaim('account-99', 'bybit', 'owner-b', 'Cached B')
     const sources = resolveTraderClaimSources({
       traderId: 'account-99',
@@ -70,9 +70,24 @@ describe('exact trader claim source selection', () => {
       claimOwnerId: sources.authorizationClaimSource?.owner_id,
     })
 
-    expect(sources.publicClaimSource).toBe(cachedBundle)
+    expect(sources.publicClaimSource).toBeNull()
     expect(sources.authorizationClaimSource).toBeNull()
     expect(ownership.isVerifiedClaimOwner).toBe(false)
+  })
+
+  it('requires the exact probe for anonymous public badges too', () => {
+    const cachedBundle = verifiedClaim('account-99', 'bybit', 'owner-b', 'Cached B')
+    const sources = resolveTraderClaimSources({
+      traderId: 'account-99',
+      source: 'bybit',
+      bundledClaim: cachedBundle,
+      bundledIsPlaceholder: false,
+      exactClaim: null,
+      requireExactAuthorization: false,
+    })
+
+    expect(sources.publicClaimSource).toBeNull()
+    expect(sources.authorizationClaimSource).toBeNull()
   })
 
   it('opens owner controls with only the fresh exact B profile after the probe resolves', () => {

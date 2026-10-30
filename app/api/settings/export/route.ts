@@ -17,6 +17,7 @@ import {
   fetchAllExportRows,
   fetchAllExportRowsByCursor,
   fetchAllExportRowsForUuidParents,
+  MAX_EXPORT_ROWS_PER_DATASET,
   projectExportRecord,
   type CursorExportDataset,
   type ExportDataset,
@@ -27,6 +28,19 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60 // Allow up to 60s for large exports
 
 const EXPORT_COOLDOWN_MS = 24 * 60 * 60 * 1000 // 24 hours
+const PRIVATE_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+  Pragma: 'no-cache',
+} as const
+
+function withPrivateNoStore<T extends Response>(response: T): T {
+  for (const [name, value] of Object.entries(PRIVATE_NO_STORE_HEADERS)) {
+    response.headers.set(name, value)
+  }
+  return response
+}
 
 interface ExportDatasetManifest {
   name: string
@@ -93,6 +107,249 @@ interface ExportData {
     push_subscriptions: unknown[]
     backup_codes: unknown[]
     recovery_tokens: unknown[]
+    legacy_portfolios: LegacyPortfolioExport
+  }
+}
+
+interface LegacyPortfolioExportRpcClient {
+  rpc(
+    functionName: 'export_legacy_portfolio_data_v1',
+    args: { p_user_id: string }
+  ): Promise<{
+    data: unknown
+    error: { code?: string; message?: string } | null
+  }>
+}
+
+interface LegacyPortfolioMetadataExportRow {
+  id: string
+  exchange: string
+  label: string | null
+  created_at: string
+}
+
+interface LegacyPortfolioPositionExportRow {
+  id: string
+  portfolio_id: string
+  symbol: string
+  side: string
+  entry_price: string
+  mark_price: string
+  size: string
+  pnl: string
+  pnl_pct: string
+  leverage: string
+  updated_at: string
+}
+
+interface LegacyPortfolioSnapshotExportRow {
+  id: string
+  portfolio_id: string
+  total_equity: string
+  total_pnl: string
+  total_pnl_pct: string
+  snapshot_at: string
+}
+
+interface LegacyPortfolioExport {
+  portfolios: LegacyPortfolioMetadataExportRow[]
+  positions: LegacyPortfolioPositionExportRow[]
+  snapshots: LegacyPortfolioSnapshotExportRow[]
+}
+
+const UUID_VALUE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const POSTGRES_NUMERIC_TEXT = /^(?:NaN|-?Infinity|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?)$/
+const LEGACY_PORTFOLIO_TOP_LEVEL_FIELDS = ['portfolios', 'positions', 'snapshots'] as const
+const LEGACY_PORTFOLIO_METADATA_FIELDS = ['id', 'exchange', 'label', 'created_at'] as const
+const LEGACY_PORTFOLIO_POSITION_FIELDS = [
+  'id',
+  'portfolio_id',
+  'symbol',
+  'side',
+  'entry_price',
+  'mark_price',
+  'size',
+  'pnl',
+  'pnl_pct',
+  'leverage',
+  'updated_at',
+] as const
+const LEGACY_PORTFOLIO_SNAPSHOT_FIELDS = [
+  'id',
+  'portfolio_id',
+  'total_equity',
+  'total_pnl',
+  'total_pnl_pct',
+  'snapshot_at',
+] as const
+
+function requireExportRecord(value: unknown, dataset: string): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${dataset} must be an object`)
+  }
+  return value as Record<string, unknown>
+}
+
+function requireExactExportFields(
+  record: Record<string, unknown>,
+  fields: readonly string[],
+  dataset: string
+): void {
+  const actual = Object.keys(record).sort()
+  const expected = [...fields].sort()
+  if (
+    actual.length !== expected.length ||
+    actual.some((field, index) => field !== expected[index])
+  ) {
+    throw new Error(`${dataset} returned an unexpected field set`)
+  }
+}
+
+function requireExportString(
+  record: Record<string, unknown>,
+  field: string,
+  dataset: string
+): string {
+  const value = record[field]
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`${dataset}.${field} must be a non-empty string`)
+  }
+  return value
+}
+
+function requireUuidExportString(
+  record: Record<string, unknown>,
+  field: string,
+  dataset: string
+): string {
+  const value = requireExportString(record, field, dataset)
+  if (!UUID_VALUE.test(value)) throw new Error(`${dataset}.${field} must be a UUID`)
+  return value
+}
+
+function requireNumericExportString(
+  record: Record<string, unknown>,
+  field: string,
+  dataset: string
+): string {
+  const value = requireExportString(record, field, dataset)
+  if (!POSTGRES_NUMERIC_TEXT.test(value)) {
+    throw new Error(`${dataset}.${field} must be exact PostgreSQL numeric text`)
+  }
+  return value
+}
+
+function requireTimestampExportString(
+  record: Record<string, unknown>,
+  field: string,
+  dataset: string
+): string {
+  const value = requireExportString(record, field, dataset)
+  if (!Number.isFinite(Date.parse(value))) {
+    throw new Error(`${dataset}.${field} must be a parseable timestamp`)
+  }
+  return value
+}
+
+function requireBoundedExportArray(value: unknown, dataset: string): unknown[] {
+  if (!Array.isArray(value)) throw new Error(`${dataset} must be an array`)
+  if (value.length > MAX_EXPORT_ROWS_PER_DATASET) {
+    throw new DataExportTooLargeError(dataset)
+  }
+  return value
+}
+
+function parseLegacyPortfolioExport(value: unknown): LegacyPortfolioExport {
+  const root = requireExportRecord(value, 'account.legacy_portfolios')
+  requireExactExportFields(root, LEGACY_PORTFOLIO_TOP_LEVEL_FIELDS, 'account.legacy_portfolios')
+
+  const portfolios = requireBoundedExportArray(
+    root.portfolios,
+    'account.legacy_portfolios.portfolios'
+  ).map((rawRow, index): LegacyPortfolioMetadataExportRow => {
+    const dataset = `account.legacy_portfolios.portfolios[${index}]`
+    const row = requireExportRecord(rawRow, dataset)
+    requireExactExportFields(row, LEGACY_PORTFOLIO_METADATA_FIELDS, dataset)
+    const label = row.label
+    if (label !== null && typeof label !== 'string') {
+      throw new Error(`${dataset}.label must be a string or null`)
+    }
+    return {
+      id: requireUuidExportString(row, 'id', dataset),
+      exchange: requireExportString(row, 'exchange', dataset),
+      label,
+      created_at: requireTimestampExportString(row, 'created_at', dataset),
+    }
+  })
+  const portfolioIds = new Set(portfolios.map((portfolio) => portfolio.id))
+
+  const positions = requireBoundedExportArray(
+    root.positions,
+    'account.legacy_portfolios.positions'
+  ).map((rawRow, index): LegacyPortfolioPositionExportRow => {
+    const dataset = `account.legacy_portfolios.positions[${index}]`
+    const row = requireExportRecord(rawRow, dataset)
+    requireExactExportFields(row, LEGACY_PORTFOLIO_POSITION_FIELDS, dataset)
+    const portfolioId = requireUuidExportString(row, 'portfolio_id', dataset)
+    if (!portfolioIds.has(portfolioId)) {
+      throw new Error(`${dataset}.portfolio_id is outside the owner portfolio set`)
+    }
+    return {
+      id: requireUuidExportString(row, 'id', dataset),
+      portfolio_id: portfolioId,
+      symbol: requireExportString(row, 'symbol', dataset),
+      side: requireExportString(row, 'side', dataset),
+      entry_price: requireNumericExportString(row, 'entry_price', dataset),
+      mark_price: requireNumericExportString(row, 'mark_price', dataset),
+      size: requireNumericExportString(row, 'size', dataset),
+      pnl: requireNumericExportString(row, 'pnl', dataset),
+      pnl_pct: requireNumericExportString(row, 'pnl_pct', dataset),
+      leverage: requireNumericExportString(row, 'leverage', dataset),
+      updated_at: requireTimestampExportString(row, 'updated_at', dataset),
+    }
+  })
+
+  const snapshots = requireBoundedExportArray(
+    root.snapshots,
+    'account.legacy_portfolios.snapshots'
+  ).map((rawRow, index): LegacyPortfolioSnapshotExportRow => {
+    const dataset = `account.legacy_portfolios.snapshots[${index}]`
+    const row = requireExportRecord(rawRow, dataset)
+    requireExactExportFields(row, LEGACY_PORTFOLIO_SNAPSHOT_FIELDS, dataset)
+    const portfolioId = requireUuidExportString(row, 'portfolio_id', dataset)
+    if (!portfolioIds.has(portfolioId)) {
+      throw new Error(`${dataset}.portfolio_id is outside the owner portfolio set`)
+    }
+    return {
+      id: requireUuidExportString(row, 'id', dataset),
+      portfolio_id: portfolioId,
+      total_equity: requireNumericExportString(row, 'total_equity', dataset),
+      total_pnl: requireNumericExportString(row, 'total_pnl', dataset),
+      total_pnl_pct: requireNumericExportString(row, 'total_pnl_pct', dataset),
+      snapshot_at: requireTimestampExportString(row, 'snapshot_at', dataset),
+    }
+  })
+
+  return { portfolios, positions, snapshots }
+}
+
+async function fetchLegacyPortfolioExport(
+  supabase: SupabaseClient<Database>,
+  userId: string
+): Promise<LegacyPortfolioExport> {
+  const rpcClient = supabase as unknown as LegacyPortfolioExportRpcClient
+  const { data, error } = await rpcClient.rpc('export_legacy_portfolio_data_v1', {
+    p_user_id: userId,
+  })
+  if (error?.code === '54000') {
+    throw new DataExportTooLargeError('account.legacy_portfolios')
+  }
+  if (error) throw new DataExportReadError('account.legacy_portfolios', error)
+  try {
+    return parseLegacyPortfolioExport(data)
+  } catch (parseError) {
+    if (parseError instanceof DataExportTooLargeError) throw parseError
+    throw new DataExportReadError('account.legacy_portfolios', parseError)
   }
 }
 
@@ -1049,19 +1306,21 @@ async function claimExportCooldown(
 
 export async function POST(request: NextRequest) {
   const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
-  if (rateLimitResp) return rateLimitResp
+  if (rateLimitResp) return withPrivateNoStore(rateLimitResp)
 
   try {
     const user = await getProvisioningAuthUser(request)
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return withPrivateNoStore(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
     }
 
     // CSRF validation
     const cookieToken = request.cookies.get(CSRF_COOKIE_NAME)?.value
     const headerToken = request.headers.get(CSRF_HEADER_NAME) ?? undefined
     if (!validateCsrfToken(cookieToken, headerToken)) {
-      return NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
+      return withPrivateNoStore(
+        NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
+      )
     }
 
     const supabase = getSupabaseAdmin()
@@ -1077,7 +1336,9 @@ export async function POST(request: NextRequest) {
 
     if (profileError || !profile) {
       logger.error('[Export] Profile fetch error:', profileError)
-      return NextResponse.json({ error: 'Profile provisioning is incomplete' }, { status: 503 })
+      return withPrivateNoStore(
+        NextResponse.json({ error: 'Profile provisioning is incomplete' }, { status: 503 })
+      )
     }
 
     const lastExportAt = readProfileLastExportAt(profile)
@@ -1088,9 +1349,11 @@ export async function POST(request: NextRequest) {
       const now = Date.now()
       if (now - lastExport < EXPORT_COOLDOWN_MS) {
         const nextAvailable = new Date(lastExport + EXPORT_COOLDOWN_MS).toISOString()
-        return NextResponse.json(
-          { error: 'Export rate limit exceeded. Try again after: ' + nextAvailable },
-          { status: 429 }
+        return withPrivateNoStore(
+          NextResponse.json(
+            { error: 'Export rate limit exceeded. Try again after: ' + nextAvailable },
+            { status: 429 }
+          )
         )
       }
     }
@@ -1128,6 +1391,7 @@ export async function POST(request: NextRequest) {
       notifications,
       commentLikes,
       postEmojiReactions,
+      legacyPortfolioExport,
     ] = await Promise.all([
       fetchAllExportRows(supabase, EXPORT_DATASETS.posts, user.id),
       fetchAllExportRows(supabase, EXPORT_DATASETS.comments, user.id),
@@ -1157,6 +1421,7 @@ export async function POST(request: NextRequest) {
       fetchAllExportRowsByCursor(supabase, NOTIFICATIONS_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, COMMENT_LIKES_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, POST_EMOJI_REACTIONS_EXPORT_DATASET, user.id),
+      fetchLegacyPortfolioExport(supabase, user.id),
     ])
 
     const normalizedFollowing = normalizeFollowRows(following, 'following')
@@ -1220,6 +1485,18 @@ export async function POST(request: NextRequest) {
           completedDataset('account.push_subscriptions', pushSubscriptions.length),
           completedDataset('account.backup_codes', backupCodes.length),
           completedDataset('account.recovery_tokens', recoveryTokens.length),
+          completedDataset(
+            'account.legacy_portfolios.portfolios',
+            legacyPortfolioExport.portfolios.length
+          ),
+          completedDataset(
+            'account.legacy_portfolios.positions',
+            legacyPortfolioExport.positions.length
+          ),
+          completedDataset(
+            'account.legacy_portfolios.snapshots',
+            legacyPortfolioExport.snapshots.length
+          ),
         ],
       },
       profile: typedProfile,
@@ -1271,6 +1548,7 @@ export async function POST(request: NextRequest) {
         push_subscriptions: pushSubscriptions,
         backup_codes: backupCodes,
         recovery_tokens: recoveryTokens,
+        legacy_portfolios: legacyPortfolioExport,
       },
     }
 
@@ -1289,18 +1567,22 @@ export async function POST(request: NextRequest) {
     })
     const cooldown = await claimExportCooldown(supabase, user.id, new Date())
     if (!cooldown.claimed) {
-      return NextResponse.json(
-        { error: 'Export rate limit exceeded. Try again after: ' + cooldown.nextAvailable },
-        { status: 429 }
+      return withPrivateNoStore(
+        NextResponse.json(
+          { error: 'Export rate limit exceeded. Try again after: ' + cooldown.nextAvailable },
+          { status: 429 }
+        )
       )
     }
-    return response
+    return withPrivateNoStore(response)
   } catch (error: unknown) {
     if (error instanceof DataExportTooLargeError) {
       logger.error('[Export] Dataset exceeds synchronous export limit:', error.dataset)
-      return NextResponse.json(
-        { error: 'Your export is too large to prepare synchronously. Please contact support.' },
-        { status: 413 }
+      return withPrivateNoStore(
+        NextResponse.json(
+          { error: 'Your export is too large to prepare synchronously. Please contact support.' },
+          { status: 413 }
+        )
       )
     }
     if (error instanceof DataExportReadError) {
@@ -1308,9 +1590,13 @@ export async function POST(request: NextRequest) {
         dataset: error.dataset,
         error: error.causeValue,
       })
-      return NextResponse.json({ error: 'Failed to prepare a complete export' }, { status: 500 })
+      return withPrivateNoStore(
+        NextResponse.json({ error: 'Failed to prepare a complete export' }, { status: 500 })
+      )
     }
     logger.error('[Export] Unexpected error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return withPrivateNoStore(
+      NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    )
   }
 }

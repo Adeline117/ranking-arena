@@ -80,7 +80,7 @@ export default function SocialComingSoon() {
 
       {/* CTA */}
       <Link
-        href="/rankings"
+        href="/"
         style={{
           display: 'inline-flex',
           alignItems: 'center',

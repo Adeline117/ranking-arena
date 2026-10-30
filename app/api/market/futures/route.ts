@@ -1,138 +1,22 @@
 /**
- * GET /api/market/futures
- * Aggregates funding rates + open interest from Supabase.
- * Redis-cached for 2 minutes with lock to prevent thundering herd.
+ * Retired anonymous market-futures acquisition ingress.
+ *
+ * V1 keeps this public compatibility endpoint fail-closed. This source-only
+ * boundary does not alter code already deployed, prior data, or external markets.
  */
-import { NextRequest, NextResponse } from 'next/server'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
-import { getOrSetWithLock } from '@/lib/cache'
-import logger from '@/lib/logger'
+
+import { NextResponse } from 'next/server'
+import {
+  V1_PUBLIC_EGRESS_NO_STORE_HEADERS,
+  V1_PUBLIC_EGRESS_UNAVAILABLE_BODY,
+} from '@/lib/security/v1-public-egress-publication'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(request: NextRequest) {
-  try {
-    const rl = await checkRateLimit(request, RateLimitPresets.read)
-    if (rl) return rl
-    const result = await getOrSetWithLock(
-      'api:market:futures',
-      async () => computeFuturesData(),
-      { ttl: 120, lockTtl: 10 }
-    )
-
-    const response = NextResponse.json(result)
-    response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300')
-    return response
-  } catch (err: unknown) {
-    logger.debug('Non-critical error in futures route:', err instanceof Error ? (err as Error).message : String(err))
-    return NextResponse.json({ error: 'Failed to fetch futures data' }, { status: 500 })
-  }
-}
-
-async function computeFuturesData() {
-  const supabase = getSupabaseAdmin()
-
-  // Run DB queries in parallel
-  const [fundingResult, oiResult] = await Promise.all([
-    supabase
-      .from('funding_rates')
-      .select('symbol, platform, funding_rate, funding_time')
-      .order('funding_time', { ascending: false })
-      .limit(200),
-    supabase
-      .from('open_interest')
-      .select('symbol, platform, open_interest_usd, timestamp')
-      .order('timestamp', { ascending: false })
-      .limit(200),
-  ])
-
-  const fundingRates = fundingResult.data
-  const openInterest = oiResult.data
-
-  // Normalize symbols
-  const normalize = (s: string) => s.replace(/-USDT-SWAP|USDT/g, '').toUpperCase()
-
-  // Group by symbol, aggregate across platforms
-  const symbolMap: Record<string, { symbol: string; contract: string; platforms: Record<string, { fundingRate?: number; fundingTime?: string; openInterest?: number }> }> = {}
-
-  for (const fr of fundingRates || []) {
-    const sym = normalize(fr.symbol)
-    if (!symbolMap[sym]) {
-      symbolMap[sym] = { symbol: sym, contract: `${sym}USDT`, platforms: {} }
-    }
-    const p = fr.platform
-    if (!symbolMap[sym].platforms[p]) symbolMap[sym].platforms[p] = {}
-    symbolMap[sym].platforms[p].fundingRate = fr.funding_rate
-    symbolMap[sym].platforms[p].fundingTime = fr.funding_time
-  }
-
-  for (const oi of openInterest || []) {
-    const sym = normalize(oi.symbol)
-    if (!symbolMap[sym]) {
-      symbolMap[sym] = { symbol: sym, contract: `${sym}USDT`, platforms: {} }
-    }
-    const p = oi.platform
-    if (!symbolMap[sym].platforms[p]) symbolMap[sym].platforms[p] = {}
-    symbolMap[sym].platforms[p].openInterest = oi.open_interest_usd
-  }
-
-  // Fetch prices from CoinGecko
-  // CoinGecko uses full names (solana, ethereum) not ticker symbols (SOL, ETH)
-  const SYMBOL_TO_CG_ID: Record<string, string> = {
-    BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', BNB: 'binancecoin',
-    XRP: 'ripple', DOGE: 'dogecoin', ADA: 'cardano', AVAX: 'avalanche-2',
-    DOT: 'polkadot', LINK: 'chainlink', MATIC: 'matic-network', UNI: 'uniswap',
-    ARB: 'arbitrum', OP: 'optimism', SUI: 'sui', APT: 'aptos',
-    NEAR: 'near', ATOM: 'cosmos', FIL: 'filecoin', LTC: 'litecoin',
-    TRX: 'tron', TON: 'the-open-network', PEPE: 'pepe', WIF: 'dogwifcoin',
-    AAVE: 'aave', MKR: 'maker', RENDER: 'render-token', INJ: 'injective-protocol',
-    FET: 'fetch-ai', BONK: 'bonk', WLD: 'worldcoin-wld', JUP: 'jupiter-exchange-solana',
-  }
-  const symbols = Object.keys(symbolMap)
-  const cgIds = symbols.map(s => SYMBOL_TO_CG_ID[s] || s.toLowerCase()).filter(Boolean).join(',')
-  const priceMap: Record<string, { price: number; change24h: number; volume24h: number; image: string }> = {}
-  try {
-    const cgRes = await fetch(
-      `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${cgIds}&sparkline=false&price_change_percentage=24h`,
-      { next: { revalidate: 60 } }
-    )
-    if (cgRes.ok) {
-      const cgData: Array<{ symbol: string; current_price: number; price_change_percentage_24h: number; total_volume: number; image: string }> = await cgRes.json()
-      for (const c of cgData) {
-        priceMap[c.symbol.toUpperCase()] = {
-          price: c.current_price,
-          change24h: c.price_change_percentage_24h,
-          volume24h: c.total_volume,
-          image: c.image,
-        }
-      }
-    }
-  } catch (err) {
-    logger.debug('Non-critical error fetching CoinGecko prices:', err instanceof Error ? err.message : String(err))
-  }
-
-  const result = Object.values(symbolMap).map((item) => {
-    const pg = priceMap[item.symbol] || {} as Partial<typeof priceMap[string]>
-    const platforms = Object.entries(item.platforms)
-    const rates = platforms.map(([, v]) => v.fundingRate).filter((r): r is number => r != null)
-    const avgRate = rates.length ? rates.reduce((a, b) => a + b, 0) / rates.length : null
-    const totalOI = platforms.reduce((sum: number, [, v]) => sum + (v.openInterest || 0), 0)
-
-    return {
-      symbol: item.symbol,
-      contract: item.contract,
-      price: pg.price ?? null,
-      change24h: pg.change24h ?? null,
-      volume24h: pg.volume24h ?? null,
-      image: pg.image ?? null,
-      fundingRate: avgRate,
-      openInterest: totalOI || null,
-      predictedFunding: avgRate != null ? avgRate * 0.95 : null,
-      platforms: item.platforms,
-    }
+/** Keep this response independent of caller-controlled values and outbound operations. */
+export function GET(): NextResponse {
+  return NextResponse.json(V1_PUBLIC_EGRESS_UNAVAILABLE_BODY, {
+    status: 410,
+    headers: V1_PUBLIC_EGRESS_NO_STORE_HEADERS,
   })
-
-  result.sort((a, b) => (b.openInterest || 0) - (a.openInterest || 0))
-  return result
 }

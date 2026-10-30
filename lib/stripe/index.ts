@@ -65,6 +65,20 @@ export function assertStripePaymentRuntimeReady(): void {
   }
 }
 
+/**
+ * Non-throwing probe for server components (e.g. the pricing page) so purchase
+ * CTAs can render a "coming soon" state instead of leading into a checkout
+ * route that would answer 503. Only the boolean may cross to the client.
+ */
+export function isStripePaymentRuntimeReady(): boolean {
+  try {
+    assertStripePaymentRuntimeReady()
+    return true
+  } catch {
+    return false
+  }
+}
+
 // 保留 stripe 导出以保持兼容性（但现在是 getter）
 export const stripe = {
   get customers() {
@@ -179,7 +193,6 @@ export const SUBSCRIPTION_PLANS = {
     interval: 'month' as const,
     features: [
       'Category ranking',
-      'Trader alerts',
       'Score breakdown',
       'Pro badge',
       'Advanced filter',

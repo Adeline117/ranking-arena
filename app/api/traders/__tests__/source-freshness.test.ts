@@ -222,10 +222,12 @@ function publicRankedPageQuery(rows: Array<Record<string, unknown>>) {
 }
 
 import { GET, warmDefaultPublicTradersCache } from '../route'
+import { resetClaimedTraderBadgeCacheForTests } from '@/lib/data/claimed-trader-badges'
 
 describe('GET /api/traders public ranked cohort', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    resetClaimedTraderBadgeCacheForTests()
     mockGetOrSetWithLock.mockImplementation(
       async (_key: string, fetcher: () => Promise<unknown>) => await fetcher()
     )

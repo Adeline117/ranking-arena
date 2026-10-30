@@ -113,7 +113,13 @@ export async function checkFrontendHealth(baseUrl: string): Promise<HealthCheck[
 
 // ── API Health Checks ────────────────────────────────────────────
 
-const API_ENDPOINTS = [
+const API_ENDPOINTS: Array<{
+  path: string
+  name: string
+  expectKey: string | null
+  expectTrueKey?: string
+  requireVerifiedRanking?: boolean
+}> = [
   { path: '/api/traders?timeRange=90D&limit=5', name: 'Rankings API', expectKey: 'data' },
   {
     path: '/api/rankings/platform-stats',
@@ -121,7 +127,12 @@ const API_ENDPOINTS = [
     expectKey: 'platforms',
     requireVerifiedRanking: true,
   },
-  { path: '/api/rankings/movers', name: 'Movers API', expectKey: 'movers' },
+  {
+    path: '/api/rankings/movers',
+    name: 'Movers API',
+    expectKey: 'available',
+    expectTrueKey: 'available',
+  },
   { path: '/api/search?q=test&limit=3', name: 'Search API', expectKey: 'results' },
   { path: '/api/market/prices', name: 'Market Prices', expectKey: null },
   { path: '/api/health', name: 'Health Endpoint', expectKey: 'status' },
@@ -155,9 +166,15 @@ export async function checkAPIHealth(baseUrl: string): Promise<HealthCheck[]> {
         } else if (latency > 3000) {
           status = 'warn'
           details = `Slow: ${latency}ms`
-        } else if (ep.expectKey && body && !(ep.expectKey in body)) {
+        } else if (ep.expectKey && (!body || typeof body !== 'object' || !(ep.expectKey in body))) {
           status = 'warn'
           details = `Missing key "${ep.expectKey}" in response`
+        } else if (
+          ep.expectTrueKey &&
+          (!body || typeof body !== 'object' || body[ep.expectTrueKey] !== true)
+        ) {
+          status = 'warn'
+          details = `Quarantined: "${ep.expectTrueKey}" is not true`
         } else if (ep.requireVerifiedRanking && (!body || body.ranking_visibility !== 'verified')) {
           status = 'warn'
           details = 'Published ranking aggregate unavailable'

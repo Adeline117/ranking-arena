@@ -11,9 +11,9 @@ interface ExchangeLogoProps {
   className?: string
 }
 
-// Local logo files in /public/icons/exchanges/
-// All logos sourced from official exchange favicons via scripts/sync-exchange-logos.sh
-// NEVER use CoinGecko CDN — it returns wrong images (caused 17 wrong logos)
+// Checked-in static logo assets live in /public/icons/exchanges/.
+// This component maps exchange names to local assets; it does not fetch or prescribe their origin.
+// Do not substitute a remote CDN URL here; preserve the local-asset rendering contract.
 const LOCAL_LOGOS: Record<string, string> = {
   binance: '/icons/exchanges/binance.png',
   bybit: '/icons/exchanges/bybit.png',

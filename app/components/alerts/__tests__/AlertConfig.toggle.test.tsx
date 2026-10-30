@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 const mockAuthedFetch = jest.fn()
 const mockShowToast = jest.fn()
+const mockTrackEvent = jest.fn()
 const mockUseAuthSession = jest.fn()
 const mockTranslations: Record<string, string> = {
   adminLoadFailed: 'Failed to load alerts',
@@ -40,6 +41,16 @@ jest.mock('@/app/components/ui/Toast', () => ({
 
 jest.mock('@/lib/api/client', () => ({
   authedFetch: (...args: unknown[]) => mockAuthedFetch(...args),
+}))
+
+jest.mock('@/lib/analytics/track', () => ({
+  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
+}))
+
+// This suite exercises the legacy configuration workflow. V1 availability is
+// covered separately with the real publication boundary left disabled.
+jest.mock('@/lib/alerts/trader-alert-publication', () => ({
+  TRADER_ALERTS_PUBLISHED: true,
 }))
 
 jest.mock('@/app/components/ui/ErrorMessage', () => ({
@@ -220,6 +231,38 @@ describe('AlertConfig enable toggle', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Login required')
     expect(screen.queryByText('Loading')).not.toBeInTheDocument()
     expect(mockAuthedFetch).not.toHaveBeenCalled()
+  })
+
+  it('records alert creation only after a new alert is durably acknowledged', async () => {
+    mockAuthedFetch
+      .mockResolvedValueOnce(result({ data: { alerts: [] } }))
+      .mockResolvedValueOnce(mutationResult({ alert: existingAlert(true, 'alert-new') }))
+
+    render(
+      <AlertConfig traderId="trader-1" traderHandle="Trader One" source="binance" userId="user-1" />
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(mockTrackEvent).toHaveBeenCalledWith('create_trader_alert', {
+        traderId: 'trader-1',
+        source: 'binance',
+        step: 'persisted',
+      })
+    )
+    expect(mockTrackEvent).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not count an existing alert update as a new alert creation', async () => {
+    loadResponses()
+    mockAuthedFetch.mockResolvedValueOnce(mutationResult({ alert: existingAlert(true, 'alert-1') }))
+    await renderLoadedConfig()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Alerts enabled', 'success'))
+    expect(mockTrackEvent).not.toHaveBeenCalled()
   })
 
   it('turns a server 403 into the Pro conversion state', async () => {

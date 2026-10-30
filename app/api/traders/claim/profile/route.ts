@@ -21,12 +21,26 @@ import { updateVerifiedTrader } from '@/lib/data/trader-claims'
 import { createLogger } from '@/lib/utils/logger'
 import { isDexWalletPlatform } from '@/lib/constants/wallet-platforms'
 import { canonicalizeWalletIdentity } from '@/lib/validators/wallet-identity'
+import { parseOptionalDiscordHandle, parseOptionalProfileUrl } from '@/lib/utils/profile-url'
 
 const logger = createLogger('claim-profile')
+const PRIVATE_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+  Pragma: 'no-cache',
+} as const
+
+function withPrivateNoStore<T extends Response>(response: T): T {
+  for (const [name, value] of Object.entries(PRIVATE_NO_STORE_HEADERS)) {
+    response.headers.set(name, value)
+  }
+  return response
+}
 
 export async function PUT(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
-  if (rateLimitResponse) return rateLimitResponse
+  if (rateLimitResponse) return withPrivateNoStore(rateLimitResponse)
 
   try {
     const user = await requireAuth(request)
@@ -77,46 +91,24 @@ export async function PUT(request: NextRequest) {
       updates.bio = bio || null
     }
 
-    // URL validation helper — only allow https URLs, block internal hosts
-    function isValidUrl(url: string): boolean {
-      try {
-        const parsed = new URL(url)
-        if (parsed.protocol !== 'https:') return false
-        const host = parsed.hostname.toLowerCase()
-        if (
-          host === 'localhost' ||
-          host === '127.0.0.1' ||
-          host === '0.0.0.0' ||
-          host.endsWith('.local')
-        )
-          return false
-        return true
-      } catch {
-        return false
-      }
-    }
-
     for (const field of ['twitter_url', 'telegram_url', 'website_url'] as const) {
       if (body[field] !== undefined) {
-        const value = typeof body[field] === 'string' ? body[field].trim() : null
-        if (value && !isValidUrl(value)) {
-          throw ApiError.validation(`Invalid URL for ${field}`)
-        }
-        updates[field] = value || null
+        const parsed = parseOptionalProfileUrl(body[field])
+        if (!parsed.ok) throw ApiError.validation(`Invalid URL for ${field}`)
+        updates[field] = parsed.value
       }
     }
 
     if (body.discord_url !== undefined) {
-      const value = typeof body.discord_url === 'string' ? body.discord_url.trim() : null
-      updates.discord_url = value || null
+      const parsed = parseOptionalDiscordHandle(body.discord_url)
+      if (!parsed.ok) throw ApiError.validation('Invalid discord_url')
+      updates.discord_url = parsed.value
     }
 
     if (body.avatar_url !== undefined) {
-      const value = typeof body.avatar_url === 'string' ? body.avatar_url.trim() : null
-      if (value && !isValidUrl(value)) {
-        throw ApiError.validation('Invalid avatar URL')
-      }
-      updates.avatar_url = value || null
+      const parsed = parseOptionalProfileUrl(body.avatar_url)
+      if (!parsed.ok) throw ApiError.validation('Invalid avatar URL')
+      updates.avatar_url = parsed.value
     }
 
     if (body.can_receive_messages !== undefined) {
@@ -149,12 +141,14 @@ export async function PUT(request: NextRequest) {
       fields: Object.keys(updates),
     })
 
-    return success({
-      verified_trader: updated,
-      message: 'Profile updated successfully',
-    })
+    return withPrivateNoStore(
+      success({
+        verified_trader: updated,
+        message: 'Profile updated successfully',
+      })
+    )
   } catch (error: unknown) {
     logger.error('Claim profile update failed', { error })
-    return handleError(error, 'claim profile PUT')
+    return withPrivateNoStore(handleError(error, 'claim profile PUT'))
   }
 }

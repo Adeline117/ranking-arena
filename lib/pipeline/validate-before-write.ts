@@ -1,16 +1,18 @@
 /**
- * Data Write Gatekeeper — validateBeforeWrite()
+ * Numeric admission helper — validateBeforeWrite()
  *
- * Single validation function that guards ALL writes to:
+ * Explicit callers use this helper to check value bounds for:
  * - leaderboard_ranks
  * - trader_daily_snapshots
  * (trader_snapshots_v2 was dropped 2026-06-16; arena.* schema is now primary)
  *
- * Dirty data never enters the database. Failed rows are logged to
- * pipeline_rejected_writes and trigger Telegram alerts.
+ * This is not a database write interceptor. It proves neither provenance,
+ * season/window identity, complete cohorts, nor atomic publication. Rejections
+ * are recorded/alerted only when the caller explicitly awaits
+ * logRejectedWrites().
  *
  * Usage:
- *   const { valid, rejected } = validateBeforeWrite(rows, 'trader_snapshots_v2')
+ *   const { valid, rejected } = validateBeforeWrite(rows, 'leaderboard_ranks')
  *   if (rejected.length) await logRejectedWrites(rejected)
  *   // only upsert `valid` rows
  */

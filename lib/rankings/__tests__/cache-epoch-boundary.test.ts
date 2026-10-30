@@ -52,6 +52,13 @@ describe('public ranking cache epoch boundary', () => {
 
   // Keep the sorted-set key checks owned by the realtime store intact. Its
   // retained raw writer is an internal cache-builder, not a public reader.
+  it('the retired composite cache command cannot read a ranking cache key during V1', () => {
+    const route = source('app/api/cron/precompute-composite/route.ts')
+
+    expect(route).toContain('v1CronExecutionGate(request) ?? v1CronExecutionUnavailableResponse()')
+    expect(route).not.toContain('publicRankingCacheKey')
+  })
+
   it('epochs both the live sorted set and its detail hash', () => {
     const store = source('lib/realtime/ranking-store.ts')
     expect(store).toContain('publicRankingCacheKey(`${REDIS_KEY_PREFIX}:${period.toUpperCase()}`)')
@@ -62,12 +69,9 @@ describe('public ranking cache epoch boundary', () => {
     expect(store).not.toMatch(/return `\$\{DETAIL_HASH_PREFIX\}:\$\{period\.toUpperCase\(\)\}`/)
   })
 
-  it.each(['app/api/cron/precompute-composite/route.ts', 'app/api/rankings/movers/route.ts'])(
-    '%s keeps its derivative cache key inside the publication epoch',
-    (path) => {
-      expect(source(path)).toContain('publicRankingCacheKey')
-    }
-  )
+  // Movers is an uncached containment stub (ranked-cohort-readers.test.ts) and
+  // precompute-composite is a retired V1 cron (asserted above); neither holds
+  // a derivative ranking cache key.
 
   it('quarantines legacy platform aggregates rather than replaying an epoch cache', () => {
     const contents = source('app/api/rankings/platform-stats/route.ts')
@@ -80,12 +84,13 @@ describe('public ranking cache epoch boundary', () => {
     expectNoRawPublicRankingRelation(contents)
   })
 
+  // app/api/export/rankings is a retired 410 route (its own route test asserts
+  // that it reads nothing), so it is no longer a sealed-view reader here.
   it.each([
     'app/api/rankings/route.ts',
     'app/api/rankings/live/route.ts',
     'app/api/v2/rankings/route.ts',
     'app/api/v3/route.ts',
-    'app/api/export/rankings/route.ts',
   ])('%s bypasses response caches and directly validates the sealed view', (path) => {
     const contents = source(path)
 

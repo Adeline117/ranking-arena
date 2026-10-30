@@ -1,11 +1,10 @@
-import { isDexWalletPlatform, isSolanaPlatform } from '@/lib/constants/wallet-platforms'
+import { isDexWalletPlatform } from '@/lib/constants/wallet-platforms'
 
 /**
  * Canonical identity rules for wallet-owned trader profiles.
  *
- * EVM addresses are case-insensitive once checksum validation has happened, so
- * every database key must use lowercase. Solana public keys are Base58 and
- * case-sensitive: changing even one letter identifies a different account.
+ * V1 supports only EVM leaderboard identities. They are case-insensitive once
+ * shape validation has happened, so every database key uses lowercase.
  */
 export function canonicalizeWalletIdentity(identity: string, platform: string): string {
   if (typeof identity !== 'string' || identity.trim() === '') {
@@ -17,7 +16,10 @@ export function canonicalizeWalletIdentity(identity: string, platform: string): 
   }
 
   const value = identity.trim()
-  return isSolanaPlatform(platform) ? value : value.toLowerCase()
+  if (!/^0x[0-9a-fA-F]{40}$/.test(value)) {
+    throw new Error('EVM wallet identity must be a 20-byte hexadecimal address')
+  }
+  return value.toLowerCase()
 }
 
 export function walletIdentitiesMatch(left: string, right: string, platform: string): boolean {

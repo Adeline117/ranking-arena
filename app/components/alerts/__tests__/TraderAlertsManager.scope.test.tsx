@@ -210,6 +210,20 @@ describe('TraderAlertsManager viewer ownership', () => {
     expect(mockAuthedFetch).not.toHaveBeenCalled()
   })
 
+  it('shows the V1 unavailable notice while retaining owner-only legacy removal', async () => {
+    mockAuthedFetch.mockResolvedValueOnce(alertsFor('user-a'))
+
+    render(<TraderAlertsManager />)
+
+    await screen.findByText('trader-user-a')
+    expect(screen.getByRole('note')).toHaveTextContent('traderAlertsUnavailableDesc')
+    expect(screen.getByText('binance · traderAlertsStoredNotMonitored')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'traderAlertsRemove' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'setAlert' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'upgrade' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'viewAllAlerts' })).not.toBeInTheDocument()
+  })
+
   it('keeps load failures distinct from an empty alerts list and retries them', async () => {
     mockAuthedFetch
       .mockRejectedValueOnce(new Error('temporary failure'))

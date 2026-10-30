@@ -1,185 +1,7 @@
 {
   "buildCommand": "npm run build",
-  "ignoreCommand": "[ \"$VERCEL_ENV\" = production ] || exit 1; case \"$VERCEL_GIT_COMMIT_MESSAGE\" in *\"[deploy-force]\"*) exit 1;; esac; [ \"$VERCEL_GIT_COMMIT_REF\" = main ] && exit 0 || exit 1",
+  "ignoreCommand": "exit 0",
   "regions": ["hnd1"],
-  "crons": [
-    {
-      "path": "/api/cron/flash-news-fetch",
-      "schedule": "*/30 * * * *"
-    },
-    {
-      "path": "/api/cron/smoke-test",
-      "schedule": "*/30 * * * *"
-    },
-    {
-      "path": "/api/cron/worker-heartbeat-check",
-      "schedule": "*/15 * * * *"
-    },
-    {
-      "path": "/api/cron/weekly-metrics",
-      "schedule": "0 9 * * 5"
-    },
-    {
-      "path": "/api/cron/daily-digest",
-      "schedule": "2 0 * * *"
-    },
-    {
-      "path": "/api/cron/check-data-freshness",
-      "schedule": "39 1,4,7,10,13,16,19,22 * * *"
-    },
-    {
-      "path": "/api/cron/meta-monitor",
-      "schedule": "23 */6 * * *"
-    },
-    {
-      "path": "/api/cron/batch-5min",
-      "schedule": "3,18,33,48 * * * *"
-    },
-    {
-      "path": "/api/cron/warm-cache",
-      "schedule": "4,34 * * * *"
-    },
-    {
-      "path": "/api/cron/pipeline-evaluate",
-      "schedule": "47 6 * * *"
-    },
-    {
-      "path": "/api/cron/cleanup-deleted-accounts",
-      "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/cron/cleanup-report-evidence",
-      "schedule": "*/15 * * * *"
-    },
-    {
-      "path": "/api/cron/recount-follow-counts",
-      "schedule": "15 */6 * * *"
-    },
-    {
-      "path": "/api/cron/cleanup-stuck-logs",
-      "schedule": "27 */6 * * *"
-    },
-    {
-      "path": "/api/cron/batch-discover",
-      "schedule": "56 */6 * * *"
-    },
-    {
-      "path": "/api/cron/subscription-expiry",
-      "schedule": "9 0 * * 1"
-    },
-    {
-      "path": "/api/cron/reconcile-subscriptions",
-      "schedule": "15 3 * * *"
-    },
-    {
-      "path": "/api/cron/stripe-readiness",
-      "schedule": "45 7 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-market-data?type=prices",
-      "schedule": "14 */4 * * *"
-    },
-    {
-      "path": "/api/cron/aggregate-daily-snapshots",
-      "schedule": "5 0 * * *"
-    },
-    {
-      "path": "/api/cron/aggregate-daily-snapshots?days_back=3",
-      "schedule": "30 2 * * *"
-    },
-    {
-      "path": "/api/cron/aggregate-portfolio-snapshots",
-      "schedule": "45 0 * * *"
-    },
-    {
-      "path": "/api/cron/qualify-referrals",
-      "schedule": "0 */6 * * *"
-    },
-    {
-      "path": "/api/cron/broadcast-trader-events",
-      "schedule": "30 4 * * *"
-    },
-    {
-      "path": "/api/cron/compute-derived-metrics",
-      "schedule": "20 0 * * *"
-    },
-    {
-      "path": "/api/cron/cleanup-data",
-      "schedule": "6 1 * * *"
-    },
-    {
-      "path": "/api/cron/snapshot-ranks",
-      "schedule": "15 0 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-funding-rates",
-      "schedule": "56 */8 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-open-interest",
-      "schedule": "16 */6 * * *"
-    },
-    {
-      "path": "/api/cron/check-trader-alerts",
-      "schedule": "*/30 * * * *"
-    },
-    {
-      "path": "/api/cron/data-reconciliation",
-      "schedule": "0 4 * * *"
-    },
-    {
-      "path": "/api/cron/retry-dead-letters",
-      "schedule": "0 5 * * *"
-    },
-    {
-      "path": "/api/cron/weekly-report",
-      "schedule": "0 8 * * 1"
-    },
-    {
-      "path": "/api/cron/weekly-digest",
-      "schedule": "0 9 * * 1"
-    },
-    {
-      "path": "/api/cron/precompute-composite",
-      "schedule": "27 */2 * * *"
-    },
-    {
-      "path": "/api/cron/backfill-avatars?platform=drift,toobit,bitfinex,etoro,gains&limit=400",
-      "schedule": "35 2 * * *"
-    },
-    {
-      "path": "/api/cron/detect-contracts?limit=500",
-      "schedule": "10 */6 * * *"
-    },
-    {
-      "path": "/api/cron/health-check-all",
-      "schedule": "25 */6 * * *"
-    },
-    {
-      "path": "/api/cron/cleanup-violations",
-      "schedule": "57 */6 * * *"
-    },
-    {
-      "path": "/api/cron/scan-data-quality",
-      "schedule": "0 6 * * *"
-    },
-    {
-      "path": "/api/cron/expire-mutes",
-      "schedule": "15 */6 * * *"
-    },
-    {
-      "path": "/api/cron/sync-ranking-store",
-      "schedule": "12,27,42,57 * * * *"
-    },
-    {
-      "path": "/api/cron/score-backtest",
-      "schedule": "37 3 * * 1"
-    },
-    {
-      "path": "/api/cron/compute-leaderboard-watchdog",
-      "schedule": "21,51 * * * *"
-    }
-  ],
   "headers": [
     {
       "source": "/api/rankings",
@@ -209,20 +31,19 @@
       ]
     },
     {
-      "source": "/",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "s-maxage=120, stale-while-revalidate=600"
-        }
-      ]
-    },
-    {
       "source": "/api/notifications/:path*",
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "private, no-store"
+          "value": "private, no-store, max-age=0, must-revalidate"
+        },
+        {
+          "key": "CDN-Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "Vercel-CDN-Cache-Control",
+          "value": "no-store"
         }
       ]
     },
@@ -339,7 +160,15 @@
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "private, no-store"
+          "value": "private, no-store, max-age=0, must-revalidate"
+        },
+        {
+          "key": "CDN-Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "Vercel-CDN-Cache-Control",
+          "value": "no-store"
         }
       ]
     },
@@ -367,15 +196,6 @@
         {
           "key": "Cache-Control",
           "value": "private, no-store, max-age=0, must-revalidate"
-        }
-      ]
-    },
-    {
-      "source": "/api/rankings/movers",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, s-maxage=60, stale-while-revalidate=300"
         }
       ]
     },
@@ -411,7 +231,15 @@
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "private, no-store"
+          "value": "private, no-store, max-age=0, must-revalidate"
+        },
+        {
+          "key": "CDN-Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "Vercel-CDN-Cache-Control",
+          "value": "no-store"
         }
       ]
     },
@@ -457,6 +285,6 @@
     }
   ],
   "git": {
-    "deploymentEnabled": true
+    "deploymentEnabled": false
   }
 }

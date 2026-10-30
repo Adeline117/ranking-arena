@@ -337,6 +337,19 @@ export async function getRecordsPage(
   cursor: string | null,
   limit = 50
 ): Promise<RecordsPage | null> {
+  // The legacy RPC projects position-history rows that are not bound to the
+  // parser-conservation receipt contract. Fail closed before parsing cursors
+  // or touching PostgREST so a stale caller cannot read the legacy archive.
+  if (kind === 'position_history') {
+    return {
+      rows: [],
+      nextCursor: null,
+      provenance: recordProvenance(source, {}),
+      cacheState: 'warm',
+      completeness: unknownHistoryCompleteness(),
+    }
+  }
+
   const { data, error } = await supabase.rpc('arena_records_page', {
     p_source: source,
     p_trader: exchangeTraderId,
@@ -348,16 +361,12 @@ export async function getRecordsPage(
   logRpcError('arena_records_page', error)
   if (error || !isPlainRecord(data)) return null
   const d = data
-  // `arena_records_page` still projects legacy typed position-history rows.
-  // Those rows are not bound to the parser-conservation receipt contract, so
-  // neither their contents nor their pagination boundary can be served as warm
-  // truth. Keep the observation clocks for cold-cache routing, but fail closed
-  // until the RPC is replaced by a receipt-bound projection.
-  const mayServeRows = kind !== 'position_history'
+  // `position_history` returned above before PostgREST. Remaining kinds retain
+  // latest-main kind-aware sanitation and completeness behavior.
   const isHistory = isAppendOnlyHistory(kind)
   return {
-    rows: mayServeRows ? sanitizeRecordRows(kind, d.rows) : [],
-    nextCursor: mayServeRows && typeof d.nextCursor === 'string' ? d.nextCursor : null,
+    rows: sanitizeRecordRows(kind, d.rows),
+    nextCursor: typeof d.nextCursor === 'string' ? d.nextCursor : null,
     provenance: recordProvenance(source, d),
     cacheState: 'warm',
     ...(isHistory ? { completeness: unknownHistoryCompleteness() } : {}),

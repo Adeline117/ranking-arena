@@ -10,7 +10,7 @@ import {
   getTraderAvatarSrc,
   isDirectAvatarSrc,
 } from '../avatar'
-import { avatarSrc } from '../avatar-proxy'
+import { avatarSrc, V1_AVATAR_PROXY_FALLBACK_SRC } from '../avatar-proxy'
 import { canonicalizeLocalExchangeLogoPath } from '../exchange-logo-path'
 
 describe('legacy exchange logo paths', () => {
@@ -58,7 +58,7 @@ describe('legacy exchange logo paths', () => {
   })
 })
 
-describe('getTraderAvatarSrc (spec §1.4 avatar chain)', () => {
+describe('getTraderAvatarSrc (V1 direct-safe avatar chain)', () => {
   const mirror =
     'https://iknktzifjdyujdccyhsv.supabase.co/storage/v1/object/public/trader-avatars/bitget_futures/abc.webp'
   const origin = 'https://qrc.bgstatic.com/otc/images/a.png'
@@ -67,16 +67,12 @@ describe('getTraderAvatarSrc (spec §1.4 avatar chain)', () => {
     expect(getTraderAvatarSrc({ avatarMirrorUrl: mirror, avatarOriginUrl: origin })).toBe(mirror)
   })
 
-  it('proxies the origin URL when no mirror exists', () => {
-    expect(getTraderAvatarSrc({ avatarMirrorUrl: null, avatarOriginUrl: origin })).toBe(
-      `/api/avatar?url=${encodeURIComponent(origin)}`
-    )
+  it('withholds an origin URL that formerly required remote acquisition', () => {
+    expect(getTraderAvatarSrc({ avatarMirrorUrl: null, avatarOriginUrl: origin })).toBeNull()
   })
 
   it('treats blank strings as missing', () => {
-    expect(getTraderAvatarSrc({ avatarMirrorUrl: '  ', avatarOriginUrl: origin })).toBe(
-      `/api/avatar?url=${encodeURIComponent(origin)}`
-    )
+    expect(getTraderAvatarSrc({ avatarMirrorUrl: '  ', avatarOriginUrl: origin })).toBeNull()
   })
 
   it('passes data URIs and local paths through unproxied', () => {
@@ -85,6 +81,10 @@ describe('getTraderAvatarSrc (spec §1.4 avatar chain)', () => {
     expect(
       getTraderAvatarSrc({ avatarMirrorUrl: null, avatarOriginUrl: '/icons/exchanges/bitget.png' })
     ).toBe('/icons/exchanges/bitget.png')
+    expect(
+      getTraderAvatarSrc({ avatarMirrorUrl: null, avatarOriginUrl: '/uploads/avatar.png' })
+    ).toBe('/uploads/avatar.png')
+    expect(getTraderAvatarUrl('/uploads/avatar.png')).toBe('/uploads/avatar.png')
   })
 
   it('returns null when both are missing (caller renders gradient initial)', () => {
@@ -93,13 +93,31 @@ describe('getTraderAvatarSrc (spec §1.4 avatar chain)', () => {
       getTraderAvatarSrc({ avatarMirrorUrl: undefined, avatarOriginUrl: undefined })
     ).toBeNull()
   })
+
+  it('preserves a direct-safe origin URL without synthesizing a route URL', () => {
+    const direct = 'https://i.pravatar.cc/150?img=3'
+    expect(getTraderAvatarSrc({ avatarMirrorUrl: null, avatarOriginUrl: direct })).toBe(direct)
+  })
+
+  it.each(['/api/avatar?url=https%3A%2F%2Fexample.com%2Fa.png', '/api/v1/avatar?url=x'])(
+    'rejects persisted retired proxy value %s',
+    (legacy) => {
+      expect(getTraderAvatarSrc({ avatarMirrorUrl: legacy, avatarOriginUrl: origin })).toBeNull()
+      expect(getTraderAvatarSrc({ avatarMirrorUrl: null, avatarOriginUrl: legacy })).toBeNull()
+      expect(getTraderAvatarUrl(legacy)).toBeNull()
+    }
+  )
 })
 
 describe('isDirectAvatarSrc', () => {
-  it('accepts data URIs and rooted local paths (incl. pre-proxied)', () => {
+  it('accepts data URIs and local static paths', () => {
     expect(isDirectAvatarSrc('data:image/svg+xml,abc')).toBe(true)
-    expect(isDirectAvatarSrc('/api/avatar?url=x')).toBe(true)
     expect(isDirectAvatarSrc('/icons/exchanges/bitget.png')).toBe(true)
+  })
+
+  it('rejects persisted legacy proxy routes', () => {
+    expect(isDirectAvatarSrc('/api/avatar?url=x')).toBe(false)
+    expect(isDirectAvatarSrc('/api/v1/avatar?url=x')).toBe(false)
   })
 
   it('rejects exchange CDN URLs (must be proxied)', () => {
@@ -109,6 +127,28 @@ describe('isDirectAvatarSrc', () => {
   it('rejects junk', () => {
     expect(isDirectAvatarSrc('not a url')).toBe(false)
   })
+})
+
+describe('avatarSrc V1 proxy containment', () => {
+  it('keeps direct and local image sources intact', () => {
+    expect(avatarSrc('/icons/exchanges/bitget.png')).toBe('/icons/exchanges/bitget.png')
+    expect(avatarSrc('data:image/svg+xml,abc')).toBe('data:image/svg+xml,abc')
+    expect(avatarSrc('https://i.pravatar.cc/150?img=3')).toBe('https://i.pravatar.cc/150?img=3')
+  })
+
+  it('uses a fixed inline fallback for values that formerly generated proxy URLs', () => {
+    expect(avatarSrc('https://qrc.bgstatic.com/otc/images/a.png')).toBe(
+      V1_AVATAR_PROXY_FALLBACK_SRC
+    )
+    expect(avatarSrc('https://unknown.example/avatar.png')).toBe(V1_AVATAR_PROXY_FALLBACK_SRC)
+  })
+
+  it.each(['/api/avatar?url=x', '/api/v1/avatar?url=x'])(
+    'normalizes persisted retired proxy src %s to the fixed fallback',
+    (legacy) => {
+      expect(avatarSrc(legacy)).toBe(V1_AVATAR_PROXY_FALLBACK_SRC)
+    }
+  )
 })
 
 describe('getAvatarColor', () => {

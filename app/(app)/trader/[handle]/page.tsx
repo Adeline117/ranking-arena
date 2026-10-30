@@ -287,19 +287,17 @@ async function getCurrentPublicLeaderboardMeta(platform: string, traderKey: stri
     : null
 }
 
-// Cached user handle lookup for one exact claimed exchange account. Raw trader
-// IDs and handles collide across sources, so this function must never start
-// from the URL handle or pick the first matching trader_sources row.
-const cachedFindUserHandleByTrader = unstable_cache(
+// Request-deduplicated but never persistently cached: claimed ownership is an
+// authorization/privacy projection. Unlink must remove owner routing on the
+// next request instead of waiting for an ISR cache entry to expire.
+const findUserHandleByTraderFresh = cache(
   async (source: string, traderId: string): Promise<string | null> => {
     try {
       return await findClaimedUserHandleByIdentity(getReadReplica(), { source, traderId })
     } catch {
       return null
     }
-  },
-  ['trader-user-handle-by-source-and-id-v2'],
-  { revalidate: 300, tags: ['trader-profile'] }
+  }
 )
 
 /**
@@ -555,11 +553,29 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
   }
 
   if (servingResolved) {
-    const [firstScreenRaw, capabilities, userHandle] = await Promise.all([
-      getCurrentPublicFirstScreen(servingResolved.source, servingResolved.exchangeTraderId),
-      cachedCapabilities(),
-      cachedFindUserHandleByTrader(servingResolved.source, servingResolved.exchangeTraderId),
-    ])
+    // Everything here depends only on the resolved identity, so it runs in
+    // one parallel batch. Per-TF sub-scores (ScoreBreakdown/header) are
+    // best-effort with a 2s cap so they can never extend the batch beyond it.
+    const [firstScreenRaw, capabilities, userHandle, verifiedKeys, servingScores] =
+      await Promise.all([
+        getCurrentPublicFirstScreen(servingResolved.source, servingResolved.exchangeTraderId),
+        cachedCapabilities(),
+        findUserHandleByTraderFresh(servingResolved.source, servingResolved.exchangeTraderId),
+        getVerifiedTraderKeys(getReadReplica()),
+        Promise.race([
+          getCurrentPublicServingScores(
+            servingResolved.source,
+            servingResolved.exchangeTraderId
+          ).catch((e) => {
+            logger.warn('[trader/page] getCurrentPublicServingScores failed', {
+              source: servingResolved.source,
+              error: String(e),
+            })
+            return []
+          }),
+          new Promise<never[]>((resolve) => setTimeout(() => resolve([]), 2_000)),
+        ]),
+      ])
 
     // ROOT-CAUSE FIX (2026-06-11): a serving-only trader (exists only in arena.*,
     // not in legacy trader_sources/leaderboard_ranks) MUST NEVER fall through to
@@ -569,8 +585,9 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     // servingFirstScreen={null} on first-screen timeout, which flipped the client
     // back into legacy mode. Instead, synthesize a minimal first-screen from the
     // already-resolved identity so the client stays in serving mode and lets
-    // ServingProfilePanel fetch /core on its own (with its own skeletons + Tier-C
-    // background fetch). entries=[] is a valid empty board, not a missing trader.
+    // ServingProfilePanel render its body on its own (the public /core projection
+    // is quarantined, so the panel builds it locally with no request and shows the
+    // under-verification state). entries=[] is a valid empty board, not a missing trader.
     const firstScreen: TraderFirstScreen = firstScreenRaw ?? {
       source: servingResolved.source,
       exchangeTraderId: servingResolved.exchangeTraderId,
@@ -597,7 +614,6 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
       best?.headlineWinRate ??
       (typeof best?.extras.win_rate === 'number' ? (best.extras.win_rate as number) : null)
 
-    const verifiedKeys = await getVerifiedTraderKeys(getReadReplica())
     const servingTraderData: UnregisteredTraderData = {
       handle: firstScreen.nickname ?? servingResolved.nickname ?? decodedHandle,
       // Spec §1.4 avatar chain: mirror direct → proxied origin → null
@@ -624,22 +640,13 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     // (useServingTabData → /core) never carried similarTraders, so OverviewTab's
     // `traderSimilar.length > 0` guard permanently hid the module for serving
     // sources (the default). Legacy path fed it via bridge.ts; serving didn't.
-    // Fix: compute it once here server-side (fetchSimilarTraders is Redis-cached,
-    // 15min warm) using the 90d board score/roi, map to the OverviewTab shape
-    // (same shape as bridge.ts:203), and thread it down as serverSimilarTraders.
-    // Per-TF sub-scores + style for ScoreBreakdown/header (best-effort, 2s cap).
-    const servingScores = await Promise.race([
-      getCurrentPublicServingScores(servingResolved.source, servingResolved.exchangeTraderId).catch(
-        (e) => {
-          logger.warn('[trader/page] getCurrentPublicServingScores failed', {
-            source: servingResolved.source,
-            error: String(e),
-          })
-          return []
-        }
-      ),
-      new Promise<never[]>((resolve) => setTimeout(() => resolve([]), 2_000)),
-    ])
+    // Fix: compute it once here server-side using the 90d board score/roi, map
+    // to the OverviewTab shape (same shape as bridge.ts:203), and thread it down
+    // as serverSimilarTraders. NOT cached: fetchSimilarTraders queries the
+    // sealed public cohort on every render (a cached slice could outlive its
+    // serving proof); the query carries its own 2s abort so it stays
+    // best-effort. It depends on the first-screen board entry, so it runs
+    // after the parallel batch above.
 
     const similarScoreExtra = best?.extras.arena_score
     const similarArenaScore = typeof similarScoreExtra === 'number' ? similarScoreExtra : null
@@ -687,7 +694,8 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
 
     // servingFirstScreen is now ALWAYS non-null for serving sources (synthesized
     // above on timeout), so the client stays in serving mode and never falls back
-    // to the legacy 404 path. ServingProfilePanel fetches /core for the body.
+    // to the legacy 404 path. ServingProfilePanel renders the body from the static
+    // quarantined core projection (no /core request) plus on-demand record tabs.
     return (
       <>
         <JsonLd data={servingJsonLd} />
@@ -741,7 +749,7 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
       )
       return null
     }),
-    cachedFindUserHandleByTrader(resolved.platform, resolved.traderKey),
+    findUserHandleByTraderFresh(resolved.platform, resolved.traderKey),
   ])
 
   const serverTraderData = detailResult

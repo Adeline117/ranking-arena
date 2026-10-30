@@ -2,12 +2,11 @@
  * 付费增值功能类型定义
  * 包含订阅计划、功能权限和 API 配额
  *
- * 核心付费价值：风险预警 + 数据透明
+ * 核心付费价值：深度分析 + 数据透明
  *
  * 简化为双层会员体系：Free + Pro
  *
- * v2.0 精简版：从 13 个功能精简为 5 个核心功能
- * - trader_alerts: 交易员变动提醒 (核心)
+ * v2.0 精简版：核心功能包括
  * - trader_comparison: 交易员对比 (核心)
  * - score_breakdown: 评分详情 + 百分位 (核心)
  * - historical_data: 历史数据 90天→1年 (扩展)
@@ -20,7 +19,7 @@
  * - portfolio_suggestions → 下线（合规风险）
  * - custom_rankings → 合并到 advanced_filter
  * - export_data → 无限制
- * - email/push_notifications → 合并到 trader_alerts
+ * - trader_alerts / advanced_alerts / email/push_notifications → V1 未发布
  */
 
 // ============================================
@@ -34,7 +33,7 @@
 /**
  * PRO_FREE_PROMO — 限时促销：Pro 功能全员免费。
  *
- * This is the limited-time promotion flag. When `true`, every Pro feature is
+ * This is the limited-time promotion flag. When `true`, every published Pro feature is
  * unlocked for everyone, on BOTH client and server:
  *   - server: `hasFeatureAccess()` / `getFeatureLimits()` below short-circuit to
  *     Pro access + Pro/unlimited limits, so all ~20 Pro API routes stop 403'ing.
@@ -101,7 +100,7 @@ export type PremiumFeatureId =
   | 'export_data' // 数据导出
   | 'historical_data' // 历史数据访问
   | 'category_ranking' // 分类排行
-  | 'trader_alerts' // 交易员变动提醒
+  | 'trader_alerts' // legacy ID; unpublished during V1 verification
   | 'score_breakdown' // 评分详情
   | 'pro_badge' // Pro 徽章
   | 'advanced_filter' // 高级筛选
@@ -109,7 +108,7 @@ export type PremiumFeatureId =
   | 'detailed_explanation' // 详细解释层（贡献拆解、变化归因、风险分解）
   | 'cross_exchange_compare' // 跨交易所对比
   | 'extended_snapshot_history' // 扩展快照历史
-  | 'advanced_alerts' // 高级告警条件
+  | 'advanced_alerts' // legacy ID; unpublished during V1 verification
 
 export interface PremiumFeature {
   id: PremiumFeatureId
@@ -140,7 +139,7 @@ export interface FeatureLimits {
 }
 
 // ============================================
-// 预定义计划（以风险预警为核心卖点）
+// 预定义计划
 // ============================================
 
 export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
@@ -173,7 +172,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
     id: 'pro',
     name: 'Pro',
-    description: '不再错过异动，保护你的跟单收益', // v2.0: 强调核心价值
+    description: '获取更深入的分析和交易员对比工具',
     price: { monthly: 4.99, yearly: 29.99, currency: 'USD' },
     features: [],
     limits: {
@@ -189,7 +188,6 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     badge: '推荐',
     recommended: true,
     highlights: [
-      '交易员变动提醒（核心）', // v2.0: 突出核心
       '交易员对比（无限制）',
       '评分详情 + 同类百分位',
       '1 年历史数据', // v2.0: 从 90 天扩展
@@ -204,19 +202,18 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
 // ============================================
 
 export const PREMIUM_FEATURES: PremiumFeature[] = [
-  // ========== 核心 Pro 功能（5个）==========
+  // ========== 核心 Pro 功能 ==========
 
-  // 1. 交易员变动提醒 - 最核心卖点
+  // V1 未发布；保留 ID 以兼容现有调用方，但不授予任何 tier 访问权限。
   {
     id: 'trader_alerts',
     name: '交易员变动提醒',
-    description: '关注的交易员排名、回撤大幅变动时自动通知（站内+邮件+推送）',
+    description: 'V1 验证期间暂不可用',
     icon: '',
-    tier: ['pro'],
-    isCore: true,
+    tier: [],
   },
 
-  // 2. 交易员对比
+  // 交易员对比
   {
     id: 'trader_comparison',
     name: '交易员对比',
@@ -226,7 +223,7 @@ export const PREMIUM_FEATURES: PremiumFeature[] = [
     isCore: true,
   },
 
-  // 3. 评分详情 + 百分位（Pro 可见百分位，免费可见子分数）
+  // 评分详情 + 百分位（Pro 可见百分位，免费可见子分数）
   {
     id: 'score_breakdown',
     name: '评分详情',
@@ -236,7 +233,7 @@ export const PREMIUM_FEATURES: PremiumFeature[] = [
     isCore: true,
   },
 
-  // 4. 历史数据（扩展到 1 年）
+  // 历史数据（扩展到 1 年）
   {
     id: 'historical_data',
     name: '历史数据',
@@ -245,7 +242,7 @@ export const PREMIUM_FEATURES: PremiumFeature[] = [
     tier: ['pro'],
   },
 
-  // 5. API 接口
+  // API 接口
   {
     id: 'api_access',
     name: 'API 接口',
@@ -324,34 +321,34 @@ export const PREMIUM_FEATURES: PremiumFeature[] = [
     icon: '',
     tier: ['pro'],
   },
+  // V1 未发布；与 trader_alerts 使用同一类提醒概念。
   {
     id: 'advanced_alerts',
     name: '高级告警条件',
-    description: '自定义阈值、多条件组合、更多告警渠道',
+    description: 'V1 验证期间暂不可用',
     icon: '',
-    tier: ['pro'],
-    isCore: true,
+    tier: [],
   },
 
   // ========== 已下线/合并的功能 ==========
 
-  // 邮件通知 - 合并到 trader_alerts
+  // 交易员提醒邮件通知 - V1 未发布
   {
     id: 'email_notifications',
     name: '邮件通知',
-    description: '已合并到交易员变动提醒功能',
+    description: 'V1 验证期间暂不可用',
     icon: '',
-    tier: ['pro'],
+    tier: [],
     isCore: false,
   },
 
-  // 推送通知 - 合并到 trader_alerts
+  // 交易员提醒推送 - V1 未发布
   {
     id: 'push_notifications',
     name: '即时推送',
-    description: '已合并到交易员变动提醒功能',
+    description: 'V1 验证期间暂不可用',
     icon: '',
-    tier: ['pro'],
+    tier: [],
     isCore: false,
   },
 
@@ -378,10 +375,9 @@ export const PREMIUM_FEATURES: PremiumFeature[] = [
 // v2.0 核心功能快捷访问
 // ============================================
 
-/** 获取 v2.0 核心 Pro 功能（5个） */
+/** 获取 v2.0 核心 Pro 功能 */
 export function getCorePremiumFeatures(): PremiumFeature[] {
   const coreIds: PremiumFeatureId[] = [
-    'trader_alerts',
     'trader_comparison',
     'score_breakdown',
     'historical_data',
@@ -404,6 +400,16 @@ export function isFeatureDeprecated(featureId: PremiumFeatureId): boolean {
  * 检查用户是否有某个功能的权限
  */
 export function hasFeatureAccess(userTier: SubscriptionTier, featureId: PremiumFeatureId): boolean {
+  // Trader alert delivery is intentionally unpublished in V1, even while the
+  // broader Pro promotion is enabled.
+  if (
+    featureId === 'trader_alerts' ||
+    featureId === 'advanced_alerts' ||
+    featureId === 'email_notifications' ||
+    featureId === 'push_notifications'
+  ) {
+    return false
+  }
   // 限时促销：全员解锁所有 Pro 功能。这是所有 Pro 服务端路由的统一闸门 ——
   // 设 PRO_FREE_PROMO=false 立即在每条路由上恢复付费墙（无需逐路由改动）。
   if (PRO_FREE_PROMO) return true

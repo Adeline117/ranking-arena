@@ -11,7 +11,6 @@ import { NextRequest } from 'next/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { logger } from '@/lib/logger'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { withCron } from '@/lib/api/with-cron'
 import { findStuckCronJobs } from '@/lib/cron/meta-monitor-policy'
 
@@ -26,31 +25,18 @@ const EXPECTED_INTERVALS: Record<string, number> = {
   'batch-fetch-traders': 360, // groups run every 3-6h
   'batch-enrich': 480,
   'fetch-details': 60,
-  'aggregate-daily-snapshots': 1440, // daily
-  'compute-derived-metrics': 1440,
   'precompute-composite': 240,
   'backfill-data': 240,
 
   // Discovery & enrichment
-  'batch-discover': 720,
   'generate-profiles': 720,
-  'backfill-avatars': 1440,
   'link-entities': 1440,
-  'batch-5min': 10,
 
   // Market data
-  'fetch-market-data': 120,
-  'fetch-funding-rates': 480,
-  'fetch-open-interest': 240,
   'flash-news-fetch': 60,
 
   // Monitoring & health
   'verify-fetchers': 360,
-  'check-data-freshness': 180,
-  // Scheduled every 30 minutes; allow one missed run before paging.
-  'check-trader-alerts': 60,
-  'cleanup-stuck-logs': 120,
-  'cleanup-data': 1440,
   'cleanup-deleted-accounts': 1440,
 
   // Snapshots & ranks
@@ -103,44 +89,8 @@ export const GET = withCron('meta-monitor', async (_request: NextRequest) => {
     )
   }
 
-  // Check if historical data cleanup is complete
-  let cleanupComplete = false
-  try {
-    const supabase = getSupabaseAdmin()
-    const { data: cleanupStatus } = await supabase
-      .from('pipeline_logs')
-      .select('metadata')
-      .eq('job_name', 'cleanup-violations')
-      .order('started_at', { ascending: false })
-      .limit(1)
-      .single()
-    if (cleanupStatus?.metadata && typeof cleanupStatus.metadata === 'object') {
-      const meta = cleanupStatus.metadata as Record<string, unknown>
-      if (meta.done === true || meta.fixed === 0) {
-        cleanupComplete = true
-        await sendRateLimitedAlert(
-          {
-            title: '历史数据清理完成!',
-            message:
-              '所有历史违规数据已清理完毕。请运行:\nbash scripts/post-cleanup-orchestrate.sh\n\n此脚本将: VALIDATE 约束 → 重算指标 → 重算 composite',
-            level: 'info',
-            details: { action: 'run post-cleanup-orchestrate.sh' },
-          },
-          'cleanup-complete',
-          24 * 60 * 60 * 1000
-        )
-      }
-    }
-  } catch (err) {
-    // Best-effort check — but never silent. If this query breaks, the
-    // cleanup-complete notification would stop firing with zero warning.
-    logger.warn('[meta-monitor] cleanup-complete status check failed', {
-      error: err instanceof Error ? err.message : String(err),
-    })
-  }
-
   logger.info(
-    `[meta-monitor] Checked ${Object.keys(EXPECTED_INTERVALS).length} jobs, ${stuckJobs.length} stuck, cleanup=${cleanupComplete ? 'done' : 'running'}`
+    `[meta-monitor] Checked ${Object.keys(EXPECTED_INTERVALS).length} jobs, ${stuckJobs.length} stuck`
   )
 
   return {
@@ -148,6 +98,5 @@ export const GET = withCron('meta-monitor', async (_request: NextRequest) => {
     monitored: Object.keys(EXPECTED_INTERVALS).length,
     stuck: stuckJobs.length,
     stuckJobs,
-    cleanupComplete,
   }
 })

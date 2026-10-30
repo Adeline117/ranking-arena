@@ -9,7 +9,9 @@ import { useToast } from '@/app/components/ui/Toast'
 import EmptyState from '@/app/components/ui/EmptyState'
 import ErrorMessage from '@/app/components/ui/ErrorMessage'
 import { authedFetch } from '@/lib/api/client'
+import { trackEvent } from '@/lib/analytics/track'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { TRADER_ALERTS_PUBLISHED } from '@/lib/alerts/trader-alert-publication'
 import {
   captureSettingsViewer,
   isSettingsViewerCurrent,
@@ -158,12 +160,23 @@ function isDeleteAcknowledged(payload: AlertMutationPayload | null): boolean {
 export default function AlertConfig(props: AlertConfigProps) {
   const auth = useAuthSession()
   const { t } = useLanguage()
+  const localResourceScopeRef = useRef('')
+
+  if (!TRADER_ALERTS_PUBLISHED) {
+    return (
+      <EmptyState
+        variant="card"
+        title={t('traderAlertsUnavailableTitle')}
+        description={t('traderAlertsUnavailableDesc')}
+      />
+    )
+  }
+
   const viewer = captureSettingsViewer(auth)
   const exactViewer = viewer && viewer.userId === props.userId ? viewer : null
   const scopeKey = exactViewer
     ? alertConfigScopeKey(exactViewer, props.traderId, props.source)
     : `invalid:${auth.viewerKey}\u0000${auth.sessionGeneration}\u0000${props.traderId}\u0000${props.source ?? ''}`
-  const localResourceScopeRef = useRef(scopeKey)
   localResourceScopeRef.current = scopeKey
   const resourceScopeRef = props.resourceScopeRef ?? localResourceScopeRef
 
@@ -419,6 +432,13 @@ function ViewerScopedAlertConfig({
       }
       const savedAlertId = savedAlert.id
       setAlert((current) => ({ ...current, id: savedAlertId }))
+      if (alertSnapshot.id === undefined) {
+        trackEvent('create_trader_alert', {
+          traderId,
+          source: source || '',
+          step: 'persisted',
+        })
+      }
       showToastRef.current(tRef.current('alertEnabled'), 'success')
     } catch (error) {
       if (!operationIsCurrent(operation, saveOperationRef)) return

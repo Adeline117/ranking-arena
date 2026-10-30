@@ -411,7 +411,7 @@ export default function NotFoundContent({ inAppShell = false }: { inAppShell?: b
             </Link>
 
             <Link
-              href="/rankings"
+              href="/"
               className="action-button secondary"
               style={{
                 padding: '14px 28px',

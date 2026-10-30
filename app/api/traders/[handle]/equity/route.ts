@@ -1,52 +1,35 @@
 /**
- * Legacy equity-series endpoint.
+ * Quarantined trader equity/PnL/drawdown series.
  *
- * `trader_daily_snapshots` is retained for internal aggregation only. Its
- * ROI/PnL rows cannot establish trusted prices or cost basis for public chart
- * values, so this transport stays structurally empty until a publication
- * authority replaces it.
+ * Legacy daily rows do not carry season, generation, cohort, or publication
+ * proof. Derived charts stay empty until an atomic authoritative publisher is
+ * available.
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { checkRateLimit, RateLimitPresets } from '@/lib/api'
-import {
-  LEGACY_METRIC_NO_STORE_HEADERS,
-  LEGACY_METRIC_PUBLICATION_UNAVAILABLE,
-} from '@/lib/data/trader/history-quarantine'
+import { NextResponse } from 'next/server'
+
+const NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+}
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ handle: string }> }
-) {
-  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
-  if (rateLimitResponse) {
-    for (const [name, value] of Object.entries(LEGACY_METRIC_NO_STORE_HEADERS)) {
-      rateLimitResponse.headers.set(name, value)
-    }
-    return rateLimitResponse
-  }
-
-  // Keep the handle syntax contract, but do not resolve it: an identity lookup
-  // followed by an empty result must not imply that legacy raw metrics exist.
-  const { handle } = await params
-  if (!handle || handle.length > 255) {
-    return NextResponse.json(
-      { error: 'Invalid handle' },
-      { status: 400, headers: LEGACY_METRIC_NO_STORE_HEADERS }
-    )
-  }
-
+export function GET() {
   return NextResponse.json(
     {
+      contract: 'arena.daily-history-publication@1',
+      available: false,
+      code: 'DAILY_SERIES_NOT_PUBLISHED',
+      reason: 'snapshot_provenance_unverified',
+      publication: null,
+      sourceAsOf: null,
       equity: [],
       pnl: [],
       drawdown: [],
-      publication: LEGACY_METRIC_PUBLICATION_UNAVAILABLE,
-      cacheState: 'quarantined',
     },
-    { headers: LEGACY_METRIC_NO_STORE_HEADERS }
+    { status: 200, headers: NO_STORE_HEADERS }
   )
 }

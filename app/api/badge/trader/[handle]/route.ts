@@ -125,7 +125,10 @@ async function fetchRank(handle: string) {
     typeof source.handle === 'string' && source.handle.trim().length > 0 ? source.handle : decoded
   const srcName = typeof source.source === 'string' ? source.source : ''
   const srcTraderId = typeof source.source_trader_id === 'string' ? source.source_trader_id : ''
-  if (!isPublicRankingSourceAllowed(srcName) || !srcTraderId) {
+  if (!isPublicRankingSourceAllowed(srcName)) {
+    return { handle: identityHandle, rank: null, score: null, verified: false }
+  }
+  if (!srcTraderId) {
     return { handle: identityHandle, rank: null, score: null, verified: false }
   }
 
@@ -148,18 +151,15 @@ async function fetchRank(handle: string) {
     return { handle: identityHandle, rank: null, score: null, verified: false }
   }
 
-  // A1 data-authenticity: an ACTIVE trader_authorizations row = read-only API
-  // key connected → numbers are API-verified, not scraped. Mirrors
-  // lib/data/verified-traders.ts. Fail-open (null → Tracked).
-  const authRow = await restSelectOne(
-    'trader_authorizations',
-    `select=trader_id&status=eq.active&platform=eq.${enc(srcName)}&trader_id=eq.${enc(srcTraderId)}`
-  )
+  // V1 CEX connections are private and never mint a public data badge. Legacy
+  // authorization-derived rows remain quarantined during the 48-hour drain and
+  // are deliberately ignored here.
+  const verified = false
   return {
     handle: identityHandle,
     rank: published.rank,
     score: published.score,
-    verified: authRow != null,
+    verified,
   }
 }
 

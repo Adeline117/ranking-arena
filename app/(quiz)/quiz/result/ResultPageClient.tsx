@@ -290,7 +290,7 @@ export default function ResultPageClient({
         {/* 9. Bottom CTAs — stack vertically so text never wraps */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Link
-            href="/rankings"
+            href="/"
             className="quiz-cta-primary"
             style={{ background: pType.gradient, width: '100%' }}
           >

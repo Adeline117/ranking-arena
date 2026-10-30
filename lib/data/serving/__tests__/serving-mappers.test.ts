@@ -111,10 +111,8 @@ describe('getPublicFirstScreen', () => {
     )
     expect(fs).not.toBeNull()
     expect(fs!.nickname).toBe('AI-HUB')
-    // Spec §1.4: no mirror → origin goes through the /api/avatar proxy
-    expect(fs!.avatarSrc).toBe(
-      `/api/avatar?url=${encodeURIComponent('https://qrc.bgstatic.com/otc/images/a.png')}`
-    )
+    // No mirror and a proxy-required origin → client renders its local fallback.
+    expect(fs!.avatarSrc).toBeNull()
     expect(fs!.entries).toHaveLength(1)
     expect(fs!.entries[0]).toMatchObject({
       rank: null,

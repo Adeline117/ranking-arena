@@ -6,6 +6,16 @@ import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
 import type { MembershipInfo } from './membership-config'
 
+/**
+ * Only 503 means the payment system is not configured. Auth and server
+ * failures must not be presented as "payment coming soon".
+ */
+export function portalErrorKey(status: number): string {
+  if (status === 503) return 'paymentSystemComingSoon'
+  if (status === 401) return 'sessionExpired'
+  return 'operationFailedTryAgain'
+}
+
 interface SubscriptionManagementProps {
   info: MembershipInfo | null
   cardStyle: React.CSSProperties
@@ -43,12 +53,15 @@ export default function SubscriptionManagement({
         if (data.url) {
           window.location.href = data.url
         } else {
-          showToast(t('paymentSystemComingSoon'), 'error')
+          console.error('[SubscriptionManagement] portal response missing url')
+          showToast(t('operationFailedTryAgain'), 'error')
         }
       } else {
-        showToast(t('paymentSystemComingSoon'), 'error')
+        console.error('[SubscriptionManagement] portal request failed', res.status)
+        showToast(t(portalErrorKey(res.status)), 'error')
       }
-    } catch {
+    } catch (err) {
+      console.error('[SubscriptionManagement] portal request error', err)
       showToast(t('operationFailedTryAgain'), 'error')
     }
   }

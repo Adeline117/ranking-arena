@@ -10,8 +10,12 @@
  * elsewhere.
  *
  * Behavior:
- * - On mount and whenever auth transitions to signed-in, if there is a pending
- *   referral code, POST it to /api/referral/apply once per session.
+ * - While the V1 referral-program publication hold is active, mounting is a
+ *   stable no-op: it does not inspect pending storage, subscribe to auth, or
+ *   send a request.
+ * - Once separately published, on mount and whenever auth transitions to
+ *   signed-in, if there is a pending referral code, POST it to
+ *   /api/referral/apply once per session.
  * - The apply route is IDEMPOTENT (a second apply once referred_by is set is
  *   rejected with 400), so overlapping with LoginPageClient's own apply is safe.
  * - On success OR a terminal 4xx ("already applied" / not found / etc.) we
@@ -25,6 +29,7 @@ import { useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { authedFetch } from '@/lib/api/client'
 import { peekPendingReferral, consumePendingReferral } from '@/lib/referral/pending'
+import { isV1ReferralProgramPublished } from '@/lib/referral/v1-publication'
 import { logger } from '@/lib/logger'
 
 // Module-level guard: at most one in-flight/completed apply attempt per page
@@ -32,7 +37,7 @@ import { logger } from '@/lib/logger'
 let attemptedThisSession = false
 
 async function tryApplyPendingReferral(): Promise<void> {
-  if (attemptedThisSession) return
+  if (!isV1ReferralProgramPublished() || attemptedThisSession) return
 
   const code = peekPendingReferral()
   if (!code) return
@@ -76,6 +81,10 @@ export default function ReferralAutoApply() {
   const mountedRef = useRef(true)
 
   useEffect(() => {
+    // Do not subscribe, poll, inspect storage, or perform a write while the
+    // checked-in V1 publication hold is active.
+    if (!isV1ReferralProgramPublished()) return
+
     mountedRef.current = true
 
     // Attempt immediately (covers users already signed in on mount).

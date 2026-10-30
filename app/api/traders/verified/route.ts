@@ -17,11 +17,28 @@ import {
 import { ApiError } from '@/lib/api/errors'
 import {
   getVerifiedTrader,
+  getVerifiedTraderLinks,
   updateVerifiedTrader,
   type UpdateVerifiedTraderInput,
+  type VerifiedTraderLinks,
 } from '@/lib/data/trader-claims'
 import { isDexWalletPlatform } from '@/lib/constants/wallet-platforms'
 import { canonicalizeWalletIdentity } from '@/lib/validators/wallet-identity'
+import { parseOptionalDiscordHandle, parseOptionalProfileUrl } from '@/lib/utils/profile-url'
+
+const PRIVATE_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+  Pragma: 'no-cache',
+} as const
+
+function withPrivateNoStore<T extends Response>(response: T): T {
+  for (const [name, value] of Object.entries(PRIVATE_NO_STORE_HEADERS)) {
+    response.headers.set(name, value)
+  }
+  return response
+}
 
 /**
  * GET /api/traders/verified?trader_id=xxx&source=yyy
@@ -29,7 +46,7 @@ import { canonicalizeWalletIdentity } from '@/lib/validators/wallet-identity'
  */
 export async function GET(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.read)
-  if (rateLimitResponse) return rateLimitResponse
+  if (rateLimitResponse) return withPrivateNoStore(rateLimitResponse)
 
   try {
     const supabase = getSupabaseAdmin()
@@ -38,29 +55,31 @@ export async function GET(request: NextRequest) {
     const source = searchParams.get('source')
 
     if (!traderId || !source) {
-      return success({ is_verified: false, verified_trader: null })
+      return withPrivateNoStore(success({ is_verified: false, verified_trader: null }))
     }
 
     const verified = await getVerifiedTrader(supabase, traderId, source)
 
-    return success({
-      is_verified: !!verified,
-      verified_trader: verified
-        ? {
-            display_name: verified.display_name,
-            bio: verified.bio,
-            avatar_url: verified.avatar_url,
-            twitter_url: verified.twitter_url,
-            telegram_url: verified.telegram_url,
-            discord_url: verified.discord_url,
-            website_url: verified.website_url,
-            verified_at: verified.verified_at,
-            verification_method: verified.verification_method,
-          }
-        : null,
-    })
+    return withPrivateNoStore(
+      success({
+        is_verified: !!verified,
+        verified_trader: verified
+          ? {
+              display_name: verified.display_name,
+              bio: verified.bio,
+              avatar_url: verified.avatar_url,
+              twitter_url: verified.twitter_url,
+              telegram_url: verified.telegram_url,
+              discord_url: verified.discord_url,
+              website_url: verified.website_url,
+              verified_at: verified.verified_at,
+              verification_method: verified.verification_method,
+            }
+          : null,
+      })
+    )
   } catch (error: unknown) {
-    return handleError(error, 'verified trader GET')
+    return withPrivateNoStore(handleError(error, 'verified trader GET'))
   }
 }
 
@@ -70,7 +89,7 @@ export async function GET(request: NextRequest) {
  */
 export async function PUT(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
-  if (rateLimitResponse) return rateLimitResponse
+  if (rateLimitResponse) return withPrivateNoStore(rateLimitResponse)
 
   try {
     const user = await requireAuth(request)
@@ -106,11 +125,27 @@ export async function PUT(request: NextRequest) {
     if (body.display_name !== undefined)
       input.display_name = String(body.display_name).slice(0, 100)
     if (body.bio !== undefined) input.bio = String(body.bio).slice(0, 500)
-    if (body.avatar_url !== undefined) input.avatar_url = body.avatar_url
-    if (body.twitter_url !== undefined) input.twitter_url = body.twitter_url || null
-    if (body.telegram_url !== undefined) input.telegram_url = body.telegram_url || null
-    if (body.discord_url !== undefined) input.discord_url = body.discord_url || null
-    if (body.website_url !== undefined) input.website_url = body.website_url || null
+    // Links are rendered as href/src — only safe https URLs (shared with
+    // /api/traders/claim/profile). Rejects javascript:, data:, http, etc.
+    // The editor resubmits every field on save, so a legacy stored value that
+    // predates this validation is left untouched rather than blocking edits.
+    const storedLinks = await getVerifiedTraderLinks(supabase, user.id, {
+      trader_id: traderId,
+      source,
+    })
+    const isUnchanged = (field: keyof VerifiedTraderLinks) =>
+      storedLinks != null && body[field] === storedLinks[field]
+    for (const field of ['avatar_url', 'twitter_url', 'telegram_url', 'website_url'] as const) {
+      if (body[field] === undefined || isUnchanged(field)) continue
+      const parsed = parseOptionalProfileUrl(body[field])
+      if (!parsed.ok) throw ApiError.validation(`Invalid URL for ${field}`)
+      input[field] = parsed.value
+    }
+    if (body.discord_url !== undefined && !isUnchanged('discord_url')) {
+      const parsed = parseOptionalDiscordHandle(body.discord_url)
+      if (!parsed.ok) throw ApiError.validation('Invalid discord_url')
+      input.discord_url = parsed.value
+    }
     if (body.can_receive_messages !== undefined)
       input.can_receive_messages = !!body.can_receive_messages
 
@@ -129,8 +164,8 @@ export async function PUT(request: NextRequest) {
       throw ApiError.forbidden('You do not own this verified trader profile')
     }
 
-    return success({ verified_trader: updated })
+    return withPrivateNoStore(success({ verified_trader: updated }))
   } catch (error: unknown) {
-    return handleError(error, 'verified trader PUT')
+    return withPrivateNoStore(handleError(error, 'verified trader PUT'))
   }
 }

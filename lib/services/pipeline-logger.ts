@@ -103,35 +103,22 @@ export class PipelineLogger {
     'batch-fetch-traders',
     'batch-enrich',
     'compute-leaderboard',
-    'aggregate-daily-snapshots',
-    'check-data-freshness',
     'pipeline-fetch',
     'fetch-details',
     'precompute-composite',
-    'compute-derived-metrics',
     'backfill-data',
 
     // Discovery & enrichment
-    'batch-discover',
     'enrich-gmx',
     'generate-profiles',
-    'backfill-avatars',
     'link-entities',
-    'batch-5min',
 
     // Market data
-    'fetch-market-data',
-    'fetch-funding-rates',
-    'fetch-open-interest',
     'flash-news-fetch',
 
     // Monitoring & health
     'verify-fetchers',
-    'check-trader-alerts',
-    'cleanup-stuck-logs',
-    'cleanup-data',
     'cleanup-deleted-accounts',
-    'cleanup-violations',
     'meta-monitor',
 
     // Snapshots & ranks

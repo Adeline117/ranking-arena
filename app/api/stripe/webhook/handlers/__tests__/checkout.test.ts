@@ -256,6 +256,7 @@ describe('handleCheckoutComplete entitlement safety', () => {
     await handleCheckoutComplete(checkoutSession({ payment_status: 'no_payment_required' }))
 
     expect(mockUpdateUserSubscription).toHaveBeenCalledWith('user-123', trial, 'monthly')
+    expect(mockMintNFTForUser).toHaveBeenCalledWith('user-123', 'monthly', 'cs_test_123')
   })
 
   it('does not grant Pro for an unrecognized subscription price', async () => {

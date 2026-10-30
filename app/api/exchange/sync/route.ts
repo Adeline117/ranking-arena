@@ -1,14 +1,14 @@
 /**
- * 同步交易所数据 API
+ * Refresh a private V1 exchange connection and return an owner-only summary.
+ * This never publishes a leaderboard profile or first-party ranking input.
  * POST /api/exchange/sync
  */
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
 import { badRequest, notFound } from '@/lib/api/response'
 import { validateEnum } from '@/lib/api/validation'
 import { decrypt } from '@/lib/exchange/encryption'
-import { type Exchange, SUPPORTED_EXCHANGES } from '@/lib/exchange'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 
@@ -24,16 +24,17 @@ import {
   getBitgetTrades,
   calculateBitgetTradingStats,
 } from '@/lib/exchange/bitget'
-import { getMexcAccount, getMexcTrades, calculateMexcTradingStats } from '@/lib/exchange/mexc'
-import {
-  getCoinexAccount,
-  getCoinexTrades,
-  calculateCoinexTradingStats,
-} from '@/lib/exchange/coinex'
-
 const logger = createLogger('exchange-sync')
+const V1_SYNC_EXCHANGES = ['binance', 'bybit', 'bitget'] as const
+type V1SyncExchange = (typeof V1_SYNC_EXCHANGES)[number]
+const PRIVATE_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+  Pragma: 'no-cache',
+} as const
 
-export const POST = withAuth(
+const authenticatedSync = withAuth(
   async ({ user, request }) => {
     let body: Record<string, unknown>
     try {
@@ -42,7 +43,7 @@ export const POST = withAuth(
       return badRequest('Invalid JSON body')
     }
 
-    const exchange = validateEnum(body.exchange, SUPPORTED_EXCHANGES, {
+    const exchange = validateEnum(body.exchange, V1_SYNC_EXCHANGES, {
       required: true,
       fieldName: 'exchange',
     })!
@@ -97,10 +98,10 @@ export const POST = withAuth(
       tradesPerWeek: number
       activeSince?: Date | null
     }
-    let stats: TradingStats | null = null
+    let stats: TradingStats
 
     try {
-      switch (exchange as Exchange) {
+      switch (exchange as V1SyncExchange) {
         case 'binance': {
           await getBinanceAccount({ apiKey, apiSecret })
           const binanceTrades = await getBinanceTrades({ apiKey, apiSecret })
@@ -121,27 +122,13 @@ export const POST = withAuth(
           stats = calculateBitgetTradingStats(bitgetTrades)
           break
         }
-
-        case 'mexc': {
-          await getMexcAccount({ apiKey, apiSecret })
-          const mexcTrades = await getMexcTrades({ apiKey, apiSecret }, 'BTCUSDT')
-          stats = calculateMexcTradingStats(mexcTrades)
-          break
-        }
-
-        case 'coinex': {
-          await getCoinexAccount({ apiKey, apiSecret })
-          const coinexTrades = await getCoinexTrades({ apiKey, apiSecret }, 'BTCUSDT')
-          stats = calculateCoinexTradingStats(coinexTrades)
-          break
-        }
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Sync failed'
       logger.error(`${exchange} sync failed`, { error: errorMessage })
 
       // 更新连接状态为失败
-      await adminSupabase
+      const { error: failureStatusError } = await adminSupabase
         .from('user_exchange_connections')
         .update({
           last_sync_at: new Date().toISOString(),
@@ -150,6 +137,12 @@ export const POST = withAuth(
         })
         .eq('id', connection.id)
         .eq('user_id', user.id)
+      if (failureStatusError) {
+        logger.error('Failed to persist private connection error status', {
+          exchange,
+          userId: user.id,
+        })
+      }
 
       throw err
     }
@@ -159,7 +152,7 @@ export const POST = withAuth(
     // still computed live and returned in the response below.
 
     // 更新连接状态为成功
-    await adminSupabase
+    const { error: successStatusError } = await adminSupabase
       .from('user_exchange_connections')
       .update({
         last_sync_at: new Date().toISOString(),
@@ -168,12 +161,19 @@ export const POST = withAuth(
       })
       .eq('id', connection.id)
       .eq('user_id', user.id)
+    if (successStatusError) {
+      logger.error('Failed to persist private connection success status', {
+        exchange,
+        userId: user.id,
+      })
+      throw new Error('Failed to persist connection status')
+    }
 
     return NextResponse.json({
       success: true,
       data: {
         message: 'Sync successful',
-        tradesCount: stats?.totalTrades ?? 0,
+        tradesCount: stats.totalTrades,
         stats,
       },
     })
@@ -183,3 +183,11 @@ export const POST = withAuth(
     rateLimit: 'sensitive',
   }
 )
+
+export async function POST(request: NextRequest) {
+  const response = await authenticatedSync(request)
+  for (const [name, value] of Object.entries(PRIVATE_NO_STORE_HEADERS)) {
+    response.headers.set(name, value)
+  }
+  return response
+}

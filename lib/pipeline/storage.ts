@@ -191,43 +191,6 @@ export class PipelineStorage {
     return { count: count ?? ranks.length }
   }
 
-  /**
-   * 批量写入 trader_daily_snapshots（用于 aggregate-daily-snapshots cron）
-   */
-  async persistDailySnapshots(
-    supabase: SupabaseClient,
-    traders: EnrichedTraderData[],
-    date: string // 'YYYY-MM-DD'
-  ): Promise<{ count: number }> {
-    const dailySnapshots = traders.map((t) => ({
-      date,
-      platform: t.platform,
-      trader_key: t.trader_id,
-      roi: t.roi_pct,
-      pnl: t.pnl_usd,
-      win_rate: t.win_rate_pct,
-      max_drawdown: t.max_drawdown_pct,
-      followers: t.followers,
-      trades_count: t.trades_count,
-      arena_score: t.arena_score,
-      created_at: new Date().toISOString(),
-    }))
-
-    const { error, count } = await supabase.from('trader_daily_snapshots').upsert(dailySnapshots, {
-      onConflict: 'date,platform,trader_key',
-      count: 'exact',
-    })
-
-    if (error) {
-      log.error('persistDailySnapshots error', {
-        error: error instanceof Error ? error.message : String(error),
-      })
-      throw error
-    }
-
-    return { count: count ?? dailySnapshots.length }
-  }
-
   // =============================================================================
   // Helper Methods
   // =============================================================================

@@ -15,7 +15,8 @@
  */
 
 import { useState, useMemo, useCallback, useEffect } from 'react'
-import { useRouter, usePathname, useSearchParams } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
+import { replaceUrlShallow } from './replaceUrlShallow'
 
 export type TraderTabKey = 'overview' | 'stats' | 'portfolio' | 'posts'
 
@@ -38,7 +39,6 @@ interface PendingTabSelection {
 }
 
 export function useTraderTabs(claimedUser: unknown): UseTraderTabsResult {
-  const { replace } = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const searchParamsString = searchParams.toString()
@@ -68,7 +68,7 @@ export function useTraderTabs(claimedUser: unknown): UseTraderTabsResult {
   )
 
   // The URL is authoritative after any search snapshot change. The sole
-  // exception is the optimistic selection between a click and its replace()
+  // exception is the optimistic selection between a click and its shallow URL replacement
   // navigation landing. Capability loss invalidates both sources immediately.
   const pendingTab =
     pendingSelection?.sourceSearchParams === searchParamsString &&
@@ -101,8 +101,8 @@ export function useTraderTabs(claimedUser: unknown): UseTraderTabsResult {
     const params = new URLSearchParams(searchParamsString)
     params.delete('tab')
     const query = params.toString()
-    replace(`${pathname}${query ? `?${query}` : ''}`, { scroll: false })
-  }, [canViewPosts, pathname, replace, searchParamsString, urlSelection.invalid])
+    replaceUrlShallow(`${pathname}${query ? `?${query}` : ''}`)
+  }, [canViewPosts, pathname, searchParamsString, urlSelection.invalid])
 
   useEffect(() => {
     setStoredVisitedTabs((previous) => {
@@ -134,7 +134,7 @@ export function useTraderTabs(claimedUser: unknown): UseTraderTabsResult {
         params.set('tab', nextTab)
       }
       const qs = params.toString()
-      replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
+      replaceUrlShallow(`${pathname}${qs ? `?${qs}` : ''}`)
       // Scroll tab content into view on tab change (prevents seeing previous tab's scroll position)
       requestAnimationFrame(() => {
         document
@@ -142,7 +142,7 @@ export function useTraderTabs(claimedUser: unknown): UseTraderTabsResult {
           ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       })
     },
-    [pathname, replace, searchParamsString, tabKeys]
+    [pathname, searchParamsString, tabKeys]
   )
 
   return { tabKeys, activeTab, visitedTabs, handleTabChange }

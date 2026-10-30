@@ -356,11 +356,10 @@ export type ExchangeId = keyof typeof EXCHANGE_CONFIGS
 // names and OAuth capability from here — never re-declare a local EXCHANGES array.
 // Display names are the canonical brand casing (WEEX, CoinEx, MEXC, HTX).
 
-// Exchanges that support OAuth authorization (vs API-key only).
-export const OAUTH_SUPPORTED_EXCHANGES: ReadonlySet<ExchangeId> = new Set<ExchangeId>([
-  'binance',
-  'bybit',
-])
+// OAuth is intentionally unavailable in V1. The retired implementation wrote
+// an unauthenticated credential projection without the exchange-authoritative
+// read-only proof or lifecycle transaction required by the API-key boundary.
+export const OAUTH_SUPPORTED_EXCHANGES: ReadonlySet<ExchangeId> = new Set<ExchangeId>()
 
 export function isOAuthSupported(id: ExchangeId): boolean {
   return OAUTH_SUPPORTED_EXCHANGES.has(id)
@@ -372,11 +371,32 @@ export interface ExchangeBindOption {
   oauthSupported: boolean
 }
 
+// V1 exposes only exchanges for which the server performs an
+// exchange-authoritative read-only permission proof before persisting either
+// credential projection. The remaining configuration copy is retained for
+// future implementation work, but must not advertise a usable binding path.
+const V1_API_KEY_BIND_EXCHANGES = [
+  'binance',
+  'bybit',
+  'bitget',
+] as const satisfies readonly ExchangeId[]
+
 // Ordered list for rendering exchange pickers / connection managers.
-export const EXCHANGE_BIND_LIST: readonly ExchangeBindOption[] = (
-  Object.keys(EXCHANGE_CONFIGS) as ExchangeId[]
-).map((id) => ({
-  id,
-  name: EXCHANGE_CONFIGS[id].name,
-  oauthSupported: OAUTH_SUPPORTED_EXCHANGES.has(id),
-}))
+export const EXCHANGE_BIND_LIST: readonly ExchangeBindOption[] = V1_API_KEY_BIND_EXCHANGES.map(
+  (id) => ({
+    id,
+    name: EXCHANGE_CONFIGS[id].name,
+    oauthSupported: OAUTH_SUPPORTED_EXCHANGES.has(id),
+  })
+)
+
+export function isV1ExchangeBindingSupported(
+  id: string
+): id is (typeof V1_API_KEY_BIND_EXCHANGES)[number] {
+  return V1_API_KEY_BIND_EXCHANGES.some((supportedId) => supportedId === id)
+}
+
+/** Fail-closed initial state for direct links before redirect effects run. */
+export function v1ExchangeBindingSelection(id: string | null): ExchangeId | null {
+  return id && isV1ExchangeBindingSupported(id) ? id : null
+}

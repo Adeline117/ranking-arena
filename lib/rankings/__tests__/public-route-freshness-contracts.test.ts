@@ -44,7 +44,6 @@ describe('public ranking freshness route contracts', () => {
 
   it('platform health never exposes raw score computation time as source freshness', () => {
     const route = source('app/api/platforms/health/route.ts')
-    const statusPage = source('app/(app)/status/page.tsx')
 
     expect(route).not.toMatch(rawLeaderboardRankRead)
     expect(route).not.toMatch(/select\([^)]*computed_at/)
@@ -54,18 +53,17 @@ describe('public ranking freshness route contracts', () => {
       "freshness_visibility: latestByPlatform.size > 0 ? ('verified' as const) : ('unknown' as const)"
     )
     expect(route).toContain("'Cache-Control': 'private, no-store, max-age=0, must-revalidate'")
-    expect(statusPage).toContain("platforms?.freshness_visibility === 'verified'")
-    expect(statusPage).toContain("platforms.freshness_visibility !== 'verified'")
-    expect(statusPage).toContain("message: t('unknown')")
+    // The /status page reads the registry freshness authority via /api/health
+    // (see lib/config/__tests__/public-fact-wiring.test.ts), not this route.
   })
 
-  it('composite cache joins source watermarks and does not discard stale last-good ranks', () => {
+  it('the retired composite cache command cannot read or publish source freshness during V1', () => {
     const route = source('app/api/cron/precompute-composite/route.ts')
 
-    expect(route).toContain('LEFT JOIN leaderboard_source_freshness AS freshness')
-    expect(route).toContain('freshness.source_as_of AS as_of_ts')
-    expect(route).not.toContain('computed_at >= $2')
-    expect(route).toContain("publicRankingCacheKey('precomputed:composite:all:v2')")
+    expect(route).toContain('v1CronExecutionGate(request) ?? v1CronExecutionUnavailableResponse()')
+    expect(route).not.toContain('leaderboard_source_freshness')
+    expect(route).not.toContain('publicRankingCacheKey')
+    expect(route).not.toContain('request.nextUrl')
   })
 
   it('SSR v7 derives its timestamp from the observed page sources and revalidates cached proof', () => {

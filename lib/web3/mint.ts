@@ -5,12 +5,7 @@
  * Uses a dedicated minter wallet (private key from env) for transactions.
  */
 
-import {
-  createWalletClient,
-  http,
-  type Address,
-  type Hash,
-} from 'viem'
+import { createWalletClient, http, type Address, type Hash } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { baseChain, baseRpcUrl, CONTRACT_ADDRESSES, basePublicClient } from './contracts'
 import { createLogger } from '@/lib/utils/logger'
@@ -243,32 +238,35 @@ export async function renewMembershipNFT(
 /**
  * Get the user's existing token ID (if any).
  */
-export async function getUserTokenId(walletAddress: string): Promise<bigint | null> {
+export async function getUserTokenIdStrict(walletAddress: string): Promise<bigint | null> {
   const contractAddress = CONTRACT_ADDRESSES.membershipNFT
   if (!contractAddress) return null
 
+  // Check balance first. Callers which use this as a minting idempotency fence
+  // must distinguish "no token" from an unavailable chain RPC.
+  const balance = await basePublicClient.readContract({
+    address: contractAddress,
+    abi: MINT_ABI,
+    functionName: 'balanceOf',
+    args: [walletAddress as Address],
+  })
+
+  if (Number(balance) === 0) {
+    return null
+  }
+
+  // Get the first token
+  return basePublicClient.readContract({
+    address: contractAddress,
+    abi: MINT_ABI,
+    functionName: 'tokenOfOwnerByIndex',
+    args: [walletAddress as Address, 0n],
+  })
+}
+
+export async function getUserTokenId(walletAddress: string): Promise<bigint | null> {
   try {
-    // Check balance first
-    const balance = await basePublicClient.readContract({
-      address: contractAddress,
-      abi: MINT_ABI,
-      functionName: 'balanceOf',
-      args: [walletAddress as Address],
-    })
-
-    if (Number(balance) === 0) {
-      return null
-    }
-
-    // Get the first token
-    const tokenId = await basePublicClient.readContract({
-      address: contractAddress,
-      abi: MINT_ABI,
-      functionName: 'tokenOfOwnerByIndex',
-      args: [walletAddress as Address, 0n],
-    })
-
-    return tokenId
+    return await getUserTokenIdStrict(walletAddress)
   } catch (_err) {
     // Intentionally swallowed: tokenOfOwnerByIndex call failed, wallet may not own any NFTs
     return null
@@ -279,10 +277,7 @@ export async function getUserTokenId(walletAddress: string): Promise<bigint | nu
  * Check if minting is properly configured.
  */
 export function isMintingConfigured(): boolean {
-  return !!(
-    CONTRACT_ADDRESSES.membershipNFT &&
-    process.env.NFT_MINTER_PRIVATE_KEY
-  )
+  return !!(CONTRACT_ADDRESSES.membershipNFT && process.env.NFT_MINTER_PRIVATE_KEY)
 }
 
 /**
@@ -295,7 +290,9 @@ export function getMinterAddress(): Address | null {
 
 // ── Helper functions ──
 
-function extractTokenIdFromLogs(logs: readonly { topics: readonly string[]; data: string }[]): bigint | undefined {
+function extractTokenIdFromLogs(
+  logs: readonly { topics: readonly string[]; data: string }[]
+): bigint | undefined {
   // ERC721 Transfer event: Transfer(address indexed from, address indexed to, uint256 indexed tokenId)
   // Topic[0] is the event signature
   // Topic[3] (if indexed) is the tokenId

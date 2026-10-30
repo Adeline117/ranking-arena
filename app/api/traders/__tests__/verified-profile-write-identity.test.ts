@@ -2,7 +2,7 @@ const mockUpdateVerifiedTrader = jest.fn()
 const mockSupabase = { name: 'supabase-admin' }
 
 function mockResponse(status: number, body: unknown) {
-  return { status, json: async () => body }
+  return { status, headers: new Headers(), json: async () => body }
 }
 
 jest.mock('@/lib/api', () => ({
@@ -43,6 +43,7 @@ jest.mock('@/lib/api', () => ({
 jest.mock('@/lib/data/trader-claims', () => ({
   getVerifiedTrader: jest.fn(),
   updateVerifiedTrader: (...args: unknown[]) => mockUpdateVerifiedTrader(...args),
+  getVerifiedTraderLinks: jest.fn().mockResolvedValue(null),
 }))
 
 jest.mock('@/lib/utils/logger', () => ({
@@ -83,6 +84,9 @@ describe.each([
     )
 
     expect(response.status).toBe(200)
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(response.headers.get('CDN-Cache-Control')).toBe('no-store')
+    expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
     expect(mockUpdateVerifiedTrader).toHaveBeenCalledWith(
       mockSupabase,
       'user-1',

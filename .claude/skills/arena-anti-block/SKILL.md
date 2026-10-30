@@ -1,74 +1,51 @@
-# Arena Anti-Block Patterns
+# Arena Source Transport and Block Handling
 
-交易所 API 反封锁策略。
+Use the repository's approved ingest transport and routing controls when an exchange
+endpoint is unavailable. This guide does not authorize bypassing access controls,
+inventing proxy infrastructure, changing source routing in production, or adding an
+unreviewed browser/stealth dependency.
 
-## 封锁类型 & 对策
+## Start from the current source contract
 
-| 类型 | 症状 | 解决 |
-|------|------|------|
-| Cloudflare JS Challenge | HTML "Just a moment..." | Puppeteer + stealth |
-| Cloudflare 1015 | 403 Rate Limit | 降速 + 换 IP |
-| Cloudflare WAF | 403 Forbidden | CF Worker / VPS |
-| Geo-block | 403/451 | 日本 VPS / ClashX |
-| API Rate Limit | 429 | sleep + exponential backoff |
-| Auth Required | 401 | 加 headers/cookies |
+Before changing transport behavior, read:
 
-## Puppeteer (Mac Mini)
+- the exact adapter in `lib/ingest/adapters/<source>/`;
+- `lib/ingest/fetch/` (`fetcher.ts`, `capture.ts`, circuit/rate-limit code, and tests);
+- `lib/ingest/core/types.ts`;
+- the worker routing and consumed-region checks in `worker/src/ingest/`;
+- the versioned source row/migration and redacted capture fixture for that adapter.
 
-```javascript
-import puppeteer from 'puppeteer-extra'
-import StealthPlugin from 'puppeteer-extra-plugin-stealth'
-puppeteer.use(StealthPlugin())
+`fetch_region` selects the worker region. Browser selection, when a source already
+supports it, is an explicit `sources.meta.browser_channel` input consumed by the
+shared fetcher. Adapters such as `bybit-mt5` and `bybit-copytrade` already use the
+shared `pageFetcher`; do not replace that boundary with a standalone Puppeteer
+script or hard-coded exchange URL.
 
-const browser = await puppeteer.launch({
-  headless: 'new',
-  executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  args: ['--no-sandbox', '--disable-setuid-sandbox'],
-})
-const page = await browser.newPage()
-await page.setUserAgent('Mozilla/5.0 ...')
+## Diagnose before changing anything
 
-// 等待 CF challenge 通过
-await page.goto(url, { waitUntil: 'networkidle0', timeout: 30000 })
-// 提取 JSON
-const data = await page.evaluate(() => JSON.parse(document.body.innerText))
-```
+Classify the observed response using a timestamped, redacted capture:
 
-## Bybit WAF 特殊处理
+- HTTP status and content type;
+- rate-limit/retry metadata;
+- whether the worker ran in the source's declared `fetch_region`;
+- whether the adapter used its declared capture/replay lane;
+- whether the response matches the checked-in parser fixture.
 
-Bybit API 被 WAF 保护，curl 直接 403。必须用 Puppeteer + stealth:
+An old platform matrix, a laptop result, or a generic statement such as “must use a
+browser” is not current proof. Never hard-code a local Chrome version or assume a
+machine-specific executable exists.
 
-```javascript
-// 先访问主页获取 cookies
-await page.goto('https://www.bybit.com', { waitUntil: 'domcontentloaded' })
-await sleep(3000)
-// 再请求 API
-await page.goto('https://www.bybit.com/copy-trading/api/...')
-```
+## Safe implementation boundary
 
-## 降级链
+- Prefer a fixture/parser correction when the transport response is valid but the
+  adapter is wrong.
+- Reuse the existing rate limiter, circuit breaker, capture/replay, and `pageFetcher`
+  abstractions.
+- Keep retries bounded and preserve an explicit failed job result when exhausted.
+- Add redacted or synthetic deterministic fixtures; never commit cookies, tokens,
+  wallet secrets, or raw private captures.
+- Verify the adapter and worker tests, both typechecks, lint, and a no-write dry run.
 
-```
-Mac Mini 直连 → CF Worker → VPS 代理 → Puppeteer
-```
-
-每一层失败才降到下一层，避免不必要的慢速请求。
-
-## 平台封锁状态
-
-| 平台 | 直连 | CF Worker | Puppeteer | VPS |
-|------|------|-----------|-----------|-----|
-| Binance | ✅ | ✅ | - | ✅ |
-| Bybit | ❌ WAF | ✅ | ✅ | ❌ |
-| BitMart | ❌ CF | ❌ | 需要 | - |
-| BloFin | ❌ CF | ✅ | - | - |
-| Gains | ❌ 429 | ❌ 404 | - | - |
-| MEXC | ✅ | ✅ | - | ✅ |
-
-## Chrome 版本
-
-Mac Mini 安装了 Chrome 145.0.7632.77，Puppeteer 自动使用。
-
-## 更新日志
-
-- 2026-02-23: 创建 skill
+A routing, proxy, browser-channel, worker, schedule, or production source-row change
+is a separate reviewed infrastructure action. Report it as a missing gate rather
+than applying it from this skill.

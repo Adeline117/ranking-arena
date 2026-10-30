@@ -5,6 +5,10 @@ import { isSitemapProfileActive } from '../route'
 const route = readFileSync(join(process.cwd(), 'app/api/sitemap-xml/route.ts'), 'utf8')
 
 describe('sitemap public audience boundary', () => {
+  it('does not advertise token-ranking routes while publication is withheld', () => {
+    expect(route).not.toContain('/rankings/tokens')
+  })
+
   it('only selects standalone active original public post candidates', () => {
     expect(route).toContain(".eq('status', 'active')")
     expect(route).toContain(".eq('visibility', 'public')")

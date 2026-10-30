@@ -1,13 +1,15 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 
 const mockReplace = jest.fn()
-const mockRouter = { replace: mockReplace }
 let mockSearchParams = new URLSearchParams()
 
 jest.mock('next/navigation', () => ({
   usePathname: () => '/trader/alice',
-  useRouter: () => mockRouter,
   useSearchParams: () => mockSearchParams,
+}))
+
+jest.mock('../replaceUrlShallow', () => ({
+  replaceUrlShallow: (url: string) => mockReplace(url),
 }))
 
 import { useTraderTabs } from '../useTraderTabs'
@@ -28,10 +30,7 @@ describe('useTraderTabs URL authority', () => {
 
     expect(hook.result.current.activeTab).toBe('stats')
     expect(hook.result.current.visitedTabs).toContain('stats')
-    expect(mockReplace).toHaveBeenLastCalledWith(
-      '/trader/alice?account=okx%3Asecondary&tab=stats',
-      { scroll: false }
-    )
+    expect(mockReplace).toHaveBeenLastCalledWith('/trader/alice?account=okx%3Asecondary&tab=stats')
     expect(
       hook.result.current.tabKeys.indexOf(hook.result.current.activeTab)
     ).toBeGreaterThanOrEqual(0)
@@ -78,9 +77,7 @@ describe('useTraderTabs URL authority', () => {
     expect(hook.result.current.activeTab).toBe('overview')
     expect(hook.result.current.tabKeys.indexOf(hook.result.current.activeTab)).toBe(0)
     await waitFor(() =>
-      expect(mockReplace).toHaveBeenLastCalledWith('/trader/alice?account=okx%3Asecondary', {
-        scroll: false,
-      })
+      expect(mockReplace).toHaveBeenLastCalledWith('/trader/alice?account=okx%3Asecondary')
     )
   })
 
@@ -113,8 +110,6 @@ describe('useTraderTabs URL authority', () => {
 
     expect(hook.result.current.activeTab).toBe('overview')
     expect(hook.result.current.tabKeys.indexOf(hook.result.current.activeTab)).toBe(0)
-    await waitFor(() =>
-      expect(mockReplace).toHaveBeenCalledWith(`/trader/alice?${remaining}`, { scroll: false })
-    )
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith(`/trader/alice?${remaining}`))
   })
 })

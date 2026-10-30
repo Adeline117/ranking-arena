@@ -37,6 +37,8 @@ interface ProMetricsData {
   newSignups: number | null
   activated7d: number | null
   activationEligible: number | null
+  activationDefinitionVersion: string | null
+  activationMeasurementStartedAt: string | null
   funnel: Partial<Record<B2CFunnelStep, number>> | null
   eventCollectionStartedAt: string | null
   measurementAvailable: boolean
@@ -310,6 +312,22 @@ export default function ProMetricsPage() {
                   .replace('{eligible}', String(data.activationEligible ?? '—'))}
               />
             </section>
+
+            {data.activationMeasurementStartedAt && (
+              <p
+                style={{
+                  marginTop: -tokens.spacing[5],
+                  marginBottom: tokens.spacing[8],
+                  fontSize: tokens.typography.fontSize.xs,
+                  color: 'var(--color-text-tertiary)',
+                }}
+              >
+                {t('activationMeasuredSince').replace(
+                  '{time}',
+                  new Date(data.activationMeasurementStartedAt).toLocaleString()
+                )}
+              </p>
+            )}
 
             <section style={{ marginBottom: tokens.spacing[8] }}>
               <h2

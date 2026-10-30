@@ -8,21 +8,12 @@ export interface CurrentRankRow {
   source_trader_id: string
   source: string
   rank: number | null
-  roi: number | null
-  pnl: number | null
 }
 
 export interface RankHistoryRow {
   trader_key: string
   platform: string
   rank: number | null
-}
-
-export interface DailySnapshotRow {
-  trader_key: string
-  platform: string
-  roi: number | null
-  pnl: number | null
 }
 
 export interface TraderEventPreferenceRow {
@@ -39,12 +30,7 @@ interface PageResult<T> {
   error: PageError | null
 }
 
-export type BroadcastEventDataset =
-  | 'follows'
-  | 'currentRanks'
-  | 'rankHistory'
-  | 'dailySnapshots'
-  | 'userPreferences'
+export type BroadcastEventDataset = 'follows' | 'currentRanks' | 'rankHistory' | 'userPreferences'
 
 type PageLoader<T> = (from: number, to: number) => PromiseLike<PageResult<T>>
 type ChunkedPageLoader<T> = (
@@ -57,14 +43,12 @@ export interface BroadcastEventPageLoaders {
   follows: PageLoader<TraderFollowRow>
   currentRanks: ChunkedPageLoader<CurrentRankRow>
   rankHistory: ChunkedPageLoader<RankHistoryRow>
-  dailySnapshots: ChunkedPageLoader<DailySnapshotRow>
 }
 
 export interface BroadcastEventRows {
   follows: TraderFollowRow[]
   currentRanks: CurrentRankRow[]
   rankHistory: RankHistoryRow[]
-  dailySnapshots: DailySnapshotRow[]
 }
 
 export class BroadcastEventDataReadError extends Error {
@@ -134,7 +118,7 @@ export async function loadBroadcastEventRows(
   ]
 
   if (traderIds.length === 0) {
-    return { follows, currentRanks: [], rankHistory: [], dailySnapshots: [] }
+    return { follows, currentRanks: [], rankHistory: [] }
   }
 
   // Keep the reads sequential. If any page fails, no later dataset is read and
@@ -153,15 +137,7 @@ export async function loadBroadcastEventRows(
     pageSize,
     filterChunkSize
   )
-  const dailySnapshots = await readAllChunkedPages(
-    'dailySnapshots',
-    traderIds,
-    loaders.dailySnapshots,
-    pageSize,
-    filterChunkSize
-  )
-
-  return { follows, currentRanks, rankHistory, dailySnapshots }
+  return { follows, currentRanks, rankHistory }
 }
 
 export async function loadBroadcastEventPreferences(

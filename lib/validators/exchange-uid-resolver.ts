@@ -1,20 +1,45 @@
 /**
  * Exchange UID Resolver
- * Extracts the account UID from exchange APIs using user-provided credentials.
- * Used to verify that an API key belongs to the trader being claimed.
+ * Extracts the account UID from exchange APIs using user-provided credentials
+ * for first-party account connection and sync.
  *
- * SECURITY: This is the core of claim verification.
- * The UID returned here MUST match the trader's source_trader_id in Arena DB.
+ * An exchange account UID is not assumed to equal a copy-trading leaderboard
+ * profile identifier and is therefore not accepted as V1 claim proof.
  */
 
 import { createHmac } from 'crypto'
 import { logger } from '@/lib/logger'
+import {
+  CEX_API_KEY_CLAIM_PLATFORMS,
+  isCexApiKeyClaimSource,
+} from '@/lib/constants/trader-claim-platforms'
+
+// Exact account-credential resolver surface. This is intentionally separate
+// from profile-claim support: resolving an account UID does not prove that it
+// equals a copy-trading leaderboard's public identity.
+const CEX_ACCOUNT_UID_RESOLVER_PLATFORMS = new Set([
+  'binance',
+  'binance_futures',
+  'binance_spot',
+  'bybit',
+  'bybit_spot',
+  'okx',
+  'okx_futures',
+  'okx_spot',
+  'bitget',
+  'bitget_futures',
+  'bitget_spot',
+  'gate',
+  'gateio',
+  'htx',
+  'htx_futures',
+  'htx_spot',
+  'huobi',
+])
 
 export {
   EVM_WALLET_PLATFORMS as DEX_WALLET_PLATFORMS,
-  SOLANA_WALLET_PLATFORMS as SOLANA_DEX_PLATFORMS,
   isDexWalletPlatform,
-  isSolanaPlatform,
 } from '@/lib/constants/wallet-platforms'
 
 export interface ExchangeCredentials {
@@ -27,7 +52,7 @@ export interface UidResolveResult {
   success: boolean
   uid?: string
   nickname?: string
-  /** Permission names reported by the exchange, never inferred by Arena. */
+  /** Permission or read-only attestation facts reported by the exchange. */
   permissions?: string[]
   /** True only when the exchange response proves trading and withdrawals are disabled. */
   isReadOnly?: boolean
@@ -72,6 +97,8 @@ async function resolveBinancePermissions(
       'enableFutures',
       'permitsUniversalTransfer',
       'enableVanillaOptions',
+      'enableFixApiTrade',
+      'enablePortfolioMarginTrading',
     ]
     return {
       permissions,
@@ -215,11 +242,15 @@ async function resolveBybitUid(credentials: ExchangeCredentials): Promise<UidRes
     }
 
     const readOnly = data.result?.readOnly
+    const permissions = enabledPermissionNames(data.result?.permissions)
+    if (readOnly !== undefined && readOnly !== null) {
+      permissions.push(`readOnly=${String(readOnly)}`)
+    }
     return {
       success: true,
       uid: String(uid),
       nickname: data.result?.note,
-      permissions: enabledPermissionNames(data.result?.permissions),
+      permissions,
       isReadOnly: readOnly === 1 || readOnly === '1' || readOnly === true,
     }
   } catch (error) {
@@ -291,7 +322,7 @@ async function resolveOkxUid(credentials: ExchangeCredentials): Promise<UidResol
 
 /**
  * Resolve Bitget account UID from API credentials.
- * GET /api/v2/spot/account/info returns userId.
+ * GET /api/v3/account/info returns userId and the API key's permission type.
  */
 async function resolveBitgetUid(credentials: ExchangeCredentials): Promise<UidResolveResult> {
   const { apiKey, apiSecret, passphrase } = credentials
@@ -302,7 +333,7 @@ async function resolveBitgetUid(credentials: ExchangeCredentials): Promise<UidRe
 
   const timestamp = Date.now().toString()
   const method = 'GET'
-  const requestPath = '/api/v2/spot/account/info'
+  const requestPath = '/api/v3/account/info'
 
   const prehash = timestamp + method + requestPath
   const signature = createHmac('sha256', apiSecret).update(prehash).digest('base64')
@@ -330,14 +361,18 @@ async function resolveBitgetUid(credentials: ExchangeCredentials): Promise<UidRe
       return { success: false, error: 'Could not extract userId from Bitget API response' }
     }
 
-    const permissions = enabledPermissionNames(data.data?.authorities)
+    const permissions = enabledPermissionNames(data.data?.permissions)
+    if (data.data?.permType !== undefined && data.data?.permType !== null) {
+      permissions.unshift(`permType=${String(data.data.permType)}`)
+    }
     return {
       success: true,
       uid: String(userId),
       permissions,
-      isReadOnly:
-        permissions.some((permission) => /^read/i.test(permission)) &&
-        !permissions.some((permission) => /trade|withdraw|transfer/i.test(permission)),
+      // Bitget V3 defines exactly two values: `read-only` and
+      // `read-and-write`. Treat every missing, malformed, legacy, or future
+      // value as writable until Bitget explicitly proves otherwise.
+      isReadOnly: data.data?.permType === 'read-only',
     }
   } catch (error) {
     logger.error('[UidResolver] Bitget resolve failed', {}, error as Error)
@@ -435,7 +470,11 @@ export async function resolveExchangeUid(
   platform: string,
   credentials: ExchangeCredentials
 ): Promise<UidResolveResult> {
-  const p = platform.toLowerCase()
+  const p = platform.trim().toLowerCase()
+
+  if (!CEX_ACCOUNT_UID_RESOLVER_PLATFORMS.has(p)) {
+    return { success: false, error: `Unsupported platform for UID resolution: ${platform}` }
+  }
 
   if (p.startsWith('binance')) {
     return resolveBinanceUid(credentials)
@@ -459,29 +498,12 @@ export async function resolveExchangeUid(
   return { success: false, error: `Unsupported platform for UID resolution: ${platform}` }
 }
 
-/**
- * List of CEX platforms that support API key verification.
- */
-export const CEX_VERIFIABLE_PLATFORMS = [
-  'binance',
-  'binance_futures',
-  'binance_spot',
-  'bybit',
-  'bybit_spot',
-  'okx',
-  'okx_futures',
-  'bitget',
-  'bitget_futures',
-  'gateio',
-  'gate',
-  'htx',
-  'htx_futures',
-] as const
+/** @deprecated Use claimMethodForSource() for the authoritative claim matrix. */
+export const CEX_VERIFIABLE_PLATFORMS = CEX_API_KEY_CLAIM_PLATFORMS
 
 /**
  * Check if a platform supports CEX API key verification.
  */
 export function isCexVerifiable(platform: string): boolean {
-  const p = platform.toLowerCase()
-  return CEX_VERIFIABLE_PLATFORMS.some((cp) => p === cp || p.startsWith(cp.split('_')[0]))
+  return isCexApiKeyClaimSource(platform)
 }

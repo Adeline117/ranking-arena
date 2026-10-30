@@ -45,17 +45,19 @@ describe('cleanup report evidence cron worker', () => {
     })
   })
 
-  it('is scheduled and keeps every report-evidence response out of shared caches', () => {
+  it('is not automatically scheduled and keeps every report-evidence response out of shared caches', () => {
     const config = JSON.parse(readFileSync(join(process.cwd(), 'vercel.json'), 'utf8')) as {
-      crons: Array<{ path: string; schedule: string }>
+      crons?: Array<{ path: string; schedule: string }>
       headers: Array<{
         source: string
         headers: Array<{ key: string; value: string }>
       }>
     }
-    expect(config.crons).toContainEqual({
+    expect(Object.hasOwn(config, 'crons')).toBe(false)
+    expect(config.crons ?? []).toHaveLength(0)
+    expect(config.crons ?? []).not.toContainEqual({
       path: '/api/cron/cleanup-report-evidence',
-      schedule: '*/15 * * * *',
+      schedule: expect.any(String),
     })
     for (const source of ['/api/report', '/api/reports', '/api/upload']) {
       expect(config.headers).toContainEqual({

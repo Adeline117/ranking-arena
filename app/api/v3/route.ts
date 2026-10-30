@@ -6,8 +6,9 @@
  * GET /api/v3?endpoint=trader&platform=binance_futures&trader_key=xxx
  * GET /api/v3?endpoint=search&q=xxx
  *
- * Append &format=csv to any list endpoint (rankings/search/platforms/history/
- * bulk) for a downloadable CSV export instead of JSON.
+ * Append &format=csv to a published list endpoint (rankings/search/platforms/
+ * bulk) for a downloadable CSV export instead of JSON. History is quarantined
+ * and always returns a JSON error without consuming caller quota.
  *
  * Rate limits:
  * - No API key: 100 requests/day per IP
@@ -249,14 +250,18 @@ const PRIVATE_NO_STORE = 'private, no-store, max-age=0, must-revalidate'
 function jsonResponse(data: unknown, meta: Record<string, unknown>, status = 200) {
   const res = apiSuccess(data, meta, status)
   res.headers.set('Cache-Control', PRIVATE_NO_STORE)
+  res.headers.set('CDN-Cache-Control', 'no-store')
+  res.headers.set('Vercel-CDN-Cache-Control', 'no-store')
   res.headers.set('Access-Control-Allow-Origin', '*')
   res.headers.set('Access-Control-Allow-Credentials', 'false')
   return res
 }
 
-function errorResponse(message: string, status: number) {
-  const res = apiError('API_ERROR', message, status)
+function errorResponse(message: string, status: number, code = 'API_ERROR') {
+  const res = apiError(code, message, status)
   res.headers.set('Cache-Control', PRIVATE_NO_STORE)
+  res.headers.set('CDN-Cache-Control', 'no-store')
+  res.headers.set('Vercel-CDN-Cache-Control', 'no-store')
   res.headers.set('Access-Control-Allow-Origin', '*')
   res.headers.set('Access-Control-Allow-Credentials', 'false')
   return res
@@ -625,24 +630,6 @@ async function handlePlatforms() {
   }
 }
 
-async function handleHistory(params: URLSearchParams) {
-  const parsed = v3HistorySchema.safeParse(Object.fromEntries(params))
-  if (!parsed.success) {
-    return { error: 'Missing required params: platform, trader_key', status: 400 }
-  }
-
-  // Validate the caller contract but do not resolve or read the requested
-  // trader. Historical daily ROI/PnL/drawdown rows are retained internally
-  // without a public publication proof, so even an empty legacy result must
-  // remain explicitly unavailable rather than masquerading as no history.
-  void parsed.data
-  return {
-    data: [],
-    total: 0,
-    historicalMetricPublication: LEGACY_METRIC_PUBLICATION_UNAVAILABLE,
-  }
-}
-
 async function handleBulk(params: URLSearchParams) {
   const parsed = v3BulkSchema.safeParse(Object.fromEntries(params))
   if (!parsed.success) {
@@ -692,6 +679,21 @@ export async function GET(request: NextRequest) {
   }
 
   const endpoint = endpointParsed.data.endpoint
+
+  // History has no publication proof. Validate its public shape, then fail
+  // before API-key usage or the free-tier counter can be incremented. CSV is
+  // deliberately ignored so an unavailable response cannot lose its metadata.
+  if (endpoint === 'history') {
+    const historyParsed = v3HistorySchema.safeParse(Object.fromEntries(params))
+    if (!historyParsed.success) {
+      return errorResponse('Missing required params: platform, trader_key', 400)
+    }
+    return errorResponse(
+      'Trader history is not published: snapshot provenance is unverified',
+      503,
+      'TRADER_HISTORY_NOT_PUBLISHED'
+    )
+  }
 
   // --- Auth & rate limiting ---
   const apiKey = request.headers.get('x-api-key')
@@ -782,9 +784,6 @@ export async function GET(request: NextRequest) {
         break
       case 'platforms':
         result = await handlePlatforms()
-        break
-      case 'history':
-        result = await handleHistory(params)
         break
       case 'bulk':
         result = await handleBulk(params)

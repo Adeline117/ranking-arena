@@ -3,16 +3,16 @@ import { test, expect } from '@playwright/test'
 test.describe('API 端点测试', () => {
   test('GET /api/traders 返回正确格式', async ({ request }) => {
     const response = await request.get('/api/traders')
-    
+
     expect(response.ok()).toBeTruthy()
     expect(response.status()).toBe(200)
-    
+
     const data = await response.json()
-    
+
     // 验证响应结构
     expect(data).toHaveProperty('traders')
     expect(Array.isArray(data.traders)).toBeTruthy()
-    
+
     // 如果有数据，验证数据结构
     if (data.traders.length > 0) {
       const trader = data.traders[0]
@@ -41,7 +41,7 @@ test.describe('API 端点测试', () => {
 
   test('GET /api/market 返回市场数据', async ({ request }) => {
     const response = await request.get('/api/market')
-    
+
     // 市场 API 可能不存在或返回错误
     if (response.ok()) {
       const data = await response.json()
@@ -53,12 +53,12 @@ test.describe('API 端点测试', () => {
     // 首先获取一个真实的交易员 handle
     const tradersResponse = await request.get('/api/traders')
     const tradersData = await tradersResponse.json()
-    
+
     if (tradersData.traders && tradersData.traders.length > 0) {
       const handle = tradersData.traders[0].handle
-      
+
       const response = await request.get(`/api/traders/${encodeURIComponent(handle)}`)
-      
+
       if (response.ok()) {
         const json = await response.json()
         // API wraps response in { success, data: { profile, performance, ... } }
@@ -69,34 +69,36 @@ test.describe('API 端点测试', () => {
     }
   })
 
-  test('GET /api/traders/[handle]/equity 返回资金曲线', async ({ request }) => {
-    const tradersResponse = await request.get('/api/traders')
-    const tradersData = await tradersResponse.json()
-    
-    if (tradersData.traders && tradersData.traders.length > 0) {
-      const handle = tradersData.traders[0].handle
-      
-      const response = await request.get(`/api/traders/${encodeURIComponent(handle)}/equity`)
-      
-      if (response.ok()) {
-        const data = await response.json()
-        expect(data).toHaveProperty('equity')
-        expect(data).toHaveProperty('pnl')
-        expect(data).toHaveProperty('drawdown')
-        expect(Array.isArray(data.equity)).toBeTruthy()
-      }
-    }
+  test('GET /api/traders/[handle]/equity 返回封存契约', async ({ request }) => {
+    const response = await request.get('/api/traders/quarantine-contract/equity')
+    const data = await response.json()
+    const headers = response.headers()
+
+    expect(response.status()).toBe(200)
+    expect(data).toMatchObject({
+      contract: 'arena.daily-history-publication@1',
+      available: false,
+      code: 'DAILY_SERIES_NOT_PUBLISHED',
+      reason: 'snapshot_provenance_unverified',
+      publication: null,
+      equity: [],
+      pnl: [],
+      drawdown: [],
+    })
+    expect(headers['cache-control']).toBe('private, no-store, max-age=0, must-revalidate')
+    expect(headers['cdn-cache-control']).toBe('no-store')
+    expect(headers['vercel-cdn-cache-control']).toBe('no-store')
   })
 
   test('GET /api/traders/[handle]/positions 返回持仓数据', async ({ request }) => {
     const tradersResponse = await request.get('/api/traders')
     const tradersData = await tradersResponse.json()
-    
+
     if (tradersData.traders && tradersData.traders.length > 0) {
       const handle = tradersData.traders[0].handle
-      
+
       const response = await request.get(`/api/traders/${encodeURIComponent(handle)}/positions`)
-      
+
       if (response.ok()) {
         const data = await response.json()
         expect(data).toHaveProperty('positions')
@@ -107,7 +109,7 @@ test.describe('API 端点测试', () => {
 
   test('API 错误处理 - 404', async ({ request }) => {
     const response = await request.get('/api/traders/nonexistent_trader_12345')
-    
+
     // 应返回 404 或带有错误信息的响应
     if (!response.ok()) {
       expect(response.status()).toBe(404)
@@ -123,11 +125,11 @@ test.describe('API 端点测试', () => {
 test.describe('API 性能测试', () => {
   test('/api/traders 响应时间', async ({ request }) => {
     const startTime = Date.now()
-    
+
     const response = await request.get('/api/traders')
-    
+
     const responseTime = Date.now() - startTime
-    
+
     expect(response.ok()).toBeTruthy()
     // API 响应应在 5 秒内 (allow headroom for parallel test load)
     expect(responseTime).toBeLessThan(5000)
@@ -137,14 +139,14 @@ test.describe('API 性能测试', () => {
     // 先获取一个交易员
     const tradersResponse = await request.get('/api/traders')
     const tradersData = await tradersResponse.json()
-    
+
     if (tradersData.traders && tradersData.traders.length > 0) {
       const handle = tradersData.traders[0].handle
-      
+
       const startTime = Date.now()
       const response = await request.get(`/api/traders/${encodeURIComponent(handle)}`)
       const responseTime = Date.now() - startTime
-      
+
       expect(response.ok()).toBeTruthy()
       // 详情 API 应在 2 秒内响应
       expect(responseTime).toBeLessThan(2000)

@@ -14,6 +14,7 @@ import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import type { TraderStats } from '@/lib/data/trader'
 import type { HistoryCompleteness } from '@/lib/data/serving/types'
+import HistoryVerificationNotice from '@/app/components/trader/HistoryVerificationNotice'
 import type {
   AssetBreakdownData,
   PositionHistoryEntry,
@@ -39,6 +40,9 @@ export interface StatsTabProps {
   historyCompleteness: HistoryCompleteness | null
   isPro: boolean
   onUnlock: () => void
+  /** Historical metrics are quarantined: show the verification placeholder
+   *  instead of empty charts/grids (record surfaces still render below). */
+  historyUnderVerification?: boolean
 }
 
 const StatsTab = React.memo(function StatsTab({
@@ -51,11 +55,34 @@ const StatsTab = React.memo(function StatsTab({
   historyCompleteness,
   isPro,
   onUnlock,
+  historyUnderVerification = false,
 }: StatsTabProps) {
   const { t } = useLanguage()
 
   if (!visited) {
     return <RankingSkeleton />
+  }
+
+  if (historyUnderVerification) {
+    // Stats/equity/asset breakdown come from the quarantined core projection
+    // and are structurally empty. Keep any published position history.
+    return (
+      <>
+        <HistoryVerificationNotice compact />
+        {positionHistory.length > 0 && (
+          <StatsPage
+            stats={null}
+            traderHandle={traderHandle}
+            assetBreakdown={undefined}
+            equityCurve={undefined}
+            positionHistory={positionHistory}
+            historyCompleteness={historyCompleteness}
+            isPro={isPro}
+            onUnlock={onUnlock}
+          />
+        )}
+      </>
+    )
   }
 
   if (

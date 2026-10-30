@@ -103,7 +103,7 @@ export default function CurrentPlanCard({
                     : info.subscription.status}
             </div>
           </div>
-          {info.subscription.plan && (
+          {(info.subscription.plan === 'monthly' || info.subscription.plan === 'yearly') && (
             <div>
               <div style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>
                 {t('billingCycle')}
@@ -116,7 +116,10 @@ export default function CurrentPlanCard({
           {info.subscription.currentPeriodEnd && (
             <div>
               <div style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>
-                {info.subscription.cancelAtPeriodEnd ? t('expiresLabel') : t('nextRenewal')}
+                {info.subscription.cancelAtPeriodEnd ||
+                (info.subscription.plan !== 'monthly' && info.subscription.plan !== 'yearly')
+                  ? t('expiresLabel') // non-renewing (e.g. referral grant)
+                  : t('nextRenewal')}
               </div>
               <div style={{ fontWeight: 600, marginTop: 4, color: tokens.colors.text.primary }}>
                 {new Date(info.subscription.currentPeriodEnd).toLocaleDateString(

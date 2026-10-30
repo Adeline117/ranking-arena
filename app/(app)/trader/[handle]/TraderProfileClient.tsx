@@ -750,7 +750,7 @@ export default function TraderProfileClient({
     // Only bundle extras for the primary account (not when switching linked accounts)
     if (primaryUsesServerDetail) {
       const separator = base.includes('?') ? '&' : '?'
-      return `${base}${separator}include=claim,rank_history`
+      return `${base}${separator}include=rank_history`
     }
     return base
   })()
@@ -844,8 +844,9 @@ export default function TraderProfileClient({
       ? 'checking'
       : 'unavailable'
 
-  // P7: Extract bundled data only for an exact primary response.
-  const bundledClaimData = primaryUsesServerDetail ? traderData?.claim_status : undefined
+  // Claim ownership is never authorized from this longer-lived profile query.
+  // Every visitor uses the dedicated exact, no-store status boundary below.
+  const bundledClaimData = undefined
   const rawBundledRankHistory = primaryUsesServerDetail ? traderData?.rank_history : undefined
   const parsedBundledRankHistory =
     !traderDataIsPlaceholder && rawBundledRankHistory?._error === undefined
@@ -899,9 +900,8 @@ export default function TraderProfileClient({
     }
   }, [activeTab, handleTabChange, suppressAccountContent])
 
-  // Anonymous visitors can use an exact, non-placeholder bundle for the public
-  // badge. Signed-in ownership/editor controls always require the no-store exact
-  // probe so a cached bundle can never authorize or hydrate another identity.
+  // Every visitor, including anonymous badge viewers, uses the exact no-store
+  // probe. A longer-lived profile bundle may never resurrect an unlinked claim.
   const claimSubject =
     isPrimaryAccount && baseIdentityReady
       ? { traderId: data.source_trader_id, source: data.source }
@@ -919,15 +919,9 @@ export default function TraderProfileClient({
               validatedActiveAccount.platform,
           }
         : null
-  const bundledClaimMatchesVisibleIdentity =
-    primaryUsesServerDetail &&
-    !traderDataIsPlaceholder &&
-    bundledClaimData?.trader_id === data.source_trader_id &&
-    bundledClaimData.source === data.source
-  const claimUrl =
-    claimSubject && (Boolean(currentUserId) || !bundledClaimMatchesVisibleIdentity)
-      ? `/api/traders/claim/status?trader_id=${encodeURIComponent(claimSubject.traderId)}&source=${encodeURIComponent(claimSubject.source)}`
-      : null
+  const claimUrl = claimSubject
+    ? `/api/traders/claim/status?trader_id=${encodeURIComponent(claimSubject.traderId)}&source=${encodeURIComponent(claimSubject.source)}`
+    : null
   const {
     data: claimResponse,
     error: claimDataError,
@@ -936,7 +930,7 @@ export default function TraderProfileClient({
     isFetching: claimIsFetching,
   } = useQuery<unknown>({
     queryKey: ['trader-claim-status', claimSubject?.traderId, claimSubject?.source],
-    queryFn: () => fetcher(claimUrl!),
+    queryFn: () => fetcher(claimUrl!, { cache: 'no-store' }),
     enabled: !!claimUrl,
     refetchOnWindowFocus: true,
     retry: false,
@@ -944,6 +938,8 @@ export default function TraderProfileClient({
     // revalidate this authorization probe and do not authorize from data that
     // only predates the current observer mount or whose refresh has failed.
     staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: 'always',
   })
   const freshExactClaim =
     claimDataFetchedAfterMount && claimFetchStatus === 'idle' && !claimIsFetching && !claimDataError
@@ -1181,6 +1177,24 @@ export default function TraderProfileClient({
     servingViewCapability ?? null,
     useThreeTab && !suppressAccountContent
   )
+  // The public /core projection is quarantined for every timeframe (see
+  // lib/data/serving/core-quarantine.ts and useServingTabData, which uses the
+  // static projection without a request), so the tabs show one explicit
+  // "under verification" state instead of blank charts.
+  const historyUnderVerification = useThreeTab && !suppressAccountContent
+  // Only sealed public-cohort values (verified rank + ROI) may be shown here.
+  const verificationTf = ({ '7D': 7, '30D': 30 } as Record<string, number>)[selectedPeriod] ?? 90
+  const verificationEntry = historyUnderVerification
+    ? servingViewFirstScreen?.entries.find((e) => e.timeframe === verificationTf)
+    : undefined
+  const sealedRank =
+    verificationEntry?.rankingVisibility === 'verified' &&
+    typeof verificationEntry.rank === 'number' &&
+    typeof verificationEntry.headlineRoi === 'number'
+      ? verificationEntry.rank
+      : null
+  const sealedRoi = sealedRank !== null ? (verificationEntry?.headlineRoi ?? null) : null
+
   // 即看即算: for a web3 wallet with no on-chain data yet, compute it on demand
   // (bounded) instead of waiting for the 12h rotation, then refetch.
   const onchainEnrichmentState = useOnchainEnrichTrigger({
@@ -1296,7 +1310,7 @@ export default function TraderProfileClient({
             }}
           >
             <Link
-              href="/rankings"
+              href="/"
               style={{
                 padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
                 borderRadius: tokens.radius.lg,
@@ -1367,10 +1381,7 @@ export default function TraderProfileClient({
         }}
       >
         <Breadcrumb
-          items={[
-            { label: t('leaderboardBreadcrumb'), href: '/rankings' },
-            { label: visibleDisplayName },
-          ]}
+          items={[{ label: t('leaderboardBreadcrumb'), href: '/' }, { label: visibleDisplayName }]}
         />
 
         <TraderStaleBanner show={showStaleBanner} t={t} />
@@ -1671,6 +1682,10 @@ export default function TraderProfileClient({
                     isVerifiedTrader={isVerifiedTrader}
                     verifiedTraderProfile={authorizationClaimSource?.profile ?? null}
                     claimedUser={visibleClaimedUser}
+                    historyUnderVerification={historyUnderVerification}
+                    sealedRankingPeriod={`${verificationTf}D`}
+                    sealedRank={sealedRank}
+                    sealedRoi={sealedRoi}
                   />
                 </Box>
 
@@ -1747,6 +1762,7 @@ export default function TraderProfileClient({
                         historyCompleteness={effHistoryCompleteness}
                         isPro={isPro}
                         onUnlock={handlePricingRedirect}
+                        historyUnderVerification={historyUnderVerification}
                       />
                     </Box>
                   ) : null}
@@ -1769,6 +1785,7 @@ export default function TraderProfileClient({
                       source={visibleData.source}
                       isPro={isPro}
                       onUnlock={handlePricingRedirect}
+                      historyUnderVerification={historyUnderVerification}
                     />
                   ) : null}
                 </Box>

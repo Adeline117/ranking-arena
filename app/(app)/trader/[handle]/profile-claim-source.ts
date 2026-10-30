@@ -67,22 +67,15 @@ function claimMatchesIdentity(
 export function resolveTraderClaimSources({
   traderId,
   source,
-  bundledClaim,
-  bundledIsPlaceholder,
   exactClaim,
-  requireExactAuthorization,
 }: TraderClaimSourcesInput): TraderClaimSources {
-  const exactBundledClaim =
-    !bundledIsPlaceholder && claimMatchesIdentity(bundledClaim, traderId, source)
-      ? bundledClaim
-      : null
   const exactProbeClaim = claimMatchesIdentity(exactClaim, traderId, source) ? exactClaim : null
-  const publicClaimSource = exactProbeClaim ?? exactBundledClaim
 
   return {
-    publicClaimSource,
-    // Signed-in users may see a cached public badge, but owner authorization
-    // and editor data must wait for the exact, no-store status probe.
-    authorizationClaimSource: requireExactAuthorization ? exactProbeClaim : publicClaimSource,
+    // Public badges, claimed profile data, and owner controls share one live
+    // identity authority. A cached profile bundle may never resurrect a claim
+    // after unlink, even for an anonymous visitor.
+    publicClaimSource: exactProbeClaim,
+    authorizationClaimSource: exactProbeClaim,
   }
 }

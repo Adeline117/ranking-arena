@@ -61,7 +61,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
               : 'No matching traders found yet. Check out our rankings to discover traders.'}
           </p>
           <Link
-            href="/rankings"
+            href="/"
             style={{
               padding: '10px 24px',
               borderRadius: 24,

@@ -113,8 +113,9 @@ const ko = {
   writeComment: '댓글을 작성하세요...',
   // Exchange binding related
   bindExchangeAccount: '거래소 계정 연결',
-  bindExchangeDescription: '연결 후 상세 거래 통계를 확인할 수 있습니다',
-  bindExchangeAccountFull: '거래소 계정을 연결하면 상세 거래 통계를 확인할 수 있습니다',
+  bindExchangeDescription: '비공개 읽기 전용 거래소 계정 연결 저장',
+  bindExchangeAccountFull:
+    '읽기 전용 거래소 연결을 저장하고 연결 상태를 수동으로 확인하거나 새로고침할 수 있습니다.',
   bindExchange: '연결',
   goToSettings: '설정으로 이동',
   connected: '연결됨',
@@ -125,14 +126,13 @@ const ko = {
   disconnectFailed: '연결 해제 실패',
   disconnected: '연결 해제됨',
   pleaseLogin: '먼저 로그인해 주세요',
-  syncSuccess: '데이터가 성공적으로 동기화되었습니다!',
+  syncSuccess: '연결 상태를 새로고침했습니다.',
   syncError: '동기화 실패',
   lastSync: '마지막 동기화: ',
   syncErrorMsg: '동기화 오류: ',
-  clickToBind:
-    '버튼을 클릭하여 {exchange} 로그인 페이지로 이동합니다. 로그인 성공 후 시스템이 자동으로 거래 데이터를 가져옵니다.',
-  bindSuccess: '연결 성공! 데이터가 동기화되었습니다.',
-  bindSuccessSyncing: '연결 성공! 데이터 동기화 중...',
+  clickToBind: 'Arena의 {exchange} API Key 안내를 열어 읽기 전용 계정 연결을 저장합니다.',
+  bindSuccess: '읽기 전용 계정 연결이 저장되었습니다.',
+  bindSuccessSyncing: '읽기 전용 계정 연결이 저장되었습니다.',
   completeBind: '완료',
   binding: '연결 중...',
   bindTip:
@@ -205,7 +205,7 @@ const ko = {
   userReviews: '리뷰',
   // Claim trader
   claimTrader: '계정 인증',
-  referral: '추천',
+  referral: '추천 상태',
   claiming: '인증 중...',
   claimSubmitted: '인증 요청 제출됨',
   claimSuccess: '인증 성공! 이 트레이더에 계정이 연결되었습니다.',
@@ -341,7 +341,7 @@ const ko = {
   // API Key binding related
   apiKeyBindTitle: 'API Key로 거래소 연결',
   apiKeyBindDesc:
-    '아래 단계를 따라 읽기 전용 API Key를 생성하고 거래 데이터를 안전하게 동기화하세요',
+    '비공개 계정 연결용 읽기 전용 API Key를 만드세요. 리더보드 프로필을 인증하거나 공개하지 않습니다.',
   selectExchange: '거래소 선택',
   operationStepsLabel: '단계',
   estimatedTime: '약 2분',
@@ -420,7 +420,7 @@ const ko = {
   tagHighReturns: '높은 수익률',
   // Trader alerts
   traderAlerts: '트레이더 알림',
-  traderAlertsDesc: '팔로우한 트레이더의 주요 변동 시 알림을 받으세요',
+  traderAlertsDesc: 'V1 검증 중에는 트레이더 알림을 사용할 수 없습니다',
   alertSettings: '알림 설정',
   alertThreshold: '변동 임계값',
   alertEnabled: '알림 활성화됨',
@@ -500,7 +500,7 @@ const ko = {
   featureCategoryRanking: '카테고리 순위',
   featureCategoryRankingDesc: '선물/현물/온체인 별 순위 보기',
   featureTraderAlerts: '트레이더 알림',
-  featureTraderAlertsDesc: '트레이더의 주요 변동 시 알림 받기',
+  featureTraderAlertsDesc: 'V1 검증 중에는 일시적으로 사용할 수 없습니다',
   featureScoreBreakdown: 'Arena Score 상세',
   featureScoreBreakdownDesc: '세부 점수 및 백분위 순위 보기',
   featureProBadge: 'Pro 뱃지',
@@ -929,7 +929,7 @@ const ko = {
   postCommentedNotify: '게시글에 댓글이 달리면 알림 받기',
   mentionedNotify: '멘션되면 알림 받기',
   newMessageNotify: '메시지를 받으면 알림 받기',
-  traderEventsNotify: '팔로우한 트레이더의 큰 변동 시 알림 받기',
+  traderEventsNotify: 'V1 검증 중에는 트레이더 이벤트 알림을 사용할 수 없습니다',
   // Privacy settings
   showFollowerList: '팔로워 목록 표시',
   showFollowingList: '팔로잉 목록 표시',
@@ -989,6 +989,7 @@ const ko = {
   digestNone: '없음',
   digestDaily: '일간 다이제스트',
   digestWeekly: '주간 다이제스트',
+  weeklyDigestUnavailable: 'V1 검증 중에는 개인화된 주간 다이제스트를 사용할 수 없습니다.',
   unsubscribeSuccess: '구독이 성공적으로 취소되었습니다',
   unsubscribeFromDigest: '이메일 다이제스트 구독 취소',
   unsubscribeFromAll: '모든 이메일 구독 취소',
@@ -1099,11 +1100,16 @@ const ko = {
   linkedAccountCount: '계정',
   // Alerts
   traderAlertsTitle: '트레이더 알림',
-  traderAlertsDesc2: '트레이더 활동을 추적하기 위한 맞춤 알림 조건 설정 (Pro 기능)',
+  traderAlertsDesc2:
+    'V1 검증 중에는 트레이더 알림 모니터링과 전달이 중단됩니다. 저장된 설정은 확인하거나 삭제할 수 있습니다.',
   traderAlertsConfigureOnProfile:
-    '각 알림이 올바른 거래소 계정에 연결되도록 트레이더 프로필에서 알림을 설정하세요.',
+    'V1 검증 중에는 새 트레이더 알림을 설정할 수 없습니다. 이 페이지에서는 저장된 설정만 삭제할 수 있습니다.',
   traderAlertsBrowse: '트레이더 둘러보기',
-  traderAlertsNone: '설정된 트레이더 알림이 없습니다.',
+  traderAlertsNone: '저장된 레거시 트레이더 알림 설정이 없습니다.',
+  traderAlertsUnavailableTitle: '트레이더 알림을 일시적으로 사용할 수 없습니다',
+  traderAlertsUnavailableDesc:
+    'V1 검증 중에는 트레이더 알림 모니터링과 전달이 중단됩니다. 저장된 레거시 설정은 확인하거나 삭제할 수 있습니다.',
+  traderAlertsStoredNotMonitored: '저장된 설정 — 모니터링되지 않음',
   traderAlertsEnabled: '활성화됨',
   traderAlertsPaused: '일시 중지됨',
   traderAlertsNoConditions: '활성 조건 없음',
@@ -1111,7 +1117,7 @@ const ko = {
   traderAlertsRemoveConfirm: '이 트레이더 알림을 삭제할까요?',
   traderAlertsRemoveFailed: '트레이더 알림을 삭제하지 못했습니다. 다시 시도하세요.',
   traderAlertsLoadFailed: '트레이더 알림을 불러오지 못했습니다. 다시 시도하세요.',
-  traderAlertsProRequired: '트레이더 알림 관리에는 Pro가 필요합니다.',
+  traderAlertsProRequired: 'V1 검증 중에는 트레이더 알림을 사용할 수 없습니다.',
   alertScoreChangeLabel: 'Arena Score 변동',
   alertScoreChangeDesc: '이 트레이더의 Arena Score가 지정 포인트 이상 변동하면 알립니다.',
   alertScoreUnit: '점',
@@ -1660,13 +1666,13 @@ const ko = {
 
   // AdvancedAlerts
   alertMonitoring: '모니터링 중: {handle}',
-  alertCheckCadence: '활성 Pro 회원은 30분마다 확인합니다.',
+  alertCheckCadence: 'V1 검증 기간에는 트레이더 알림 모니터링을 일시적으로 사용할 수 없습니다.',
   alertRoiChangeLabel: 'ROI 변동',
   alertRoiChangeDesc: 'ROI가 임계값만큼 변동하면 알림',
   alertDrawdownLabel: '낙폭 알림',
   alertDrawdownDesc: '낙폭이 임계값을 초과하면 알림',
   alertRankChangeLabel: '순위 변동',
-  alertRankChangeDesc: '순위가 임계값만큼 변동하면 알림',
+  alertRankChangeDesc: 'V1 검증 중에는 사용할 수 없습니다',
   alertChangesBy: '변동 기준',
   alertChangesByDisplay: '변동 기준',
   alertEmailNotification: '이메일 알림',
@@ -1689,7 +1695,7 @@ const ko = {
   alertNoAlerts: '설정된 알림이 없습니다',
   alertLastTriggered: '마지막 트리거',
   alertNewPositionLabel: '새 포지션 알림',
-  alertNewPositionDesc: '트레이더가 새 포지션을 열면 알림',
+  alertNewPositionDesc: 'V1 검증 중에는 사용할 수 없습니다',
 
   // ProFeaturesPanel
   proFeaturesTitle: 'Pro 기능',
@@ -1916,7 +1922,7 @@ const ko = {
   adminAlertTriggerTitle: '알림 트리거 조건',
   adminStaleAlertDesc: '오래됨 알림: 12시간 이상 업데이트되지 않은 데이터',
   adminCriticalAlertDesc: '위험 알림: 24시간 이상 업데이트되지 않은 데이터',
-  adminAlertCronNote: '/api/cron/check-data-freshness 예약 작업으로 알림이 트리거됩니다',
+  adminAlertCronNote: 'V1 검증 보류: 자동 데이터 신선도 알림을 사용할 수 없습니다',
 
   // Login / Register page
   loginRegisterTitle: '로그인 / 회원가입',
@@ -2048,9 +2054,9 @@ const ko = {
   helpCompareQ: '트레이더 비교 기능은 어떻게 사용하나요?',
   helpCompareA:
     '홈페이지에서 "트레이더 비교" 버튼을 클릭하고 최대 5명의 트레이더를 검색하여 추가하면 시스템이 지표를 나란히 표시합니다.',
-  helpAlertsQ: '트레이더 알림이란 무엇인가요?',
+  helpAlertsQ: '트레이더 알림을 현재 사용할 수 있나요?',
   helpAlertsA:
-    '팔로우한 트레이더의 순위 변동, ROI 변동 또는 기타 중요한 변화가 발생하면 시스템이 자동으로 쪽지 알림을 보내드립니다.',
+    'V1 검증 중에는 트레이더 알림 모니터링과 전달을 사용할 수 없습니다. 로그인한 사용자는 저장된 레거시 설정을 확인하거나 삭제만 할 수 있습니다.',
   helpScoreBreakdownQ: 'Arena Score 상세 분석이란 무엇인가요?',
   helpScoreBreakdownA:
     '점수 상세 분석은 트레이더의 수익 점수, 낙폭 점수, 안정성 점수 및 동일 유형 트레이더 중 백분위 순위를 보여줍니다.',
@@ -2546,7 +2552,8 @@ const ko = {
   verifiedAccounts: '인증된 계정',
   mddLabel: 'MDD',
   tradesLabel: '거래',
-  dataOutdatedBanner: '데이터가 오래되었을 수 있습니다. 새로고침하여 최신 정보를 확인하세요.',
+  dataOutdatedBanner:
+    '데이터가 오래되었을 수 있습니다. V1 검증 중에는 수동 새로고침을 사용할 수 없습니다.',
   platformDataUnavailable:
     '이 플랫폼의 데이터를 일시적으로 사용할 수 없습니다. 아래 표시된 기록 데이터가 오래되었을 수 있습니다.',
   rankTrend: '순위 추이 (7일)',
@@ -2650,8 +2657,8 @@ const ko = {
   compProAnomalyDetection: '이상 감지',
   compFeatureTraderCompare: '트레이더 비교',
   compProUpTo10Traders: '최대 10명',
-  compFeatureTraderAlerts: '트레이더 변동 알림',
-  compProInAppEmailPush: '앱 내 + 이메일 + 푸시',
+  compFeatureTraderAlerts: '트레이더 알림(V1 이용 불가)',
+  compProInAppEmailPush: 'V1 검증 중 미공개',
   compFeatureArenaScore: 'Arena Score',
   compFreeTotalScore: '종합 점수',
   compProBreakdownPercentile: '상세 분석 + 백분위',
@@ -2681,7 +2688,7 @@ const ko = {
   congratsProMember: '축하합니다! Pro 회원이 되셨습니다',
   nowYouCan: '이제 다음을 이용할 수 있습니다:',
   proBenefit1: '카테고리별 순위 보기',
-  proBenefit2: '트레이더 변동 알림 받기',
+  proBenefit2: 'V1 검증 중에는 트레이더 알림을 사용할 수 없습니다',
   proBenefit3: '상세 점수 분석 보기',
   proBenefit4: '고급 필터 사용',
   proBenefit5: '여러 트레이더 비교',
@@ -2737,7 +2744,7 @@ const ko = {
   pollDuration7d: '7일',
   myWatchlist: '내 워치리스트',
   savedHubTitle: '저장됨',
-  savedHubSubtitle: '트레이더, 게시물, 성과 알림을 한곳에서 관리하세요.',
+  savedHubSubtitle: '트레이더와 게시물을 한곳에서 관리하세요.',
   savedTabTraders: '트레이더',
   savedTabPosts: '게시물',
   savedTabAlerts: '알림',
@@ -2950,7 +2957,7 @@ const ko = {
   benefitFeature: '기능',
   benefitFollowTraders: '트레이더 팔로우',
   benefitHistoricalData: '과거 데이터',
-  benefitTraderAlerts: '트레이더 변동 알림',
+  benefitTraderAlerts: '트레이더 알림(V1 사용 불가)',
   benefitTraderCompare: '트레이더 비교',
   benefitArenaScore: 'Arena Score 상세',
   benefitApiAccess: 'API 접근',
@@ -3030,9 +3037,8 @@ const ko = {
     '상세 지표 분석 및 성과 차트로 최대 4명의 트레이더를 나란히 비교할 수 있습니다.',
   aboutFeature4Title: '포트폴리오 추적',
   aboutFeature4Desc: '여러 거래소의 최고 트레이더로 맞춤 포트폴리오를 구축하고 추적하세요.',
-  aboutFeature5Title: '스마트 알림',
-  aboutFeature5Desc:
-    '팔로우한 트레이더가 목표를 달성하거나, 포지션을 변경하거나, 상위 순위에 진입하면 알림을 받으세요.',
+  aboutFeature5Title: '알림 공개 보류',
+  aboutFeature5Desc: 'V1 검증 중에는 트레이더 알림과 개인화된 전달을 사용할 수 없습니다.',
   aboutFeature6Title: '지식 라이브러리',
   aboutFeature6Desc:
     '트레이딩 전략, 리스크 관리 및 시장 분석에 관한 56K+ 엄선된 교육 리소스입니다.',
@@ -3103,7 +3109,7 @@ const ko = {
   // Exchange binding banner
   bindExchangeBannerTitle: '거래소 계정 연결',
   bindExchangeBannerDesc:
-    '읽기 전용 API로 실제 포지션과 성과를 포트폴리오에 동기화합니다 (순위표 트레이더 신원 인증과 다릅니다)',
+    '비공개 읽기 전용 연결을 저장하고 상태를 수동으로 확인합니다. 포트폴리오나 리더보드 프로필을 게시하지 않습니다.',
   goToBind: '연결하기',
 
   // Search dropdown
@@ -3122,8 +3128,8 @@ const ko = {
   pushNotificationError: '푸시 알림 설정 실패, 다시 시도해 주세요',
   pushNotificationsDisabled: '푸시 알림이 비활성화되었습니다',
   hapticFeedbackTitle: '햅틱 피드백',
-  hapticFeedbackDesc: '팔로우한 트레이더가 포지션을 열 때 진동을 느끼세요',
-  tradeAlertVibration: '거래 알림 진동',
+  hapticFeedbackDesc: '지원되는 앱 내 상호작용에 진동 피드백을 사용합니다',
+  tradeAlertVibration: '햅틱 피드백',
 
   // Messaging system
   messageSent: '전송됨',
@@ -3515,16 +3521,15 @@ const ko = {
   adminReportOther2: '기타',
 
   // Trader Authorize Page
-  authorizeTitle: '실거래 데이터 인증',
-  authorizeDesc:
-    '인증 후 실거래 데이터가 리더보드에 실시간으로 표시되어 높은 신뢰성과 관심을 얻을 수 있습니다.',
-  authorizeBenefits: '혜택:',
-  authorizeRealTimePositions: '실시간 포지션 표시',
-  authorizeSuccess: '인증 완료! 설정으로 이동합니다...',
+  authorizeTitle: '읽기 전용 거래소 연결 저장',
+  authorizeDesc: '비공개 계정 연결을 저장합니다. 리더보드 프로필을 인증하거나 공개하지 않습니다.',
+  authorizeBenefits: '연결 범위:',
+  authorizeRealTimePositions: '읽기 전용 계정 접근',
+  authorizeSuccess: '연결을 저장했습니다! 설정으로 이동합니다...',
   authorizeSecurityNote:
     'API 자격 증명은 AES-256으로 암호화되어 저장되며 거래 데이터 조회에만 사용됩니다. 거래 조작은 불가능합니다. 읽기 전용 API Key를 생성하실 것을 권장합니다.',
-  authorizeSubmitSuccess: '인증이 완료되었습니다!',
-  authorizeSubmitButton: '데이터 표시 인증',
+  authorizeSubmitSuccess: '연결을 저장했습니다!',
+  authorizeSubmitButton: '연결 저장',
   authorizeStep1: '거래소 계정에 로그인하여 API 관리로 이동하세요',
   authorizeStep2: '권한: "읽기" 권한만 체크하고, 거래 또는 출금 권한은 활성화하지 마세요',
   authorizeStep3: '선택사항: 보안 강화를 위해 IP 화이트리스트를 설정하세요',
@@ -3789,13 +3794,13 @@ const ko = {
   // Round 18 i18n - trader/authorize (unique keys only)
   pleaseLoginTitle: '로그인해 주세요',
   loginToAuthorize: '거래 계정을 인증하려면 로그인이 필요합니다',
-  authorizeRealData: '실제 거래 데이터 인증',
-  authBenefitsTitle: '혜택:',
-  authBenefitRealtime: '실시간 포지션 표시',
-  authBenefitWeight: '더 높은 순위 가중치',
-  authBenefitBadge: '공식 인증 배지',
-  authBenefitPriority: '우선 추천',
-  authSuccessRedirecting: '인증 성공! 설정으로 이동합니다...',
+  authorizeRealData: '읽기 전용 거래소 연결 저장',
+  authBenefitsTitle: '연결 범위:',
+  authBenefitRealtime: '읽기 전용 계정 접근',
+  authBenefitWeight: '순위 가중치 없음',
+  authBenefitBadge: '인증 배지 없음',
+  authBenefitPriority: '공개 프로필 게시 없음',
+  authSuccessRedirecting: '연결을 저장했습니다! 설정으로 이동합니다...',
   connectExchange: '거래소 연결',
   apiKey: 'API Key',
   apiSecret: 'API Secret',
@@ -4107,7 +4112,7 @@ const ko = {
   linkedAt: '연결됨',
   noFollowers: '아직 팔로워가 없습니다',
   noMessagesHint: '아직 메시지가 없습니다',
-  noAlertsDesc: '랭킹 페이지에서 트레이더를 팔로우하면 성과 변동 시 알림을 받을 수 있습니다',
+  noAlertsDesc: 'V1 검증 중에는 트레이더 알림 모니터링과 전달을 사용할 수 없습니다.',
 
   // Errors
   invalidResponse: '잘못된 응답',
@@ -4357,8 +4362,8 @@ const ko = {
 
   // Guest signup prompt
   guestSignupTitle: '최고의 트레이더 추적',
-  guestSignupSubtitle: '무료 계정을 만들어 트레이더를 팔로우하고 성과 변동 시 알림을 받으세요',
-  guestSignupFeature1: '트레이더를 팔로우하고 순위 변동 알림 받기',
+  guestSignupSubtitle: '무료 계정을 만들어 트레이더를 팔로우하고 리서치를 정리하세요.',
+  guestSignupFeature1: '트레이더를 팔로우하고 리서치를 정리',
   guestSignupFeature2: '최대 5명의 트레이더를 나란히 비교',
   guestSignupFeature3: '관심 목록을 저장하고 순위를 맞춤 설정',
   guestSignupButton: '무료 가입',
@@ -4436,8 +4441,24 @@ const ko = {
   statusActiveIncidents: '진행 중인 장애',
   statusNoIncidents: '진행 중인 장애 없음',
   statusNoIncidentsDesc: '모니터링 중인 모든 서비스와 데이터 피드가 정상 작동 중입니다.',
-  statusServices: '서비스',
+  statusServices: '핵심 API 및 종속성',
+  statusCoreApiNote:
+    '공개 /api/rankings 및 /api/traders 경로는 위의 API, 데이터베이스, 신선도 권한에 의존합니다. 권한을 사용할 수 없으면 정상 상태로 추정하지 않습니다.',
   statusDataFreshness: '데이터 신선도',
+  statusSourceBoardCoverage: '랭킹 소스 보드 범위',
+  statusBoardsVisible: '예상 {expected}개 보드 중 {visible}개 표시 가능',
+  statusRankingSourceFreshness: '랭킹 소스 신선도',
+  statusSourcesFresh: '{fresh}/{total}개 소스 신선',
+  statusLatestPublication: '최근 성공한 {season} 게시',
+  statusRankingAuthority: '랭킹 신선도 및 게시 권한',
+  statusAuthorityUnavailable: '알 수 없음 — 권한 사용 불가',
+  statusKnownLimitations: '알려진 제한 사항',
+  statusLimitationCadence:
+    '랭킹은 {leaderboard}마다 재계산되며 상위 소스 보드는 보통 {sources}마다 갱신됩니다. 개별 소스는 다를 수 있습니다.',
+  statusLimitationCoverage:
+    '범위와 사용 가능한 지표는 소스마다 다릅니다. 누락되거나 오래되거나 증명되지 않은 기간은 실패로 닫힙니다.',
+  statusLimitationAvailability:
+    '여기 표시된 가용성은 현재 스냅샷이며 과거 가동률, SLA 또는 실시간 데이터 보장이 아닙니다.',
   statusUnableToLoad: '상태를 불러올 수 없습니다',
   statusLastChecked: '마지막 확인 {ago}',
   statusAutoRefresh: '30초마다 자동 새로고침',
@@ -4613,6 +4634,12 @@ const ko = {
   // Portfolio page
   portfolioPageTitle: '포트폴리오',
   portfolioTitle: '포트폴리오',
+  portfolioLegacyCleanup: '레거시 연결 정리',
+  portfolioLegacyTitle: '레거시 포트폴리오 연결은 V1에서 종료되었습니다',
+  portfolioLegacyDescription:
+    '새 연결과 동기화는 비활성화되었습니다. 기존 암호화 자격 증명은 Arena 사본을 삭제할 수 있도록 목록에만 표시되며 V1 순위나 프로필 인증에 사용되지 않습니다. 각 거래소에서도 기존 키를 폐기하거나 교체하세요.',
+  portfolioLegacySuccessor: 'V1 비공개 연결 절차 열기',
+  portfolioLegacyEmpty: '남아 있는 레거시 포트폴리오 연결이 없습니다.',
   portfolioConnectExchange: '거래소 연결',
   portfolioEmptyTitle: '거래소를 연결하여 포트폴리오를 추적하세요',
   portfolioConnectedExchanges: '연결된 거래소',
@@ -4940,23 +4967,26 @@ const ko = {
   claimWalletExpired: '서명이 만료되었습니다. 다시 서명해 주세요.',
 
   // Claim - API key verification
-  claimApiKeyVerifyTitle: 'API 키 소유권 확인',
+  claimApiKeyVerifyTitle: 'CEX 계정 연결',
   claimApiKeyVerifyDesc:
-    '거래소 API 키와 시크릿을 입력하여 이 트레이더 계정의 소유자임을 확인하세요. 읽기 전용 권한만 사용합니다.',
-  claimApiKeyMismatch: '이 API 키는 이 트레이더 계정에 속하지 않습니다.',
+    '읽기 전용 API 키는 퍼스트파티 계정 데이터 동기화 전용입니다. 공개 리더보드 프로필 소유권을 증명하지 못하며 V1 신청에는 사용할 수 없습니다.',
+  claimApiKeyMismatch: 'API 키를 이 거래소 계정과 일치시킬 수 없습니다.',
   claimWalletToVerifyLabel: '검증할 지갑:',
   claimExchangeErrorPrefix: '거래소 응답:',
-  claimApiKeySuccess: 'API 키 인증 성공!',
+  claimApiKeySuccess: 'CEX 계정 연결 확인 완료!',
 
   // Claim - Methods
-  claimVerifyMethodApi: 'API 키',
+  claimVerifyMethodApi: 'CEX 계정 연결',
   claimVerifyMethodWallet: '지갑 서명',
   claimVerifyAndClaim: '인증하고 소유권 주장',
   claimFormSafeNote:
-    '읽기 전용 API 키(거래 또는 출금 권한 없음)만 필요합니다. 키는 AES-256-GCM으로 암호화되며 로그에 기록되지 않습니다.',
+    '읽기 전용 CEX 키는 암호화되어 퍼스트파티 계정 동기화에만 사용됩니다. V1 리더보드 신청 증명으로는 허용되지 않습니다.',
   claimSupportedExchanges: '지원 거래소',
-  claimDexPlatforms: 'DEX 플랫폼 (지갑 인증)',
-  claimCexPlatforms: 'CEX 플랫폼 (API 키 인증)',
+  claimDexPlatforms: 'V1 신청 (Hyperliquid·GMX 지갑)',
+  claimCexPlatforms: 'CEX 계정 연결 (V1 신청 아님)',
+  claimSourceUnsupportedTitle: '이 소스는 아직 프로필 신청을 지원하지 않습니다',
+  claimSourceUnsupportedBody:
+    'V1 프로필 신청은 Hyperliquid와 GMX 지갑 서명만 지원합니다. CEX API 키는 계정 동기화용이며 공개 리더보드 프로필 소유권을 증명하지 못합니다.',
 
   // Claim page
   claimPageTitle: 'Arena에서 트레이더 프로필 신청',
@@ -4972,21 +5002,20 @@ const ko = {
   change: '변경',
   redirectingToProfile: '프로필로 이동 중...',
   claimReadOnlyWarning:
-    '보안을 위해 읽기 전용 API 키를 사용해 주세요. 거래 권한은 필요하지 않습니다.',
-  claimSolanaWalletRequired: '확인을 위해 Solana 지갑(예: Phantom)을 설치해 주세요.',
+    'CEX API 키는 퍼스트파티 계정 동기화 전용이며 V1 프로필 신청 증명으로 사용할 수 없습니다.',
   claimPageFaqTitle: '자주 묻는 질문',
   claimPageFaqWhat: '프로필 신청이란?',
   claimPageFaqWhatAnswer:
     '신청은 Arena의 트레이더 프로필 뒤에 있는 실제 본인임을 확인하는 것입니다. 인증되면 배지가 부여되고, 프로필 편집 및 독점 기능에 접근할 수 있습니다.',
   claimPageFaqHow: '본인 확인은 어떻게 하나요?',
   claimPageFaqHowAnswer:
-    'CEX 트레이더(Binance, Bybit, OKX 등)는 읽기 전용 API 키를 제공합니다. DEX 트레이더(Hyperliquid, GMX 등)는 지갑으로 메시지에 서명합니다. 두 방법 모두 거래 계정의 소유권을 확인합니다. 인증 후 간단한 수동 검토(보통 24시간 이내)를 거쳐 배지가 활성화됩니다.',
-  claimPageFaqExchanges: '어떤 거래소가 지원되나요?',
+    'V1에서는 Hyperliquid 또는 GMX 프로필을 선택하고 동일한 지갑으로 서버가 발급한 정확한 challenge에 서명합니다. 서명 후에도 수동 검토가 끝나기 전에는 배지가 활성화되지 않습니다.',
+  claimPageFaqExchanges: 'V1 신청을 지원하는 소스는 무엇인가요?',
   claimPageFaqExchangesAnswer:
-    'CEX: Binance, Bybit, OKX, Bitget, Gate.io, HTX. DEX: Hyperliquid, GMX, Gains, Aevo, Kwenta, Vertex, dYdX, Jupiter Perps, Drift.',
-  claimPageFaqSafe: 'API 키를 제공하는 것이 안전한가요?',
+    'Hyperliquid와 GMX만 지원합니다. Binance, Bybit, OKX 등 CEX API 키는 별도 계정 동기화에는 사용할 수 있지만 리더보드 프로필 신청에는 사용할 수 없습니다.',
+  claimPageFaqSafe: 'CEX API 키로 프로필을 신청할 수 있나요?',
   claimPageFaqSafeAnswer:
-    '네. 읽기 전용 API 키(거래 또는 출금 권한 없음)만 필요합니다. 키는 AES-256-GCM으로 암호화되며 로그에 기록되지 않습니다.',
+    '아니요. CEX 계정 UID와 공개 리더보드 프로필 식별자가 같다는 것을 증명할 수 없으므로 V1은 안전하게 거부합니다.',
   claimPageCta: '내 프로필 찾기',
   claimPageSeoTitle: '크립토 트레이더 프로필 신청 | Arena',
   claimPageSeoDesc:
@@ -5023,7 +5052,7 @@ const ko = {
   // Pricing Pro features
   pricingProUnlockTitle: 'Pro 잠금 해제 기능',
   pricingProDetailedAnalytics: '상세 트레이더 분석 및 점수 분석',
-  pricingProAlerts: '트레이더 알림을 30분마다 확인',
+  pricingProAlerts: 'V1 검증 기간에는 트레이더 알림을 일시적으로 사용할 수 없습니다',
   pricingProApiAccess: 'API 접근 (출시 예정)',
   pricingProCsvExport: 'CSV 데이터 내보내기',
   pricingProAdvancedFilters: '고급 다중 조건 필터',
@@ -5040,7 +5069,7 @@ const ko = {
   pricingFaqSwitchA: '네, 월간과 연간 요금제를 언제든 전환할 수 있으며 차액은 일할 계산됩니다.',
   pricingFaqApiQ: 'Pro에 API 접근이 포함되나요?',
   pricingFaqApiA:
-    '아니요. 데이터 API 요금제는 Arena Pro와 별도로 판매됩니다. Pro는 트레이더 탐색, 알림, 비교 및 심층 분석을 위한 상품입니다.',
+    '아니요. 데이터 API 요금제는 Arena Pro와 별도로 판매됩니다. Pro는 트레이더 탐색, 비교 및 심층 분석을 위한 상품이며 트레이더 알림은 V1 검증 중에는 사용할 수 없습니다.',
   pricingLimitedTimeBanner: '한정 기간: 모든 Pro 기능이 현재 무료입니다!',
   pricingStatTradersRanked: '랭킹된 트레이더',
   pricingStatExchangesTracked: '운영 중 랭킹 보드',
@@ -5222,7 +5251,6 @@ const ko = {
   noGroupsFollowedYet: '팔로우한 그룹이 없습니다',
   groupActionsTitle: '그룹 작업',
   newPostButton: '+ 새 게시물',
-  fetchingLinkPreview: '링크 미리보기 가져오는 중...',
   stickerButton: '스티커',
   stickersButton: '스티커',
   deleteButton: '삭제',
@@ -5262,6 +5290,11 @@ const ko = {
   writeFirstPostButton: '첫 번째 게시물 작성하기',
 
   // Token Rankings
+  tokenRankingsContainmentLabel: '검증 일시 중지',
+  tokenRankingsContainmentTitle: '토큰 랭킹을 일시적으로 공개하지 않습니다',
+  tokenRankingsContainmentDescription:
+    '랭킹 권위 스냅샷을 재구축하고 독립적으로 검증하고 있습니다. 검증이 완료될 때까지 어떤 토큰 랭킹도 공개하지 않습니다.',
+  tokenRankingsContainmentBack: '트레이더 랭킹으로 돌아가기',
   tokenRankingsTitle: '토큰 랭킹',
   tokenRankingsSubtitle: '각 토큰의 최고 트레이더를 발견하세요. 누가 BTC를 가장 잘 거래할까요?',
   tokenRankingsSearchPlaceholder: '토큰 검색 (BTC, ETH, SOL...)',
@@ -5341,7 +5374,8 @@ const ko = {
   dataSourcePublic: '공개 데이터',
   dataSourceDerived: '파생 데이터',
   dataSourceHistorical: '과거 데이터',
-  dataSourceVerifiedTooltip: '이 트레이더는 신원을 확인하고 실시간 데이터 접근을 승인했습니다',
+  dataSourceVerifiedTooltip:
+    '이 데이터에는 검토된 신원과 계정 직접 연결 출처가 있습니다. 표시된 기준 시각으로 최신성을 확인하세요.',
   dataSourcePublicTooltip: '공개 거래소 API에서 가져온 데이터',
   bindApiKey: 'API 키 연결',
   connectWallet: '지갑 연결',
@@ -5356,8 +5390,8 @@ const ko = {
   copyBackupCodes: '모든 코드 복사',
   bioTooLong: '자기소개는 200자 이내여야 합니다',
   invalidEmailFormat: '이메일 형식이 올바르지 않습니다',
-  referralTitle: '추천 프로그램',
-  referralDesc: '친구를 초대하고 Pro 보상을 받으세요',
+  referralTitle: '추천 프로그램 상태',
+  referralDesc: 'V1 검증 보류 중에는 추천 초대와 보상을 이용할 수 없습니다.',
   copyText: '복사',
 
   // Watchlist page
@@ -5366,7 +5400,7 @@ const ko = {
   watchlistSignInTitle: '관심 목록을 보려면 로그인하세요',
   watchlistSignInDesc: '계정을 만들거나 로그인하여 즐겨찾는 트레이더를 저장하고 추적하세요.',
   traderAlertsSignInTitle: '트레이더 알림을 보려면 로그인하세요',
-  traderAlertsSignInDesc: '로그인하여 팔로우한 트레이더의 성과 알림을 만들고 관리하세요.',
+  traderAlertsSignInDesc: '로그인하여 저장된 트레이더 알림 설정을 확인하거나 삭제하세요.',
   watchlistEmptyTitle: '관심 목록이 비어 있습니다',
   watchlistEmptyDesc: '랭킹을 살펴보고 트레이더 프로필의 별표 아이콘을 클릭하여 추가하세요.',
   watchlistBrowseRankings: '랭킹 보기',
@@ -5484,10 +5518,10 @@ const ko = {
   winrate: '승률',
 
   // ── 2026-06-02: 433 missing keys batch (synced with en.ts) ──
-  gateAdvancedAlertsTitle: '고급 알림 잠금 해제',
-  gateBenefitAlertsRealtime: '30분 확인에서 변화를 감지한 뒤 푸시 및 이메일 알림',
-  gateBenefitAlertsConditions: '알림당 5개 이상의 조건 결합',
-  gateBenefitAlertsHistory: '전체 알림 기록 및 분석',
+  gateAdvancedAlertsTitle: '트레이더 알림을 사용할 수 없습니다',
+  gateBenefitAlertsRealtime: 'V1 검증 기간에는 트레이더 알림을 일시적으로 사용할 수 없습니다',
+  gateBenefitAlertsConditions: '새 알림 설정은 게시되지 않습니다',
+  gateBenefitAlertsHistory: '저장된 레거시 설정은 삭제할 수 있습니다',
   gateComparisonTitle: '트레이더 나란히 비교',
   gateBenefitCompareSideBySide: '최대 4명의 트레이더, 모든 지표',
   gateBenefitCompareMetrics: '위험 조정 점수 세부 분석',
@@ -6025,10 +6059,10 @@ const ko = {
   provenanceSource: '데이터 출처',
   provenanceTracked: '추적 데이터',
   provenanceTrackedTip:
-    '지표는 거래소 공개 리더보드에서 수집한 것으로, API를 통한 독립 검증을 거치지 않았습니다. 읽기 전용 API 키를 연결하면 ✓ 인증됨 배지를 받을 수 있습니다.',
+    '지표는 거래소 공개 리더보드에서 가져옵니다. 별도의 비공개 CEX 연결은 이 프로필을 인증, 변경 또는 게시하지 않습니다.',
   provenanceVerified: '인증됨',
   provenanceVerifiedTip:
-    '읽기 전용 API로 체결 확인 — 수치는 거래소 계정에서 직접 가져온 것으로 스크래핑이 아닙니다.',
+    '계정 직접 연결 데이터는 신원 매핑 검토 후에만 게시됩니다. 최신성은 표시된 기준 시각을 따릅니다.',
   provenanceAsOf: '업데이트',
   recordProvenanceSourceAsOf: '원본 데이터 기준',
   recordProvenanceObservedAt: 'Arena 수집 시각',
@@ -6288,28 +6322,29 @@ const ko = {
   tokenRankingsSortTrades: '거래 수',
   tokenRankingsSortPnl: '손익',
   tokenRankingsNoActivity: '아직 활동 없음',
-  referralRewardBannerTitle: '친구 {count}명을 초대하고 Pro {days}일 무료 받기',
-  referralRewardBannerSubtitle:
-    '친구를 Arena에 초대하세요. {count}명이 내 링크로 가입하면 Arena Pro {days}일을 무료로 받습니다.',
-  referralHowItWorks: '이용 방법',
-  referralStep1: '아래의 추천 링크를 복사하세요',
-  referralStep2: '암호화폐를 좋아하는 친구에게 공유하세요',
-  referralStep3: '친구 {count}명이 가입하면 Pro {days}일이 잠금 해제됩니다',
-  referralFriendsReferred: '초대한 친구',
-  referralRewardUnlocked: '보상 잠금 해제!',
-  referralInviteFriends: '친구 초대',
-  referralReferredCount: '{count}명 초대',
-  referralFriendTrialNote: '보너스: 친구가 내 링크로 가입하면 {days}일 Pro 체험을 받습니다.',
-  // TODO i18n ja/ko
-  referralPromoNote:
-    '프로모션 기간 동안 Pro는 모두에게 무료입니다. 획득한 Pro 보상 일수는 계정에 적립되며 프로모션 종료 후 자동으로 적용됩니다. 만료되지 않습니다.',
-  referralPageSubtitle: '친구를 Arena에 초대하고 추천 현황을 확인하세요.',
-  referralSignInGateTitle: '로그인하고 추천 링크 받기',
-  referralSignInGateDesc: '계정을 만들거나 로그인하여 친구 초대를 시작하세요.',
-  referralYourLink: '내 추천 링크',
-  referralGenerating: '생성 중...',
-  referralRegenerate: '코드 재생성',
-  referralGenerate: '추천 링크 생성',
+  // V1 추천 프로그램 공개 보류
+  referralUnavailableTitle: '추천 프로그램을 이용할 수 없습니다',
+  referralUnavailableDescription: 'V1 검증 보류 중에는 추천 초대와 보상을 이용할 수 없습니다.',
+  referralUnavailableHistoryNote: '기존 추천 기록이 보상의 자동 지급을 약속하지는 않습니다.',
+  referralRewardBannerTitle: '추천 프로그램을 이용할 수 없습니다',
+  referralRewardBannerSubtitle: 'V1 검증 보류 중에는 새로운 추천 초대와 보상을 이용할 수 없습니다.',
+  referralHowItWorks: '프로그램 상태',
+  referralStep1: '새 추천 링크를 사용할 수 없습니다.',
+  referralStep2: '새 추천 초대를 사용할 수 없습니다.',
+  referralStep3: '추천 보상은 자동으로 지급되지 않습니다.',
+  referralFriendsReferred: '추천 기록',
+  referralRewardUnlocked: '보상을 이용할 수 없습니다',
+  referralInviteFriends: '추천 프로그램을 이용할 수 없습니다',
+  referralReferredCount: '과거 추천 {count}건',
+  referralFriendTrialNote: 'V1 검증 보류 중에는 추천 체험과 보상을 이용할 수 없습니다.',
+  referralPromoNote: '기존 추천 기록이 보상의 자동 지급을 약속하지는 않습니다.',
+  referralPageSubtitle: 'V1 검증 보류 중에는 추천 초대와 보상을 이용할 수 없습니다.',
+  referralSignInGateTitle: '추천 프로그램을 이용할 수 없습니다',
+  referralSignInGateDesc: 'V1 보류 중에는 로그인해도 추천 링크가 만들어지지 않습니다.',
+  referralYourLink: '추천 링크를 이용할 수 없습니다',
+  referralGenerating: '이용할 수 없습니다',
+  referralRegenerate: '이용할 수 없습니다',
+  referralGenerate: '이용할 수 없습니다',
   referralShareText: 'Arena를 확인해 보세요 — 암호화폐 트레이더 랭킹 플랫폼!',
   referralShareEmailSubject: 'Arena를 확인해 보세요',
 
@@ -6317,11 +6352,11 @@ const ko = {
   proGetStarted: 'Pro 시작하기',
   proStep1: '고급 Pro 필터로 랭킹 탐색',
   proStep2: '상위 트레이더 나란히 비교',
-  proStep3: '트레이더 알림 및 환경설정',
+  proStep3: '알림 환경설정 검토',
   exploreProRankings: 'Pro 랭킹 탐색',
-  inviteFriendsTitle: '친구를 Arena에 초대',
-  inviteFriendsDesc: 'Arena를 공유하고 추천 보상 받기',
-  inviteFriendsCta: '초대',
+  inviteFriendsTitle: '추천 프로그램을 이용할 수 없습니다',
+  inviteFriendsDesc: '추천 초대와 보상은 V1 검증 중에 일시 중지됩니다.',
+  inviteFriendsCta: '상태 보기',
   receiptSentTo: '영수증을 {email}(으)로 보냈습니다',
   receiptEmailed: '영수증을 이메일로 보내드렸습니다',
   tipSentAmount: '{amount}를 보냈습니다',
@@ -6662,7 +6697,8 @@ const ko = {
   wauSub: '최근 7일 실제 하트비트가 있는 사용자',
   newSignups7d: '신규 가입 (7일)',
   activation7d: '7일 활성화',
-  activationSub: '대상 {eligible}명 중 {activated}명이 2일 이상 활동',
+  activationSub: '대상 {eligible}명 중 {activated}명이 2개의 UTC 날짜에 상세 보기와 추적을 완료',
+  activationMeasuredSince: '활성화 V2는 {time}부터 측정하며 이전 활동은 기준선에서 제외합니다.',
   journeyFunnel: 'B2C 여정 (중복 제거 인원)',
   collectionSince: '퍼스트파티 이벤트는 {time}부터 수집되며 이전 기록은 소급하지 않습니다.',
   collectionPending: '아직 이벤트가 수신되지 않았습니다. 0은 과거 사용자가 없었다는 뜻이 아닙니다.',
@@ -6680,6 +6716,21 @@ const ko = {
   u2detail_chartMedian: '중앙값',
   u2detail_chartDays: '일수',
   u13admin_accessRequired: '관리자 권한이 필요합니다',
+  rankingsRefreshingTitle: '랭킹을 갱신하는 중입니다',
+  rankingsRefreshingDesc:
+    '최신 거래소 데이터가 검증을 통과한 후에만 랭킹을 게시합니다. 잠시 후 다시 확인해 주세요.',
+  rankingsEmptyPeriodTitle: '이 기간에 게시된 랭킹이 아직 없습니다',
+  pricingLifetimeMemberLabel: '평생 Pro 회원입니다',
+  quizBadgeMatchLegend: '전설과 매칭',
+  quizNoTradersFound: '아직 일치하는 트레이더가 없습니다. 랭킹에서 트레이더를 찾아보세요.',
+  quizRoiExtreme: '극단값',
+  quizShareChallenge:
+    'Arena 트레이더 성향 테스트에서 {type} {match}% 일치가 나왔어요. 나의 트레이딩 소울메이트는 {master}. 내 매칭률을 넘을 수 있을까요? {url}',
+  quizShareOnX: 'X에 공유',
+  historyVerificationTitle: '과거 데이터 검증 중',
+  historyVerificationDesc:
+    '이 트레이더의 과거 데이터가 검증을 통과하면 차트와 상세 통계가 여기에 표시됩니다.',
+  historyVerificationCurrentRanking: '현재 랭킹 ({period})',
 } as const
 
 export default ko

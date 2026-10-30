@@ -143,7 +143,14 @@ PREDEPLOY_MIGRATIONS=(
   20260729224000_rank_eligible_leaderboard_count_cache.sql
   20260729225000_token_trader_rank_authority.sql
   20260729230000_token_ranking_generation_barrier.sql
+  20260804043000_retire_legacy_token_rankings.sql
+  20260804044000_freeze_legacy_position_history_relations.sql
   20260804045000_quarantine_bingx_rank_authority.sql
+  20260804050000_harden_serving_trader_resolver.sql
+  20260804051000_harden_serving_source_capabilities.sql
+  20260804052000_fail_closed_unbound_copier_aggregates.sql
+  20260804053000_copier_snapshot_publication_substrate.sql
+  20260804054000_publish_copier_snapshot_atomically.sql
 )
 
 # 054 is retained as immutable history but is never an ordered candidate. 055

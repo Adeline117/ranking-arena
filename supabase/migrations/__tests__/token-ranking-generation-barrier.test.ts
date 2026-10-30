@@ -106,7 +106,7 @@ describe('token ranking generation barrier', () => {
     expect(normalized).toContain("notify pgrst, 'reload schema'")
   })
 
-  it('remains the final ordered predecessor and documents the retired live contract', () => {
+  it('remains the exact ordered predecessor of the containment chain', () => {
     const predeployStart = runner.indexOf('PREDEPLOY_MIGRATIONS=(')
     const predeployEnd = runner.indexOf('\n)', predeployStart) + 2
     const quarantineStart = runner.indexOf('QUARANTINED_PREDEPLOY_MIGRATIONS=(')
@@ -114,23 +114,35 @@ describe('token ranking generation barrier', () => {
 
     expect(migrationIndex).toBeGreaterThan(predeployStart)
     expect(migrationIndex).toBeLessThan(quarantineStart)
-    expect(runner.slice(predeployStart, predeployEnd).trimEnd()).toMatch(
-      new RegExp(`${migrationName.replace('.', '\\.')}\\n\\)$`)
-    )
+    const orderedTail = runner
+      .slice(predeployStart, predeployEnd)
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => /^\d{14}_.+\.sql$/.test(line))
+    expect(orderedTail.slice(orderedTail.indexOf(migrationName))).toEqual([
+      '20260729230000_token_ranking_generation_barrier.sql',
+      '20260804043000_retire_legacy_token_rankings.sql',
+      '20260804044000_freeze_legacy_position_history_relations.sql',
+      '20260804045000_quarantine_bingx_rank_authority.sql',
+      '20260804050000_harden_serving_trader_resolver.sql',
+      '20260804051000_harden_serving_source_capabilities.sql',
+      '20260804052000_fail_closed_unbound_copier_aggregates.sql',
+      '20260804053000_copier_snapshot_publication_substrate.sql',
+      '20260804054000_publish_copier_snapshot_atomically.sql',
+    ])
     expect(generatedTypes).toContain('get_token_ranking_publication_head: {')
     expect(generatedTypes).toContain('window_through_date: string | null')
     expect(generatedTypes).toContain('published_at_epoch_ms: number | null')
     expect(generatedTypes).toContain('get_token_trader_rankings_v2: {')
     expect(generatedTypes).toContain('get_popular_tokens_v2: {')
-    expect(runbook).toContain('/rest/v1/rpc/get_token_ranking_publication_head')
-    expect(runbook).toContain('.[0].generation_seq == 0')
-    expect(runbook).toContain('20260804043000_retire_legacy_token_rankings.sql')
+    // V1 NO-GO runbook keeps only the containment inventory and fail-closed
+    // requirement; the production head-probe recipe was intentionally removed
+    // (docs/RUNBOOK.md "V1 数据库与排名权威门禁").
+    expect(runbook).toContain('`20260804042000`、`20260804043000`、`20260804044000`')
     expect(runbook).toContain('20260804044000_freeze_legacy_position_history_relations.sql')
-    expect(runbook).toContain('legacy_token_rpcs_closed')
-    expect(runbook).toContain('legacy_token_mvs_closed')
-    expect(runbook).toContain('legacy_history_frozen')
-    expect(runbook).toContain('TOKEN_RANKING_NOT_PUBLISHED')
-    expect(runbook).toContain('rank_eligible=true')
+    expect(runbook).toContain('公开 token 面维持 fail closed')
+    expect(runbook).toContain('legacy token-ranking surface 仍是 **ACTIVE-EXPOSURE**')
+    expect(runbook).not.toContain('/rest/v1/rpc/')
     expect(runbook).not.toContain('.code == "40001"')
     expect(runbook).not.toContain('/rest/v1/rpc/get_popular_tokens_v2')
     expect(runbook).not.toContain('SELECT public.refresh_popular_tokens_mv();')

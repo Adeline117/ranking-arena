@@ -8,14 +8,13 @@ function source(relativePath: string): string {
 describe('claim review UX contract', () => {
   it('never promises auto-approval after a claim enters manual review', () => {
     const liveClaimUi = [
-      source('app/(app)/claim/components/CexVerifyForm.tsx'),
       source('app/(app)/claim/components/DexVerifyForm.tsx'),
       source('app/(app)/claim/page.tsx'),
     ].join('\n')
 
     expect(liveClaimUi).not.toContain('claimVerifiedAutoApproved')
     expect(liveClaimUi).not.toMatch(/auto[- ]approved/i)
-    expect(liveClaimUi.match(/t\('claimSubmitted'\)/g)).toHaveLength(3)
+    expect(liveClaimUi.match(/t\('claimSubmitted'\)/g)).toHaveLength(2)
   })
 
   it('removes the obsolete auto-approval promise from every shipped language', () => {

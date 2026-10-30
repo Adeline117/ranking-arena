@@ -32,6 +32,7 @@ const mockUpdate = jest.fn()
 const mockEq = jest.fn()
 const mockAbortSignal = jest.fn()
 const mockUnsubscribe = jest.fn()
+const mockIsV1ReferralProgramPublished = jest.fn(() => false)
 let mockAuthStateCallback: ((event: string, session: Session | null) => void) | null = null
 let mockLoginFormProps: Record<string, any> | null = null
 let mockRegisterFormProps: Record<string, any> | null = null
@@ -102,6 +103,9 @@ jest.mock('@/lib/hooks/useProductFacts', () => ({
 jest.mock('@/lib/analytics/track', () => ({ trackEvent: jest.fn() }))
 jest.mock('@/lib/logger', () => ({
   logger: { error: jest.fn(), warn: jest.fn(), info: jest.fn() },
+}))
+jest.mock('@/lib/referral/v1-publication', () => ({
+  isV1ReferralProgramPublished: () => mockIsV1ReferralProgramPublished(),
 }))
 
 jest.mock('../components/SocialLogin', () => ({
@@ -229,6 +233,7 @@ async function startPasswordLogin(value: Session): Promise<void> {
 describe('LoginPageClient exact identity boundary', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockIsV1ReferralProgramPublished.mockReturnValue(false)
     mockSearchParams = new URLSearchParams()
     mockAuthStateCallback = null
     mockLoginFormProps = null
@@ -579,7 +584,8 @@ describe('LoginPageClient exact identity boundary', () => {
     expect(mockGetUser).toHaveBeenCalledWith('access-user-b')
   })
 
-  it('uses the updated exact session bearer for attribution, referral and welcome', async () => {
+  it('uses the updated exact session bearer for attribution, referral and welcome when explicitly published', async () => {
+    mockIsV1ReferralProgramPublished.mockReturnValue(true)
     mockSearchParams = new URLSearchParams('utm_source=launch&ref=friend_1')
     const sessionA1 = session('user-a', 'access-a1')
     const sessionA2 = session('user-a', 'access-a2')
@@ -625,5 +631,51 @@ describe('LoginPageClient exact identity boundary', () => {
       { password: 'Correct-Horse-42!' },
       expect.objectContaining({ expectedUserId: 'user-a' })
     )
+  })
+
+  it('does not issue a referral apply request during the default V1 publication hold', async () => {
+    mockSearchParams = new URLSearchParams('utm_source=launch&ref=friend_1')
+    const sessionA1 = session('user-a', 'access-a1')
+    const sessionA2 = session('user-a', 'access-a2')
+    mockVerifyOtp.mockImplementationOnce(async () => {
+      makeCurrent(sessionA1)
+      return { data: { session: sessionA1, user: sessionA1.user }, error: null }
+    })
+    mockUpdateUserWithSession.mockImplementationOnce(async () => {
+      window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(sessionA2))
+      return { data: { session: sessionA2, user: sessionA2.user }, error: null }
+    })
+    mockProfileMaybeSingle
+      .mockResolvedValueOnce({ data: profile('user-a'), error: null })
+      .mockResolvedValueOnce({ data: profile('user-a'), error: null })
+      .mockResolvedValueOnce({ data: { id: 'user-a' }, error: null })
+
+    await renderLogin()
+    fireEvent.click(screen.getByRole('button', { name: 'loginSwitchToRegister' }))
+    await screen.findByTestId('verify-code')
+    act(() => {
+      mockRegisterFormProps?.setCode('123456')
+    })
+    fireEvent.click(screen.getByTestId('verify-code'))
+    await waitFor(() => expect(mockRegisterFormProps?.codeVerified).toBe(true))
+
+    act(() => {
+      mockRegisterFormProps?.setPassword('Correct-Horse-42!')
+      mockRegisterFormProps?.setHandle('new_handle')
+    })
+    fireEvent.click(screen.getByTestId('set-password'))
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/onboarding?returnUrl=%2F'))
+    const calls = (global.fetch as jest.Mock).mock.calls.filter(([url]) =>
+      ['/api/profile/attribution', '/api/referral/apply', '/api/email/welcome'].includes(
+        url as string
+      )
+    )
+
+    expect(calls.map(([url]) => url)).toEqual(['/api/profile/attribution', '/api/email/welcome'])
+    expect(mockIsV1ReferralProgramPublished).toHaveBeenCalled()
+    for (const [, request] of calls) {
+      expect(request.headers.Authorization).toBe('Bearer access-a2')
+    }
   })
 })

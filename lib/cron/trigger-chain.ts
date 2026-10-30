@@ -1,17 +1,18 @@
 /**
- * Event-driven trigger chain: fetch → compute → evaluate → cache
+ * Historical event-driven trigger chain: fetch → compute → evaluate → cache.
  *
  * After batch-fetch-traders or batch-enrich successfully writes new data,
  * triggers compute-leaderboard → warm-cache in sequence.
  *
- * Fire-and-forget: errors are logged but never block the caller.
+ * The V1 source gate below returns before the former fire-and-forget work can
+ * touch Redis or issue a downstream request.
  *
  * Redis-based dedup prevents stampede when multiple cron groups finish
  * within a short window (e.g., groups a1 and a2 complete 30s apart).
  */
 
-import { getSharedRedis } from '@/lib/cache/redis-client'
 import { createLogger } from '@/lib/utils/logger'
+import { isV1RankingCommandChainPublished } from './v1-ranking-command-chain-publication'
 
 const logger = createLogger('trigger-chain')
 
@@ -80,10 +81,19 @@ export interface TraceMetadata {
  * @param trace - optional trace metadata from upstream job (for structured handoff)
  */
 export function triggerDownstreamRefresh(source: string, trace?: TraceMetadata): void {
+  // This retired command chain is intentionally source-closed for V1. Return
+  // before starting background work, importing Redis, calculating a target
+  // URL, or issuing any authenticated downstream request.
+  if (!isV1RankingCommandChainPublished()) {
+    logger.info(`[${source}] V1 ranking command chain is not published; refresh was not triggered.`)
+    return
+  }
+
   // Immediately return — entire chain runs in background
   void (async () => {
     try {
       // ── Dedup check via Redis ────────────────────────────────────
+      const { getSharedRedis } = await import('@/lib/cache/redis-client')
       const redis = await getSharedRedis()
       if (redis) {
         const lastRun = await redis.get<number>(DEDUP_KEY)

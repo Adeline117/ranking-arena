@@ -1,220 +1,305 @@
 /**
- * Wallet Verification Service Tests
- *
- * Tests parseClaimMessage() and message freshness validation.
- * Skips actual crypto signature verification (requires complex chain mocking).
+ * Wallet claim challenge and signature verification security tests.
  */
 
-// Mock external dependencies to avoid real crypto operations
 jest.mock('viem', () => ({
   verifyMessage: jest.fn().mockResolvedValue(true),
 }))
 
-jest.mock('@solana/web3.js', () => ({
-  PublicKey: jest.fn().mockImplementation(() => ({
-    toBytes: () => new Uint8Array(32),
-  })),
-}))
-
-jest.mock('tweetnacl', () => ({
-  sign: {
-    detached: {
-      verify: jest.fn().mockReturnValue(true),
-    },
-  },
-}))
-
 jest.mock('@/lib/data/unified', () => ({
-  resolveTrader: jest.fn().mockResolvedValue(null),
+  resolveTrader: jest.fn(),
 }))
 
 jest.mock('@/lib/cache/redis-client', () => ({
-  getSharedRedis: jest.fn().mockResolvedValue(null),
+  getSharedRedis: jest.fn(),
+}))
+
+jest.mock('@/lib/logger', () => ({
+  logger: { error: jest.fn(), info: jest.fn(), warn: jest.fn() },
 }))
 
 import { resolveTrader } from '@/lib/data/unified'
-import { parseClaimMessage, verifyWalletOwnership } from '../wallet-verification'
+import { getSharedRedis } from '@/lib/cache/redis-client'
+import { createWalletClaimChallenge, verifyWalletOwnership } from '../wallet-verification'
 
 const mockedResolveTrader = jest.mocked(resolveTrader)
+const mockedGetSharedRedis = jest.mocked(getSharedRedis)
 const mockSupabase = {} as Parameters<typeof verifyWalletOwnership>[0]
 
-// ═══════════════════════════════════════════════════════
-// parseClaimMessage
-// ═══════════════════════════════════════════════════════
+const checksumEvm = '0xAbCdEf0123456789aBCdEf0123456789AbCdEf01'
+const canonicalEvm = checksumEvm.toLowerCase()
 
-describe('parseClaimMessage', () => {
-  test('parses valid message correctly', () => {
-    const ts = Date.now()
-    const msg = `I am claiming trader profile 0xABC123 on Arena. Timestamp: ${ts}`
-    const result = parseClaimMessage(msg)
-    expect(result).not.toBeNull()
-    expect(result!.traderKey).toBe('0xABC123')
-    expect(result!.timestamp).toBe(ts)
+function createRedisFixture() {
+  const values = new Map<string, string>()
+  const get = jest.fn(async (key: string) => values.get(key) ?? null)
+  const set = jest.fn(
+    async (key: string, value: unknown, options?: { nx?: boolean; ex?: number }) => {
+      if (options?.nx && values.has(key)) return null
+      values.set(key, String(value))
+      return 'OK'
+    }
+  )
+  const evalCommand = jest.fn(
+    async (script: string, keys: string[], args: string[]): Promise<number> => {
+      const key = keys[0]
+      if (values.get(key) !== args[0]) return 0
+      if (script.includes("'consumed'")) {
+        values.set(key, 'consumed')
+      } else {
+        values.delete(key)
+      }
+      return 1
+    }
+  )
+  return {
+    values,
+    redis: { get, set, eval: evalCommand },
+    get,
+    set,
+    eval: evalCommand,
+  }
+}
+
+async function issueAndVerify(
+  redisFixture: ReturnType<typeof createRedisFixture>,
+  overrides: Partial<Parameters<typeof verifyWalletOwnership>[2]> = {}
+) {
+  const challenge = await createWalletClaimChallenge('user-1', 'hyperliquid', canonicalEvm)
+  const verification = await verifyWalletOwnership(mockSupabase, 'user-1', {
+    wallet_address: checksumEvm,
+    signature: '0xsigned',
+    challenge_id: challenge.challenge_id,
+    platform: 'hyperliquid',
+    trader_key: canonicalEvm,
+    ...overrides,
+  })
+  return { challenge, verification, redisFixture }
+}
+
+describe('authenticated wallet claim challenges', () => {
+  let redisFixture: ReturnType<typeof createRedisFixture>
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    redisFixture = createRedisFixture()
+    mockedGetSharedRedis.mockResolvedValue(redisFixture.redis as never)
+    mockedResolveTrader.mockResolvedValue({
+      platform: 'hyperliquid',
+      traderKey: canonicalEvm,
+      handle: null,
+      avatarUrl: null,
+    })
   })
 
-  test('returns null for empty string', () => {
-    expect(parseClaimMessage('')).toBeNull()
+  it('binds the signed message to Arena, the authenticated user, source, trader, nonce, and expiry', async () => {
+    const challenge = await createWalletClaimChallenge('user-1', 'hyperliquid', checksumEvm)
+
+    expect(challenge.challenge_id).toMatch(/^[a-f0-9]{64}$/)
+    expect(challenge.message).toContain('Domain: www.arenafi.org')
+    expect(challenge.message).toContain('User ID: user-1')
+    expect(challenge.message).toContain('Source: hyperliquid')
+    expect(challenge.message).toContain(`Trader ID: ${canonicalEvm}`)
+    expect(challenge.message).toContain(`Nonce: ${challenge.challenge_id}`)
+    expect(challenge.message).toContain('Expiration Time:')
+    expect(redisFixture.set).toHaveBeenCalledWith(
+      `wallet-claim:challenge:${challenge.challenge_id}`,
+      expect.any(String),
+      { nx: true, ex: 300 }
+    )
   })
 
-  test('returns null for wrong prefix', () => {
-    const msg = `Hello world 0xABC123 on Arena. Timestamp: ${Date.now()}`
-    expect(parseClaimMessage(msg)).toBeNull()
+  it('rejects a challenge replayed by another authenticated user', async () => {
+    const challenge = await createWalletClaimChallenge('user-1', 'hyperliquid', canonicalEvm)
+
+    await expect(
+      verifyWalletOwnership(mockSupabase, 'user-2', {
+        wallet_address: canonicalEvm,
+        signature: '0xsigned',
+        challenge_id: challenge.challenge_id,
+        platform: 'hyperliquid',
+        trader_key: canonicalEvm,
+      })
+    ).rejects.toThrow('does not match this user, source, or trader')
+
+    expect(redisFixture.values.has(`wallet-claim:replay:${challenge.challenge_id}`)).toBe(false)
   })
 
-  test('returns null for missing timestamp', () => {
-    const msg = 'I am claiming trader profile 0xABC123 on Arena.'
-    expect(parseClaimMessage(msg)).toBeNull()
+  it('rejects a challenge replayed across sources', async () => {
+    const challenge = await createWalletClaimChallenge('user-1', 'hyperliquid', canonicalEvm)
+
+    await expect(
+      verifyWalletOwnership(mockSupabase, 'user-1', {
+        wallet_address: canonicalEvm,
+        signature: '0xsigned',
+        challenge_id: challenge.challenge_id,
+        platform: 'gmx',
+        trader_key: canonicalEvm,
+      })
+    ).rejects.toThrow('does not match this user, source, or trader')
   })
 
-  test('returns null for non-numeric timestamp', () => {
-    const msg = 'I am claiming trader profile 0xABC123 on Arena. Timestamp: not-a-number'
-    expect(parseClaimMessage(msg)).toBeNull()
+  it('rejects an expired challenge even if a stale Redis value remains', async () => {
+    const challenge = await createWalletClaimChallenge('user-1', 'hyperliquid', canonicalEvm)
+    const key = `wallet-claim:challenge:${challenge.challenge_id}`
+    const stored = JSON.parse(redisFixture.values.get(key)!) as Record<string, unknown>
+    stored.issuedAt = Date.now() - 301_000
+    stored.expiresAt = Date.now() - 1_000
+    stored.message = String(stored.message)
+      .replace(/Issued At: .+/, `Issued At: ${new Date(stored.issuedAt as number).toISOString()}`)
+      .replace(
+        /Expiration Time: .+/,
+        `Expiration Time: ${new Date(stored.expiresAt as number).toISOString()}`
+      )
+    redisFixture.values.set(key, JSON.stringify(stored))
+
+    await expect(
+      verifyWalletOwnership(mockSupabase, 'user-1', {
+        wallet_address: canonicalEvm,
+        signature: '0xsigned',
+        challenge_id: challenge.challenge_id,
+        platform: 'hyperliquid',
+        trader_key: canonicalEvm,
+      })
+    ).rejects.toThrow('challenge has expired')
   })
 
-  test('returns null for missing trader key', () => {
-    const msg = `I am claiming trader profile  on Arena. Timestamp: ${Date.now()}`
-    // The regex requires at least one character for the trader key (.+)
-    // An empty-ish space won't match the pattern correctly - let's test explicit empty
-    expect(
-      parseClaimMessage(`I am claiming trader profile on Arena. Timestamp: ${Date.now()}`)
-    ).toBeNull()
+  it('atomically admits only one of two concurrent uses of the same challenge', async () => {
+    const challenge = await createWalletClaimChallenge('user-1', 'hyperliquid', canonicalEvm)
+    const input = {
+      wallet_address: canonicalEvm,
+      signature: '0xsigned',
+      challenge_id: challenge.challenge_id,
+      platform: 'hyperliquid',
+      trader_key: canonicalEvm,
+    }
+
+    const results = await Promise.allSettled([
+      verifyWalletOwnership(mockSupabase, 'user-1', input),
+      verifyWalletOwnership(mockSupabase, 'user-1', input),
+    ])
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1)
+    expect(redisFixture.set).toHaveBeenCalledWith(
+      `wallet-claim:replay:${challenge.challenge_id}`,
+      expect.any(String),
+      { nx: true, ex: 600 }
+    )
   })
 
-  test('handles trader keys with special characters', () => {
-    const ts = 1700000000000
-    const msg = `I am claiming trader profile 0x1234-ABCD.test on Arena. Timestamp: ${ts}`
-    const result = parseClaimMessage(msg)
-    expect(result).not.toBeNull()
-    expect(result!.traderKey).toBe('0x1234-ABCD.test')
-    expect(result!.timestamp).toBe(ts)
+  it('releases only its own reservation after a downstream verification failure so retry can succeed', async () => {
+    const challenge = await createWalletClaimChallenge('user-1', 'hyperliquid', canonicalEvm)
+    mockedResolveTrader.mockResolvedValueOnce(null)
+    const input = {
+      wallet_address: canonicalEvm,
+      signature: '0xsigned',
+      challenge_id: challenge.challenge_id,
+      platform: 'hyperliquid',
+      trader_key: canonicalEvm,
+    }
+
+    await expect(verifyWalletOwnership(mockSupabase, 'user-1', input)).rejects.toThrow(
+      'Trader account was not found'
+    )
+    expect(redisFixture.values.has(`wallet-claim:replay:${challenge.challenge_id}`)).toBe(false)
+
+    await expect(verifyWalletOwnership(mockSupabase, 'user-1', input)).resolves.toMatchObject({
+      verified: true,
+      challenge_id: challenge.challenge_id,
+    })
   })
 
-  test('handles Solana-style base58 trader keys', () => {
-    const ts = 1700000000000
-    const key = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU'
-    const msg = `I am claiming trader profile ${key} on Arena. Timestamp: ${ts}`
-    const result = parseClaimMessage(msg)
-    expect(result).not.toBeNull()
-    expect(result!.traderKey).toBe(key)
+  it('cannot release a replay marker after losing reservation ownership', async () => {
+    const { challenge, verification } = await issueAndVerify(redisFixture)
+    const replayKey = `wallet-claim:replay:${challenge.challenge_id}`
+    redisFixture.values.set(replayKey, 'another-request-owner')
+
+    await expect(verification.reservation.release()).resolves.toBe(false)
+    expect(redisFixture.values.get(replayKey)).toBe('another-request-owner')
   })
 
-  test('timestamp is parsed as integer', () => {
-    const msg = 'I am claiming trader profile 0xABC on Arena. Timestamp: 1700000000000'
-    const result = parseClaimMessage(msg)
-    expect(result).not.toBeNull()
-    expect(typeof result!.timestamp).toBe('number')
-    expect(result!.timestamp).toBe(1700000000000)
+  it('keeps a consumed marker through its TTL and rejects subsequent replay', async () => {
+    const { challenge, verification } = await issueAndVerify(redisFixture)
+
+    await expect(verification.reservation.consume()).resolves.toBe(true)
+    expect(redisFixture.values.get(`wallet-claim:replay:${challenge.challenge_id}`)).toBe(
+      'consumed'
+    )
+    await expect(
+      verifyWalletOwnership(mockSupabase, 'user-1', {
+        wallet_address: canonicalEvm,
+        signature: '0xsigned',
+        challenge_id: challenge.challenge_id,
+        platform: 'hyperliquid',
+        trader_key: canonicalEvm,
+      })
+    ).rejects.toThrow('already in use or has been consumed')
   })
 
-  test('returns null for extra text after timestamp', () => {
-    const msg = `I am claiming trader profile 0xABC on Arena. Timestamp: ${Date.now()} extra`
-    expect(parseClaimMessage(msg)).toBeNull()
+  it('fails closed when Redis is unavailable during issuance or verification', async () => {
+    mockedGetSharedRedis.mockResolvedValue(null)
+    await expect(
+      createWalletClaimChallenge('user-1', 'hyperliquid', canonicalEvm)
+    ).rejects.toMatchObject({
+      message: expect.stringContaining('temporarily unavailable'),
+      code: 'SERVICE_UNAVAILABLE',
+      statusCode: 503,
+      retryAfter: 30,
+    })
+
+    mockedGetSharedRedis.mockResolvedValue(redisFixture.redis as never)
+    const challenge = await createWalletClaimChallenge('user-1', 'hyperliquid', canonicalEvm)
+    mockedGetSharedRedis.mockResolvedValue(null)
+    await expect(
+      verifyWalletOwnership(mockSupabase, 'user-1', {
+        wallet_address: canonicalEvm,
+        signature: '0xsigned',
+        challenge_id: challenge.challenge_id,
+        platform: 'hyperliquid',
+        trader_key: canonicalEvm,
+      })
+    ).rejects.toMatchObject({
+      message: expect.stringContaining('temporarily unavailable'),
+      code: 'SERVICE_UNAVAILABLE',
+      statusCode: 503,
+      retryAfter: 30,
+    })
   })
 
-  test('returns null for extra text before prefix', () => {
-    const msg = `extra I am claiming trader profile 0xABC on Arena. Timestamp: ${Date.now()}`
-    expect(parseClaimMessage(msg)).toBeNull()
-  })
-})
-
-// ═══════════════════════════════════════════════════════
-// Message freshness validation (via verifyWalletOwnership behavior)
-// ═══════════════════════════════════════════════════════
-
-describe('message freshness', () => {
-  // We can't easily test verifyWalletOwnership end-to-end without extensive
-  // mocking, but we can validate the constants and logic conceptually.
-
-  test('MAX_MESSAGE_AGE is 5 minutes', () => {
-    // The module uses 5 * 60 * 1000 = 300000ms
-    const EXPECTED_MAX_AGE = 5 * 60 * 1000
-    expect(EXPECTED_MAX_AGE).toBe(300000)
-  })
-
-  test('a message from 1 second ago should be fresh', () => {
-    const messageTimestamp = Date.now() - 1000
-    const age = Date.now() - messageTimestamp
-    expect(age).toBeLessThan(5 * 60 * 1000) // within 5 min
-  })
-
-  test('a message from 10 minutes ago should be expired', () => {
-    const messageTimestamp = Date.now() - 10 * 60 * 1000
-    const age = Date.now() - messageTimestamp
-    expect(age).toBeGreaterThan(5 * 60 * 1000)
-  })
-
-  test('a message from the future (within 60s tolerance) should be acceptable', () => {
-    const messageTimestamp = Date.now() + 30000 // 30s in the future
-    const age = Date.now() - messageTimestamp
-    // age is negative (-30s), which is > -60000, so within tolerance
-    expect(age).toBeGreaterThan(-60000)
-  })
-
-  test('a message from far in the future should be rejected', () => {
-    const messageTimestamp = Date.now() + 120000 // 2 min in the future
-    const age = Date.now() - messageTimestamp
-    // age is ~-120000, which is < -60000
-    expect(age).toBeLessThan(-60000)
+  it('rejects the legacy freely constructed message format without a server challenge id', async () => {
+    await expect(
+      verifyWalletOwnership(mockSupabase, 'user-1', {
+        wallet_address: canonicalEvm,
+        signature: '0xsigned',
+        message: `I am claiming trader profile ${canonicalEvm} on Arena. Timestamp: ${Date.now()}`,
+        platform: 'hyperliquid',
+        trader_key: canonicalEvm,
+      } as unknown as Parameters<typeof verifyWalletOwnership>[2])
+    ).rejects.toThrow('challenge_id must be a non-empty string')
   })
 })
 
 describe('chain-specific wallet identity verification', () => {
-  const solanaTrader = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU'
-  const caseCollidingSolanaWallet = '7XKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU'
-  const checksumEvm = '0xAbCdEf0123456789aBCdEf0123456789AbCdEf01'
-  const canonicalEvm = checksumEvm.toLowerCase()
-
-  function claimMessage(traderKey: string): string {
-    return `I am claiming trader profile ${traderKey} on Arena. Timestamp: ${Date.now()}`
-  }
+  let redisFixture: ReturnType<typeof createRedisFixture>
 
   beforeEach(() => {
     jest.clearAllMocks()
+    redisFixture = createRedisFixture()
+    mockedGetSharedRedis.mockResolvedValue(redisFixture.redis as never)
   })
 
-  test('rejects a different valid-looking Solana key that collides only after lowercasing', async () => {
-    mockedResolveTrader.mockResolvedValue({
-      platform: 'drift',
-      traderKey: solanaTrader,
-      handle: null,
-      avatarUrl: null,
-    })
+  it.each(['gains', 'aevo', 'dydx', 'jupiter_perps', 'drift'])(
+    'does not issue a challenge for retired or blocked source %s',
+    async (source) => {
+      await expect(createWalletClaimChallenge('user-1', source, canonicalEvm)).rejects.toThrow(
+        'does not support wallet signature verification'
+      )
+      expect(redisFixture.set).not.toHaveBeenCalled()
+    }
+  )
 
-    await expect(
-      verifyWalletOwnership(mockSupabase, 'user-1', {
-        wallet_address: caseCollidingSolanaWallet,
-        signature: 'c2lnbmF0dXJl',
-        message: claimMessage(solanaTrader),
-        platform: 'drift',
-        trader_key: solanaTrader,
-      })
-    ).rejects.toThrow('does not match this trader account')
-  })
-
-  test('accepts an exact Solana identity without changing its case', async () => {
-    mockedResolveTrader.mockResolvedValue({
-      platform: 'drift',
-      traderKey: solanaTrader,
-      handle: null,
-      avatarUrl: null,
-    })
-
-    await expect(
-      verifyWalletOwnership(mockSupabase, 'user-1', {
-        wallet_address: solanaTrader,
-        signature: 'c2lnbmF0dXJl',
-        message: claimMessage(solanaTrader),
-        platform: 'drift',
-        trader_key: solanaTrader,
-      })
-    ).resolves.toMatchObject({
-      verified: true,
-      wallet_address: solanaTrader,
-      chain: 'solana',
-    })
-  })
-
-  test('canonicalizes EVM checksum case for lookup and storage', async () => {
+  it('canonicalizes EVM checksum case for lookup and storage', async () => {
+    const challenge = await createWalletClaimChallenge('user-1', 'hyperliquid', checksumEvm)
     mockedResolveTrader.mockResolvedValue({
       platform: 'hyperliquid',
       traderKey: canonicalEvm,
@@ -226,7 +311,7 @@ describe('chain-specific wallet identity verification', () => {
       verifyWalletOwnership(mockSupabase, 'user-1', {
         wallet_address: checksumEvm,
         signature: '0xsigned',
-        message: claimMessage(checksumEvm),
+        challenge_id: challenge.challenge_id,
         platform: 'hyperliquid',
         trader_key: canonicalEvm,
       })
@@ -241,26 +326,12 @@ describe('chain-specific wallet identity verification', () => {
     })
   })
 
-  test('fails closed when the claimed wallet is not an Arena trader', async () => {
-    mockedResolveTrader.mockResolvedValue(null)
-
-    await expect(
-      verifyWalletOwnership(mockSupabase, 'user-1', {
-        wallet_address: canonicalEvm,
-        signature: '0xsigned',
-        message: claimMessage(canonicalEvm),
-        platform: 'hyperliquid',
-        trader_key: canonicalEvm,
-      })
-    ).rejects.toThrow('Trader account was not found in Arena')
-  })
-
-  test('rejects non-string nested wallet input before crypto or lookup', async () => {
+  it('rejects non-string nested wallet input before challenge reservation', async () => {
     await expect(
       verifyWalletOwnership(mockSupabase, 'user-1', {
         wallet_address: { value: canonicalEvm } as unknown as string,
         signature: '0xsigned',
-        message: claimMessage(canonicalEvm),
+        challenge_id: 'a'.repeat(64),
         platform: 'hyperliquid',
         trader_key: canonicalEvm,
       })

@@ -3,6 +3,7 @@
 import type { ConnectionOptions, Queue } from 'bullmq'
 import type { Redis } from 'ioredis'
 import { logger } from '@/lib/logger'
+import { isV1IngestExecutionPublished } from '@/lib/ingest/v1-execution-publication'
 
 const QUEUE_NAME = 'arena-ingest'
 const JOB_NAME = 'firstparty:sync'
@@ -39,6 +40,11 @@ async function getBridge(): Promise<{ queue: Queue; redis: Redis } | null> {
 }
 
 export async function enqueueFirstPartySync(authorizationId: string): Promise<boolean> {
+  // V1 does not admit new ingest work. This guard is deliberately before the
+  // input branch and bridge construction so a future caller cannot reach
+  // Redis or BullMQ while the source publication hold is active.
+  if (!isV1IngestExecutionPublished()) return false
+
   if (!authorizationId) return false
   try {
     const activeBridge = await getBridge()
