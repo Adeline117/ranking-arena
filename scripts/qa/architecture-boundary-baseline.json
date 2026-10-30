@@ -2,36 +2,6 @@
   "version": 1,
   "violations": [
     {
-      "rule": "app-ui-must-not-import-api-route",
-      "source": "app/(app)/compare/ComparePageClient.tsx",
-      "specifier": "@/app/api/search/route"
-    },
-    {
-      "rule": "app-ui-must-not-import-api-route",
-      "source": "app/(app)/search/__tests__/SearchPageClient.people.test.tsx",
-      "specifier": "@/app/api/search/route"
-    },
-    {
-      "rule": "app-ui-must-not-import-api-route",
-      "source": "app/(app)/search/search-result-model.ts",
-      "specifier": "@/app/api/search/route"
-    },
-    {
-      "rule": "app-ui-must-not-import-api-route",
-      "source": "app/(app)/search/SearchPageClient.tsx",
-      "specifier": "@/app/api/search/route"
-    },
-    {
-      "rule": "app-ui-must-not-import-api-route",
-      "source": "app/components/search/SearchResultGroup.tsx",
-      "specifier": "@/app/api/search/route"
-    },
-    {
-      "rule": "app-ui-must-not-import-api-route",
-      "source": "app/components/search/useSearchData.ts",
-      "specifier": "@/app/api/search/route"
-    },
-    {
       "rule": "lib-must-not-import-app",
       "source": "lib/data/serving/legacy-adapter.ts",
       "specifier": "@/app/(app)/u/[handle]/components/types"
