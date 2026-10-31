@@ -44,16 +44,11 @@ interface FirstScreenCall {
   canonicalSubject: LinkedSubject
 }
 
-interface CoreCall {
-  url: string
-  subject: LinkedSubject
-  timeframe: '7' | '30' | '90'
-}
-
 interface LinkedAccountRequests {
   aggregateCalls: StandaloneAggregateCall[]
   firstScreenCalls: FirstScreenCall[]
-  coreCalls: CoreCall[]
+  /** Any /core request is a regression: the projection is quarantined and built client-side. */
+  coreCalls: string[]
   legacyCalls: string[]
   invalidCalls: string[]
   controls: {
@@ -215,6 +210,8 @@ function makeFirstScreenFixture(request: LinkedSubject) {
           {
             timeframe: 90,
             rank: MOCK_LINKED_RANK,
+            rankingVisibility: 'verified',
+            rankingVisibilityReason: null,
             headlineRoi: MOCK_LINKED_ROI,
             headlinePnl: null,
             headlineWinRate: 61,
@@ -260,36 +257,6 @@ function makeFirstScreenNotFound(request: LinkedSubject, sourceNotServing: boole
         },
       }),
       timestamp: '2026-07-29T12:00:00.000Z',
-    },
-  }
-}
-
-function makeCoreFixture(subject: LinkedSubject, timeframe: 7 | 30 | 90) {
-  const roi = timeframe === 90 ? MOCK_LINKED_ROI : timeframe === 30 ? 51.3 : 14.7
-  return {
-    success: true,
-    data: {
-      timeframe,
-      stats: {
-        roi,
-        pnl: timeframe === 90 ? 1234.56 : 321.09,
-        win_rate: 61,
-        mdd: 18,
-        total_positions: 37,
-      },
-      currency: 'USDT',
-      series: {
-        roi: [
-          { ts: '2026-07-28T00:00:00.000Z', value: roi - 1 },
-          { ts: '2026-07-29T00:00:00.000Z', value: roi },
-        ],
-      },
-      extras: {},
-      provenance: {
-        source: subject.platform,
-        asOf: '2026-07-29T12:00:00.000Z',
-      },
-      cacheState: 'warm',
     },
   }
 }
@@ -442,50 +409,11 @@ async function stubLinkedAccountApis(
     }
   )
 
-  await page.route(new RegExp(`/api/traders/${MOCK_LINKED_KEY}/core(?:\\?|$)`), async (route) => {
-    const url = new URL(route.request().url())
-    const queryKeys = [...url.searchParams.keys()].sort()
-    const sourceValues = url.searchParams.getAll('source')
-    const timeframeValues = url.searchParams.getAll('tf')
-    const timeframe = timeframeValues[0]
-    const subject = {
-      platform: sourceValues[0] ?? '',
-      traderKey: MOCK_LINKED_KEY,
-    }
-    const membershipProvesSubject = requests.aggregateCalls.some((call) =>
-      subjectsMatch(canonicalLinkedSubject(syntheticLinkedSubject(call.subject)), subject)
-    )
-    const isSupportedTimeframe = timeframe === '7' || timeframe === '30' || timeframe === '90'
-    const isExact =
-      url.pathname === `/api/traders/${MOCK_LINKED_KEY}/core` &&
-      queryKeys.join(',') === 'source,tf' &&
-      sourceValues.length === 1 &&
-      sourceValues[0].length > 0 &&
-      timeframeValues.length === 1 &&
-      isSupportedTimeframe &&
-      membershipProvesSubject
-
-    if (!isExact || !isSupportedTimeframe) {
-      requests.invalidCalls.push(url.toString())
-      await route.fulfill({
-        status: 400,
-        contentType: 'application/json',
-        body: JSON.stringify({ success: false, error: 'expected exact linked core subject' }),
-      })
-      return
-    }
-
-    requests.coreCalls.push({
-      url: url.toString(),
-      subject,
-      timeframe,
-    })
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      headers: { 'cache-control': 'private, no-store, max-age=0' },
-      body: JSON.stringify(makeCoreFixture(subject, Number(timeframe) as 7 | 30 | 90)),
-    })
+  // The public /core projection is quarantined for every timeframe and the
+  // client builds it locally, so the detail page must never request it.
+  await page.route(/\/api\/traders\/[^/]+\/core(?:\?|$)/, async (route) => {
+    requests.coreCalls.push(route.request().url())
+    await route.fulfill({ status: 410, body: 'quarantined /core must not be requested' })
   })
 
   // This is the legacy detail boundary selected-account fallback may call only
@@ -804,18 +732,13 @@ async function expectSyntheticServingView(
       () => requests.firstScreenCalls.filter((call) => subjectsMatch(call.request, subject)).length
     )
     .toBeGreaterThan(0)
-  await expect
-    .poll(
-      () =>
-        requests.coreCalls.filter(
-          (call) => subjectsMatch(call.subject, canonicalSubject) && call.timeframe === '90'
-        ).length
-    )
-    .toBeGreaterThan(0)
-
-  const performanceCard = page.locator('.performance-card')
-  await expect(performanceCard).toBeVisible()
-  await expect(performanceCard.getByText(MOCK_LINKED_ROI_TEXT, { exact: true })).toBeVisible()
+  // History is quarantined: one verification notice carrying only the sealed
+  // public rank/ROI of the exact linked subject, never a performance card.
+  const notice = page.getByTestId('history-verification-notice').first()
+  await expect(notice).toBeVisible()
+  await expect(notice.getByText(`#${MOCK_LINKED_RANK}`, { exact: true })).toBeVisible()
+  await expect(notice.getByText(MOCK_LINKED_ROI_TEXT, { exact: true })).toBeVisible()
+  await expect(page.locator('.performance-card')).toHaveCount(0)
 
   for (const call of requests.firstScreenCalls) {
     expect(call.request).toEqual(subject)
@@ -824,12 +747,7 @@ async function expectSyntheticServingView(
     expect(url.pathname).toContain(`/${MOCK_LINKED_KEY}/`)
     expect(url.searchParams.get('source')).toBe(subject.platform)
   }
-  for (const call of requests.coreCalls) {
-    expect(call.subject).toEqual(canonicalSubject)
-    const url = new URL(call.url)
-    expect(url.pathname).toContain(`/${MOCK_LINKED_KEY}/`)
-    expect(url.searchParams.get('source')).toBe(canonicalSubject.platform)
-  }
+  expect(requests.coreCalls, 'quarantined /core must not be requested').toHaveLength(0)
   expect(requests.invalidCalls).toHaveLength(0)
 }
 
@@ -852,7 +770,7 @@ test.describe('交易员详情页 - 账号切换 (account switching)', () => {
     await expectAllAccountScope(page)
   })
 
-  test('direct synthetic account URL rekeys first-screen and core to its exact identity', async ({
+  test('direct synthetic account URL rekeys first-screen to its exact identity without /core', async ({
     page,
   }) => {
     const requests = await stubLinkedAccountApis(page)
