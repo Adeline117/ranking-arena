@@ -22,22 +22,12 @@ import {
   type SharedCacheWriteFence,
   type SharedCacheWriteLock,
 } from './write-fence'
+import { readCorrelationId } from '@/lib/telemetry/correlation-context'
 
 // Correlation ID support — logs cache operations with the current request's correlation ID
-let _getCorrelationId: (() => string | undefined) | null = null
 function correlationId(): string | undefined {
   if (typeof window !== 'undefined') return undefined
-  if (!_getCorrelationId) {
-    try {
-      const mod = '@/lib/api/' + 'correlation'
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      _getCorrelationId = require(mod).getCorrelationId
-    } catch (_err) {
-      /* correlation module unavailable */
-      _getCorrelationId = () => undefined
-    }
-  }
-  return _getCorrelationId!()
+  return readCorrelationId()
 }
 
 // ============================================

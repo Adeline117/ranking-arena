@@ -4,22 +4,12 @@
  * 生产环境自动关闭 debug/log，保留 warn/error
  */
 
-// Correlation ID support — server-only (node:async_hooks not available in browser)
-let _getCorrelationId: (() => string | undefined) | null = null
+import { readCorrelationId } from '@/lib/telemetry/correlation-context'
+
+// Correlation ID from the request context (server only; undefined in the browser).
 function correlationId(): string | undefined {
   if (typeof window !== 'undefined') return undefined
-  if (!_getCorrelationId) {
-    try {
-      // Dynamic path to prevent Turbopack from resolving node:async_hooks in client bundles
-      const mod = '@/lib/api/' + 'correlation'
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      _getCorrelationId = require(mod).getCorrelationId
-    } catch (_err) {
-      /* correlation module unavailable (Edge Runtime) */
-      _getCorrelationId = () => undefined
-    }
-  }
-  return _getCorrelationId!()
+  return readCorrelationId()
 }
 
 // ============================================
@@ -63,9 +53,9 @@ const LOG_LEVELS: Record<LogLevel, number> = {
 
 const LOG_COLORS: Record<LogLevel, string> = {
   debug: '\x1b[90m', // 灰色
-  log: '\x1b[37m',   // 白色
-  info: '\x1b[36m',  // 青色
-  warn: '\x1b[33m',  // 黄色
+  log: '\x1b[37m', // 白色
+  info: '\x1b[36m', // 青色
+  warn: '\x1b[33m', // 黄色
   error: '\x1b[31m', // 红色
 }
 
@@ -159,7 +149,12 @@ class Logger {
       // Merge first data arg if it's an object, append rest as extra
       if (data.length > 0) {
         const first = data[0]
-        if (first && typeof first === 'object' && !Array.isArray(first) && !(first instanceof Error)) {
+        if (
+          first &&
+          typeof first === 'object' &&
+          !Array.isArray(first) &&
+          !(first instanceof Error)
+        ) {
           Object.assign(entry, first)
           if (data.length > 1) entry.extra = data.slice(1)
         } else {
@@ -234,7 +229,7 @@ class Logger {
   error(message: string, ...data: unknown[]): void {
     this.output('error', message, ...data)
     // Auto-report Error objects to Sentry for observability
-    const errorObj = data.find(d => d instanceof Error) as Error | undefined
+    const errorObj = data.find((d) => d instanceof Error) as Error | undefined
     if (errorObj) {
       void captureError(errorObj, { message, logger: this.name })
     }
@@ -251,11 +246,12 @@ class Logger {
    * Log API error with standard format
    */
   apiError(endpoint: string, error: unknown, context?: Record<string, unknown>): void {
-    const errorMessage = error instanceof Error
-      ? error.message
-      : (typeof error === 'object' && error !== null && 'message' in error)
-        ? String((error as Record<string, unknown>).message)
-        : JSON.stringify(error)
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error !== null && 'message' in error
+          ? String((error as Record<string, unknown>).message)
+          : JSON.stringify(error)
     this.error(`API Error: ${endpoint}`, { endpoint, error: errorMessage, ...context })
     if (error instanceof Error) {
       void captureError(error, { endpoint, ...context })
@@ -266,11 +262,12 @@ class Logger {
    * Log database error
    */
   dbError(operation: string, error: unknown, context?: Record<string, unknown>): void {
-    const errorMessage = error instanceof Error
-      ? error.message
-      : (typeof error === 'object' && error !== null && 'message' in error)
-        ? String((error as Record<string, unknown>).message)
-        : JSON.stringify(error)
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error !== null && 'message' in error
+          ? String((error as Record<string, unknown>).message)
+          : JSON.stringify(error)
     this.error(`Database Error: ${operation}`, { operation, error: errorMessage, ...context })
     if (error instanceof Error) {
       void captureError(error, { operation, ...context })
@@ -398,12 +395,12 @@ export const messageLogger = new Logger('Message')
  * 消息事件类型
  */
 export type MessageEvent =
-  | 'send'           // 发送消息
-  | 'delivered'      // 消息送达
-  | 'read'           // 消息已读
-  | 'failed'         // 发送失败
-  | 'conversation_created'  // 会话创建
-  | 'notification_sent'     // 通知发送
+  | 'send' // 发送消息
+  | 'delivered' // 消息送达
+  | 'read' // 消息已读
+  | 'failed' // 发送失败
+  | 'conversation_created' // 会话创建
+  | 'notification_sent' // 通知发送
 
 interface MessageTraceContext {
   messageId?: string
@@ -522,13 +519,13 @@ interface Timer {
 export function createTimer(label: string, context?: string): Timer {
   const start = Date.now()
   const log = context ? new Logger(context) : logger
-  
+
   return {
     end(options?: TimerEndOptions): number {
       const duration = Date.now() - start
       const status = options?.status
       const error = options?.error
-      
+
       if (error) {
         log.warn(`${label} completed in ${duration}ms with error: ${error}`)
       } else if (status && status >= 400) {
@@ -536,9 +533,9 @@ export function createTimer(label: string, context?: string): Timer {
       } else {
         log.debug(`${label} completed in ${duration}ms`)
       }
-      
+
       return duration
-    }
+    },
   }
 }
 
@@ -569,7 +566,12 @@ export function silent<T>(fn: () => T): T {
 /**
  * 条件日志
  */
-export function logIf(condition: boolean, level: LogLevel, message: string, ...data: unknown[]): void {
+export function logIf(
+  condition: boolean,
+  level: LogLevel,
+  message: string,
+  ...data: unknown[]
+): void {
   if (condition) {
     logger[level](message, ...data)
   }
@@ -603,7 +605,10 @@ async function getSentry() {
     sentryLoadFailed = true
     // Log to console so we know Sentry isn't working
     if (isProduction) {
-      console.warn('[Logger] Sentry load failed, error reporting disabled:', e instanceof Error ? e.message : e)
+      console.warn(
+        '[Logger] Sentry load failed, error reporting disabled:',
+        e instanceof Error ? e.message : e
+      )
     }
     return null
   }
@@ -630,7 +635,11 @@ export async function captureError(error: Error, context?: Record<string, unknow
 /**
  * 向 Sentry 发送消息
  */
-export async function captureMessage(message: string, level: 'info' | 'warning' | 'error' = 'info', context?: Record<string, unknown>): Promise<void> {
+export async function captureMessage(
+  message: string,
+  level: 'info' | 'warning' | 'error' = 'info',
+  context?: Record<string, unknown>
+): Promise<void> {
   try {
     const sentry = await getSentry()
     if (sentry) {
@@ -646,7 +655,11 @@ export async function captureMessage(message: string, level: 'info' | 'warning' 
 /**
  * 添加 Sentry breadcrumb
  */
-export async function addBreadcrumb(message: string, level: 'info' | 'warning' | 'error' = 'info', data?: Record<string, unknown>): Promise<void> {
+export async function addBreadcrumb(
+  message: string,
+  level: 'info' | 'warning' | 'error' = 'info',
+  data?: Record<string, unknown>
+): Promise<void> {
   try {
     const sentry = await getSentry()
     if (sentry) {
@@ -730,7 +743,10 @@ export async function safeExecute<T>(
 // ---------------------------------------------------------------------------
 
 /** In-memory failure counts per label, for health check observability */
-const _fireAndForgetFailures = new Map<string, { count: number; lastError: string; lastAt: number }>()
+const _fireAndForgetFailures = new Map<
+  string,
+  { count: number; lastError: string; lastAt: number }
+>()
 const FIRE_AND_FORGET_MAX_ENTRIES = 100
 const FIRE_AND_FORGET_MAX_AGE_MS = 60 * 60 * 1000 // 1 hour
 
@@ -761,7 +777,10 @@ const FIRE_AND_FORGET_ERROR_THRESHOLD = 3
  * Returns a snapshot of all fire-and-forget failure counts.
  * Useful for health check endpoints to surface silent background failures.
  */
-export function getFireAndForgetStats(): Record<string, { count: number; lastError: string; lastAt: string }> {
+export function getFireAndForgetStats(): Record<
+  string,
+  { count: number; lastError: string; lastAt: string }
+> {
   const result: Record<string, { count: number; lastError: string; lastAt: string }> = {}
   for (const [label, data] of _fireAndForgetFailures) {
     result[label] = {
