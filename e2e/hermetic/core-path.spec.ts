@@ -26,6 +26,17 @@ test.describe('core path', () => {
     await expect(page.getByRole('heading', { name: /E2E 90D Trader 1/ })).toBeVisible()
   })
 
+  test("switching period on a trader shows that period's numbers", async ({ page }) => {
+    await page.goto('/trader/e2e-shared?platform=binance_futures')
+    await expect(page.getByRole('heading', { name: 'E2E Shared Trader' })).toBeVisible()
+    const roi = page.getByRole('tabpanel', { name: 'Overview' })
+    await expect(roi.getByRole('img', { name: 'ROI +333.0%' })).toBeVisible()
+    await page.getByRole('button', { name: '7D period' }).click()
+    await expect(roi.getByRole('img', { name: 'ROI +111.0%' })).toBeVisible()
+    await page.getByRole('button', { name: '30D period' }).click()
+    await expect(roi.getByRole('img', { name: 'ROI +222.0%' })).toBeVisible()
+  })
+
   test('an exchange ranking only lists that exchange', async ({ page }) => {
     await page.goto('/rankings/binance_futures')
     const links = page.locator('a[href*="/trader/"]:visible')

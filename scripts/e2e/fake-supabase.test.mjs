@@ -12,7 +12,13 @@ test('filters by period, so each period has its own traders', () => {
   const week = query('season_id=eq.7D')
   assert.ok(week.length > 0)
   assert.ok(week.every((row) => row.season_id === '7D'))
-  assert.ok(week.every((row) => row.handle.startsWith('E2E 7D ')))
+  const own = week.filter((row) => row.source_trader_id !== 'e2e-shared')
+  assert.ok(own.length > 0)
+  assert.ok(own.every((row) => row.handle.startsWith('E2E 7D ')))
+  assert.deepEqual(
+    week.filter((row) => row.source_trader_id === 'e2e-shared').map((row) => row.roi),
+    [111]
+  )
 })
 
 test('honours the source exclusion and allowlist the leaderboard reader sends', () => {
@@ -28,7 +34,7 @@ test('orders and pages like PostgREST range requests', () => {
   const page = query('season_id=eq.90D&order=rank.desc&offset=1&limit=2')
   assert.deepEqual(
     page.map((row) => row.rank),
-    [29, 28]
+    [30, 29]
   )
 })
 
