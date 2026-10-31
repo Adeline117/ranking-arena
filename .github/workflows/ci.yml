@@ -404,7 +404,7 @@ jobs:
           npm run qa:architecture
 
       - name: Core path gates
-        run: node --test scripts/qa/core-coverage-floor.test.mjs scripts/qa/v1-surface.test.mjs scripts/qa/fix-requires-test.test.mjs
+        run: node --test scripts/qa/core-coverage-floor.test.mjs scripts/qa/v1-surface.test.mjs scripts/qa/fix-requires-test.test.mjs scripts/qa/launch-inventory-gap.test.mjs
 
       # A pull request titled fix(...) must change a test, or say why not.
       - name: Fixes carry a regression test
