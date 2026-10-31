@@ -5,7 +5,7 @@
 
 import { ReactNode, createElement } from 'react'
 import { getStickerById, isPureSticker, extractStickerId, STICKER_PATTERN } from '@/lib/stickers'
-import { logger } from '@/lib/logger'
+import { logger } from './logger'
 
 // Arena 主题色
 export const ARENA_PURPLE = 'var(--color-brand)'
