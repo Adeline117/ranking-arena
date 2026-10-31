@@ -1,0 +1,14 @@
+# Keep the repository representation and Unix-oriented tooling deterministic.
+* text=auto eol=lf
+
+# Native Windows launchers keep CRLF in the working tree; Git stores LF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Reviewed binary formats must never be normalized or auto-merged as text.
+*.ico binary
+*.jar binary
+*.jpeg binary
+*.jpg binary
+*.png binary
+*.webp binary
