@@ -33,3 +33,17 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+  # Android (Capacitor) Gradle dependencies. Mobile release is paused under V1,
+  # so this only surfaces security/minor updates for review; majors stay manual.
+  - package-ecosystem: "gradle"
+    directory: "/android"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps(android)"
+    labels:
+      - "dependencies"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
