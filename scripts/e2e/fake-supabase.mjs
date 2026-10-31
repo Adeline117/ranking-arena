@@ -52,6 +52,46 @@ function buildRow(period, index, nowIso) {
   }
 }
 
+export const TEST_USER = {
+  id: '00000000-0000-4000-8000-000000000001',
+  email: 'e2e@example.com',
+  password: 'e2e-password',
+}
+
+function buildAccessToken() {
+  const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url')
+  const exp = Math.floor(Date.now() / 1000) + 3600
+  return [
+    encode({ alg: 'HS256', typ: 'JWT' }),
+    encode({ sub: TEST_USER.id, email: TEST_USER.email, role: 'authenticated', exp }),
+    'fake-signature',
+  ].join('.')
+}
+
+function buildAuthUser() {
+  return {
+    id: TEST_USER.id,
+    aud: 'authenticated',
+    role: 'authenticated',
+    email: TEST_USER.email,
+    email_confirmed_at: '2026-01-01T00:00:00.000Z',
+    created_at: '2026-01-01T00:00:00.000Z',
+    app_metadata: { provider: 'email' },
+    user_metadata: {},
+  }
+}
+
+function buildSession() {
+  return {
+    access_token: buildAccessToken(),
+    refresh_token: 'fake-refresh-token',
+    token_type: 'bearer',
+    expires_in: 3600,
+    expires_at: Math.floor(Date.now() / 1000) + 3600,
+    user: buildAuthUser(),
+  }
+}
+
 // One trader ranked in every period, so a test can switch period on its profile.
 export const SHARED_TRADER_ROI = { '7D': 111, '30D': 222, '90D': 333 }
 
@@ -83,6 +123,15 @@ export function buildFixtures(now = new Date()) {
     public_ranked_leaderboard: ranked,
     leaderboard_ranks: ranked,
     leaderboard_source_freshness: freshness,
+    user_profiles: [
+      {
+        id: TEST_USER.id,
+        handle: 'e2e_user',
+        email: TEST_USER.email,
+        banned_at: null,
+        deleted_at: null,
+      },
+    ],
     trader_sources: ranked.map((row) => ({
       source: row.source,
       source_trader_id: row.source_trader_id,
@@ -187,7 +236,11 @@ export function queryRelation(rows, searchParams) {
   return result.slice(offset, offset + limit)
 }
 
+// Relations a test can write to. Everything else accepts a write and forgets it.
+const WRITABLE_RELATIONS = new Set(['trader_watchlist'])
+
 export function startFakeSupabase({ port = 54399, log } = {}) {
+  const stored = new Map([...WRITABLE_RELATIONS].map((relation) => [relation, []]))
   const server = createServer((req, res) => {
     const url = new URL(req.url, 'http://fake-supabase.local')
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -204,14 +257,46 @@ export function startFakeSupabase({ port = 54399, log } = {}) {
       if (log) appendFileSync(log, `${status} ${req.method} ${req.url}\n`)
       res.setHeader('Content-Type', 'application/json')
       res.writeHead(status)
-      res.end(JSON.stringify(body))
+      res.end(status === 204 || req.method === 'HEAD' ? undefined : JSON.stringify(body))
+    }
+
+    const readBody = (handler) => {
+      let body = ''
+      req.on('data', (chunk) => (body += chunk))
+      req.on('end', () => handler(body ? JSON.parse(body) : null))
     }
 
     const rest = url.pathname.match(/^\/rest\/v1\/([^/]+)$/)
-    if (rest && req.method === 'GET') {
+    if (rest && stored.has(rest[1])) {
+      const rows = stored.get(rest[1])
+      if (req.method === 'POST') {
+        return readBody((body) => {
+          for (const row of [body].flat()) {
+            const key = JSON.stringify([row.user_id, row.source, row.source_trader_id])
+            const same = (other) =>
+              JSON.stringify([other.user_id, other.source, other.source_trader_id]) === key
+            if (!rows.some(same)) {
+              rows.push({ id: rows.length + 1, created_at: new Date().toISOString(), ...row })
+            }
+          }
+          send(201, [])
+        })
+      }
+      if (req.method === 'DELETE') {
+        const removed = new Set(queryRelation(rows, url.searchParams))
+        stored.set(
+          rest[1],
+          rows.filter((row) => !removed.has(row))
+        )
+        return send(204, [])
+      }
+    }
+    if (rest && (req.method === 'GET' || req.method === 'HEAD')) {
       // Fixtures are rebuilt per request so `computed_at` never ages out of
       // the app's freshness window during a long run.
-      const rows = queryRelation(buildFixtures()[rest[1]] ?? [], url.searchParams)
+      const source = stored.get(rest[1]) ?? buildFixtures()[rest[1]] ?? []
+      const rows = queryRelation(source, url.searchParams)
+      res.setHeader('Content-Range', `0-${Math.max(rows.length - 1, 0)}/${rows.length}`)
       const wantsObject = (req.headers.accept ?? '').includes('vnd.pgrst.object')
       if (!wantsObject) return send(200, rows)
       if (rows.length === 1) return send(200, rows[0])
@@ -230,9 +315,25 @@ export function startFakeSupabase({ port = 54399, log } = {}) {
       )
       return
     }
-    if (url.pathname.startsWith('/auth/v1/')) {
-      return send(401, { code: 401, msg: 'no session in the hermetic environment' })
+    if (url.pathname === '/auth/v1/token') {
+      return readBody((body) => {
+        const refresh = url.searchParams.get('grant_type') === 'refresh_token'
+        const valid =
+          refresh || (body?.email === TEST_USER.email && body?.password === TEST_USER.password)
+        if (valid) return send(200, buildSession())
+        send(400, {
+          code: 400,
+          error_code: 'invalid_credentials',
+          msg: 'Invalid login credentials',
+        })
+      })
     }
+    if (url.pathname === '/auth/v1/user') {
+      const token = (req.headers.authorization ?? '').replace(/^Bearer /, '')
+      const signedIn = token.split('.').length === 3 && token.endsWith('fake-signature')
+      return signedIn ? send(200, buildAuthUser()) : send(401, { code: 401, msg: 'invalid token' })
+    }
+    if (url.pathname.startsWith('/auth/v1/')) return send(204, {})
     return send(200, [])
   })
 

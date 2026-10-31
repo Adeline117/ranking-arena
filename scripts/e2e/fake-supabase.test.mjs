@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildFixtures, queryRelation, startFakeSupabase } from './fake-supabase.mjs'
+import { TEST_USER, buildFixtures, queryRelation, startFakeSupabase } from './fake-supabase.mjs'
 
 const rows = buildFixtures(new Date('2026-10-30T00:00:00.000Z')).public_ranked_leaderboard
 
@@ -79,4 +79,36 @@ test('answers Upstash commands and pipelines as an empty Redis', async (t) => {
     body: '[["GET","a"],["GET","b"]]',
   })
   assert.deepEqual(await pipeline.json(), [{ result: null }, { result: null }])
+})
+
+test('signs in only with the test credentials, and the token identifies the user', async (t) => {
+  const server = await startFakeSupabase({ port: 0 })
+  t.after(() => server.close())
+  const base = `http://127.0.0.1:${server.address().port}/auth/v1`
+  const signIn = (password) =>
+    fetch(`${base}/token?grant_type=password`, {
+      method: 'POST',
+      body: JSON.stringify({ email: TEST_USER.email, password }),
+    })
+
+  assert.equal((await signIn('wrong')).status, 400)
+  const { access_token: token } = await (await signIn(TEST_USER.password)).json()
+
+  const user = await fetch(`${base}/user`, { headers: { authorization: `Bearer ${token}` } })
+  assert.equal((await user.json()).id, TEST_USER.id)
+  assert.equal((await fetch(`${base}/user`)).status, 401)
+})
+
+test('keeps watchlist writes until they are deleted', async (t) => {
+  const server = await startFakeSupabase({ port: 0 })
+  t.after(() => server.close())
+  const url = `http://127.0.0.1:${server.address().port}/rest/v1/trader_watchlist`
+  const row = { user_id: 'u', source: 's', source_trader_id: 't' }
+
+  await fetch(url, { method: 'POST', body: JSON.stringify(row) })
+  await fetch(url, { method: 'POST', body: JSON.stringify(row) })
+  assert.equal((await (await fetch(`${url}?user_id=eq.u`)).json()).length, 1)
+
+  await fetch(`${url}?source_trader_id=eq.t`, { method: 'DELETE' })
+  assert.deepEqual(await (await fetch(url)).json(), [])
 })

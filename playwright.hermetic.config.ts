@@ -21,6 +21,8 @@ export default defineConfig({
   outputDir: 'test-results-hermetic',
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
+    // The production CSP only allows real Supabase hosts, not the local fake.
+    bypassCSP: true,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
