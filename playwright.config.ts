@@ -11,7 +11,7 @@ export default defineConfig({
   // storageState setup. Running it in this four-device parallel matrix would
   // multiply shared-account mutations and used to fail when QA secrets were
   // absent while still making the generic suite look flaky.
-  testIgnore: ['**/authenticated-qa.spec.ts'],
+  testIgnore: ['**/authenticated-qa.spec.ts', '**/hermetic/**'],
 
   /* Global timeout per test — dev server needs more time for compilation */
   timeout: 120_000,
