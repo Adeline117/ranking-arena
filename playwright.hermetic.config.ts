@@ -48,6 +48,8 @@ export default defineConfig({
         SUPABASE_URL: FAKE_SUPABASE_URL,
         SUPABASE_SERVICE_ROLE_KEY: 'ci-build-service-placeholder',
         CRON_SECRET: 'ci-build-placeholder-cron-secret-0000000000',
+        UPSTASH_REDIS_REST_URL: `${FAKE_SUPABASE_URL}/upstash`,
+        UPSTASH_REDIS_REST_TOKEN: 'ci-build-upstash-placeholder',
       },
     },
   ],
