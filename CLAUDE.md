@@ -2,6 +2,7 @@
 
 ## Session Start Checklist
 
+**Current status**: `docs/STATUS.md` is the single entry point
 **Quick fix** (small bug, one file): Just read this file (CLAUDE.md)
 **Feature work**: Also read `docs/PROGRESS.md` + `docs/TASKS.md`
 **Architecture change**: Also read `docs/DECISIONS.md`（ADR：为什么这么做）+ `docs/ARCHITECTURE.md`（数据流/拓扑图）
