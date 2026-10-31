@@ -32,6 +32,12 @@ test('orders and pages like PostgREST range requests', () => {
   )
 })
 
+test('applies or-filters, as trader search does', () => {
+  const found = query('or=(handle.ilike.%25E2E 90D Trader 1%25,source_trader_id.ilike.%25none%25)')
+  assert.ok(found.length > 0)
+  assert.ok(found.every((row) => row.handle.startsWith('E2E 90D Trader 1')))
+})
+
 test('an unknown operator matches nothing rather than everything', () => {
   assert.deepEqual(query('season_id=bogus.90D'), [])
 })

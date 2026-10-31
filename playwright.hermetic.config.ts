@@ -1,0 +1,54 @@
+import { defineConfig, devices } from '@playwright/test'
+
+/**
+ * Core-path E2E against a production build and scripts/e2e/fake-supabase.mjs.
+ * It needs no secret and contacts no real service, so it can run on every pull
+ * request. Retries stay at zero: a flaky core-path test should fail visibly.
+ */
+const PORT = 3111
+const FAKE_SUPABASE_PORT = 54399
+const FAKE_SUPABASE_URL = `http://127.0.0.1:${FAKE_SUPABASE_PORT}`
+
+export default defineConfig({
+  testDir: './e2e/hermetic',
+  timeout: 60_000,
+  expect: { timeout: 15_000 },
+  fullyParallel: false,
+  forbidOnly: !!process.env.CI,
+  retries: 0,
+  workers: 1,
+  reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report-hermetic' }]],
+  outputDir: 'test-results-hermetic',
+  use: {
+    baseURL: `http://127.0.0.1:${PORT}`,
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
+  },
+  projects: [
+    { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
+    { name: 'mobile', use: { ...devices['iPhone 14'], defaultBrowserType: 'chromium' } },
+  ],
+  webServer: [
+    {
+      command: 'node scripts/e2e/fake-supabase.mjs',
+      url: `${FAKE_SUPABASE_URL}/rest/v1/health`,
+      reuseExistingServer: !process.env.CI,
+      env: { FAKE_SUPABASE_PORT: String(FAKE_SUPABASE_PORT) },
+    },
+    {
+      // Expects an existing `.next` built with the same public Supabase URL.
+      command: `npx next start -p ${PORT}`,
+      url: `http://127.0.0.1:${PORT}/login`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+      env: {
+        NODE_ENV: 'production',
+        NEXT_PUBLIC_SUPABASE_URL: FAKE_SUPABASE_URL,
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: 'ci-build-anon-placeholder',
+        SUPABASE_URL: FAKE_SUPABASE_URL,
+        SUPABASE_SERVICE_ROLE_KEY: 'ci-build-service-placeholder',
+        CRON_SECRET: 'ci-build-placeholder-cron-secret-0000000000',
+      },
+    },
+  ],
+})

@@ -134,14 +134,22 @@ function matches(row, column, expression) {
   return negated ? !result : result
 }
 
+// `or=(handle.ilike.%x%,id.eq.y)`; values with commas are not used by the app.
+function matchesAny(row, expression) {
+  return parseList(expression).some((term) => {
+    const dot = term.indexOf('.')
+    return matches(row, term.slice(0, dot), term.slice(dot + 1))
+  })
+}
+
 const RESERVED_PARAMS = new Set(['select', 'order', 'limit', 'offset', 'on_conflict', 'columns'])
 
 export function queryRelation(rows, searchParams) {
   let result = rows.filter((row) =>
-    [...searchParams.entries()].every(
-      ([key, value]) =>
-        RESERVED_PARAMS.has(key) || key === 'or' || key === 'and' || matches(row, key, value)
-    )
+    [...searchParams.entries()].every(([key, value]) => {
+      if (RESERVED_PARAMS.has(key)) return true
+      return key === 'or' ? matchesAny(row, value) : matches(row, key, value)
+    })
   )
 
   const order = searchParams.get('order')
