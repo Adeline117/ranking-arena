@@ -11,7 +11,7 @@ printf '%s\n' \
   'ERROR: scripts/security/rotate-secrets.sh is retired and fail-closed.' \
   'No credential was read, generated, logged, or changed.' \
   'Do not use delete-then-add rotation or pass secret values in command arguments.' \
-  'Follow the owner-supervised, provider-atomic procedure in:' \
-  'docs/RUNBOOK.md#manual-provider-atomic-secret-rotation' >&2
+  'Any future credential change is owner-only; see:' \
+  'docs/RUNBOOK.md#credential-rotation--v1-no-go--owner-only' >&2
 
 exit "$RETIRED_EXIT_CODE"
