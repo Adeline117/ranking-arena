@@ -52,11 +52,26 @@ function buildRow(period, index, nowIso) {
   }
 }
 
+// One trader ranked in every period, so a test can switch period on its profile.
+export const SHARED_TRADER_ROI = { '7D': 111, '30D': 222, '90D': 333 }
+
+function buildSharedRow(period, nowIso) {
+  return {
+    ...buildRow(period, TRADERS_PER_PERIOD, nowIso),
+    source: 'binance_futures',
+    source_type: 'futures',
+    source_trader_id: 'e2e-shared',
+    handle: 'E2E Shared Trader',
+    roi: SHARED_TRADER_ROI[period],
+  }
+}
+
 export function buildFixtures(now = new Date()) {
   const nowIso = now.toISOString()
-  const ranked = PERIODS.flatMap((period) =>
-    Array.from({ length: TRADERS_PER_PERIOD }, (_, index) => buildRow(period, index, nowIso))
-  )
+  const ranked = PERIODS.flatMap((period) => [
+    ...Array.from({ length: TRADERS_PER_PERIOD }, (_, index) => buildRow(period, index, nowIso)),
+    buildSharedRow(period, nowIso),
+  ])
   const freshness = PERIODS.flatMap((season_id) =>
     ['binance_futures', 'hyperliquid'].map((source) => ({
       season_id,
