@@ -59,3 +59,18 @@ test('serves rest requests, single-row errors and empty relations over HTTP', as
   const empty = await fetch(`${base}/no_fixture_relation`)
   assert.deepEqual(await empty.json(), [])
 })
+
+test('answers Upstash commands and pipelines as an empty Redis', async (t) => {
+  const server = await startFakeSupabase({ port: 0 })
+  t.after(() => server.close())
+  const base = `http://127.0.0.1:${server.address().port}/upstash`
+
+  const single = await fetch(base, { method: 'POST', body: '["GET","k"]' })
+  assert.deepEqual(await single.json(), { result: null })
+
+  const pipeline = await fetch(`${base}/pipeline`, {
+    method: 'POST',
+    body: '[["GET","a"],["GET","b"]]',
+  })
+  assert.deepEqual(await pipeline.json(), [{ result: null }, { result: null }])
+})

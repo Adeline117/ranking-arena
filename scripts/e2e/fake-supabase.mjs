@@ -202,6 +202,19 @@ export function startFakeSupabase({ port = 54399, log } = {}) {
       if (rows.length === 1) return send(200, rows[0])
       return send(406, { code: 'PGRST116', message: 'expected one row', details: null, hint: null })
     }
+    // Upstash REST: production requires it at boot, so answer as an empty Redis.
+    if (url.pathname === '/upstash') return send(200, { result: null })
+    if (url.pathname === '/upstash/pipeline' || url.pathname === '/upstash/multi-exec') {
+      let body = ''
+      req.on('data', (chunk) => (body += chunk))
+      req.on('end', () =>
+        send(
+          200,
+          JSON.parse(body).map(() => ({ result: null }))
+        )
+      )
+      return
+    }
     if (url.pathname.startsWith('/auth/v1/')) {
       return send(401, { code: 401, msg: 'no session in the hermetic environment' })
     }

@@ -546,6 +546,8 @@ jobs:
       SUPABASE_URL: http://127.0.0.1:54399
       SUPABASE_SERVICE_ROLE_KEY: ci-build-service-placeholder
       CRON_SECRET: ci-build-placeholder-cron-secret-0000000000
+      UPSTASH_REDIS_REST_URL: http://127.0.0.1:54399/upstash
+      UPSTASH_REDIS_REST_TOKEN: ci-build-upstash-placeholder
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
