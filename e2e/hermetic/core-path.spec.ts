@@ -75,4 +75,19 @@ test.describe('account path', () => {
     await page.goto('/pricing')
     await expect(page.locator('body')).toContainText(/Pro/)
   })
+
+  test('without Stripe configured, checkout is disabled rather than broken', async ({ page }) => {
+    await page.goto('/pricing')
+    const buttons = page.getByRole('button', { name: 'Payment system coming soon' })
+    await expect(buttons.first()).toBeVisible()
+    await expect(buttons.first()).toBeDisabled()
+  })
+
+  test('the checkout API refuses to start without Stripe configured', async ({ request }) => {
+    const response = await request.post('/api/stripe/create-checkout', {
+      data: { plan: 'monthly' },
+    })
+    expect(response.status()).toBe(503)
+    expect(JSON.stringify(await response.json())).not.toContain('checkout.stripe.com')
+  })
 })
