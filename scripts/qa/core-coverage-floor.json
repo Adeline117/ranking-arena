@@ -1,0 +1,40 @@
+{
+  "floors": {
+    "app/api/rankings/route.ts": {
+      "lines": 89,
+      "branches": 71
+    },
+    "app/api/search/route.ts": {
+      "lines": 57,
+      "branches": 37
+    },
+    "app/api/traders/[handle]/route.ts": {
+      "lines": 92,
+      "branches": 85
+    },
+    "app/api/traders/route.ts": {
+      "lines": 93,
+      "branches": 72
+    },
+    "lib/data/trader/mappers.ts": {
+      "lines": 100,
+      "branches": 81
+    },
+    "lib/data/trader/queries.ts": {
+      "lines": 90,
+      "branches": 73
+    },
+    "lib/getInitialTraders.ts": {
+      "lines": 84,
+      "branches": 66
+    },
+    "lib/rankings/publication-policy.ts": {
+      "lines": 93,
+      "branches": 86
+    },
+    "lib/rankings/source-freshness.ts": {
+      "lines": 95,
+      "branches": 90
+    }
+  }
+}

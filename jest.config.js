@@ -25,6 +25,11 @@ const customJestConfig = {
   collectCoverageFrom: [
     'lib/**/*.{ts,tsx}',
     'app/components/**/*.{ts,tsx}',
+    // Core-path routes, held to scripts/qa/core-coverage-floor.json.
+    'app/api/rankings/route.ts',
+    'app/api/traders/route.ts',
+    'app/api/traders/\\[handle\\]/route.ts',
+    'app/api/search/route.ts',
     '!**/*.d.ts',
     '!**/node_modules/**',
     '!**/*.test.{ts,tsx}',
