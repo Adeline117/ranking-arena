@@ -188,3 +188,5 @@ e2e/*debug*
 /vg.mjs
 /t[0-9]*.mjs
 scratchpad/
+/playwright-report-hermetic/
+/test-results-hermetic/
