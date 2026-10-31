@@ -6,14 +6,21 @@
  */
 
 import { NextRequest } from 'next/server'
+import { installCorrelationIdReader } from '@/lib/telemetry/correlation-context'
 
 // ============================================
 // AsyncLocalStorage context (Node.js only)
 // ============================================
 
 // Dynamic import to prevent Turbopack from bundling node:async_hooks in Client/Edge
-let correlationStore: { getStore(): string | undefined; run<T>(id: string, fn: () => T): T } | null = null
-if (typeof globalThis.process !== 'undefined' && typeof globalThis.process.versions?.node === 'string') {
+let correlationStore: {
+  getStore(): string | undefined
+  run<T>(id: string, fn: () => T): T
+} | null = null
+if (
+  typeof globalThis.process !== 'undefined' &&
+  typeof globalThis.process.versions?.node === 'string'
+) {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { AsyncLocalStorage } = require('node:async_hooks')
@@ -22,6 +29,13 @@ if (typeof globalThis.process !== 'undefined' && typeof globalThis.process.versi
     // AsyncLocalStorage unavailable in Edge Runtime — correlation IDs disabled
   }
 }
+
+// Publish the reader through a runtime-neutral bridge so shared modules
+// (logger, cache, Supabase) can read the active ID without resolving this
+// Node-only module themselves. Their former string-concatenated dynamic
+// require of this module compiled to webpack's empty context and always threw,
+// so production logs never carried a correlation ID.
+installCorrelationIdReader(() => correlationStore?.getStore())
 
 // ============================================
 // ID Generation
@@ -48,9 +62,7 @@ function generateId(): string {
  * Checks X-Correlation-ID and X-Request-ID headers (in that order).
  */
 export function getOrCreateCorrelationId(request: NextRequest): string {
-  const existing =
-    request.headers.get('x-correlation-id') ??
-    request.headers.get('x-request-id')
+  const existing = request.headers.get('x-correlation-id') ?? request.headers.get('x-request-id')
 
   return existing || generateId()
 }
