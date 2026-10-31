@@ -356,6 +356,8 @@ jobs:
         run: npm run qa:auth-recovery-preflight
       - name: Backup freshness fail-closed contract
         run: node --test scripts/openclaw/backup-freshness-check.test.mjs
+      - name: Secret rotation retirement contract
+        run: node --test scripts/security/rotate-secrets.test.mjs
       - run: npm run lint
       - name: Type-check application
         env:
