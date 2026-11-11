@@ -35,7 +35,7 @@ import { searchTradersMeili, isMeilisearchAvailable } from '@/lib/search/meilise
 import { isMaliciousSearchQuery } from '@/lib/utils/search-sanitize'
 import { escapeLikePattern } from '@/lib/sanitize'
 import { filterServiceReadablePostRows } from '@/lib/data/service-post-audience'
-import type { UnifiedSearchResponse, UnifiedSearchResult } from '@/lib/search/contracts'
+import type { UnifiedSearchResponse, UnifiedSearchResultOf } from '@/lib/search/contracts'
 
 // Redis stores only server-side candidates. Any payload derived from posts is
 // re-authorized for the current anonymous audience and is never CDN-cached.
@@ -63,7 +63,7 @@ interface UnifiedSearchCacheCandidate {
 }
 
 type SearchPostAudienceCandidate =
-  | { id: string; source: 'result'; result: UnifiedSearchResult }
+  | { id: string; source: 'result'; result: UnifiedSearchResultOf<'post'> }
   | { id: string; source: 'suggestion'; title: string }
 
 const SEARCH_NO_STORE_HEADERS = {
@@ -93,7 +93,9 @@ function publicSearchNominationKey(platform: string, traderKey: string): string 
   return JSON.stringify([platform, traderKey])
 }
 
-function materializeSearchTraderResults(traders: readonly UnifiedTrader[]): UnifiedSearchResult[] {
+function materializeSearchTraderResults(
+  traders: readonly UnifiedTrader[]
+): UnifiedSearchResultOf<'trader'>[] {
   return traders.map((trader) => {
     const exchangeName =
       EXCHANGE_CONFIG[trader.platform as keyof typeof EXCHANGE_CONFIG]?.name || trader.platform
@@ -277,7 +279,7 @@ async function materializeUnifiedSearchCandidate(
   // result from its current discoverable row so edits/removals take effect on
   // the very next cache hit.
   const groups = candidate.result.results.groups
-    .map((candidateGroup): UnifiedSearchResult | null => {
+    .map((candidateGroup): UnifiedSearchResultOf<'group'> | null => {
       const group = currentGroups.get(candidateGroup.id)
       if (!group) return null
       return {
@@ -289,7 +291,7 @@ async function materializeUnifiedSearchCandidate(
         meta: { member_count: group.member_count },
       }
     })
-    .filter((group): group is UnifiedSearchResult => group !== null)
+    .filter((group): group is UnifiedSearchResultOf<'group'> => group !== null)
   const users = candidate.result.results.users.filter((user) => currentUserIds.has(user.id))
   const groupSuggestions =
     candidate.suggestionCandidates?.groups
@@ -924,7 +926,7 @@ export const GET = withPublic(
       .map(toPublicSearchTraderCandidate)
       .filter((candidate): candidate is PublicSearchTraderCandidate => candidate !== null)
 
-    const posts: UnifiedSearchResult[] = readablePostsData.map((p) => ({
+    const posts: UnifiedSearchResultOf<'post'>[] = readablePostsData.map((p) => ({
       id: p.id,
       type: 'post' as const,
       title: p.title || 'Untitled',
@@ -933,7 +935,7 @@ export const GET = withPublic(
       meta: { view_count: p.view_count },
     }))
 
-    const users: UnifiedSearchResult[] = (usersData as UserRow[]).map((u) => ({
+    const users: UnifiedSearchResultOf<'user'>[] = (usersData as UserRow[]).map((u) => ({
       id: u.id,
       type: 'user' as const,
       title: `@${u.handle}`,
@@ -942,7 +944,7 @@ export const GET = withPublic(
       avatar: u.avatar_url,
     }))
 
-    const groups: UnifiedSearchResult[] = (groupsData as GroupRow[]).map((g) => ({
+    const groups: UnifiedSearchResultOf<'group'>[] = (groupsData as GroupRow[]).map((g) => ({
       id: g.id,
       type: 'group' as const,
       title: g.name,

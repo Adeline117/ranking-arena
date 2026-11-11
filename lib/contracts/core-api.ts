@@ -9,6 +9,7 @@
  * e2e/hermetic/api-contract.spec.ts checks real responses against these.
  */
 import { z } from 'zod'
+import type { UnifiedSearchResponse } from '@/lib/search/contracts'
 
 const nullableNumber = z.number().nullable()
 const nullableString = z.string().nullable()
@@ -118,25 +119,29 @@ export const SearchSuggestionsResponseSchema = envelope(
 )
 
 /** GET /api/search */
-export const SearchResponseSchema = envelope(
-  z.object({
-    query: z.string(),
-    total: z.number().int().nonnegative(),
-    results: z.object({
-      traders: z.array(
-        z.object({
-          id: z.string().min(1),
-          type: z.literal('trader'),
-          title: z.string().min(1),
-          href: z.string().startsWith('/'),
-        })
-      ),
-      posts: z.array(z.unknown()),
-      users: z.array(z.unknown()),
-      groups: z.array(z.unknown()),
-    }),
-  })
-)
+const SearchDataSchema = z.object({
+  query: z.string(),
+  total: z.number().int().nonnegative(),
+  results: z.object({
+    traders: z.array(
+      z.object({
+        id: z.string().min(1),
+        type: z.literal('trader'),
+        title: z.string().min(1),
+        href: z.string().startsWith('/'),
+      })
+    ),
+    posts: z.array(z.unknown()),
+    users: z.array(z.unknown()),
+    groups: z.array(z.unknown()),
+  }),
+})
+export const SearchResponseSchema = envelope(SearchDataSchema)
+
+// The route and its clients share UnifiedSearchResponse. If that type stops
+// satisfying this contract, type-checking fails here instead of in production.
+type Satisfies<Actual extends Contract, Contract> = Actual
+export type SearchContractCheck = Satisfies<UnifiedSearchResponse, z.infer<typeof SearchDataSchema>>
 
 export type TradersListResponse = z.infer<typeof TradersListResponseSchema>
 export type RankingsResponse = z.infer<typeof RankingsResponseSchema>
