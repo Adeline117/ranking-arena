@@ -8,13 +8,13 @@
 
 `npm run qa:launch-migration-inventory` 的分类停在 2026-08-04。之后新增的 **17 个迁移都不在清单里**，名单见 `scripts/qa/launch-inventory-gap.json`。
 
-其中 `20260816151614_public_ranked_leaderboard.sql` 影响最大：main 的榜单、详情和搜索都读 `public_ranked_leaderboard`。如果生产没有这个视图，部署当前 main 后这些页面很可能拿不到排名数据。
+其中 `20260816151614_public_ranked_leaderboard.sql` 影响最大：main 的榜单、详情和搜索都读 `public_ranked_leaderboard`。**已证实生产没有这个视图**（2026-11-11 UTC 只读取证：`to_regclass('public.public_ranked_leaderboard')` 为空，`supabase_migrations.schema_migrations` 中也没有对应记录），部署当前 main 后这些页面会拿不到排名数据。生产缺口与排练结果见 `LAUNCH_REHEARSAL_2026-11-11.md`。
 
 **要做的事：**
 
 1. 逐个判断这 17 个迁移属于 predeploy、postdeploy，还是已被取代，并确定顺序。
 2. 把它们写入清单，同时从 `launch-inventory-gap.json` 删除。
-3. 查询生产 ledger 和 catalog，重算实际缺项。这一步需要 owner 授权只读取证。
+3. 查询生产 ledger 和 catalog，重算实际缺项。**2026-11-11 已完成**：17 个里 16 个未应用，全部 112 个缺口见 `LAUNCH_REHEARSAL_2026-11-11.md`。
 
 8 月文档里的 "122 项 predeploy" 只是下界，不能直接使用。
 
