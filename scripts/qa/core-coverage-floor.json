@@ -5,8 +5,8 @@
       "branches": 71
     },
     "app/api/search/route.ts": {
-      "lines": 57,
-      "branches": 37
+      "lines": 94,
+      "branches": 76
     },
     "app/api/traders/[handle]/route.ts": {
       "lines": 92,
