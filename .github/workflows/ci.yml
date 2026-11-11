@@ -489,7 +489,10 @@ jobs:
   # ─────────────────────────────────────────────
   build:
     name: Build
-    runs-on: ubuntu-latest
+    # 固定 24.04：ubuntu-latest 自 2026-10 起是 26.04，Playwright 1.59 不支持在其上
+    # 安装 Chromium（"Playwright does not support chromium on ubuntu26.04-x64"）。
+    # 升级 Playwright 后可改回 ubuntu-latest。
+    runs-on: ubuntu-24.04
     needs: lint-typecheck
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
