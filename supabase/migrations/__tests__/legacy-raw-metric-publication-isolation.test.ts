@@ -5,7 +5,7 @@ function read(relativePath: string): string {
   return readFileSync(join(process.cwd(), relativePath), 'utf8')
 }
 
-const migrationName = '20260817061000_legacy_raw_metric_publication_isolation.sql'
+const migrationName = '20261111132450_legacy_raw_metric_publication_isolation_hosted_role_graph.sql'
 const migration = read(`supabase/migrations/${migrationName}`)
 const proof = read('supabase/migrations/__tests__/legacy-raw-metric-publication-isolation.pg17.sh')
 const packageJson = read('package.json')
@@ -29,8 +29,12 @@ const withoutComments = (value: string): string =>
 
 describe('legacy raw metric publication isolation migration', () => {
   it('is a forward-only transactional metadata cutover', () => {
-    expect(migrationName).toMatch(/^\d{14}_legacy_raw_metric_publication_isolation\.sql$/)
-    expect(migrationName > '20260817060000_trader_series_publication_isolation.sql').toBe(true)
+    expect(migrationName).toMatch(
+      /^\d{14}_legacy_raw_metric_publication_isolation_hosted_role_graph\.sql$/
+    )
+    expect(
+      migrationName > '20261111132448_trader_series_publication_isolation_hosted_role_graph.sql'
+    ).toBe(true)
     expect(migration.match(/^BEGIN;$/gm)).toHaveLength(1)
     expect(migration.match(/^COMMIT;$/gm)).toHaveLength(1)
     expect(migration.trimEnd()).toMatch(/COMMIT;$/)

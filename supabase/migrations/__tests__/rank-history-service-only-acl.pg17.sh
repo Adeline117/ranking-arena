@@ -6,7 +6,7 @@
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-MIGRATION="$ROOT_DIR/supabase/migrations/20260817020000_rank_history_service_only_acl.sql"
+MIGRATION="$ROOT_DIR/supabase/migrations/20261111132444_rank_history_service_only_acl_hosted_role_graph.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -330,6 +330,13 @@ V1_ROWS_BEFORE="$(v1_row_digest)"
 # Before the cutover the historical PUBLIC policy plus ACL exposes the raw row.
 PRE_CUTOVER_COUNT="$(psql_cmd -Atqc "SET ROLE anon; SELECT count(*) FROM public.rank_history;")"
 assert_equal "historical anonymous raw read" "2" "$PRE_CUTOVER_COUNT"
+
+if [[ "${SUPABASE_MANAGED_GRAPH_PROOF:-0}" == "1" ]]; then
+  # shellcheck source=lib/supabase-managed-graph-proof.sh
+  source "$ROOT_DIR/supabase/migrations/__tests__/lib/supabase-managed-graph-proof.sh"
+  run_supabase_managed_graph_proof
+  exit 0
+fi
 
 psql_cmd -q -f "$MIGRATION"
 V1_CATALOG_AFTER_FIRST="$(v1_catalog_digest)"

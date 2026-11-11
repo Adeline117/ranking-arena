@@ -7,7 +7,7 @@
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-MIGRATION="$ROOT_DIR/supabase/migrations/20260817061000_legacy_raw_metric_publication_isolation.sql"
+MIGRATION="$ROOT_DIR/supabase/migrations/20261111132450_legacy_raw_metric_publication_isolation_hosted_role_graph.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -252,6 +252,13 @@ assert_equal \
   "historical anonymous raw function" \
   "44" \
   "$(psql_as anon -Atqc 'SELECT public.legacy_raw_metric_reader();')"
+
+if [[ "${SUPABASE_MANAGED_GRAPH_PROOF:-0}" == "1" ]]; then
+  # shellcheck source=lib/supabase-managed-graph-proof.sh
+  source "$ROOT_DIR/supabase/migrations/__tests__/lib/supabase-managed-graph-proof.sh"
+  run_supabase_managed_graph_proof
+  exit 0
+fi
 
 psql_cmd -q -f "$MIGRATION"
 
