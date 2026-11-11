@@ -5,7 +5,8 @@ function read(relativePath: string): string {
   return readFileSync(join(process.cwd(), relativePath), 'utf8')
 }
 
-const migrationName = '20260817040000_notification_ranking_change_reader_fence.sql'
+const migrationName =
+  '20261111132446_notification_ranking_change_reader_fence_hosted_role_graph.sql'
 const migration = read(`supabase/migrations/${migrationName}`)
 const proof = read('supabase/migrations/__tests__/notification-ranking-change-reader-fence.pg17.sh')
 const notificationData = read('lib/data/notifications.ts')
@@ -24,8 +25,12 @@ const withoutComments = (value: string): string =>
 
 describe('notification ranking-change reader fence migration', () => {
   it('is a forward-only transactional reader cutover that retains legacy rows', () => {
-    expect(migrationName).toMatch(/^\d{14}_notification_ranking_change_reader_fence\.sql$/)
-    expect(migrationName > '20260817030000_trader_activities_publication_fence.sql').toBe(true)
+    expect(migrationName).toMatch(
+      /^\d{14}_notification_ranking_change_reader_fence_hosted_role_graph\.sql$/
+    )
+    expect(
+      migrationName > '20261111132445_trader_activities_publication_fence_hosted_role_graph.sql'
+    ).toBe(true)
     expect(migration).toMatch(/^--[\s\S]*\nBEGIN;/)
     expect(migration.match(/^BEGIN;$/gm)).toHaveLength(1)
     expect(migration.match(/^COMMIT;$/gm)).toHaveLength(1)

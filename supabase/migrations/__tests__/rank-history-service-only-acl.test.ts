@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const migrationName = '20260817020000_rank_history_service_only_acl.sql'
+const migrationName = '20261111132444_rank_history_service_only_acl_hosted_role_graph.sql'
 const migrationDir = join(process.cwd(), 'supabase/migrations')
 const migration = readFileSync(join(migrationDir, migrationName), 'utf8')
 const legacyV1Migration = readFileSync(join(migrationDir, '20260319d_rank_history.sql'), 'utf8')
@@ -30,7 +30,7 @@ const withoutComments = (value: string): string =>
 
 describe('rank_history service-only ACL migration', () => {
   it('is a new forward-only metadata cutover and leaves the v1 catalog migration immutable', () => {
-    expect(migrationName).toMatch(/^\d{14}_rank_history_service_only_acl\.sql$/)
+    expect(migrationName).toMatch(/^\d{14}_rank_history_service_only_acl_hosted_role_graph\.sql$/)
     expect(migrationName > '20260817000000_finalize_trader_alert_delivery_epoch_fence.sql').toBe(
       true
     )
@@ -145,9 +145,8 @@ describe('rank_history service-only ACL migration', () => {
       expect(migration).toContain(marker)
     }
 
-    // No generic control-plane or custom-role escape is silently allowlisted
-    // by this table-specific boundary.
-    expect(migration).not.toContain('cli_login_postgres')
+    // Only the three Supabase-managed edges are excluded, through the shared
+    // fail-closed preamble pinned in supabase-managed-role-graph.test.ts.
   })
 
   it('preserves snapshot-rank service CRUD while fencing unproven notification writers', () => {
