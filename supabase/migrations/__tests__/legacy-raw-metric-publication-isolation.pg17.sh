@@ -256,6 +256,16 @@ assert_equal \
 if [[ "${SUPABASE_MANAGED_GRAPH_PROOF:-0}" == "1" ]]; then
   # shellcheck source=lib/supabase-managed-graph-proof.sh
   source "$ROOT_DIR/supabase/migrations/__tests__/lib/supabase-managed-graph-proof.sh"
+  if [[ "${SUPABASE_MANAGED_GRAPH_EXECUTOR:-}" == "hosted" ]]; then
+    # hostile_owner is a bare-cluster attack fixture. A non-superuser executor
+    # cannot take its objects over and fails closed instead, so the
+    # hosted-executor path proves convergence with postgres-owned objects.
+    psql_cmd -q <<'SQL'
+ALTER TABLE public.trader_portfolio OWNER TO postgres;
+ALTER FUNCTION public.legacy_raw_metric_reader() OWNER TO postgres;
+ALTER FUNCTION public.legacy_raw_metric_reader(bigint) OWNER TO postgres;
+SQL
+  fi
   run_supabase_managed_graph_proof
   exit 0
 fi

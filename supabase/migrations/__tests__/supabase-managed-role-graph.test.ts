@@ -46,6 +46,9 @@ const MANAGED_EDGES = [
   /membership\.roleid IS NOT DISTINCT FROM pg_catalog\.to_regrole\('authenticator'\)\s+AND membership\.member = pg_catalog\.to_regrole\('postgres'\)\s+\)/,
 ]
 
+const EVENT_TRIGGER_REPLACEMENT =
+  '20261111132450_legacy_raw_metric_publication_isolation_hosted_role_graph.sql'
+
 const PREAMBLE_START = '-- Supabase platform-managed role edges'
 const PREAMBLE_END = '$supabase_managed_role_edges$;'
 
@@ -77,11 +80,31 @@ describe('Supabase-managed role-graph replacements', () => {
       /pg_temp\.arena_guard_auth_members/g,
       'pg_catalog.pg_auth_members'
     )
+    // The legacy raw metric replacement also accepts the supautils privileged
+    // role as its event-trigger executor; that one block is swapped back.
+    const executorCheck =
+      /  -- The partition event trigger needs an executor[\s\S]*?partition event triggers';\n  END IF;/
+    const originalExecutorCheck = originalSql.match(
+      /  IF NOT EXISTS \(\n {7}SELECT 1\n {7}FROM pg_catalog\.pg_roles AS role_row\n {7}WHERE role_row\.rolname = current_user\n {9}AND role_row\.rolsuper\n {5}\) THEN\n {4}RAISE EXCEPTION\n {6}'legacy raw metric isolation requires a superuser migration executor for partition event triggers';\n  END IF;/
+    )
+    const normalized =
+      replacement === EVENT_TRIGGER_REPLACEMENT
+        ? body.replace(executorCheck, () => {
+            expect(originalExecutorCheck).not.toBeNull()
+            return originalExecutorCheck?.[0] ?? ''
+          })
+        : body
+    if (replacement === EVENT_TRIGGER_REPLACEMENT) {
+      expect(body).toMatch(executorCheck)
+    } else {
+      expect(body).not.toMatch(executorCheck)
+    }
+
     const originalWithAnchor =
       originalSql.slice(0, originalSql.indexOf('DO $preflight$')) +
       PREAMBLE_END +
       originalSql.slice(originalSql.indexOf('DO $preflight$'))
-    expect(body.replace(PREAMBLE_END + '\n\n', PREAMBLE_END)).toBe(originalWithAnchor)
+    expect(normalized.replace(PREAMBLE_END + '\n\n', PREAMBLE_END)).toBe(originalWithAnchor)
   })
 
   it.each(REPLACEMENTS)(

@@ -86,8 +86,14 @@ describe('legacy raw metric publication isolation migration', () => {
       "set_config('arena.legacy_raw_metric_partition_converging', 'off', true)"
     )
     expect(migration).toContain(
-      'requires a superuser migration executor for partition event triggers'
+      'requires a superuser or supautils privileged migration executor for partition event triggers'
     )
+    // The hosted executor qualifies through supautils' privileged role; an
+    // unknown or empty setting must resolve to false rather than error.
+    expect(migration).toContain(
+      "NULLIF(pg_catalog.current_setting('supautils.privileged_role', true), '')"
+    )
+    expect(migration).toMatch(/AND NOT COALESCE\(\s+CASE\s+WHEN pg_catalog\.to_regrole\(/)
     expect(migration).toContain(
       'legacy raw metric attached relation retained a direct policy or ACL'
     )
