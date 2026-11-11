@@ -7,8 +7,14 @@
 # that graph plus the hosted migration executor (supabase_admin bootstrap,
 # non-superuser postgres). Never connects to application or remote databases.
 #
-# 20260817061000 is expected to stop in the hosted-executor run until its
-# superuser requirement for the partition event trigger is resolved.
+# The replacement for 20260817061000 creates a partition event trigger, so a
+# non-superuser executor qualifies only as a member of the supautils
+# privileged role. Without supautils configured it must stop at its own
+# executor check; with the setting present but supautils not loaded (as on a
+# plain PostgreSQL 17 build) PostgreSQL itself must still refuse the event
+# trigger, proving the setting cannot widen access. The hosted-supautils
+# behaviour itself (trigger owned by postgres, firing for postgres DDL) was
+# verified separately on the supabase/postgres 17.6.1.178 image.
 
 set -Eeuo pipefail
 
@@ -25,8 +31,9 @@ PROOFS=(
   trader-series-publication-isolation
   legacy-raw-metric-publication-isolation
 )
-HOSTED_EXPECTED_FAILURE='legacy-raw-metric-publication-isolation'
-HOSTED_EXPECTED_MESSAGE='requires a superuser migration executor for partition event triggers'
+EVENT_TRIGGER_PROOF='legacy-raw-metric-publication-isolation'
+HOSTED_EXPECTED_MESSAGE='requires a superuser or supautils privileged migration executor for partition event triggers'
+SUPAUTILS_EXPECTED_MESSAGE='permission denied to create event trigger'
 
 # Rewrite a proof so its cluster is bootstrapped by supabase_admin. Proofs that
 # connect as postgres get a superuser postgres for fixture setup (the shared
@@ -70,7 +77,7 @@ for proof in "${PROOFS[@]}"; do
   hosted="$TEST_DIR/.hosted-$proof.pg17.sh"
   log="$WORK_DIR/$proof"
 
-  for mode in bare graph hosted; do
+  for mode in bare graph hosted hosted-supautils; do
     status=0
     case "$mode" in
       bare)
@@ -85,15 +92,24 @@ for proof in "${PROOFS[@]}"; do
           bash "$hosted" >"$log.$mode" 2>&1 || status=$?
         rm -f "$hosted"
         ;;
+      hosted-supautils)
+        hosted_copy "$script" "$hosted"
+        PGOPTIONS='-c supautils.privileged_role=supabase_privileged_role' \
+          SUPABASE_MANAGED_GRAPH_PROOF=1 SUPABASE_MANAGED_GRAPH_EXECUTOR=hosted \
+          bash "$hosted" >"$log.$mode" 2>&1 || status=$?
+        rm -f "$hosted"
+        ;;
     esac
 
-    if [[ "$mode" == hosted && "$proof" == "$HOSTED_EXPECTED_FAILURE" ]]; then
-      if ((status != 0)) && grep -Fq "$HOSTED_EXPECTED_MESSAGE" "$log.$mode"; then
-        echo "[supabase-managed-role-graph] $proof $mode: blocked as expected (superuser executor)"
+    if [[ "$mode" == hosted* && "$proof" == "$EVENT_TRIGGER_PROOF" ]]; then
+      expected="$HOSTED_EXPECTED_MESSAGE"
+      [[ "$mode" == hosted-supautils ]] && expected="$SUPAUTILS_EXPECTED_MESSAGE"
+      if ((status != 0)) && grep -Fq "$expected" "$log.$mode"; then
+        echo "[supabase-managed-role-graph] $proof $mode: stopped as expected ($expected)"
         continue
       fi
-      echo "[supabase-managed-role-graph] $proof $mode: expected the superuser-executor stop" >&2
-      tail -20 "$log.$mode" >&2
+      echo "[supabase-managed-role-graph] $proof $mode: expected stop: $expected" >&2
+      grep -m5 -E "ERROR|unexpectedly|expected" "$log.$mode" >&2 || true
       failures=$((failures + 1))
       continue
     fi

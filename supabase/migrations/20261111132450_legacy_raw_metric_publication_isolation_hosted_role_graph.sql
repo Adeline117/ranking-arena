@@ -3,8 +3,10 @@
 -- Supabase-managed memberships every hosted project carries (see
 -- docs/LAUNCH_REHEARSAL_2026-11-11.md, class A). The body is that migration
 -- unchanged except for the shared managed-edge preamble before the preflight
--- and the guards reading the filtered graph. Apply this file instead of the
--- original; the original stays immutable in history.
+-- and the guards reading the filtered graph, plus one more change: the
+-- event-trigger executor check also accepts a member of the supautils
+-- privileged role, because the hosted postgres is not a superuser. Apply this
+-- file instead of the original; the original stays immutable in history.
 --
 -- Legacy public relations below contain raw trajectories, prices, cost basis,
 -- position snapshots, or derived metrics with no immutable public publication
@@ -160,14 +162,34 @@ BEGIN
      OR v_postgres IS NULL THEN
     RAISE EXCEPTION 'legacy raw metric isolation requires Supabase runtime roles';
   END IF;
+  -- The partition event trigger needs an executor that may create event
+  -- triggers: a superuser, or (on the hosted project, where postgres is not
+  -- a superuser) a member of the supautils privileged role. Under supautils
+  -- the trigger is owned by postgres and fires for non-superuser DDL, which
+  -- covers the postgres-run partition maintenance. The setting is only a hint:
+  -- without supautils loaded, PostgreSQL itself still refuses CREATE EVENT
+  -- TRIGGER to a non-superuser below, so a spoofed value cannot widen access.
   IF NOT EXISTS (
        SELECT 1
        FROM pg_catalog.pg_roles AS role_row
        WHERE role_row.rolname = current_user
          AND role_row.rolsuper
+     )
+     AND NOT COALESCE(
+       CASE
+         WHEN pg_catalog.to_regrole(
+           NULLIF(pg_catalog.current_setting('supautils.privileged_role', true), '')
+         ) IS NOT NULL
+         THEN pg_catalog.pg_has_role(
+           current_user,
+           pg_catalog.to_regrole(pg_catalog.current_setting('supautils.privileged_role', true)),
+           'MEMBER'
+         )
+       END,
+       false
      ) THEN
     RAISE EXCEPTION
-      'legacy raw metric isolation requires a superuser migration executor for partition event triggers';
+      'legacy raw metric isolation requires a superuser or supautils privileged migration executor for partition event triggers';
   END IF;
 
   -- service_role may deliberately bypass RLS for server-side ingest, but it
