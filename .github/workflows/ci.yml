@@ -531,16 +531,6 @@ jobs:
           CI: true
         run: npm run test:e2e:hermetic
 
-      - name: Upload core path E2E report
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
-        if: failure()
-        with:
-          name: playwright-report-hermetic
-          path: |
-            playwright-report-hermetic/
-            test-results-hermetic/
-          retention-days: 7
-
       - name: Bundle size check
         run: |
           echo "## Bundle Size Report" >> $GITHUB_STEP_SUMMARY
