@@ -14,13 +14,18 @@ export interface UnifiedSearchResult {
   meta?: Record<string, unknown>
 }
 
+/** A result of one known category, so a trader list can only hold traders. */
+export type UnifiedSearchResultOf<T extends UnifiedSearchResult['type']> = UnifiedSearchResult & {
+  type: T
+}
+
 export interface UnifiedSearchResponse {
   query: string
   results: {
-    traders: UnifiedSearchResult[]
-    posts: UnifiedSearchResult[]
-    users: UnifiedSearchResult[]
-    groups: UnifiedSearchResult[]
+    traders: UnifiedSearchResultOf<'trader'>[]
+    posts: UnifiedSearchResultOf<'post'>[]
+    users: UnifiedSearchResultOf<'user'>[]
+    groups: UnifiedSearchResultOf<'group'>[]
   }
   total: number
   /** "Did you mean" suggestions when few results found */
