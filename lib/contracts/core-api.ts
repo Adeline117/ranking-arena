@@ -10,6 +10,7 @@
  */
 import { z } from 'zod'
 import type { UnifiedSearchResponse } from '@/lib/search/contracts'
+import type { PublicTradersListResponse } from '@/lib/contracts/traders-list'
 
 const nullableNumber = z.number().nullable()
 const nullableString = z.string().nullable()
@@ -138,10 +139,15 @@ const SearchDataSchema = z.object({
 })
 export const SearchResponseSchema = envelope(SearchDataSchema)
 
-// The route and its clients share UnifiedSearchResponse. If that type stops
-// satisfying this contract, type-checking fails here instead of in production.
+// Each route and its clients share one transport type (UnifiedSearchResponse,
+// PublicTradersListResponse, ...). If a shared type stops satisfying its
+// contract, type-checking fails here instead of in production.
 type Satisfies<Actual extends Contract, Contract> = Actual
 export type SearchContractCheck = Satisfies<UnifiedSearchResponse, z.infer<typeof SearchDataSchema>>
+export type TradersListContractCheck = Satisfies<
+  PublicTradersListResponse,
+  z.infer<typeof TradersListResponseSchema>
+>
 
 export type TradersListResponse = z.infer<typeof TradersListResponseSchema>
 export type RankingsResponse = z.infer<typeof RankingsResponseSchema>

@@ -23,6 +23,7 @@ import {
   type PublishedEquity,
 } from '@/lib/rankings/daily-publication-contract'
 import { NOTIFICATION_READER_CACHE_EPOCH } from '@/lib/notifications/ranking-change-fence'
+import type { PublicTradersListResponse } from '@/lib/contracts/traders-list'
 
 // Re-export pure fetchers from the shared module
 export { fetcher, fetcherWithAuth, fetchWithTimeout } from './fetchers'
@@ -32,17 +33,8 @@ import { fetcher, fetcherWithAuth } from './fetchers'
 // 交易员相关 Hooks
 // ============================================
 
-interface TradersResponse {
-  traders: Array<{
-    id: string
-    handle: string
-    roi: number
-    win_rate: number
-    source: string
-    followers?: number
-  }>
-  total?: number
-}
+/** GET /api/traders — the route's own response type, not a local copy. */
+type TradersResponse = PublicTradersListResponse
 
 interface UseTraderListOptions {
   timeRange?: string

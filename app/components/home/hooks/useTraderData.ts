@@ -5,6 +5,7 @@ import type { Trader } from '../../ranking/RankingTable'
 import { useTraderDataSync, type TraderDataPayload } from '@/lib/hooks/useBroadcastSync'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { CategoryCounts } from '@/lib/getInitialTraders'
+import type { PublicTradersListResponse } from '@/lib/contracts/traders-list'
 import { resolveExchangeSlug } from '@/lib/constants/exchanges'
 
 import { FIVE_MINUTES_MS } from '@/lib/constants/time'
@@ -50,6 +51,18 @@ function normalizeCategoryCounts(value: unknown): CategoryCounts | null {
   return Object.values(normalized).every(isSafeNonNegativeCount)
     ? (normalized as CategoryCounts)
     : null
+}
+
+/**
+ * Fields an older /api/traders deployment emitted. The current route never
+ * sends them; the reads below stay so a payload cached during rollout cannot
+ * silently lose its flag.
+ */
+interface LegacyTradersListFields {
+  as_of?: string | null
+  is_stale?: unknown
+  categoryCounts?: unknown
+  categoryCountsAreExact?: unknown
 }
 
 function finiteMetricOrNull(value: unknown): number | null {
@@ -672,28 +685,32 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
           throw new Error(`${tRef.current('loadFailed')} (${response.status})`)
         }
 
-        const data = await response.json()
+        const data: PublicTradersListResponse & LegacyTradersListFields = await response.json()
         // A slower, aborted request can still resolve in some environments.
         // Never let it overwrite or broadcast a newer page/filter cohort.
         if (requestSequence !== requestSequenceRef.current) return false
-        const traders: Trader[] = (data.traders || []).map((t: Record<string, unknown>) => ({
-          id: t.id as string,
-          handle: (t.handle as string) || null,
+        // The UI Trader model is narrower than the API row on three fields:
+        // `followers` (the API sends null when unknown) and the literal unions
+        // of `score_completeness` / `trader_type` (the API sends any string).
+        // Values pass through unchanged; the casts below only name that gap.
+        const traders: Trader[] = (data.traders || []).map((t) => ({
+          id: t.id,
+          handle: t.handle || null,
           roi: finiteMetricOrNull(t.roi),
           pnl: finiteMetricOrNull(t.pnl),
           win_rate: finiteMetricOrNull(t.win_rate),
           max_drawdown: finiteMetricOrNull(t.max_drawdown),
           trades_count: finiteMetricOrNull(t.trades_count),
-          followers: t.followers != null ? Number(t.followers) : null,
-          source: t.source as string,
-          avatar_url: t.avatar_url as string | null,
-          avatar_url_mirror: (t.avatar_url_mirror as string | null) ?? null,
+          followers: (t.followers != null ? Number(t.followers) : null) as Trader['followers'],
+          source: t.source,
+          avatar_url: t.avatar_url,
+          avatar_url_mirror: t.avatar_url_mirror ?? null,
           arena_score: finiteMetricOrNull(t.arena_score),
           rank: isSafeNonNegativeCount(t.rank) && t.rank > 0 ? t.rank : null,
           profitability_score: finiteMetricOrNull(t.profitability_score),
           risk_control_score: finiteMetricOrNull(t.risk_control_score),
           execution_score: finiteMetricOrNull(t.execution_score),
-          score_completeness: t.score_completeness ?? null,
+          score_completeness: (t.score_completeness ?? null) as Trader['score_completeness'],
           trading_style: t.trading_style ?? null,
           avg_holding_hours: finiteMetricOrNull(t.avg_holding_hours),
           style_confidence: t.style_confidence ?? null,
@@ -701,7 +718,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
           // 认领徽章(P3-P3):API 已按 verified_traders 标记;此显式挑字段映射器
           // 曾把它丢掉 → 徽章渲染器有、数据到 API、行上永不显示(2026-07-09 真点揪出)。
           is_verified: t.is_verified === true,
-          trader_type: t.trader_type ?? null,
+          trader_type: (t.trader_type ?? null) as Trader['trader_type'],
           sharpe_ratio: finiteMetricOrNull(t.sharpe_ratio),
           sortino_ratio: finiteMetricOrNull(t.sortino_ratio),
           calmar_ratio: finiteMetricOrNull(t.calmar_ratio),

@@ -26,6 +26,7 @@ import { validateTradersResponse } from '@/lib/api/traders-response-schema'
 import { attachAvatarMirrors } from '@/lib/data/avatar-mirrors'
 import { claimedTraderBadgeKey, getClaimedTraderBadgeKeys } from '@/lib/data/claimed-trader-badges'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import type { PublicTradersListResponse } from '@/lib/contracts/traders-list'
 import {
   sourceFreshnessStatusMap,
   summarizeSourceFreshness,
@@ -328,7 +329,7 @@ export const GET = withPublic(
           ranking_visibility: 'partial',
           ranking_visibility_reason: 'publication_policy_filtered',
           ranking_visibility_reasons: ['quarantined_source_requested'],
-        },
+        } satisfies PublicTradersListResponse,
         { headers: { 'Cache-Control': PUBLIC_RANKING_RESPONSE_CACHE_CONTROL } }
       )
     }
@@ -540,7 +541,7 @@ async function buildPublicTradersResponse(
   supabase: ReturnType<typeof import('@/lib/supabase/server').getSupabaseAdmin>,
   params: TradersCacheKeyParams,
   cohort: SanitizedPublicRankedCohort
-) {
+): Promise<PublicTradersListResponse> {
   const { timeRange, exchangeFilter, categoryFilter, sortBy, order, limit, useLegacyPaging, page } =
     params
   const hasLookahead = cohort.rows.length > limit
@@ -708,14 +709,12 @@ async function buildPublicTradersResponse(
   }
 
   // Apply profanity filter to all handles before returning
-  const sanitizedTraders = dedupedTraders.map(
-    (t: { handle: string | null; [key: string]: unknown }) => ({
-      ...t,
-      handle: sanitizeDisplayName(t.handle),
-      updated_at: freshnessBySource.get(String(t.source))?.updated_at ?? null,
-      is_stale: freshnessBySource.get(String(t.source))?.is_stale ?? true,
-    })
-  )
+  const sanitizedTraders = dedupedTraders.map((t) => ({
+    ...t,
+    handle: sanitizeDisplayName(t.handle),
+    updated_at: freshnessBySource.get(String(t.source))?.updated_at ?? null,
+    is_stale: freshnessBySource.get(String(t.source))?.is_stale ?? true,
+  }))
 
   return {
     traders: sanitizedTraders,
