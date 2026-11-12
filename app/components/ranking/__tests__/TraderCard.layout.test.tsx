@@ -103,7 +103,12 @@ describe('TraderCard narrow-card layout', () => {
 
     const actions = screen.getByRole('group', { name: /actions/i })
     expect(within(actions).getByRole('button', { name: /Share/i })).toBeVisible()
-    expect(within(actions).getByRole('button', { name: /Add to compare/i })).toBeVisible()
+    const compare = within(actions).getByRole('button', { name: /Add to compare/i })
+    expect(compare).toBeVisible()
+    // No form control nested inside the button (axe nested-interactive); the
+    // button's aria-pressed carries the state.
+    expect(compare.querySelector('input, button, a, select, textarea')).toBeNull()
+    expect(compare).toHaveAttribute('aria-pressed', 'false')
 
     const card = container.querySelector('.trader-card-contained')
     expect(card).toHaveStyle({
