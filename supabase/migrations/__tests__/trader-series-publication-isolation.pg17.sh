@@ -7,7 +7,7 @@
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-MIGRATION="$ROOT_DIR/supabase/migrations/20260817060000_trader_series_publication_isolation.sql"
+MIGRATION="$ROOT_DIR/supabase/migrations/20261111132448_trader_series_publication_isolation_hosted_role_graph.sql"
 PARTITION_CONVERGENCE="$ROOT_DIR/supabase/migrations/20260718135000_partition_child_rls_convergence.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
@@ -343,6 +343,13 @@ assert_equal \
   "historical anonymous sparkline RPC" \
   "99.9" \
   "$(psql_as anon -Atqc "SELECT public.arena_roi_sparklines('{}'::jsonb, 90::bigint, 1)->>'roi';")"
+
+if [[ "${SUPABASE_MANAGED_GRAPH_PROOF:-0}" == "1" ]]; then
+  # shellcheck source=lib/supabase-managed-graph-proof.sh
+  source "$ROOT_DIR/supabase/migrations/__tests__/lib/supabase-managed-graph-proof.sh"
+  run_supabase_managed_graph_proof
+  exit 0
+fi
 
 psql_cmd -q -f "$MIGRATION"
 

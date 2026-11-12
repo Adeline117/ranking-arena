@@ -1,0 +1,67 @@
+-- Supabase-managed role memberships observed on the production project
+-- (read-only catalog evidence, 2026-11-11). Applied on top of a migration
+-- proof fixture to check that a role-graph guard accepts the platform's own
+-- edges. Only edges whose both endpoints exist are created.
+DO $graph$
+DECLARE
+  edge record;
+BEGIN
+  IF to_regrole('cli_login_postgres') IS NULL THEN
+    CREATE ROLE cli_login_postgres LOGIN NOINHERIT NOSUPERUSER NOCREATEROLE
+      NOCREATEDB NOREPLICATION NOBYPASSRLS;
+  END IF;
+  IF to_regrole('supabase_storage_admin') IS NULL THEN
+    CREATE ROLE supabase_storage_admin LOGIN NOINHERIT NOSUPERUSER CREATEROLE
+      NOCREATEDB NOREPLICATION NOBYPASSRLS;
+  END IF;
+  IF to_regrole('supabase_privileged_role') IS NULL THEN
+    CREATE ROLE supabase_privileged_role NOLOGIN INHERIT NOSUPERUSER NOBYPASSRLS;
+  END IF;
+  IF to_regrole('supabase_etl_admin') IS NULL THEN
+    CREATE ROLE supabase_etl_admin LOGIN INHERIT NOSUPERUSER NOCREATEROLE
+      NOCREATEDB REPLICATION BYPASSRLS;
+  END IF;
+  IF to_regrole('supabase_read_only_user') IS NULL THEN
+    CREATE ROLE supabase_read_only_user LOGIN INHERIT NOSUPERUSER NOCREATEROLE
+      NOCREATEDB NOREPLICATION BYPASSRLS;
+  END IF;
+  IF to_regrole('arena_backup_ro') IS NULL THEN
+    CREATE ROLE arena_backup_ro LOGIN INHERIT NOSUPERUSER NOCREATEROLE
+      NOCREATEDB NOREPLICATION BYPASSRLS;
+  END IF;
+
+  FOR edge IN
+    SELECT *
+    FROM (VALUES
+      ('postgres', 'cli_login_postgres', false, false, true),
+      ('authenticator', 'supabase_storage_admin', false, false, true),
+      ('authenticator', 'postgres', true, true, true),
+      ('anon', 'postgres', true, true, true),
+      ('authenticated', 'postgres', true, true, true),
+      ('service_role', 'postgres', true, true, true),
+      ('supabase_privileged_role', 'postgres', false, true, true),
+      ('pg_read_all_data', 'postgres', true, true, true),
+      ('pg_monitor', 'postgres', true, true, true),
+      ('pg_signal_backend', 'postgres', true, true, true),
+      ('pg_create_subscription', 'postgres', true, true, true),
+      ('arena_backup_ro', 'postgres', true, false, false),
+      ('pg_read_all_data', 'arena_backup_ro', false, true, true),
+      ('pg_monitor', 'supabase_etl_admin', false, true, true),
+      ('pg_read_all_data', 'supabase_etl_admin', false, true, true),
+      ('supabase_privileged_role', 'supabase_etl_admin', false, true, true),
+      ('pg_monitor', 'supabase_read_only_user', false, true, true),
+      ('pg_read_all_data', 'supabase_read_only_user', false, true, true)
+    ) AS e(role_name, member_name, admin_opt, inherit_opt, set_opt)
+    WHERE to_regrole(e.role_name) IS NOT NULL
+      AND to_regrole(e.member_name) IS NOT NULL
+  LOOP
+    EXECUTE format(
+      'GRANT %I TO %I WITH ADMIN %s, INHERIT %s, SET %s',
+      edge.role_name, edge.member_name,
+      CASE WHEN edge.admin_opt THEN 'TRUE' ELSE 'FALSE' END,
+      CASE WHEN edge.inherit_opt THEN 'TRUE' ELSE 'FALSE' END,
+      CASE WHEN edge.set_opt THEN 'TRUE' ELSE 'FALSE' END
+    );
+  END LOOP;
+END
+$graph$;

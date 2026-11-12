@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const migrationName = '20260817030000_trader_activities_publication_fence.sql'
+const migrationName = '20261111132445_trader_activities_publication_fence_hosted_role_graph.sql'
 const migrationDir = join(process.cwd(), 'supabase/migrations')
 const migration = readFileSync(join(migrationDir, migrationName), 'utf8')
 const proof = readFileSync(
@@ -30,11 +30,15 @@ const withoutComments = (value: string): string =>
 
 describe('trader_activities publication fence migration', () => {
   it('is a forward-only transactional ACL/RLS cutover that leaves the v1 table migration immutable', () => {
-    expect(migrationName).toMatch(/^\d{14}_trader_activities_publication_fence\.sql$/)
+    expect(migrationName).toMatch(
+      /^\d{14}_trader_activities_publication_fence_hosted_role_graph\.sql$/
+    )
     expect(migrationName > '20260817000000_finalize_trader_alert_delivery_epoch_fence.sql').toBe(
       true
     )
-    expect(migrationName > '20260817020000_rank_history_service_only_acl.sql').toBe(true)
+    expect(
+      migrationName > '20261111132444_rank_history_service_only_acl_hosted_role_graph.sql'
+    ).toBe(true)
     expect(migration.match(/^BEGIN;$/gm)).toHaveLength(1)
     expect(migration.match(/^COMMIT;$/gm)).toHaveLength(1)
     expect(migration.trimEnd()).toMatch(/COMMIT;$/)

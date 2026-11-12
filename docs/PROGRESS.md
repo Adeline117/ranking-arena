@@ -1,5 +1,7 @@
 # Arena Progress Tracker
 
+> 当前状态以 [`docs/STATUS.md`](./STATUS.md) 为准；本文是历史记录，可能已过期。
+
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
 ## 当前上线 / 数据权威台账（2026-08-03）
