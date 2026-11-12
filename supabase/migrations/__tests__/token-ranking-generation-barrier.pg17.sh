@@ -5,8 +5,10 @@
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-MIGRATION="$ROOT_DIR/supabase/migrations/20260729230000_token_ranking_generation_barrier.sql"
-RETIREMENT_MIGRATION="$ROOT_DIR/supabase/migrations/20260804043000_retire_legacy_token_rankings.sql"
+# The 2026-11-11 forward replacements are the launch candidates: the originals
+# UPDATE cron.job directly, which Supabase's SELECT-only grant rejects.
+MIGRATION="$ROOT_DIR/supabase/migrations/20261111133259_token_ranking_generation_barrier_cron_api.sql"
+RETIREMENT_MIGRATION="$ROOT_DIR/supabase/migrations/20261111133300_retire_legacy_token_rankings_cron_api.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -83,6 +85,42 @@ CREATE TABLE cron.job (
   username text NOT NULL,
   active boolean NOT NULL
 );
+
+-- Mirrors pg_cron's owner-checked alter_job API. Supabase grants the
+-- migration owner only SELECT on cron.job, so migrations must use this API
+-- rather than a direct catalog UPDATE.
+CREATE FUNCTION cron.alter_job(
+  job_id bigint,
+  schedule text DEFAULT NULL,
+  command text DEFAULT NULL,
+  database text DEFAULT NULL,
+  username text DEFAULT NULL,
+  active boolean DEFAULT NULL
+)
+RETURNS void
+LANGUAGE plpgsql
+AS $alter_job$
+BEGIN
+  UPDATE cron.job AS job
+  SET
+    schedule = COALESCE(alter_job.schedule, job.schedule),
+    command = COALESCE(alter_job.command, job.command),
+    database = COALESCE(alter_job.database, job.database),
+    username = COALESCE(alter_job.username, job.username),
+    active = COALESCE(alter_job.active, job.active)
+  WHERE job.jobid = alter_job.job_id
+    AND (
+      job.username = current_user
+      OR EXISTS (
+        SELECT 1 FROM pg_catalog.pg_roles AS role_row
+        WHERE role_row.rolname = current_user AND role_row.rolsuper
+      )
+    );
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'could not find valid entry for job %', alter_job.job_id;
+  END IF;
+END
+$alter_job$;
 
 INSERT INTO cron.job (
   jobname,
