@@ -1134,32 +1134,6 @@ export interface RankedTraderRow {
   as_of_ts: string
 }
 
-/** Rankings API response (new format) */
-export interface RankingsResponse {
-  traders: RankingEntry[]
-  meta: {
-    platform: LeaderboardPlatform | 'all'
-    market_type: MarketType | 'all'
-    window: Window
-    total_count: number
-    updated_at: string | null
-    staleness_seconds: number | null
-    is_stale?: boolean
-    source_freshness?: Array<{
-      source: string
-      updated_at: string | null
-      is_stale: boolean
-      age_seconds: number | null
-    }>
-    sort_by?: string
-    sort_dir?: string
-    limit?: number
-    offset?: number
-    cached_at?: string
-    category?: TradingCategory | 'all'
-  }
-}
-
 /** Single entry in rankings response */
 export interface RankingEntry {
   platform: LeaderboardPlatform

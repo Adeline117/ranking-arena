@@ -11,6 +11,7 @@
 import { z } from 'zod'
 import type { UnifiedSearchResponse } from '@/lib/search/contracts'
 import type { PublicTradersListResponse } from '@/lib/contracts/traders-list'
+import type { PublicRankingsData } from '@/lib/contracts/rankings'
 
 const nullableNumber = z.number().nullable()
 const nullableString = z.string().nullable()
@@ -148,6 +149,20 @@ export type TradersListContractCheck = Satisfies<
   PublicTradersListResponse,
   z.infer<typeof TradersListResponseSchema>
 >
+
+type RankingsContract = z.infer<typeof RankingsResponseSchema>['data']
+/**
+ * KNOWN DIVERGENCE (reported, not fixed here): `window=composite` answers with
+ * `window: 'COMPOSITE'`, which PeriodSchema rejects. RankingsContractCheck
+ * covers every other field; the expect-error line fails once route and
+ * contract agree on `window`, and the narrowing can then be dropped.
+ */
+type RankingsPeriodData = Omit<PublicRankingsData, 'window'> & {
+  window: z.infer<typeof PeriodSchema>
+}
+export type RankingsContractCheck = Satisfies<RankingsPeriodData, RankingsContract>
+// @ts-expect-error -- known divergence on `window`, see above
+export type RankingsCompositeCheck = Satisfies<PublicRankingsData, RankingsContract>
 
 export type TradersListResponse = z.infer<typeof TradersListResponseSchema>
 export type RankingsResponse = z.infer<typeof RankingsResponseSchema>
