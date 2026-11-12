@@ -4,7 +4,7 @@ import { join } from 'node:path'
 const migration = readFileSync(
   join(
     process.cwd(),
-    'supabase/migrations/20260817050000_arena_bot_legacy_publication_isolation.sql'
+    'supabase/migrations/20261111132447_arena_bot_legacy_publication_isolation_hosted_role_graph.sql'
   ),
   'utf8'
 )

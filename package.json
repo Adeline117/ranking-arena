@@ -119,6 +119,7 @@
     "qa:rank-staging-xid-pg17": "bash supabase/migrations/__tests__/leaderboard-rank-generation-staging-only-writer.pg17.sh && bash supabase/migrations/__tests__/leaderboard-rank-generation-staging-full-xid-epoch.pg17.sh && bash supabase/migrations/__tests__/leaderboard-rank-generation-staging-only-writer-legacy-replay.pg17.sh",
     "qa:rank-publication-plan-pg17": "bash supabase/migrations/__tests__/leaderboard-rank-generation-publication-plan.pg17.sh",
     "qa:public-rank-authority-pg17": "bash supabase/migrations/__tests__/rerank-public-eligible-rows-only.pg17.sh && bash supabase/migrations/__tests__/rank-eligible-leaderboard-count-cache.pg17.sh && bash supabase/migrations/__tests__/token-trader-rank-authority.pg17.sh && bash supabase/migrations/__tests__/token-ranking-generation-barrier.pg17.sh",
+    "qa:supabase-managed-graph-pg17": "bash supabase/migrations/__tests__/supabase-managed-role-graph.pg17.sh",
     "qa:public-ranked-leaderboard-pg17": "bash supabase/migrations/__tests__/public-ranked-leaderboard.pg17.sh",
     "qa:score-alias-pg17": "bash supabase/migrations/__tests__/bitget-bot-rank-authority-quarantine.pg17.sh",
     "qa:bingx-rank-quarantine-pg17": "bash supabase/migrations/__tests__/bingx-rank-authority-quarantine.pg17.sh",
