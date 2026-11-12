@@ -12,6 +12,7 @@ import { z } from 'zod'
 import type { UnifiedSearchResponse } from '@/lib/search/contracts'
 import type { PublicTradersListResponse } from '@/lib/contracts/traders-list'
 import type { PublicRankingsData } from '@/lib/contracts/rankings'
+import type { TraderDetailProfile, TraderDetailResponseData } from '@/lib/contracts/trader-detail'
 
 const nullableNumber = z.number().nullable()
 const nullableString = z.string().nullable()
@@ -163,6 +164,21 @@ type RankingsPeriodData = Omit<PublicRankingsData, 'window'> & {
 export type RankingsContractCheck = Satisfies<RankingsPeriodData, RankingsContract>
 // @ts-expect-error -- known divergence on `window`, see above
 export type RankingsCompositeCheck = Satisfies<PublicRankingsData, RankingsContract>
+
+type TraderDetailContract = z.infer<typeof TraderDetailResponseSchema>['data']
+/**
+ * KNOWN DIVERGENCE (reported, not fixed here): the route omits
+ * `profile.followers` when the source has no count, while the contract
+ * requires the key with a null value. TraderDetailContractCheck covers every
+ * other contract field; the expect-error line fails once the two agree.
+ */
+type TraderDetailNullFollowers = {
+  profile: Omit<TraderDetailProfile, 'followers'> & { followers: number | null }
+  performance: TraderDetailResponseData['performance']
+}
+export type TraderDetailContractCheck = Satisfies<TraderDetailNullFollowers, TraderDetailContract>
+// @ts-expect-error -- known divergence on `profile.followers`, see above
+export type TraderDetailFullCheck = Satisfies<TraderDetailResponseData, TraderDetailContract>
 
 export type TradersListResponse = z.infer<typeof TradersListResponseSchema>
 export type RankingsResponse = z.infer<typeof RankingsResponseSchema>

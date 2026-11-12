@@ -24,6 +24,8 @@ import {
 } from '@/lib/rankings/daily-publication-contract'
 import { NOTIFICATION_READER_CACHE_EPOCH } from '@/lib/notifications/ranking-change-fence'
 import type { PublicTradersListResponse } from '@/lib/contracts/traders-list'
+import type { TraderDetailResponseData } from '@/lib/contracts/trader-detail'
+import type { ApiSuccessResponse } from '@/lib/types/index'
 
 // Re-export pure fetchers from the shared module
 export { fetcher, fetcherWithAuth, fetchWithTimeout } from './fetchers'
@@ -65,25 +67,11 @@ export function useTraderList(options: UseTraderListOptions = {}) {
   })
 }
 
-interface TraderDetailResponse {
-  profile: {
-    handle: string
-    id: string
-    bio?: string
-    followers?: number
-    source?: string
-    avatar_url?: string
-    isRegistered?: boolean
-  }
-  performance: {
-    roi_7d?: number
-    roi_30d?: number
-    roi_90d?: number
-    pnl?: number
-    win_rate?: number
-    max_drawdown?: number
-  }
-}
+/**
+ * GET /api/traders/[handle]. `fetcher` does not unwrap the success envelope,
+ * so the query data is the envelope itself, not the bare profile payload.
+ */
+type TraderDetailResponse = ApiSuccessResponse<TraderDetailResponseData>
 
 /**
  * 获取交易员详情
