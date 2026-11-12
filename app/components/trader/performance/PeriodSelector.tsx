@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
+import { describeDataTime, formatDataClock } from '@/lib/utils/data-time'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../../base'
 import { useLanguage } from '../../Providers/LanguageProvider'
@@ -68,6 +69,10 @@ export function PeriodSelector({
   onInceptionSelect,
 }: PeriodSelectorProps) {
   const { t, language } = useLanguage()
+  // Source capture time of the shown period. The epoch/invalid "unknown"
+  // sentinel hides the label; an older day keeps its date so it cannot read
+  // as today, and anything past 48h is flagged as possibly delayed.
+  const updatedTime = describeDataTime(lastUpdated)
   const containerRef = useRef<HTMLDivElement>(null)
   const [indicatorStyle, setIndicatorStyle] = useState<{ left: number; width: number } | null>(null)
 
@@ -113,14 +118,27 @@ export function PeriodSelector({
         <Text size="lg" weight="black" style={{ color: tokens.colors.text.primary }}>
           {t('performance')}
         </Text>
-        {lastUpdated && (
-          <Text size="xs" color="tertiary" style={{ opacity: 0.6 }}>
+        {updatedTime.timestampMs !== null && (
+          <Text
+            size="xs"
+            color="tertiary"
+            style={{ opacity: updatedTime.isStale ? 1 : 0.6 }}
+            suppressHydrationWarning
+          >
             {t('updatedAt')}{' '}
-            {new Date(lastUpdated).toLocaleTimeString(getLocaleFromLanguage(language), {
-              hour: '2-digit',
-              minute: '2-digit',
-              timeZoneName: 'short',
-            })}
+            <time dateTime={updatedTime.iso ?? undefined} suppressHydrationWarning>
+              {formatDataClock(
+                updatedTime.timestampMs,
+                Date.now(),
+                getLocaleFromLanguage(language)
+              )}
+            </time>
+            {updatedTime.isStale && (
+              <span data-testid="period-data-stale" style={{ color: tokens.colors.accent.warning }}>
+                {' · '}
+                {t('dataStaleWarning')}
+              </span>
+            )}
           </Text>
         )}
       </Box>
