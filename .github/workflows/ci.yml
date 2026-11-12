@@ -403,6 +403,14 @@ jobs:
           export ARCHITECTURE_BASE_REF
           npm run qa:architecture
 
+      - name: Core path gates
+        run: node --test scripts/qa/core-coverage-floor.test.mjs scripts/qa/v1-surface.test.mjs scripts/qa/fix-requires-test.test.mjs scripts/qa/launch-inventory-gap.test.mjs
+
+      # A pull request titled fix(...) must change a test, or say why not.
+      - name: Fixes carry a regression test
+        if: github.event_name == 'pull_request'
+        run: node scripts/qa/fix-requires-test.mjs --event "$GITHUB_EVENT_PATH"
+
       - name: Migration lint — block dangerous DDL
         run: |
           set -euo pipefail
@@ -454,7 +462,10 @@ jobs:
         # Keep jsdom/webpack transforms inside the hosted-runner memory budget.
         # Unbounded CPU-derived workers caused deterministic 10s RTL timeouts
         # under coverage despite the same files passing alone.
-        run: npm test -- --coverage --coverageReporters=text --coverageReporters=lcov --ci --maxWorkers=2
+        run: npm test -- --coverage --coverageReporters=text --coverageReporters=lcov --coverageReporters=json-summary --ci --maxWorkers=2
+
+      - name: Core path coverage floor
+        run: node scripts/qa/core-coverage-floor.mjs coverage/coverage-summary.json
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
@@ -478,7 +489,10 @@ jobs:
   # ─────────────────────────────────────────────
   build:
     name: Build
-    runs-on: ubuntu-latest
+    # 固定 24.04：ubuntu-latest 自 2026-10 起是 26.04，Playwright 1.59 不支持在其上
+    # 安装 Chromium（"Playwright does not support chromium on ubuntu26.04-x64"）。
+    # 升级 Playwright 后可改回 ubuntu-latest。
+    runs-on: ubuntu-24.04
     needs: lint-typecheck
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -498,13 +512,27 @@ jobs:
           # SUPABASE_* 做 fail-fast 校验（NODE_ENV=production 时硬抛）。Vercel build
           # 这些 env 全有，CI 也只需通过静态模块校验。PR 可修改 build 脚本，
           # 因此这里永远只给 dummy，绝不把生产 Supabase/cron secret 注入 PR。
-          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          # 指向本地假 Supabase：NEXT_PUBLIC_* 在构建时写入产物，下面的核心路径
+          # E2E 复用这次构建，避免每个 PR 多构建一次、多耗 Actions 分钟。
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54399
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-build-anon-placeholder
-          SUPABASE_URL: https://placeholder.supabase.co
+          SUPABASE_URL: http://127.0.0.1:54399
           SUPABASE_SERVICE_ROLE_KEY: ci-build-service-placeholder
           # CriticalEnvSchema 要求 CRON_SECRET ≥32 字符，dummy 兜底须够长。
           CRON_SECRET: ci-build-placeholder-cron-secret-0000000000
         run: npm run build
+
+      - name: Fake Supabase contract
+        run: node --test scripts/e2e/fake-supabase.test.mjs
+
+      - name: Install Chromium for core path E2E
+        run: npx playwright install --with-deps chromium
+
+      # 全部用假服务，不持有密钥、不访问真实服务；环境变量见 playwright.hermetic.config.ts。
+      - name: Core path E2E (hermetic)
+        env:
+          CI: true
+        run: npm run test:e2e:hermetic
 
       - name: Bundle size check
         run: |

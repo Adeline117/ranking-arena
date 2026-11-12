@@ -1,5 +1,7 @@
 # Arena Task Queue
 
+> 当前状态以 [`docs/STATUS.md`](./STATUS.md) 为准；本文是历史记录，可能已过期。
+
 > Priority-ordered task list. Update as tasks complete or priorities change.
 
 ## Priority Legend

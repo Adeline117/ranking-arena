@@ -7,7 +7,7 @@
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-MIGRATION="$ROOT_DIR/supabase/migrations/20260817040000_notification_ranking_change_reader_fence.sql"
+MIGRATION="$ROOT_DIR/supabase/migrations/20261111132446_notification_ranking_change_reader_fence_hosted_role_graph.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl postgres psql; do
@@ -323,6 +323,9 @@ BEGIN
   ORDER BY notification_page.created_at DESC;
 END
 $function$;
+-- 20260717220000_notification_read_authority makes postgres the owner.
+ALTER FUNCTION public.get_user_notifications(uuid, integer, integer, boolean)
+  OWNER TO postgres;
 GRANT EXECUTE
   ON FUNCTION public.get_user_notifications(uuid, integer, integer, boolean)
   TO PUBLIC;
@@ -379,6 +382,19 @@ psql_cmd <<'SQL' >/dev/null
 REVOKE inherited_reader FROM authenticated;
 REVOKE service_role FROM inherited_reader;
 SQL
+
+if [[ "${SUPABASE_MANAGED_GRAPH_PROOF:-0}" == "1" ]]; then
+  # shellcheck source=lib/supabase-managed-graph-proof.sh
+  source "$ROOT_DIR/supabase/migrations/__tests__/lib/supabase-managed-graph-proof.sh"
+  if [[ "${SUPABASE_MANAGED_GRAPH_EXECUTOR:-}" == "hosted" ]]; then
+    # The hostile_owner overload is a bare-cluster attack fixture. A
+    # non-superuser executor cannot take it over and fails closed instead, so
+    # the hosted-executor path proves convergence without it.
+    psql_cmd -q -c 'DROP FUNCTION public.get_user_notifications(uuid)'
+  fi
+  run_supabase_managed_graph_proof
+  exit 0
+fi
 
 psql_cmd -f "$MIGRATION" >/dev/null
 

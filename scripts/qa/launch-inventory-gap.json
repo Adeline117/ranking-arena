@@ -1,0 +1,21 @@
+{
+  "unclassified": [
+    "20260808001418_atomic_group_channel_settings_update.sql",
+    "20260808010000_copier_snapshot_trust_raw_role.sql",
+    "20260808020000_copier_snapshot_trust_publication_substrate.sql",
+    "20260808021000_publish_copier_snapshot_trust_v2.sql",
+    "20260808090000_quarantine_legacy_trader_daily_snapshots.sql",
+    "20260816130000_quarantine_v1_trader_alert_browser_mutations.sql",
+    "20260816151614_public_ranked_leaderboard.sql",
+    "20260816184500_public_ranked_leaderboard_source_freshness_gate.sql",
+    "20260817000000_finalize_trader_alert_delivery_epoch_fence.sql",
+    "20260817020000_rank_history_service_only_acl.sql",
+    "20260817030000_trader_activities_publication_fence.sql",
+    "20260817040000_notification_ranking_change_reader_fence.sql",
+    "20260817050000_arena_bot_legacy_publication_isolation.sql",
+    "20260817060000_trader_series_publication_isolation.sql",
+    "20260817061000_legacy_raw_metric_publication_isolation.sql",
+    "20260817134214_quarantine_legacy_platform_stats_rpc.sql",
+    "20261013094743_retire_v2_partition_cron_extend_arena_partitions.sql"
+  ]
+}
