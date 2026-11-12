@@ -1143,7 +1143,11 @@ export async function resolveTrader(
   }
 
   const platformFilter = params.platform
-  const sanitizedForFilter = decodedHandle.replace(/[,()\[\]\\%_]/g, '')
+  // Only characters that break PostgREST `.or()` syntax are removed. These
+  // filters are exact `.eq` matches, so `_`, `%`, `\`, `[`, `]` carry no LIKE
+  // meaning; stripping them turned "crypto_king" into "cryptoking" and the
+  // trader could never be resolved.
+  const sanitizedForFilter = decodedHandle.replace(/[,()"]/g, '')
 
   type ResolvedIdentity = {
     platform: string
