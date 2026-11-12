@@ -51,3 +51,22 @@ describe('HomeHeroText', () => {
     expect(text).not.toMatch(/How ranking works|No source can pay/)
   })
 })
+
+describe('HomeHeroText dictionary coverage', () => {
+  // The hero renders on the server with the full English dictionary but the
+  // first client render only has en-core (full dictionaries load after the
+  // hydration commit). A hero key missing from en-core renders differently on
+  // each side and throws React #418 on `/`.
+  it('keeps every hero key in the synchronous English core', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const ssr = readFileSync(join(process.cwd(), 'app/components/home/HomeHeroSSR.tsx'), 'utf8')
+    const keys = new Set([
+      ...[...ssr.matchAll(/HomeHeroText k="(\w+)"/g)].map((m) => m[1]),
+      ...[...ssr.matchAll(/'(hero\w+)'/g)].map((m) => m[1]),
+    ])
+    const { default: enCore } = await import('@/lib/i18n/en-core')
+    expect(keys.size).toBeGreaterThanOrEqual(10)
+    for (const key of keys) expect(enCore).toHaveProperty(key)
+  })
+})
