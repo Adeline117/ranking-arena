@@ -401,6 +401,10 @@
   .profile-header-info {
     flex-direction: row !important;
     align-items: center !important;
+    /* The avatar sits to the left of the name here, so the column-layout
+       centering inherited from .profile-header would float the name and
+       badges away from the avatar. */
+    text-align: left;
   }
 
   .profile-header-avatar {
@@ -415,7 +419,7 @@
   }
 
   .trader-name-badges-row {
-    justify-content: center !important;
+    justify-content: flex-start !important;
   }
 
   .trader-name-truncate {

@@ -16,6 +16,8 @@ import type { TraderProfile } from '@/lib/data/trader'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { avatarSrc, isSvgAvatarSource } from '@/lib/utils/avatar-proxy'
 
+const MAX_VISIBLE_SIMILAR_TRADERS = 6
+
 // Extended type for similar traders with performance metrics
 interface SimilarTraderWithMetrics extends TraderProfile {
   roi_90d?: number
@@ -146,6 +148,10 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
     })
   }, [traders])
 
+  // The card shows at most this many; the count badge must describe the same
+  // list rather than the larger matched set it was sliced from.
+  const visibleTraders = uniqueTraders.slice(0, MAX_VISIBLE_SIMILAR_TRADERS)
+
   if (uniqueTraders.length === 0) {
     return (
       <div
@@ -204,7 +210,7 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
           }}
         >
           <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.primary }}>
-            {uniqueTraders.length}
+            {visibleTraders.length}
           </Text>
         </Box>
       </Box>
@@ -213,7 +219,7 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
         className="similar-traders-grid"
         style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}
       >
-        {uniqueTraders.slice(0, 6).map((trader, index) => (
+        {visibleTraders.map((trader, index) => (
           <Link
             key={trader.handle}
             href={`/trader/${encodeURIComponent(trader.id || trader.handle)}${trader.source ? `?platform=${encodeURIComponent(trader.source)}` : ''}`}

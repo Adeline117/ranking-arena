@@ -55,3 +55,19 @@ describe('SimilarTraders avatars', () => {
     )
   })
 })
+
+describe('SimilarTraders count badge', () => {
+  it('counts only the traders the card actually lists', () => {
+    const traders = Array.from({ length: 8 }, (_, index) => ({
+      id: `trader-${index}`,
+      handle: `Trader ${index}`,
+      source: 'binance_futures',
+      avatar_url: null,
+    }))
+    const { container, getByText, queryByText } = render(<SimilarTraders traders={traders} />)
+
+    expect(container.querySelectorAll('a[href^="/trader/"]')).toHaveLength(6)
+    expect(getByText('6')).toBeInTheDocument()
+    expect(queryByText('8')).not.toBeInTheDocument()
+  })
+})
