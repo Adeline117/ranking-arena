@@ -6018,7 +6018,7 @@ const zh = {
 
   // ── ARENA_DATA_SPEC v1.2 serving 层（spec §2.4/§6）──
   provenanceSource: '数据来源',
-  provenanceTracked: '爬取数据',
+  provenanceTracked: '追踪数据',
   provenanceTrackedTip:
     '指标来自交易所公开榜单。独立的私有 CEX 连接不会验证、修改或发布该排行榜档案。',
   provenanceVerified: '已验证',
