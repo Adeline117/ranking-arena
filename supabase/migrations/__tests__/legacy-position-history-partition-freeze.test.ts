@@ -183,8 +183,17 @@ describe('legacy trader-position-history relation freeze', () => {
   })
 
   it('prevents later migrations from reopening legacy direct authority', () => {
+    // Forward replacements of this freeze itself (launched in its slot, the
+    // original superseded). prod-state-forward-replacements.test.ts proves each
+    // differs from this migration only in reviewed legacy-digest hunks.
+    const freezeReplacements = new Set([
+      '20261111135144_freeze_legacy_position_history_relations_prod_creator.sql',
+    ])
     const laterMigrations = readdirSync(migrationDir)
-      .filter((name) => /^\d{14}_.+\.sql$/.test(name) && name > migrationName)
+      .filter(
+        (name) =>
+          /^\d{14}_.+\.sql$/.test(name) && name > migrationName && !freezeReplacements.has(name)
+      )
       .map((name) => ({
         name,
         sql: withoutComments(readFileSync(join(migrationDir, name), 'utf8')),
