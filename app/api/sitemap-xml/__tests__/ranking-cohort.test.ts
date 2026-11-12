@@ -76,11 +76,27 @@ describe('XML trader sitemap public ranking cohort', () => {
   })
 
   it('filters and orders the public cohort before querying a fixed shard range', async () => {
-    const rankingQuery = query({ data: [publicRankedRow()], error: null })
-    mockFrom.mockReturnValue(rankingQuery)
+    const rankingQuery = query({
+      data: [
+        publicRankedRow(),
+        publicRankedRow({ source: 'okx_futures', source_trader_id: 'trader-2' }),
+      ],
+      error: null,
+    })
+    // lastmod comes from the source watermark, never computed_at (2026-08-16).
+    const watermarkQuery = query({
+      data: [{ source: 'binance_futures', source_as_of: '2026-08-01T00:00:00.000Z' }],
+      error: null,
+    })
+    mockFrom.mockImplementation((relation: string) =>
+      relation === 'leaderboard_source_freshness' ? watermarkQuery : rankingQuery
+    )
 
     const response = await GET(request('http://localhost/api/sitemap-xml?shard=2'))
     const xml = await response.text()
+    expect(xml).toContain('<lastmod>2026-08-01T00:00:00.000Z</lastmod>')
+    expect(xml).not.toContain('2026-08-16T12:00:00.000Z')
+    expect(xml.match(/<lastmod>/g)).toHaveLength(1)
 
     expect(response.status).toBe(200)
     expect(mockFrom).toHaveBeenCalledWith('public_ranked_leaderboard')

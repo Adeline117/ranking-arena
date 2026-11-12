@@ -54,7 +54,15 @@ describe('Next trader sitemap public ranking cohort', () => {
       ],
       error: null,
     })
-    mockFrom.mockReturnValue(rankingQuery)
+    // The score compute time (computed_at 2026-08-16) is NOT the data time;
+    // lastmod must come from the source watermark, and be omitted when unknown.
+    const watermarkQuery = query({
+      data: [{ source: 'binance_futures', source_as_of: '2026-08-01T00:00:00.000Z' }],
+      error: null,
+    })
+    mockFrom.mockImplementation((relation: string) =>
+      relation === 'leaderboard_source_freshness' ? watermarkQuery : rankingQuery
+    )
 
     const entries = await sitemap({ id: 2 })
 
@@ -71,12 +79,15 @@ describe('Next trader sitemap public ranking cohort', () => {
     expect(entries).toEqual([
       expect.objectContaining({
         url: 'https://www.arenafi.org/trader/Top%20Trader?platform=binance_futures',
-        lastModified: '2026-08-16T12:00:00.000Z',
+        lastModified: '2026-08-01T00:00:00.000Z',
       }),
       expect.objectContaining({
         url: 'https://www.arenafi.org/trader/Top%20Trader?platform=okx_futures',
       }),
     ])
+    expect(entries[1]).not.toHaveProperty('lastModified')
+    expect(watermarkQuery.eq).toHaveBeenCalledWith('season_id', '90D')
+    expect(watermarkQuery.in).toHaveBeenCalledWith('source', ['binance_futures', 'okx_futures'])
   })
 
   it('fails a finite shard closed when a view response is malformed', async () => {

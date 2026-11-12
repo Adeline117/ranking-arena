@@ -147,6 +147,12 @@ describe('generateTraderProfilePageSchema', () => {
     expect(schema.dateModified).toBe(lastModified)
   })
 
+  test('omits date modified instead of claiming the render time when unknown', () => {
+    const trader = { handle: 'testTrader', id: 'trader123' }
+    expect(generateTraderProfilePageSchema(trader)).not.toHaveProperty('dateModified')
+    expect(generateTraderProfilePageSchema(trader, 'not-a-date')).not.toHaveProperty('dateModified')
+  })
+
   test('should generate description', () => {
     const trader = {
       handle: 'testTrader',
@@ -240,7 +246,10 @@ describe('generatePostArticleSchema', () => {
     }
 
     const schema = generatePostArticleSchema(post)
-    expect(schema.image).toEqual(['https://example.com/image1.png', 'https://example.com/image2.png'])
+    expect(schema.image).toEqual([
+      'https://example.com/image1.png',
+      'https://example.com/image2.png',
+    ])
   })
 
   test('should include publisher', () => {
@@ -272,10 +281,7 @@ describe('generateBreadcrumbSchema', () => {
   })
 
   test('should set correct positions', () => {
-    const items = [
-      { name: 'Home', url: 'https://example.com' },
-      { name: 'About' },
-    ]
+    const items = [{ name: 'Home', url: 'https://example.com' }, { name: 'About' }]
 
     const schema = generateBreadcrumbSchema(items)
 
@@ -284,18 +290,14 @@ describe('generateBreadcrumbSchema', () => {
   })
 
   test('should include item URL when provided', () => {
-    const items = [
-      { name: 'Home', url: 'https://example.com' },
-    ]
+    const items = [{ name: 'Home', url: 'https://example.com' }]
 
     const schema = generateBreadcrumbSchema(items)
     expect(schema.itemListElement[0].item).toBe('https://example.com')
   })
 
   test('should not include item URL when not provided', () => {
-    const items = [
-      { name: 'Current Page' },
-    ]
+    const items = [{ name: 'Current Page' }]
 
     const schema = generateBreadcrumbSchema(items)
     expect(schema.itemListElement[0].item).toBeUndefined()
