@@ -30,6 +30,21 @@ const CASES: ReadonlyArray<{
   hunks: ReadonlyArray<readonly [original: string, replacement: string]>
 }> = [
   {
+    original: '20260725017250_normalize_leaderboard_rank_max_drawdown.sql',
+    originalSha256: '951ab2b3c24da62169022ac65b451b5139db52d6a03acc3ae616d2d79bcb7920',
+    replacement: '20261111185914_normalize_leaderboard_rank_max_drawdown_prod_constraint.sql',
+    hunks: [
+      [
+        `        constraint_row.conname NOT IN (
+          'leaderboard_ranks_max_drawdown_check',`,
+        `        constraint_row.conname NOT IN (
+          -- Production's name for the reviewed legacy expression.
+          'chk_lr_part_mdd',
+          'leaderboard_ranks_max_drawdown_check',`,
+      ],
+    ],
+  },
+  {
     original: '20260803090000_record_provenance_clocks.sql',
     originalSha256: '3fcc835f33e369feac52a2c260869167c65c75536e7e0ff0cbf4683cb51dee1b',
     replacement: '20261111134937_record_provenance_clocks_prod_reader.sql',
@@ -150,7 +165,7 @@ describe('production-state forward replacements', () => {
   })
 
   it('never relaxes the bingx_futures status or changes any source status', () => {
-    const replacement = read(CASES[2].replacement)
+    const replacement = read('20261111135302_quarantine_bingx_rank_authority_blocked_spot.sql')
     expect(replacement).not.toMatch(/SET\s+status\s*=/u)
     expect(
       count(replacement, "source.slug = 'bingx_spot' AND source.status = 'blocked_pending_vps'")
