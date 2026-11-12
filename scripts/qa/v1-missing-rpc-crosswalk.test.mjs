@@ -66,7 +66,7 @@ function reattestChangedMigration(inventory, migrationFile, contents) {
 
 function assertRetirementAclMutationRejected(mutate, expectedError) {
   const inventory = buildLaunchMigrationInventory({ repoRoot: ROOT })
-  const migrationFile = '20260804043000_retire_legacy_token_rankings.sql'
+  const migrationFile = '20261111133300_retire_legacy_token_rankings_cron_api.sql'
   const repoRoot = copyCrosswalkEvidenceRepo()
   try {
     const migrationPath = resolve(repoRoot, `supabase/migrations/${migrationFile}`)
@@ -571,4 +571,38 @@ test('CLI emits read-only JSON and rejects arguments', () => {
 test('implementation has no network, database, or subprocess capability', () => {
   const source = readFileSync(SCRIPT, 'utf8')
   assert.doesNotMatch(source, /\b(?:fetch|spawn|exec|DATABASE_URL|SUPABASE_SERVICE_ROLE_KEY)\b/u)
+})
+
+test('superseded cron-API originals must stay superseded and out of predeploy', () => {
+  const inventory = buildLaunchMigrationInventory({ repoRoot: ROOT })
+  const original = '20260729230000_token_ranking_generation_barrier.sql'
+  const reattest = (copy) => {
+    for (const phase of copy.phases) {
+      phase.count = phase.migrations.length
+      phase.migrationSetSha256 = canonicalJsonSha256(phase.migrations)
+    }
+    const { inventorySha256: _oldDigest, ...attested } = copy
+    copy.inventorySha256 = canonicalJsonSha256(attested)
+    return copy
+  }
+
+  const unsuperseded = structuredClone(inventory)
+  const supersededPhase = unsuperseded.phases.find((phase) => phase.name === 'superseded')
+  supersededPhase.migrations = supersededPhase.migrations.filter(
+    (migration) => migration.file !== original
+  )
+  assert.throws(
+    () => buildMissingRpcCrosswalk({ inventory: reattest(unsuperseded), repoRoot: ROOT }),
+    /superseded ranking migration must stay superseded: 20260729230000/u
+  )
+
+  const reentered = structuredClone(inventory)
+  const originalEntry = reentered.phases
+    .find((phase) => phase.name === 'superseded')
+    .migrations.find((migration) => migration.file === original)
+  reentered.phases.find((phase) => phase.name === 'predeploy').migrations.push(originalEntry)
+  assert.throws(
+    () => buildMissingRpcCrosswalk({ inventory: reattest(reentered), repoRoot: ROOT }),
+    /superseded ranking migration re-entered predeploy: 20260729230000/u
+  )
 })
