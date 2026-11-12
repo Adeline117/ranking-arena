@@ -223,8 +223,10 @@ export const ROI_TEXT_BASE_STYLE: React.CSSProperties = {
 // small enough to fit between the right-edge of the row and the sort chevron
 // area. Was 28×28 — too small for thumbs in the dense ranking list.
 export const EXPAND_BTN_STYLE: React.CSSProperties = {
+  // Sits inside the 56px right inset the desktop grid reserves for it
+  // (globals.css), clear of the last metric column.
   position: 'absolute',
-  right: 2,
+  right: 10,
   top: '50%',
   transform: 'translateY(-50%)',
   width: 36,

@@ -4539,13 +4539,29 @@ td[data-numeric],
   .ranking-table-container .ranking-table-grid-custom {
     grid-template-columns: var(
       --ranking-grid-cols,
-      40px minmax(140px, 1.4fr) 58px 80px 64px 64px
+      40px minmax(140px, 1.4fr) 72px 80px 64px 64px
     ) !important;
     /* Sum of column widths — lets the grid overflow into the horizontal-scroll
        wrapper (frozen columns) once the viewport is narrower than this, instead
        of being clipped. No effect when the viewport is wider (1.5fr absorbs the
        slack), so wide-screen layout is unchanged. */
-    min-width: var(--ranking-grid-min, 654px);
+    min-width: var(--ranking-grid-min, 682px);
+    /* Header and rows must share one horizontal geometry, otherwise the
+       flexible name column absorbs the difference and every fixed column
+       drifts (the header sat 20-24px right of the data at 1440px). The right
+       inset reserves room for the absolutely positioned expand button so it
+       never covers the last metric column. */
+    column-gap: 12px !important;
+    padding-left: 20px !important;
+    padding-right: 56px !important;
+  }
+  /* Podium rows keep their vertical spacing but not a horizontal margin:
+     a narrower row shifts its fixed columns away from the header. */
+  .ranking-table-container .ranking-table-grid-custom.rank-1,
+  .ranking-table-container .ranking-table-grid-custom.rank-2,
+  .ranking-table-container .ranking-table-grid-custom.rank-3 {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
   }
   .ranking-table-container[data-hide-score] .col-score {
     display: none !important;

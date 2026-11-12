@@ -330,7 +330,9 @@ function RankingTableInner(props: {
 
   const desktopGridTemplate = React.useMemo(() => {
     let template = '40px minmax(140px, 1.5fr)'
-    if (visibleColumns.includes('score')) template += ' 58px'
+    // The score cell holds the 38px circle, a 4px gap and the 12px breakdown
+    // icon above a 44px mini bar; 58px overflowed it into the ROI column.
+    if (visibleColumns.includes('score')) template += ' 72px'
     if (visibleColumns.includes('roi')) template += ' 96px'
     if (visibleColumns.includes('pnl')) template += ' 80px'
     if (visibleColumns.includes('winrate')) template += ' 64px'
@@ -352,7 +354,7 @@ function RankingTableInner(props: {
   // background + bottom border even in the overflow region.
   const desktopGridMinWidth = React.useMemo(() => {
     const widths: number[] = [40, 140] // rank, name (floor)
-    if (visibleColumns.includes('score')) widths.push(58)
+    if (visibleColumns.includes('score')) widths.push(72)
     if (visibleColumns.includes('roi')) widths.push(96)
     if (visibleColumns.includes('pnl')) widths.push(80)
     if (visibleColumns.includes('winrate')) widths.push(64)
@@ -364,7 +366,7 @@ function RankingTableInner(props: {
     if (visibleColumns.includes('trades')) widths.push(70)
     const cols = widths.reduce((a, b) => a + b, 0)
     const gaps = (widths.length - 1) * 12 // row gap = tokens.spacing[3]
-    const padding = 40 // row horizontal padding = 2 × tokens.spacing[5]
+    const padding = 76 // desktop grid inset: 20px left + 56px expand-button reserve (globals.css)
     return cols + gaps + padding
   }, [visibleColumns])
 
@@ -870,8 +872,10 @@ function RankingTableInner(props: {
             className="ranking-table-header ranking-table-grid ranking-table-grid-custom"
             style={{
               display: 'grid',
-              gap: tokens.spacing[2],
-              padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+              // Same gap and horizontal inset as ROW_BASE_STYLE so header labels
+              // sit over their columns (globals.css pins both on desktop).
+              gap: tokens.spacing[3],
+              padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
               borderBottom: `1px solid var(--glass-border-light)`,
               boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
               background: 'var(--color-bg-secondary, #14121C)',

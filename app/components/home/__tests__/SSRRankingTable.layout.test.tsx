@@ -79,7 +79,7 @@ describe('SSRRankingTable responsive layout', () => {
     const css = getCriticalCss().replace(/\s+/g, '')
 
     expect(css).toContain(
-      '.ssr-ranking-grid{display:grid;grid-template-columns:40pxminmax(0,1.5fr)58pxminmax(72px,96px)minmax(64px,80px)60px60px;'
+      '.ssr-ranking-grid{display:grid;grid-template-columns:40pxminmax(0,1.5fr)72pxminmax(72px,96px)minmax(64px,80px)60px60px;'
     )
     expect(css).toContain(
       '@media(max-width:767px){.ssr-ranking-table{padding:0010px;background:transparent}.ssr-ranking-header{display:none}'
