@@ -924,10 +924,14 @@ async function searchTradersInner(
 ): Promise<UnifiedTrader[]> {
   const { query, limit, platform } = params
 
-  const sanitizedQuery = query
+  // Callers pass the raw query. `textQuery` is compared against handles/ids in
+  // JS; `sanitizedQuery` is the LIKE-escaped form for SQL only. Comparing the
+  // escaped form in JS made every name containing `_`, `%` or `\` unfindable.
+  const textQuery = query
     .slice(0, 100)
-    .replace(/[\\%_]/g, (c) => `\\${c}`)
     .replace(/[.,()]/g, '')
+    .trim()
+  const sanitizedQuery = textQuery.replace(/[\\%_]/g, (c) => `\\${c}`)
 
   if (!sanitizedQuery) return []
 
@@ -947,7 +951,7 @@ async function searchTradersInner(
       platform_filter: platform || null,
     })
     if (!fuzzyErr && Array.isArray(fuzzyData) && fuzzyData.length > 0) {
-      const qLower = sanitizedQuery.toLowerCase()
+      const qLower = textQuery.toLowerCase()
       const filtered = (fuzzyData as FuzzyIdentityResult[]).filter((candidate) => {
         if (
           typeof candidate.source_trader_id !== 'string' ||
@@ -1020,7 +1024,7 @@ async function searchTradersInner(
 
   // Text matching is the only ordering input here. Never let an RPC/index
   // relevance score reorder or admit identity candidates before public proof.
-  const queryLower = sanitizedQuery.toLowerCase()
+  const queryLower = textQuery.toLowerCase()
   const sorted = filteredSources
     .map((candidate) => {
       const handleLower = (candidate.handle || '').toLowerCase()
