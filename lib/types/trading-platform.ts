@@ -270,9 +270,11 @@ export interface TraderDetailResponse {
     daily_pnl: DailyPnlPoint[] | null
     asset_breakdown: AssetBreakdownPoint[] | null
   }
-  updated_at: string
+  /** Oldest upstream source watermark of the published windows; null = unknown. */
+  updated_at: string | null
   is_stale: boolean
-  staleness_seconds: number
+  /** Age of `updated_at` in seconds; null when the watermark is unknown. */
+  staleness_seconds: number | null
   refresh_job: RefreshJobSummary | null
 }
 
