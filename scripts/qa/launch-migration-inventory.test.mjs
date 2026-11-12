@@ -50,7 +50,7 @@ function canonicalFixtureRunner(tipReadonlyDeclaration) {
     ({ sourceArray }) =>
       `${sourceArray}=(\n  20260804000000_fixture.sql\n)\nreadonly -a ${sourceArray}\n`
   ).join('\n')
-  return `${phaseArrays}\nTIP_CHECKOUT_CUTOVER_VERSIONS=(\n  20260721210000\n)\n${tipReadonlyDeclaration}`
+  return `${phaseArrays}\nSUPERSEDING_VERSIONS=(\n  20260804000001\n)\nreadonly -a SUPERSEDING_VERSIONS\n\nTIP_CHECKOUT_CUTOVER_VERSIONS=(\n  20260721210000\n)\n${tipReadonlyDeclaration}`
 }
 
 test('exports a deterministic, hash-attested read-only launch inventory', () => {
@@ -62,7 +62,9 @@ test('exports a deterministic, hash-attested read-only launch inventory', () => 
   assert.match(first.inventorySha256, /^[a-f0-9]{64}$/u)
   const predeploy = first.phases.find((phase) => phase.name === 'predeploy')
   const postdeploy = first.phases.find((phase) => phase.name === 'postdeploy')
-  assert.equal(predeploy.count, 122)
+  assert.equal(predeploy.count, 156)
+  assert.equal(first.phases.find((phase) => phase.name === 'baselineGap').count, 18)
+  assert.equal(first.phases.find((phase) => phase.name === 'trailingMcp').count, 1)
   assert.equal(postdeploy.count, 3)
   const firstMigration = predeploy.migrations[0]
   assert.equal(firstMigration.sha256, sha256(readFileSync(resolve(ROOT, firstMigration.path))))
@@ -300,7 +302,7 @@ test('canonical runner contract also requires TIP checkout versions to be exactl
       resolve(setup.repoRoot, 'scripts/maintenance/apply-launch-migrations.sh'),
       canonicalFixtureRunner('readonly -a TIP_CHECKOUT_CUTOVER_VERSIONS\n')
     )
-    assert.equal(buildLaunchMigrationInventory({ repoRoot: setup.repoRoot }).phases.length, 7)
+    assert.equal(buildLaunchMigrationInventory({ repoRoot: setup.repoRoot }).phases.length, 9)
   } finally {
     rmSync(setup.repoRoot, { force: true, recursive: true })
   }

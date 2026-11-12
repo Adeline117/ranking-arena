@@ -29,6 +29,9 @@ ORDERED_PREDEPLOY_RELEASE_SHA=''
 ORDERED_PREDEPLOY_SNAPSHOT_DIR=''
 
 PREDEPLOY_MIGRATIONS=(
+  20260715100000_contract_comment_write_boundary.sql
+  20261111194845_fix_gmx_source_contract_current_population.sql
+  20260715232500_quarantine_gmx_mixed_pnl.sql
   20260716111600_atomic_group_application_review.sql
   20260716111700_group_application_read_write_boundary.sql
   20260716111800_group_creation_membership_write_boundary.sql
@@ -91,6 +94,7 @@ PREDEPLOY_MIGRATIONS=(
   20260721140000_idempotent_equivalent_refund_events.sql
   20260721150000_metric_trust_raw_artifact_identity.sql
   20260721175746_arena_score_inputs_publish_bundle.sql
+  20260721180903_metric_rankable_score_inputs_shadow.sql
   20260721210000_tip_checkout_lifecycle_atomic.sql
   20260721211000_tip_checkout_completion_identity.sql
   20260722030000_durable_leaderboard_acquisition_attempt_ledger.sql
@@ -100,7 +104,9 @@ PREDEPLOY_MIGRATIONS=(
   20260722050000_metric_trust_attempt_outcome_authority.sql
   20260722051000_leaderboard_score_input_manifest_contract.sql
   20260722052000_leaderboard_score_input_manifest_rank_eligible_pnl.sql
+  20261111191927_binance_spot_contract_registration_serving_hold.sql
   20260722053000_binance_spot_metric_source_contract.sql
+  20261111191928_binance_spot_contract_registration_serving_restore.sql
   20260722055000_metric_trust_source_page_lineage_forward_repair.sql
   20260724010000_shadow_unverified_okx_web3_ranks.sql
   20260724232500_allow_pipeline_logs_partial_success.sql
@@ -114,13 +120,14 @@ PREDEPLOY_MIGRATIONS=(
   20260725015000_leaderboard_rank_generation_claim.sql
   20260725015500_bound_leaderboard_rank_generation_batches.sql
   20260725016000_leaderboard_rank_generation_receipt_substrate.sql
+  20261111140053_leaderboard_ranks_codec_layout_rebuild.sql
   20260725016500_leaderboard_rank_persisted_codec.sql
   20260725017000_leaderboard_rank_typed_batch_contract.sql
-  20260725017250_normalize_leaderboard_rank_max_drawdown.sql
+  20261111185914_normalize_leaderboard_rank_max_drawdown_prod_constraint.sql
   20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql
-  20260728122000_bitget_bots_canonical_timeframe.sql
+  20261111134210_bitget_bots_canonical_timeframe_partial_seed.sql
   20260728123000_arena_bot_header_canonical_snapshot.sql
-  20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql
+  20261111134416_quarantine_bitget_bot_cumulative_rank_authority_prod_reader.sql
   20260729010000_api_keys_server_authority.sql
   20260729011000_leaderboard_rank_manifest_attestation_substrate.sql
   20260729012000_partitioned_bot_acquisition_manifest_v4.sql
@@ -139,20 +146,80 @@ PREDEPLOY_MIGRATIONS=(
   20260729070500_leaderboard_score_input_manifest_v2.sql
   20260729071000_leaderboard_metric_trust_projection_v2.sql
   20260729071500_tier_a_one_phase_commit_guard.sql
+  20260729220908_season_scoped_leaderboard_count_cache.sql
   20260729223000_rerank_public_eligible_rows_only.sql
   20260729224000_rank_eligible_leaderboard_count_cache.sql
   20260729225000_token_trader_rank_authority.sql
-  20260729230000_token_ranking_generation_barrier.sql
-  20260804043000_retire_legacy_token_rankings.sql
-  20260804044000_freeze_legacy_position_history_relations.sql
-  20260804045000_quarantine_bingx_rank_authority.sql
+  20261111133259_token_ranking_generation_barrier_cron_api.sql
+  20260730033000_token_trade_fact_authority_shadow.sql
+  20261111134937_record_provenance_clocks_prod_reader.sql
+  20260803100000_record_surface_publication_substrate.sql
+  20260803101000_verified_position_history_publication_writer.sql
+  20260803211000_b2c_activation_v2.sql
+  20260803211500_trader_authorizations_server_only.sql
+  20260803212000_legacy_portfolios_v1_retirement.sql
+  20260803213000_trader_claim_v2_rpcs.sql
+  20260803214000_trader_claim_v2_cutover.sql
+  20260804041000_retire_legacy_position_history_publisher.sql
+  20260804042000_fail_closed_position_history_records_page.sql
+  20261111133300_retire_legacy_token_rankings_cron_api.sql
+  20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
+  20261111135302_quarantine_bingx_rank_authority_blocked_spot.sql
   20260804050000_harden_serving_trader_resolver.sql
   20260804051000_harden_serving_source_capabilities.sql
   20260804052000_fail_closed_unbound_copier_aggregates.sql
   20260804053000_copier_snapshot_publication_substrate.sql
   20260804054000_publish_copier_snapshot_atomically.sql
+  20260808010000_copier_snapshot_trust_raw_role.sql
+  20260808020000_copier_snapshot_trust_publication_substrate.sql
+  20260808021000_publish_copier_snapshot_trust_v2.sql
+  20260808090000_quarantine_legacy_trader_daily_snapshots.sql
+  20260816130000_quarantine_v1_trader_alert_browser_mutations.sql
+  20260816151614_public_ranked_leaderboard.sql
+  20260816184500_public_ranked_leaderboard_source_freshness_gate.sql
+  20260817000000_finalize_trader_alert_delivery_epoch_fence.sql
+  20261111132444_rank_history_service_only_acl_hosted_role_graph.sql
+  20261111132445_trader_activities_publication_fence_hosted_role_graph.sql
+  20261111132446_notification_ranking_change_reader_fence_hosted_role_graph.sql
+  20261111132447_arena_bot_legacy_publication_isolation_hosted_role_graph.sql
+  20261111132448_trader_series_publication_isolation_hosted_role_graph.sql
+  20261111132450_legacy_raw_metric_publication_isolation_hosted_role_graph.sql
+  20260817134214_quarantine_legacy_platform_stats_rpc.sql
 )
 readonly -a PREDEPLOY_MIGRATIONS
+
+# Production-missing migrations written for the Supabase MCP channel: they
+# carry no outer BEGIN/COMMIT, so the ordered emitter cannot wrap them with
+# their exact-body ledger row. Under ADR-023 each is applied with
+# apply_migration, one file at a time, in this order: every baseline-gap file
+# before the first predeploy candidate, every trailing file after the last one
+# and before postdeploy (full-production-replica rehearsal, 2026-11-11).
+BASELINE_GAP_MIGRATIONS=(
+  20260703032237_drop_competitions_feature.sql
+  20260703192324_metric_fill_trend.sql
+  20260703234459_upstream_field_inventory.sql
+  20260706201258_drop_bot_ranking_tables.sql
+  20260706202941_add_flash_news_ja_ko_columns.sql
+  20260706222615_add_group_applications_group_id.sql
+  20260706224932_add_group_member_prefs.sql
+  20260707003925_drop_ingest_cursors_trader_fk.sql
+  20260708194004_arena_roi_sparklines_rpc.sql
+  20260709134929_roi_sparklines_metric_priority.sql
+  20260709201407_first_party_claimed_foundation.sql
+  20260709201917_score_inputs_first_party_branch.sql
+  20260709223039_arena_backfill_panel_rpc.sql
+  20260710015607_comments_soft_delete_columns.sql
+  20260710015608_user_interactions_impression_dedup.sql
+  20260710103004_arena_trust_scorecard_rpc.sql
+  20260711191505_tighten_quiz_results_rls.sql
+  20260711204608_revoke_anon_execute_sdf.sql
+)
+readonly -a BASELINE_GAP_MIGRATIONS
+
+TRAILING_MCP_MIGRATIONS=(
+  20261013094743_retire_v2_partition_cron_extend_arena_partitions.sql
+)
+readonly -a TRAILING_MCP_MIGRATIONS
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
 # accepts it only when its exact reviewed ledger and complete object contract
@@ -175,7 +242,7 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 POSTDEPLOY_MIGRATIONS=(
   20260716192000_social_edge_write_contract.sql
   20260717120000_trader_follows_composite_identity.sql
-  20260729061000_tier_a_execution_claim_enforcement.sql
+  20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
 
@@ -253,13 +320,64 @@ RECOVERY_MIGRATIONS=(
 )
 readonly -a RECOVERY_MIGRATIONS
 
-# Do not replay this older collection boundary. The separately applied
-# 20260717230000 migration replaces its policies with current-owner/current-
-# resource audience checks and atomic service-only writes.
+# Never replay these. Each is paired by position with the ledger version that
+# replaces it in SUPERSEDING_VERSIONS:
+# - 20260716104500 is replaced by the separately applied 20260717230000, which
+#   uses current-owner/current-resource audience checks and atomic service-only
+#   writes.
+# - 20260808001418 is already applied in production under ledger version
+#   20260808071456 (same name; read-only ledger evidence, 2026-11-11).
+# - The rest were never applied and cannot apply on the hosted project; each has
+#   a forward replacement placed at its position in the ordered phases
+#   (docs/LAUNCH_REHEARSAL_2026-11-11.md, PRs #400 and #401).
 SUPERSEDED_MIGRATIONS=(
   20260716104500_collection_read_write_boundaries.sql
+  20260808001418_atomic_group_channel_settings_update.sql
+  20260817020000_rank_history_service_only_acl.sql
+  20260817030000_trader_activities_publication_fence.sql
+  20260817040000_notification_ranking_change_reader_fence.sql
+  20260817050000_arena_bot_legacy_publication_isolation.sql
+  20260817060000_trader_series_publication_isolation.sql
+  20260817061000_legacy_raw_metric_publication_isolation.sql
+  20260725017250_normalize_leaderboard_rank_max_drawdown.sql
+  20260728122000_bitget_bots_canonical_timeframe.sql
+  20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql
+  20260729061000_tier_a_execution_claim_enforcement.sql
+  20260729230000_token_ranking_generation_barrier.sql
+  20260804043000_retire_legacy_token_rankings.sql
+  20260804044000_freeze_legacy_position_history_relations.sql
+  20260804045000_quarantine_bingx_rank_authority.sql
+  20260715231500_fix_gmx_source_contract.sql
+  20260803090000_record_provenance_clocks.sql
 )
 readonly -a SUPERSEDED_MIGRATIONS
+
+SUPERSEDING_VERSIONS=(
+  20260717230000
+  20260808071456
+  20261111132444
+  20261111132445
+  20261111132446
+  20261111132447
+  20261111132448
+  20261111132450
+  20261111185914
+  20261111134210
+  20261111134416
+  20261111192134
+  20261111133259
+  20261111133300
+  20261111135144
+  20261111135302
+  20261111194845
+  20261111134937
+)
+readonly -a SUPERSEDING_VERSIONS
+
+if [[ "${#SUPERSEDED_MIGRATIONS[@]}" != "${#SUPERSEDING_VERSIONS[@]}" ]]; then
+  echo 'SUPERSEDED_MIGRATIONS and SUPERSEDING_VERSIONS must pair one-to-one' >&2
+  exit 2
+fi
 
 require_environment() {
   if [[ -z "${DATABASE_URL:-}" ]]; then
@@ -945,12 +1063,16 @@ status() {
   local phase
   {
     printf '%s\n' \
-      'WITH target(version, phase, ordinal, expected_name, expected_hash) AS (VALUES'
+      'WITH target(version, phase, ordinal, expected_name, expected_hash, superseding_version) AS (VALUES'
     local ordinal=0
     local separator=''
-    for phase in predeploy postdeploy concurrent-recovery recovery quarantined superseded; do
+    for phase in baseline-gap predeploy trailing-mcp postdeploy concurrent-recovery recovery quarantined superseded; do
       local -a phase_migrations
-      if [[ "$phase" == "predeploy" ]]; then
+      if [[ "$phase" == "baseline-gap" ]]; then
+        phase_migrations=("${BASELINE_GAP_MIGRATIONS[@]}")
+      elif [[ "$phase" == "trailing-mcp" ]]; then
+        phase_migrations=("${TRAILING_MCP_MIGRATIONS[@]}")
+      elif [[ "$phase" == "predeploy" ]]; then
         phase_migrations=("${PREDEPLOY_MIGRATIONS[@]}")
       elif [[ "$phase" == "postdeploy" ]]; then
         phase_migrations=("${POSTDEPLOY_MIGRATIONS[@]}")
@@ -963,16 +1085,22 @@ status() {
       else
         phase_migrations=("${SUPERSEDED_MIGRATIONS[@]}")
       fi
+      local phase_index=0
       for migration in "${phase_migrations[@]}"; do
         ordinal=$((ordinal + 1))
         local version
         local name
         local hash
+        local superseding='NULL'
         version="$(migration_version "$migration")"
         name="$(migration_name "$migration")"
         hash="$(migration_body_sha256 "$migration")"
-        printf "%s  ('%s', '%s', %d, '%s', '%s')" \
-          "$separator" "$version" "$phase" "$ordinal" "$name" "$hash"
+        if [[ "$phase" == "superseded" ]]; then
+          superseding="'${SUPERSEDING_VERSIONS[$phase_index]}'"
+        fi
+        phase_index=$((phase_index + 1))
+        printf "%s  ('%s', '%s', %d, '%s', '%s', %s)" \
+          "$separator" "$version" "$phase" "$ordinal" "$name" "$hash" "$superseding"
         separator=$',\n'
       done
     done
@@ -982,8 +1110,8 @@ status() {
       "  CASE" \
       "    WHEN target.phase = 'superseded' AND EXISTS (" \
       "      SELECT 1 FROM supabase_migrations.schema_migrations AS replacement" \
-      "      WHERE replacement.version = '20260717230000'" \
-      "    ) THEN 'superseded-by-20260717230000'" \
+      "      WHERE replacement.version = target.superseding_version" \
+      "    ) THEN 'superseded-by-' || target.superseding_version" \
       "    WHEN target.phase = 'superseded' THEN 'missing-superseder'" \
       "    WHEN target.phase = 'quarantined' AND NOT EXISTS (" \
       "      SELECT 1 FROM supabase_migrations.schema_migrations AS candidate" \
@@ -1006,6 +1134,14 @@ status() {
       "    ) THEN 'quarantined-exact-forward-repair-required'" \
       "    WHEN target.phase = 'quarantined' THEN 'quarantined-drift'" \
       "    WHEN ledger.version IS NULL THEN 'missing'" \
+      "    WHEN target.phase IN ('baseline-gap', 'trailing-mcp')" \
+      "      AND ledger.name = target.expected_name" \
+      "      AND pg_catalog.array_length(ledger.statements, 1) = 1" \
+      "      AND pg_catalog.encode(" \
+      "        extensions.digest(ledger.statements[1], 'sha256')," \
+      "        'hex'" \
+      "      ) = target.expected_hash" \
+      "    THEN 'applied-via-mcp'" \
       "    WHEN ledger.name = target.expected_name" \
       "      AND ledger.created_by = 'codex'" \
       "      AND ledger.idempotency_key =" \

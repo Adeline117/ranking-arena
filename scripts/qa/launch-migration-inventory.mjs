@@ -17,7 +17,9 @@ export const LAUNCH_MIGRATION_INVENTORY_CONTRACT = 'arena.launch-migration-inven
 export const LAUNCH_MIGRATION_INVENTORY_STATUS = 'inventory/read-only-not-live-evidence'
 
 export const LAUNCH_MIGRATION_PHASES = Object.freeze([
+  Object.freeze({ name: 'baselineGap', sourceArray: 'BASELINE_GAP_MIGRATIONS' }),
   Object.freeze({ name: 'predeploy', sourceArray: 'PREDEPLOY_MIGRATIONS' }),
+  Object.freeze({ name: 'trailingMcp', sourceArray: 'TRAILING_MCP_MIGRATIONS' }),
   Object.freeze({
     name: 'quarantinedPredeploy',
     sourceArray: 'QUARANTINED_PREDEPLOY_MIGRATIONS',
@@ -38,6 +40,7 @@ export const LAUNCH_MIGRATION_PHASES = Object.freeze([
 export const LAUNCH_RUNNER_READONLY_ARRAYS = Object.freeze([
   ...LAUNCH_MIGRATION_PHASES.map(({ sourceArray }) => sourceArray),
   'TIP_CHECKOUT_CUTOVER_VERSIONS',
+  'SUPERSEDING_VERSIONS',
 ])
 
 const LAUNCH_RUNNER_READONLY_ARRAY_SET = new Set(LAUNCH_RUNNER_READONLY_ARRAYS)
@@ -568,6 +571,7 @@ export function buildLaunchMigrationInventory({
     )
   if (usesCanonicalRunnerContract) {
     readonlyArrayDeclaration(source, 'TIP_CHECKOUT_CUTOVER_VERSIONS', true)
+    readonlyArrayDeclaration(source, 'SUPERSEDING_VERSIONS', true)
   }
   const phaseNames = new Set()
   const sourceArrays = new Set()
