@@ -97,3 +97,26 @@ for (const density of ['comfortable', 'compact'] as const) {
     }
   })
 }
+
+test('narrow-phone trader cards keep every metric inside the card', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile', 'cards are the mobile layout')
+  for (const width of [320, 360, 390]) {
+    await page.setViewportSize({ width, height: 800 })
+    await page.goto('/')
+    const card = page.locator('.trader-card-contained').first()
+    await expect(card).toBeVisible()
+    const clipped = await card.evaluate((element) => {
+      const cardBox = element.getBoundingClientRect()
+      const stats = element.querySelector('.trader-card-stats')
+      if (!stats) return ['stats row missing']
+      return [...stats.children].flatMap((cell) => {
+        const box = cell.getBoundingClientRect()
+        const problems: string[] = []
+        if (box.right > cardBox.right + 1) problems.push(`${cell.textContent} past card edge`)
+        if (cell.scrollWidth > cell.clientWidth + 1) problems.push(`${cell.textContent} overflows`)
+        return problems
+      })
+    })
+    expect(clipped, `${width}px`).toEqual([])
+  }
+})

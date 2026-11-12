@@ -328,8 +328,9 @@ export const TraderCard = memo(
             />
           </Box>
 
-          {/* Stats row */}
+          {/* Stats row — 2×2 on the narrowest phones (globals.css .trader-card-stats) */}
           <Box
+            className="trader-card-stats"
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(4, 1fr)',

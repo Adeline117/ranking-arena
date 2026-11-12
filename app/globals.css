@@ -4528,6 +4528,16 @@ td[data-numeric],
   transform: scale(1.03);
 }
 
+/* Mobile trader card stats: four metrics in one row overflow a 320px phone
+   (PnL with its arrow is wide) and the card clipped the MDD value. Below
+   375px they wrap into two rows of two. */
+@media (max-width: 374px) {
+  .trader-card-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    row-gap: 8px;
+  }
+}
+
 /* ============================================================
    RankingTable — dynamic column visibility + grid template
    Moved here from a runtime <style>{...}</style> element that
