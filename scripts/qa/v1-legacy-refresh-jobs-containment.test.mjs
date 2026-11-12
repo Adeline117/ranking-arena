@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -16,8 +16,6 @@ const batchFiveMinutes = source('app/api/cron/batch-5min/route.ts')
 const inlineJobs = source('lib/cron/inline-jobs.ts')
 const publicRefresh = source('app/api/trader/[platform]/[trader_key]/refresh/route.ts')
 const legacyDetail = source('app/api/trader/[platform]/[trader_key]/route.ts')
-const legacyHook = source('lib/hooks/useTraderDetailV2.ts')
-const legacyPage = source('app/components/trader/TraderPageV2.tsx')
 const pipelineLogger = source('lib/services/pipeline-logger.ts')
 const metaMonitor = source('app/api/cron/meta-monitor/route.ts')
 
@@ -86,18 +84,15 @@ test('legacy trader detail never reads or publishes legacy refresh-job state', (
   assert.doesNotMatch(legacyDetail, /tieredGet\(|cached\.data/)
 })
 
-test('legacy hook cannot post a refresh request, poll its result, or auto-retry', () => {
-  assert.match(legacyHook, /isV1LegacyRefreshJobsPublished\(\)/)
-  assert.doesNotMatch(
-    legacyHook,
-    /\/refresh['"`]|pollForCompletion|AbortController|refetchInterval:\s*refreshInterval/
-  )
-  assert.match(legacyHook, /refetchInterval:\s*false/)
-  assert.match(legacyHook, /retry:\s*false/)
-})
-
-test('legacy V2 page no longer renders a refresh or retry affordance', () => {
-  assert.doesNotMatch(legacyPage, /TraderRefreshButton|triggerRefresh|onRetry=/)
+test('legacy V2 trader hook and page stay deleted', () => {
+  // The unreferenced V2 stack was removed outright (2026-11-12); a restored copy
+  // would reopen the refresh/poll/retry affordances this containment forbids.
+  for (const relativePath of [
+    'lib/hooks/useTraderDetailV2.ts',
+    'app/components/trader/TraderPageV2.tsx',
+  ]) {
+    assert.equal(existsSync(resolve(ROOT, relativePath)), false, relativePath)
+  }
 })
 
 test('retired refresh commands are absent from liveness monitoring', () => {
