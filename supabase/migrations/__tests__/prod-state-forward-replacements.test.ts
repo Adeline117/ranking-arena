@@ -30,6 +30,50 @@ const CASES: ReadonlyArray<{
   hunks: ReadonlyArray<readonly [original: string, replacement: string]>
 }> = [
   {
+    original: '20260729061000_tier_a_execution_claim_enforcement.sql',
+    originalSha256: '9dbcea2c3b5b951c19c0ba32d616e7d7b7da617f54b93d2d4b72fc3006cbe887',
+    replacement: '20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql',
+    hunks: [
+      [
+        `    'arena.protect_leaderboard_acquisition_raw_evidence()'::pg_catalog.regprocedure,
+    27,
+    false,
+    false
+  ),`,
+        `    'arena.protect_leaderboard_acquisition_raw_evidence()'::pg_catalog.regprocedure,
+    27,
+    false,
+    false
+  ),
+  -- Reviewed raw-object guards installed by later launch migrations.
+  (
+    'arena.raw_objects'::pg_catalog.regclass,
+    'protect_record_surface_publication_raw_before_write',
+    'arena.protect_record_surface_publication_raw_object()'::pg_catalog.regprocedure,
+    27,
+    false,
+    false
+  ),
+  (
+    'arena.raw_objects'::pg_catalog.regclass,
+    'protect_copier_snapshot_raw_before_write',
+    'arena.protect_copier_snapshot_raw_object()'::pg_catalog.regprocedure,
+    27,
+    false,
+    false
+  ),
+  (
+    'arena.raw_objects'::pg_catalog.regclass,
+    'protect_copier_snapshot_trust_raw_before_write',
+    'arena.protect_copier_snapshot_trust_raw_object()'::pg_catalog.regprocedure,
+    27,
+    false,
+    false
+  ),`,
+      ],
+    ],
+  },
+  {
     original: '20260725017250_normalize_leaderboard_rank_max_drawdown.sql',
     originalSha256: '951ab2b3c24da62169022ac65b451b5139db52d6a03acc3ae616d2d79bcb7920',
     replacement: '20261111185914_normalize_leaderboard_rank_max_drawdown_prod_constraint.sql',
