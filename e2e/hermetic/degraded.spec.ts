@@ -86,6 +86,19 @@ test.describe('degraded data', () => {
     await expect(section).not.toContainText(METRIC_FIGURE)
   })
 
+  test('a trader profile on days-old exchange data does not claim it was just updated', async ({
+    page,
+    request,
+  }) => {
+    await useScenario(request, 'leaderboard-stale-source')
+    await page.goto('/trader/e2e-shared?platform=binance_futures')
+    const header = page.locator('main')
+    await expect(page.getByRole('heading', { name: 'E2E Shared Trader' })).toBeVisible()
+    await expect(header).toContainText('Updated 3d ago')
+    await expect(header).toContainText('Data may be delayed')
+    await expect(header).not.toContainText(/Updated just now/i)
+  })
+
   test('a trader that does not exist gets a not-found page, not an empty profile', async ({
     page,
   }) => {

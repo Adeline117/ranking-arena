@@ -13,6 +13,7 @@ import { formatAum, getActiveDays, formatActiveDays } from './TraderHeaderHelper
 import { TraderHeaderBadges } from './TraderHeaderBadges'
 import { TraderHeaderAvatar } from './TraderHeaderAvatar'
 import { TraderHeaderActions } from './TraderHeaderActions'
+import { RANKING_SOURCE_STALE_MS } from '@/lib/rankings/source-freshness'
 
 // Lazy-load rarely-used components
 const _OnChainBadge = dynamic(
@@ -152,6 +153,11 @@ export default function TraderHeader({
     const days = Math.floor(hours / 24)
     return t('daysAgoShort').replace('{n}', String(days))
   }
+
+  // Same serving boundary the rankings use: older source data is flagged.
+  const lastUpdatedMs = lastUpdated ? new Date(lastUpdated).getTime() : NaN
+  const lastUpdatedIsStale =
+    Number.isFinite(lastUpdatedMs) && Date.now() - lastUpdatedMs > RANKING_SOURCE_STALE_MS
 
   const copyHandle = useCallback(() => {
     navigator.clipboard
@@ -396,14 +402,17 @@ export default function TraderHeader({
                 <Text
                   size="xs"
                   style={{
-                    color: tokens.colors.text.tertiary,
+                    color: lastUpdatedIsStale
+                      ? 'var(--color-accent-warning, #f59e0b)'
+                      : tokens.colors.text.tertiary,
                     fontSize: tokens.typography.fontSize.xs,
-                    opacity: 0.6,
+                    opacity: lastUpdatedIsStale ? 1 : 0.6,
                   }}
                   title={new Date(lastUpdated).toLocaleString()}
                 >
                   {subtitleParts.length > 0 ? ' · ' : ''}
                   {t('updated')} {getRelativeTime(lastUpdated)}
+                  {lastUpdatedIsStale ? ` · ${t('dataStaleWarning')}` : ''}
                 </Text>
               )}
             </Box>
