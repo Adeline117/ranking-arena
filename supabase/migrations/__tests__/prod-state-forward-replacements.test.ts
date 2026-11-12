@@ -30,6 +30,36 @@ const CASES: ReadonlyArray<{
   hunks: ReadonlyArray<readonly [original: string, replacement: string]>
 }> = [
   {
+    original: '20260715231500_fix_gmx_source_contract.sql',
+    originalSha256: '949dbafc0a6d26f78b1488fa0ea8d9315b0e6de3f9e3b6f3d986fd40021fa5ba',
+    replacement: '20261111194845_fix_gmx_source_contract_current_population.sql',
+    hunks: [
+      [
+        `    IF NOT ((v_live_counts->>'leaderboard_snapshots')::bigint BETWEEN 400 AND 650)
+       OR NOT ((v_live_counts->>'trader_stats')::bigint BETWEEN 500 AND 600)
+       OR NOT ((v_live_counts->>'trader_series')::bigint BETWEEN 25000 AND 31000)
+       OR NOT ((v_live_counts->>'trader_series_weekly')::bigint BETWEEN 700 AND 900)
+       OR NOT ((v_live_counts->>'leaderboard_ranks')::bigint BETWEEN 75 AND 250)
+       OR (v_live_counts->>'leaderboard_count_cache')::bigint NOT IN (9, 12)`,
+        `    -- The July audit bands no longer describe production (the 2026-10-30
+    -- backup has 1,095 GMX trader_stats rows). What matters is that every row
+    -- predates the v2 contract: archive only while the registry is still the
+    -- pre-v2 configuration (no pnl_contract_version, old subgraph endpoint),
+    -- so no row could have been produced under v2. The archive is complete
+    -- (counts and digests below) and 20260715232500 verifies it before CUTOVER.
+    IF NOT EXISTS (
+         SELECT 1
+         FROM arena.sources AS source_row
+         WHERE source_row.slug = 'gmx'
+           AND NOT source_row.meta ? 'pnl_contract_version'
+           AND source_row.meta->'endpoints'->>'subgraph' =
+               'https://gmx.squids.live/gmx-synthetics-arbitrum/graphql'
+       )
+       OR (v_live_counts->>'leaderboard_count_cache')::bigint NOT IN (9, 12)`,
+      ],
+    ],
+  },
+  {
     original: '20260729061000_tier_a_execution_claim_enforcement.sql',
     originalSha256: '9dbcea2c3b5b951c19c0ba32d616e7d7b7da617f54b93d2d4b72fc3006cbe887',
     replacement: '20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql',
