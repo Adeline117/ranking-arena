@@ -509,20 +509,41 @@ export const TraderCard = memo(
                 justifyContent: 'center',
               }}
             >
-              <input
-                type="checkbox"
-                checked={isSelected}
-                disabled={!isSelected && !canAddMore}
-                readOnly
+              {/* Visual-only tick. A real <input> inside this <button> is
+                  nested interactive content (invalid HTML, axe
+                  nested-interactive); the button's aria-pressed already
+                  carries the selected state. */}
+              <span
                 aria-hidden="true"
-                tabIndex={-1}
+                data-testid="compare-tick"
                 style={{
-                  pointerEvents: 'none',
                   width: 16,
                   height: 16,
-                  accentColor: tokens.colors.accent.primary,
+                  boxSizing: 'border-box',
+                  // eslint-disable-next-line no-restricted-syntax -- off-scale by design: native checkbox corner on a 16px tick
+                  borderRadius: 3,
+                  border: `1.5px solid ${isSelected ? tokens.colors.accent.primary : tokens.colors.text.tertiary}`,
+                  background: isSelected ? tokens.colors.accent.primary : 'transparent',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
-              />
+              >
+                {isSelected ? (
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="var(--color-on-accent, #fff)"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                ) : null}
+              </span>
             </span>
             <span>{t('compare')}</span>
           </button>
