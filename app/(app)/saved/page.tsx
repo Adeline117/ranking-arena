@@ -3,6 +3,7 @@ import { Suspense } from 'react'
 import { BASE_URL } from '@/lib/constants/urls'
 import SavedHub from './SavedHub'
 import { Skeleton } from '@/app/components/ui/Skeleton'
+import { t } from '@/lib/i18n'
 import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
 import { tokens } from '@/lib/design-tokens'
 
@@ -22,7 +23,9 @@ export const metadata: Metadata = {
 function SavedHubFallback() {
   return (
     <div
+      role="status"
       aria-busy="true"
+      aria-label={t('loadingSkeleton')}
       style={{ maxWidth: 1120, margin: '0 auto', padding: `0 ${tokens.spacing[4]}` }}
     >
       <Skeleton
