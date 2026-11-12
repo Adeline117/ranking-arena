@@ -8,12 +8,13 @@
  * Hidden via CSS (#ssr-hero-shell) once the client HomeHero mounts inside HomePage.
  *
  * Key: No 'use client', no hooks — pure server component.
- * Uses getServerTranslation() to read language from cookie for i18n.
+ * Text slots render through HomeHeroText: English in the static HTML (keeps
+ * `/` ISR-cacheable), then the visitor's language after hydration.
  */
 
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import { getStaticTranslation } from '@/lib/i18n/server'
+import HomeHeroText from './HomeHeroText'
 import { PRO_FREE_PROMO } from '@/lib/types/premium'
 import { PRODUCT_FACTS } from '@/lib/config/product-facts'
 
@@ -25,25 +26,22 @@ export default async function HomeHeroSSR({
   sourceBoardCount = PRODUCT_FACTS.fallbackSourceBoardCount,
 }: HomeHeroSSRProps) {
   // 2026-07-12 ISR 根因修复:getServerTranslation 的 cookies() 把 `/` 判为动态
-  // (revalidate=300 失效,宣传第一落点零边缘缓存)。静态壳固定英文,客户端
-  // Phase 2 水合后换语言 —— 与本页"SSR 恒默认视图"决策一致。
-  const { t } = getStaticTranslation()
+  // (revalidate=300 失效,宣传第一落点零边缘缓存)。服务端仍只输出英文;每段文案
+  // 由 HomeHeroText 在水合后切换到访客语言(此前负责切换的客户端 HomeHero 已删除,
+  // 导致所有语言的首页英雄区都停在英文)。
   const sourceBoardCountStr = `${sourceBoardCount}+`
-
-  const headline = t('heroHeadline')
-  const subtitle = t('heroSubtitle').replace('{boards}', String(sourceBoardCount))
 
   // Trader-count stat intentionally dropped — the hero leads with exchange
   // coverage; the trader total lives in the leaderboard itself.
   const stats = [
-    { value: sourceBoardCountStr, label: t('heroStatSourceBoards') },
+    { value: sourceBoardCountStr, labelKey: 'heroStatSourceBoards' },
     // Real cadence: the leaderboard recomputes every 2h (worker scheduler
     // SCORE_INTERVALS_MS). "30 min" overstated it (that's only the warm-cache
     // cron, which re-warms Redis but doesn't make data fresher) — a freshness
     // claim a savvy crypto user can disprove costs more trust than an honest one.
     {
       value: `${PRODUCT_FACTS.leaderboardRefreshHours}h`,
-      label: t('heroStatUpdated'),
+      labelKey: 'heroStatUpdated',
     },
   ]
 
@@ -106,7 +104,7 @@ export default async function HomeHeroSSR({
               letterSpacing: '-0.03em',
             }}
           >
-            {headline}
+            <HomeHeroText k="heroHeadline" />
           </h1>
           <p
             className="home-hero-subtitle"
@@ -118,7 +116,7 @@ export default async function HomeHeroSSR({
               maxWidth: 540,
             }}
           >
-            {subtitle}
+            <HomeHeroText k="heroSubtitle" vars={{ boards: sourceBoardCount }} />
           </p>
           {/* Score legibility + neutrality — the cross-exchange percentile moat.
               True and not number-specific (no contested exchange count). */}
@@ -132,7 +130,7 @@ export default async function HomeHeroSSR({
               maxWidth: 540,
             }}
           >
-            {t('heroScoreExplainer')} {t('heroNeutrality')}
+            <HomeHeroText k="heroScoreExplainer" /> <HomeHeroText k="heroNeutrality" />
           </p>
           {/* Trust affordance: put "how is this ranked / where's the data from"
               next to the hero, not buried in the footer — a first-time airdrop
@@ -150,7 +148,7 @@ export default async function HomeHeroSSR({
               textDecoration: 'none',
             }}
           >
-            {t('heroHowRanked')}
+            <HomeHeroText k="heroHowRanked" />
           </Link>
         </div>
 
@@ -164,7 +162,7 @@ export default async function HomeHeroSSR({
           }}
         >
           {stats.map((stat) => (
-            <div key={stat.label} style={{ textAlign: 'center', minWidth: 56 }}>
+            <div key={stat.labelKey} style={{ textAlign: 'center', minWidth: 56 }}>
               <div
                 style={{
                   fontSize: '2rem',
@@ -189,7 +187,7 @@ export default async function HomeHeroSSR({
                   opacity: 0.7,
                 }}
               >
-                {stat.label}
+                <HomeHeroText k={stat.labelKey} />
               </div>
             </div>
           ))}
@@ -229,7 +227,7 @@ export default async function HomeHeroSSR({
             boxShadow: '0 4px 14px var(--color-accent-primary-30, rgba(147,115,181,0.3))',
           }}
         >
-          {t('heroCTASignUp')}
+          <HomeHeroText k="heroCTASignUp" />
         </Link>
         <Link
           href="/pricing"
@@ -257,7 +255,9 @@ export default async function HomeHeroSSR({
           >
             <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
           </svg>
-          <span>{PRO_FREE_PROMO ? t('heroProBadgePromo') : t('heroProBadge')}</span>
+          <span>
+            <HomeHeroText k={PRO_FREE_PROMO ? 'heroProBadgePromo' : 'heroProBadge'} />
+          </span>
         </Link>
       </div>
     </section>

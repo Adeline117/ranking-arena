@@ -64,8 +64,11 @@ export function Skeleton({
   return (
     <div
       className={`skeleton ${className}`}
-      aria-busy="true"
-      aria-label={t('loadingSkeleton')}
+      // Decorative placeholder block. Loading is announced once by the
+      // surrounding role="status" container; an aria-label on a role-less
+      // div is ignored by screen readers (axe: aria-prohibited-attr) and a
+      // page of skeletons would repeat it dozens of times.
+      aria-hidden="true"
       style={{
         width: toPx(width),
         height: toPx(height),
