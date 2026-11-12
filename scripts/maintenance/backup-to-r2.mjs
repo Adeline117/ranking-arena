@@ -9,7 +9,11 @@
  * Neither mode is a proven managed-auth disaster-recovery path until its
  * matching restore drill has passed on an isolated managed scratch project.
  *
- * Requires: DATABASE_URL, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
+ * Requires: DATABASE_URL, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, BACKUP_R2_BUCKET
+ *
+ * 安全（2026-10-30 事故）：旧版默认写 R2_BUCKET，而它是公开 CDN 桶 arena-cdn，
+ * 明文备份因此可匿名下载。现在备份只写专用私有桶 BACKUP_R2_BUCKET；与 CDN 桶同名、
+ * 属于已知公开桶、或经 R2_PUBLIC_URL 匿名可读时，在 pg_dump 之前拒绝运行。
  */
 
 import { spawn } from 'node:child_process'
@@ -33,7 +37,12 @@ import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
 import { createGzip } from 'node:zlib'
-import { S3Client, HeadObjectCommand } from '@aws-sdk/client-s3'
+import {
+  S3Client,
+  HeadObjectCommand,
+  PutObjectCommand,
+  DeleteObjectCommand,
+} from '@aws-sdk/client-s3'
 import { Upload } from '@aws-sdk/lib-storage'
 import 'dotenv/config'
 import {
@@ -67,7 +76,7 @@ const DATABASE_URL = process.env.DATABASE_URL
 const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID
 const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID
 const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY
-const R2_BUCKET = process.env.R2_BUCKET || 'arena-backups'
+const R2_BUCKET = process.env.BACKUP_R2_BUCKET
 
 const s3 = new S3Client({
   region: 'auto',
@@ -77,6 +86,62 @@ const s3 = new S3Client({
     secretAccessKey: R2_SECRET_ACCESS_KEY,
   },
 })
+
+/** Known publicly served buckets; a database backup must never land in one. */
+export const KNOWN_PUBLIC_BUCKETS = Object.freeze(['arena-cdn'])
+
+/**
+ * Resolve the dedicated backup bucket. The shared R2_BUCKET is the public CDN
+ * bucket, so it is never an acceptable fallback.
+ */
+export function resolveBackupBucket(env = {}) {
+  const bucket = String(env.BACKUP_R2_BUCKET ?? '').trim()
+  if (!bucket) {
+    throw new Error('BACKUP_R2_BUCKET is required; backups never fall back to the CDN bucket')
+  }
+  if (KNOWN_PUBLIC_BUCKETS.includes(bucket)) {
+    throw new Error(`refusing backup bucket ${bucket}: it is publicly served`)
+  }
+  const cdnBucket = String(env.R2_BUCKET ?? '').trim()
+  if (cdnBucket && bucket === cdnBucket) {
+    throw new Error('BACKUP_R2_BUCKET must differ from the public CDN bucket R2_BUCKET')
+  }
+  return bucket
+}
+
+/**
+ * Prove the backup bucket is not anonymously readable through the configured
+ * public URL before any database byte is produced. A probe object is written,
+ * fetched without credentials, and always deleted. Any 2xx anonymous read, or
+ * an inability to complete the probe, fails closed.
+ */
+export async function assertBackupBucketNotPublic({
+  client,
+  bucket,
+  publicUrl,
+  fetchImpl = globalThis.fetch,
+  probeId = randomBytes(16).toString('hex'),
+}) {
+  const base = String(publicUrl ?? '')
+    .trim()
+    .replace(/\/+$/, '')
+  if (!base) return { probed: false }
+  const key = `db-backups/.public-probe-${probeId}`
+  await client.send(
+    new PutObjectCommand({ Bucket: bucket, Key: key, Body: 'probe', ContentType: 'text/plain' })
+  )
+  let status
+  try {
+    const response = await fetchImpl(`${base}/${key}`, { method: 'GET', redirect: 'manual' })
+    status = response.status
+  } finally {
+    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
+  }
+  if (status >= 200 && status < 300) {
+    throw new Error(`refusing backup: bucket ${bucket} is anonymously readable (HTTP ${status})`)
+  }
+  return { probed: true, status }
+}
 
 // Schema 模式：BACKUP_SCHEMAS=arena,public → dump 这些 schema 全部（含主数据层
 // arena.*）。GH Actions 备份用此模式抓完整 app 数据，跳过
@@ -560,6 +625,17 @@ async function run() {
   }
   if (!R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_ACCOUNT_ID) {
     console.error('Missing R2 credentials (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY)')
+    process.exit(1)
+  }
+  try {
+    resolveBackupBucket(process.env)
+    await assertBackupBucketNotPublic({
+      client: s3,
+      bucket: R2_BUCKET,
+      publicUrl: process.env.R2_PUBLIC_URL,
+    })
+  } catch (err) {
+    console.error('[backup] Refusing to start:', err.message)
     process.exit(1)
   }
 
