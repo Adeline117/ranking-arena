@@ -118,6 +118,9 @@ export default function ExchangePartners() {
           animation:
             exchanges.length > 0 ? `exchange-scroll ${animationSeconds}s linear infinite` : 'none',
           width: 'max-content',
+          // A static state (empty / failed) would otherwise sit at the left
+          // edge under the 40px fade and lose its first characters.
+          marginInline: exchanges.length > 0 ? undefined : 'auto',
           willChange: 'transform', // Promote to compositor layer — prevents layout recalc during animation
         }}
       >

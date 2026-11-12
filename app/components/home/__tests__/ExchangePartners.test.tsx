@@ -116,4 +116,21 @@ describe('ExchangePartners', () => {
     expect(mockRefetch).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
   })
+
+  it('centers the static empty state so the edge fade cannot clip it', () => {
+    mockUseQuery.mockReturnValue({ data: [], isLoading: false, error: null, refetch: mockRefetch })
+
+    render(<ExchangePartners />)
+    const status = screen.getByRole('status')
+    expect(status).toHaveTextContent('No data')
+    const track = status.closest('.exchange-scroll-track') as HTMLElement
+    expect(track.style.marginInline).toBe('auto')
+    expect(track.style.animation).toBe('none')
+  })
+
+  it('keeps the scrolling track left-anchored when sources exist', () => {
+    const { container } = render(<ExchangePartners />)
+    const track = container.querySelector('.exchange-scroll-track') as HTMLElement
+    expect(track.style.marginInline).toBe('')
+  })
 })
