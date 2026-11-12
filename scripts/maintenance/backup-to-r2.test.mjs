@@ -986,7 +986,14 @@ test('the executable uses a shell-free non-pruning pipeline and CI runs the cont
   assert.match(source, /'completion-token': completionToken/)
   assert.match(source, /new UploadClass\(/)
   assert.match(source, /new HeadObjectCommand\(/)
-  assert.doesNotMatch(source, /PutObjectCommand/)
+  // 单次 PutObject 只允许出现在公开性探测里（写 probe 对象），备份本体只能走带校验的分段上传
+  const probeFn = source.slice(
+    source.indexOf('export async function assertBackupBucketNotPublic'),
+    source.indexOf('// Schema 模式：')
+  )
+  assert.equal((source.match(/new PutObjectCommand\(/g) ?? []).length, 1)
+  assert.match(probeFn, /new PutObjectCommand\(/)
+  assert.match(probeFn, /db-backups\/\.public-probe-/)
   assert.match(source, /realpathSync\(process\.argv\[1\]\)/)
   assert.match(source, /cleanPostgresConnectionEnv\(/)
   assert.match(source, /parseBackupMode\(/)
@@ -1020,4 +1027,81 @@ test('the producer runs through a symlink instead of silently skipping main', as
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
+})
+
+test('backup bucket must be dedicated and never the public CDN bucket', async () => {
+  const { resolveBackupBucket } = await import('./backup-to-r2.mjs')
+  assert.throws(
+    () => resolveBackupBucket({ R2_BUCKET: 'arena-cdn' }),
+    /BACKUP_R2_BUCKET is required/
+  )
+  assert.throws(() => resolveBackupBucket({ BACKUP_R2_BUCKET: 'arena-cdn' }), /publicly served/)
+  assert.throws(
+    () => resolveBackupBucket({ BACKUP_R2_BUCKET: 'shared', R2_BUCKET: 'shared' }),
+    /must differ from the public CDN bucket/
+  )
+  assert.equal(
+    resolveBackupBucket({ BACKUP_R2_BUCKET: ' arena-db-backups ', R2_BUCKET: 'arena-cdn' }),
+    'arena-db-backups'
+  )
+})
+
+function probeClient() {
+  const sent = []
+  return { sent, send: async (command) => sent.push(command.constructor.name) }
+}
+
+test('public-exposure probe refuses an anonymously readable bucket and cleans up', async () => {
+  const { assertBackupBucketNotPublic } = await import('./backup-to-r2.mjs')
+  const client = probeClient()
+  let fetched = ''
+  await assert.rejects(
+    assertBackupBucketNotPublic({
+      client,
+      bucket: 'leaky',
+      publicUrl: 'https://cdn.example/',
+      probeId: 'p1',
+      fetchImpl: async (url) => {
+        fetched = url
+        return { status: 200 }
+      },
+    }),
+    /anonymously readable \(HTTP 200\)/
+  )
+  assert.equal(fetched, 'https://cdn.example/db-backups/.public-probe-p1')
+  assert.deepEqual(client.sent, ['PutObjectCommand', 'DeleteObjectCommand'])
+})
+
+test('public-exposure probe passes a private bucket and fails closed on fetch errors', async () => {
+  const { assertBackupBucketNotPublic } = await import('./backup-to-r2.mjs')
+  const client = probeClient()
+  const ok = await assertBackupBucketNotPublic({
+    client,
+    bucket: 'private',
+    publicUrl: 'https://cdn.example',
+    fetchImpl: async () => ({ status: 404 }),
+  })
+  assert.deepEqual(ok, { probed: true, status: 404 })
+  assert.deepEqual(client.sent, ['PutObjectCommand', 'DeleteObjectCommand'])
+
+  const failing = probeClient()
+  await assert.rejects(
+    assertBackupBucketNotPublic({
+      client: failing,
+      bucket: 'private',
+      publicUrl: 'https://cdn.example',
+      fetchImpl: async () => {
+        throw new Error('network down')
+      },
+    }),
+    /network down/
+  )
+  assert.deepEqual(failing.sent, ['PutObjectCommand', 'DeleteObjectCommand'])
+
+  const none = probeClient()
+  assert.deepEqual(
+    await assertBackupBucketNotPublic({ client: none, bucket: 'private', publicUrl: '' }),
+    { probed: false }
+  )
+  assert.deepEqual(none.sent, [])
 })
