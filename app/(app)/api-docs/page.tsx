@@ -299,7 +299,7 @@ export default async function ApiDocsPage() {
       <style
         dangerouslySetInnerHTML={{
           __html: `
-.apiEndpointsLayout{display:grid;grid-template-columns:1fr;gap:24px}
+.apiEndpointsLayout{display:grid;grid-template-columns:minmax(0,1fr);gap:24px}
 .apiEndpointIndex ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px}
 .apiEndpointIndex a{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;text-decoration:none;color:var(--color-text-secondary);font-size:13px;border:1px solid var(--color-border-primary)}
 .apiEndpointIndex a:hover{color:var(--color-text-primary);background:var(--color-bg-tertiary)}
