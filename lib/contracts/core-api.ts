@@ -13,6 +13,10 @@ import type { UnifiedSearchResponse } from '@/lib/search/contracts'
 import type { PublicTradersListResponse } from '@/lib/contracts/traders-list'
 import type { PublicRankingsData } from '@/lib/contracts/rankings'
 import type { TraderDetailProfile, TraderDetailResponseData } from '@/lib/contracts/trader-detail'
+import type {
+  EmptySearchSuggestionsData,
+  SearchSuggestionsData,
+} from '@/lib/contracts/search-suggestions'
 
 const nullableNumber = z.number().nullable()
 const nullableString = z.string().nullable()
@@ -179,6 +183,16 @@ type TraderDetailNullFollowers = {
 export type TraderDetailContractCheck = Satisfies<TraderDetailNullFollowers, TraderDetailContract>
 // @ts-expect-error -- known divergence on `profile.followers`, see above
 export type TraderDetailFullCheck = Satisfies<TraderDetailResponseData, TraderDetailContract>
+
+type SuggestionsContract = z.infer<typeof SearchSuggestionsResponseSchema>['data']
+export type SearchSuggestionsContractCheck = Satisfies<SearchSuggestionsData, SuggestionsContract>
+/**
+ * KNOWN DIVERGENCE (reported, not fixed here): a missing or blank `q` answers
+ * `{ suggestions: [] }` without the `query` key the contract requires. The
+ * expect-error line fails once the empty answer satisfies the contract.
+ */
+// @ts-expect-error -- known divergence on the empty-query answer, see above
+export type EmptySuggestionsCheck = Satisfies<EmptySearchSuggestionsData, SuggestionsContract>
 
 export type TradersListResponse = z.infer<typeof TradersListResponseSchema>
 export type RankingsResponse = z.infer<typeof RankingsResponseSchema>
