@@ -202,7 +202,6 @@ const eslintConfig = defineConfig([
       'app/error.tsx',
       'app/global-error.tsx',
       'app/components/ui/ProBadge.tsx',
-      'app/components/ui/DataStateWrapper.tsx',
       'app/components/ui/ReportModal.tsx',
       'app/components/settings/WalletSection.tsx',
       'app/components/sidebar/TrendingHashtags.tsx',
@@ -216,7 +215,6 @@ const eslintConfig = defineConfig([
       'app/components/ranking/RankingFilters.tsx',
       'app/components/post/components/PostDetailView.tsx',
       'app/components/trader/AdvancedMetricsCard.tsx',
-      'app/components/trader/MarketCorrelationCard.tsx',
       'app/components/trader/CopyTradeSimulator.tsx',
       'app/components/home/RankingControls.tsx',
       'app/components/onboarding/WelcomeModal.tsx',
@@ -362,7 +360,6 @@ const eslintConfig = defineConfig([
       'lib/data/**', // ingest 边界块管辖（含其 money 禁令合并版）
       'lib/hooks/**',
       // 存量豁免（迁移到 @/lib/utils/format 后逐个删除）
-      'lib/utils/advanced-metrics.ts',
       'lib/utils/arena-score.ts',
       'lib/utils/calculate-mdd.ts',
       'lib/utils/index.ts',
