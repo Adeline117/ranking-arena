@@ -90,6 +90,14 @@ const tocBoxStyle: React.CSSProperties = {
 const anchorClass =
   'rounded-md outline-none transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent-primary)]'
 
+// Links inside body copy need a non-colour cue: the accent is too close to the
+// paragraph colour to identify a link (axe link-in-text-block, 1.52:1).
+const inTextLinkStyle: React.CSSProperties = {
+  color: 'var(--color-accent-primary)',
+  textDecoration: 'underline',
+  textUnderlineOffset: 2,
+}
+
 /* ---------- helpers ---------- */
 
 function renderParagraphs(block: string): React.ReactNode {
@@ -256,11 +264,7 @@ export default function PrivacyPolicyPage() {
           <div style={calloutStyle}>
             <p style={{ margin: 0 }}>
               {t('privacySec6Contact')}{' '}
-              <Link
-                href={PROFILE_HREF}
-                className={anchorClass}
-                style={{ color: 'var(--color-accent-primary)' }}
-              >
+              <Link href={PROFILE_HREF} className={anchorClass} style={inTextLinkStyle}>
                 {PROFILE_HANDLE}
               </Link>
             </p>
@@ -296,11 +300,7 @@ export default function PrivacyPolicyPage() {
         <div style={bodyStyle}>
           <p>
             {t('privacySec10Body')}{' '}
-            <Link
-              href={PROFILE_HREF}
-              className={anchorClass}
-              style={{ color: 'var(--color-accent-primary)' }}
-            >
+            <Link href={PROFILE_HREF} className={anchorClass} style={inTextLinkStyle}>
               {PROFILE_HANDLE}
             </Link>
           </p>
