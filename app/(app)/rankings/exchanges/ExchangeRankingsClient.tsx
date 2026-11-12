@@ -20,6 +20,7 @@ import Metric from '@/app/components/ui/Metric'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { formatTimeAgo } from '@/lib/utils/date'
+import { oldestDataTimestamp } from '@/lib/utils/data-time'
 import { getExchangeLogoUrl } from '@/lib/utils/avatar'
 import DerivedBoardBadge from '@/app/components/common/DerivedBoardBadge'
 import ProvenanceFooter from '@/app/components/common/ProvenanceFooter'
@@ -257,10 +258,9 @@ export default function ExchangeRankingsClient({
     return arr
   }, [rows, sortKey, sortDir])
 
-  const newestAsOf = rows.reduce<string | null>(
-    (acc, r) => (acc === null || r.provenance.asOf > acc ? r.provenance.asOf : acc),
-    null
-  )
+  // Page-level "as of" is the OLDEST source time: the newest would hide a
+  // stale exchange behind a fresh one (same rule as the homepage watermark).
+  const oldestAsOf = oldestDataTimestamp(rows.map((r) => r.provenance.asOf))
 
   function onSort(key: SortKey) {
     if (key === sortKey) {
@@ -533,8 +533,8 @@ export default function ExchangeRankingsClient({
       >
         {t('exchangeRankingsNote')}
       </Text>
-      {newestAsOf && (
-        <ProvenanceFooter provenance={{ source: 'arena', asOf: newestAsOf }} exchangeName="Arena" />
+      {oldestAsOf && (
+        <ProvenanceFooter provenance={{ source: 'arena', asOf: oldestAsOf }} exchangeName="Arena" />
       )}
     </Box>
   )

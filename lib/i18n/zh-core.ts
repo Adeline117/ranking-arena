@@ -355,6 +355,7 @@ const zhCore = {
   // ── Homepage ranking pagination/controls (first paint; mirrors en-core) ──
   rankingControlsOffline: '您已离线。排名数据仍可查看但无法更新。',
   rankingControlsDataAsOf: '数据截至',
+  dataStaleWarning: '数据可能有延迟',
   rankingControlsTakingLong: '加载时间超出预期。',
   rankingControlsRetry: '重试',
   rankingControlsPrev: '上一页',

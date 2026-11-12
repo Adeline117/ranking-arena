@@ -402,6 +402,8 @@ const enCore = {
   // on every load. Keeping them in core makes SSR and hydration resolve identically.
   rankingControlsOffline: 'You are offline. Rankings data is still visible but cannot be updated.',
   rankingControlsDataAsOf: 'Data as of',
+  // Shown beside any data time older than RANKING_SOURCE_STALE_MS (48h).
+  dataStaleWarning: 'Data may be delayed',
   rankingControlsTakingLong: 'This is taking longer than expected.',
   rankingControlsRetry: 'Retry',
   rankingControlsPrev: 'Prev',
