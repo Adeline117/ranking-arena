@@ -478,11 +478,17 @@ jobs:
       # The season publication proof drives the TypeScript orchestrator, so it
       # runs here (node_modules installed) rather than in the SQL-only pre-checks.
       - name: Install isolated PostgreSQL 17 server binaries
+        env:
+          # 与 Pre-flight 同一固定版本：17.12 给新建列写 attoptions={pg_attver=…}，
+          # 迁移 postflight 会判 "column contract drifted"（见 Pre-flight 同名步骤注释）。
+          PG17_VERSION: 17.11-1.pgdg26.04+2
         run: |
-          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          codename=$(lsb_release -cs)
+          sudo sh -c "echo 'deb http://apt.postgresql.org/pub/repos/apt ${codename}-pgdg main' > /etc/apt/sources.list.d/pgdg.list"
+          sudo sh -c "echo 'deb https://apt-archive.postgresql.org/pub/repos/apt ${codename}-pgdg-archive main' > /etc/apt/sources.list.d/pgdg-archive.list"
           curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
           sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-17
+          sudo apt-get install -y -qq --allow-downgrades "postgresql-17=${PG17_VERSION}" "postgresql-client-17=${PG17_VERSION}"
           /usr/lib/postgresql/17/bin/initdb --version
 
       - name: Prove one complete public ranking season publication
