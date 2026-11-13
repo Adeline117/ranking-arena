@@ -170,6 +170,11 @@ export async function getLeaderboard(
   totalCountIsExact: boolean
   /** Whether this SQL-filtered cohort has another row after this page. */
   hasMore: boolean
+  /**
+   * The limit+1 row that witnessed `hasMore`, mapped like the page rows.
+   * Callers that cache a page keep it so a cache hit can re-prove `hasMore`.
+   */
+  lookahead?: UnifiedTrader
   error?: string
 }> {
   const {
@@ -279,7 +284,9 @@ export async function getLeaderboard(
   // future reader revision. Until then `hasMore` is the only paging contract.
   const totalCountIsExact = false
 
-  return { traders, totalCountIsExact, hasMore }
+  const lookahead = hasMore ? mapLeaderboardRow(cohortRows[limit]) : undefined
+
+  return { traders, totalCountIsExact, hasMore, lookahead }
 }
 
 /**

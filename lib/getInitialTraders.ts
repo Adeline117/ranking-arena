@@ -191,6 +191,12 @@ export interface InitialTradersResult {
    * this internal proof list.
    */
   sourceFreshness: SourceFreshnessRow[]
+  /**
+   * Internal cache proof: the SQL limit+1 row that witnessed `hasMore`.
+   * Stored with the Redis entry so a cache hit can re-run the same row proof
+   * on it before claiming a next page. Never forwarded to the client.
+   */
+  lookaheadWitness?: InitialTrader | null
 }
 
 const UNKNOWN_CATEGORY_COUNTS: CategoryCounts = {
@@ -226,6 +232,38 @@ function isCurrentHomepageCohortRow(value: InitialTrader, nowMs = Date.now()): b
     Number.isFinite(computedAtMs) &&
     computedAtMs >= nowMs - PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS
   )
+}
+
+/** Homepage cohort predicate (`arena_score > 10`), see fetchInitialLeaderboardPage. */
+const HOME_MIN_SCORE = 10
+
+/**
+ * Re-prove a cached look-ahead witness with the same checks the visible rows
+ * pass: publication proof, homepage freshness window, upstream source
+ * watermark, the homepage score floor, and ordering after the last visible row.
+ */
+function isValidCachedLookahead(
+  witness: unknown,
+  visible: readonly InitialTrader[],
+  sourceFreshness: readonly SourceFreshnessRow[],
+  timeRange: Period
+): boolean {
+  if (!hasPublishedInitialRank(witness)) return false
+  const checked = sanitizePublicRankingPayload(
+    { traders: [witness] },
+    { expectedPeriod: timeRange }
+  )
+  if (!Array.isArray(checked.traders) || checked.traders.length !== 1) return false
+  if (!isCurrentHomepageCohortRow(witness)) return false
+  if (typeof witness.arena_score !== 'number' || !(witness.arena_score > HOME_MIN_SCORE)) {
+    return false
+  }
+  const lastVisibleRank = visible.reduce((max, trader) => Math.max(max, trader.rank), 0)
+  if (!(witness.rank > lastVisibleRank)) return false
+  return !summarizeInitialTraderFreshness({
+    watermarkRows: sourceFreshness,
+    observedSources: [witness.source],
+  }).isStale
 }
 
 function sanitizeCachedFreshnessRows(value: unknown): SourceFreshnessRow[] {
@@ -277,8 +315,9 @@ function sanitizeInitialTradersResult(
     Number.isSafeInteger(sanitized.totalCount) &&
     sanitized.totalCount >= 0
 
+  const { lookaheadWitness: _unverifiedWitness, ...sanitizedRest } = sanitized
   return {
-    ...sanitized,
+    ...sanitizedRest,
     traders: filteredTraders,
     // A Redis entry retains only the visible page, not the SQL look-ahead row
     // that originally witnessed `hasMore`. Even when every visible row still
@@ -289,7 +328,27 @@ function sanitizeInitialTradersResult(
     // Fresh DB results retain their in-request, view-filtered look-ahead
     // witness. A future cache format may preserve and revalidate that witness
     // explicitly; until then cache hits fail closed for next-page navigation.
-    hasMore: options.fromCache ? false : removed ? false : sanitized.hasMore === true,
+    //
+    // Cache entries now carry that witness (`lookaheadWitness`) and a cache
+    // hit claims a next page only when it passes the same row proof again.
+    // Entries without a witness (older format) still fail closed.
+    hasMore:
+      removed || freshness.isStale
+        ? false
+        : options.fromCache
+          ? sanitized.hasMore === true &&
+            isValidCachedLookahead(
+              payload.lookaheadWitness,
+              filteredTraders,
+              sourceFreshness,
+              timeRange
+            )
+          : sanitized.hasMore === true,
+    // Keep the witness (when well-formed) so a fresh result can be cached
+    // with it; omitted otherwise. page.tsx never forwards it to the client.
+    lookaheadWitness: hasPublishedInitialRank(payload.lookaheadWitness)
+      ? payload.lookaheadWitness
+      : undefined,
     totalCount: totalCountIsExact ? sanitized.totalCount : null,
     totalCountIsExact,
     categoryCounts: UNKNOWN_CATEGORY_COUNTS,
@@ -538,7 +597,12 @@ export async function fetchLeaderboardFromDB(
     // Prefer our own CDN mirror over the exchange-CDN proxy (no 429 cold-burst).
     // Missing mirrors do not change ranking eligibility, so this enrichment is
     // availability-only and leaves the verified cohort rows otherwise intact.
-    const observedSources = pageResult.traders.map((trader) => trader.source)
+    // Include the look-ahead witness's source so its watermark is cached
+    // alongside the page and a cache hit can re-check it.
+    const observedSources = [
+      ...pageResult.traders.map((trader) => trader.source),
+      ...(pageResult.lookahead ? [pageResult.lookahead.source] : []),
+    ]
     const [enrichedTraders, watermarkRows] = await Promise.all([
       attachAvatarMirrors(supabase, pageResult.traders, signal),
       fetchInitialFreshnessRows(supabase, timeRange, observedSources, signal),
@@ -562,6 +626,7 @@ export async function fetchLeaderboardFromDB(
           totalCount: null,
           totalCountIsExact: false,
           hasMore: pageResult.hasMore,
+          lookaheadWitness: pageResult.lookahead,
           categoryCounts: UNKNOWN_CATEGORY_COUNTS,
           categoryCountsAreExact: false,
           sourceFreshness: watermarkRows,
@@ -591,14 +656,14 @@ async function fetchInitialLeaderboardPage(
   limit: number,
   page: number,
   signal: AbortSignal
-): Promise<{ traders: InitialTrader[]; hasMore: boolean }> {
+): Promise<{ traders: InitialTrader[]; hasMore: boolean; lookahead: InitialTrader | null }> {
   const result = await getLeaderboard(supabase, {
     period: timeRange,
     limit,
     offset: page * limit,
     // Preserve the homepage's established score threshold, but apply it to
     // every page so pagination stays one coherent, SQL-filtered cohort.
-    minScore: 10,
+    minScore: HOME_MIN_SCORE,
     sortBy: 'arena_score',
     signal,
   })
@@ -610,7 +675,11 @@ async function fetchInitialLeaderboardPage(
   if (traders.length !== result.traders.length) {
     throw new Error('public cohort response failed local proof revalidation')
   }
-  return { traders, hasMore: result.hasMore }
+  // The witness is kept only as cache proof; an unmappable witness simply
+  // means a later cache hit cannot re-prove `hasMore` (fails closed).
+  const lookahead =
+    result.hasMore && result.lookahead ? mapUnifiedToInitial(result.lookahead) : null
+  return { traders, hasMore: result.hasMore, lookahead }
 }
 
 async function fetchInitialFreshnessRows(

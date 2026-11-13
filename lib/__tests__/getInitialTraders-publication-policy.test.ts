@@ -284,6 +284,69 @@ describe('SSR public ranking cohort', () => {
     expect(mockFrom).not.toHaveBeenCalled()
   })
 
+  it('re-proves a cached hasMore from the stored look-ahead witness', async () => {
+    mockCacheGet.mockResolvedValueOnce({
+      ...validCachedResult('cached-visible-row'),
+      lookaheadWitness: { ...cachedTrader('witness-row'), rank: 2 },
+    })
+    mockFrom.mockImplementation(() => {
+      throw new Error('a valid primary cache hit must avoid database work')
+    })
+
+    const result = await getInitialTraders('90D', 20, 0)
+
+    expect(result.traders.map((trader) => trader.id)).toEqual(['cached-visible-row'])
+    expect(result.hasMore).toBe(true)
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['partial witness', { pnl: null }],
+    ['witness outside the six-hour cohort window', { computed_at: '2026-07-24T01:00:00.000Z' }],
+    ['witness below the homepage score floor', { arena_score: 5 }],
+    ['witness not after the last visible rank', { rank: 1 }],
+    ['witness from a source without a cached watermark', { source: 'bybit' }],
+  ])(
+    'fails closed on a cache hit with an invalid look-ahead witness (%s)',
+    async (_label, patch) => {
+      mockCacheGet.mockResolvedValueOnce({
+        ...validCachedResult('cached-visible-row'),
+        lookaheadWitness: { ...cachedTrader('witness-row'), rank: 2, ...patch },
+      })
+      mockFrom.mockImplementation(() => {
+        throw new Error('a valid primary cache hit must avoid database work')
+      })
+
+      const result = await getInitialTraders('90D', 20, 0)
+
+      expect(result.traders.map((trader) => trader.id)).toEqual(['cached-visible-row'])
+      expect(result.hasMore).toBe(false)
+    }
+  )
+
+  it('stores the SQL look-ahead row and its source watermark with a fresh page', async () => {
+    const cohort = cohortQuery([
+      cohortRow('safe-1', 1),
+      cohortRow('safe-2', 2),
+      cohortRow('next-3', 3, 'bybit'),
+    ])
+    const freshness = resultQuery([
+      { source: 'binance_futures', source_as_of: '2026-07-24T11:00:00.000Z' },
+      { source: 'bybit', source_as_of: '2026-07-24T11:00:00.000Z' },
+    ])
+    mockFrom.mockImplementation((relation: string) => {
+      if (relation === 'public_ranked_leaderboard') return cohort
+      if (relation === 'leaderboard_source_freshness') return freshness
+      throw new Error(`unexpected relation ${relation}`)
+    })
+
+    const result = await fetchLeaderboardFromDB('90D', 2, 0)
+
+    expect(result.hasMore).toBe(true)
+    expect(result.lookaheadWitness?.id).toBe('next-3')
+    expect(freshness.in).toHaveBeenCalledWith('source', ['binance_futures', 'bybit'])
+  })
+
   it('serves a valid fallback cache as stale but rejects old source-only cache shapes', async () => {
     const legacySourceOnly = {
       traders: [{ id: 'legacy', source: 'binance_futures', rank: 1 }],
