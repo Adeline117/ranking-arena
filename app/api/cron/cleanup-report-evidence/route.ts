@@ -86,5 +86,5 @@ export const GET = withCron(
 
     return { count: deleted, leased: batch.data.length, failed }
   },
-  { safetyTimeoutMs: 55_000 }
+  { maxDurationSec: maxDuration, safetyTimeoutMs: 55_000 }
 )

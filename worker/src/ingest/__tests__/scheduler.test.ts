@@ -29,6 +29,7 @@ const mockFastQueue = {
   add: jest.fn().mockResolvedValue(undefined),
 }
 const mockDbQuery = jest.fn().mockResolvedValue({ rows: [] })
+const mockRegions: string[] = ['local']
 
 // The scheduler's historical invariants stay unit-tested under an explicit
 // test-only GO. The checked-in V1 source gate remains fixed-off.
@@ -49,7 +50,7 @@ jest.mock('../queues', () => ({
     DAILY_DIGEST: 'maint:daily-digest',
     FIRST_PARTY: 'firstparty:sync',
   },
-  INGEST_REGIONS: ['local'],
+  INGEST_REGIONS: mockRegions,
   getIngestQueue: () => mockQueue,
   getRegionQueue: () => mockQueue,
   getFastQueue: () => mockFastQueue,
@@ -81,7 +82,11 @@ jest.mock('@/lib/ingest/sources', () => ({
   ]),
 }))
 
-import { reconcileSchedulers } from '../scheduler'
+const mockAlert = jest.fn().mockResolvedValue(undefined)
+jest.mock('@/lib/ingest/alerting', () => ({ alert: (...args: unknown[]) => mockAlert(...args) }))
+jest.mock('../../connection', () => ({ getConnection: () => ({ set: jest.fn() }) }))
+
+import { effectiveTierABoardSize, reconcileSchedulers, revivePriority } from '../scheduler'
 import { getActiveSources } from '@/lib/ingest/sources'
 
 const HOUR = 3600_000
@@ -113,7 +118,11 @@ describe('reconcileSchedulers cleanup/revival', () => {
 
     await reconcileSchedulers()
 
-    expect(mockDbQuery).not.toHaveBeenCalled()
+    // The only DB read is the observed board-size query; never an
+    // authorization-wide scan.
+    for (const [sql] of mockDbQuery.mock.calls) {
+      expect(String(sql)).not.toMatch(/authoriz/i)
+    }
     expect(mockQueue.removeJobScheduler).toHaveBeenCalledWith('fp:auth-1')
     expect(
       mockQueue.upsertJobScheduler.mock.calls.some(([key]) => String(key).startsWith('fp:'))
@@ -243,7 +252,7 @@ describe('reconcileSchedulers cleanup/revival', () => {
       c[2]?.jobId?.startsWith('revive-kick-tierbs-srcx')
     )
     expect(kick).toBeDefined()
-    expect(kick?.[2]?.priority).toBe(9) // inherited, NOT hardcoded 1
+    expect(kick?.[2]?.priority).toBe(8) // one notch ahead of its tier (9), NOT hardcoded 1
     expect(kick?.[2]?.jobId).toBe('revive-kick-tierbs-srcx') // stable — no timestamp suffix
     // Rebuild must carry template opts through (old code dropped priority).
     const rebuild = mockQueue.upsertJobScheduler.mock.calls.find((c) => c[0] === 'tierbs:srcx')
@@ -280,7 +289,7 @@ describe('reconcileSchedulers cleanup/revival', () => {
     const kick = mockQueue.add.mock.calls.find((c) =>
       c[2]?.jobId?.startsWith('revive-kick-tierbs-srcx')
     )
-    expect(kick?.[2]?.priority).toBe(9) // from PRIORITY_BY_PREFIX, not template
+    expect(kick?.[2]?.priority).toBe(8) // from PRIORITY_BY_PREFIX (9), one notch ahead
     // the REBUILD upsert is the last one for this key (registration upserts first)
     const rebuild = mockQueue.upsertJobScheduler.mock.calls
       .filter((c) => c[0] === 'tierbs:srcx')
@@ -419,6 +428,56 @@ describe('reconcileSchedulers cleanup/revival', () => {
     expect(newer.remove).not.toHaveBeenCalled()
   })
 
+  it('never removes a pending scheduler iteration, even when a newer kick exists', async () => {
+    const iteration = {
+      id: 'repeat:tiera:srcx:1700000000000',
+      name: 'tiera:leaderboard',
+      data: { sourceSlug: 'srcx' },
+      timestamp: 100,
+      repeatJobKey: 'tiera:srcx',
+      remove: jest.fn().mockResolvedValue(undefined),
+    }
+    const olderKick = {
+      id: 'kick-old',
+      name: 'tiera:leaderboard',
+      data: { sourceSlug: 'srcx' },
+      timestamp: 150,
+      remove: jest.fn().mockResolvedValue(undefined),
+    }
+    const newerKick = {
+      id: 'revive-kick-tiera-srcx',
+      name: 'tiera:leaderboard',
+      data: { sourceSlug: 'srcx' },
+      timestamp: 200,
+      remove: jest.fn().mockResolvedValue(undefined),
+    }
+    mockQueue.getJobs.mockResolvedValue([iteration, olderKick, newerKick])
+
+    await reconcileSchedulers()
+
+    expect(iteration.remove).not.toHaveBeenCalled()
+    expect(olderKick.remove).toHaveBeenCalledTimes(1)
+    expect(newerKick.remove).not.toHaveBeenCalled()
+  })
+
+  it('also dedupes the fast lane', async () => {
+    const older = {
+      id: 'fast-old',
+      name: 'tiera:leaderboard',
+      data: { sourceSlug: 'srcx' },
+      timestamp: 100,
+      remove: jest.fn().mockResolvedValue(undefined),
+    }
+    const newer = { ...older, id: 'fast-new', timestamp: 200, remove: jest.fn() }
+    mockFastQueue.getJobs.mockResolvedValueOnce([older, newer])
+
+    await reconcileSchedulers()
+
+    expect(mockFastQueue.getJobs).toHaveBeenCalledWith(['prioritized', 'waiting'], 0, 500)
+    expect(older.remove).toHaveBeenCalledTimes(1)
+    expect(newer.remove).not.toHaveBeenCalled()
+  })
+
   it('uses the BullMQ job id to break equal-timestamp ties deterministically', async () => {
     const lowerId = {
       id: 'fp-a',
@@ -466,5 +525,154 @@ describe('reconcileSchedulers cleanup/revival', () => {
     expect(malformedB.remove).not.toHaveBeenCalled()
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('kept 2 unscoped pending jobs'))
     warn.mockRestore()
+  })
+})
+
+describe('reconcileSchedulers per-source isolation', () => {
+  const src = (slug: string) => ({
+    slug,
+    phase: 1,
+    fetch_region: 'local',
+    cadence_tier_a_seconds: 3600,
+    cadence_tier_b_seconds: 7200,
+    cadence_tier_d_seconds: 1800,
+    deep_profile_topn: 300,
+    timeframes_derived: [],
+    meta: {},
+  })
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockQueue.getJobSchedulers.mockResolvedValue([])
+    mockQueue.getJob.mockResolvedValue(null)
+    mockQueue.getJobs.mockResolvedValue([])
+  })
+
+  it('keeps registering later sources, spares the failed source, and alerts', async () => {
+    ;(getActiveSources as jest.Mock).mockResolvedValueOnce([src('bad'), src('good')])
+    mockQueue.upsertJobScheduler.mockImplementation(async (key: string) => {
+      if (key === 'tierb:bad') throw new Error('every must be > 0')
+    })
+    // An existing scheduler of the failed source must not be treated as stale.
+    mockQueue.getJobSchedulers.mockResolvedValue([
+      {
+        key: 'tierd:bad',
+        name: 'tierd:positions',
+        next: Date.now() + HOUR,
+        every: HOUR,
+        template: { data: { sourceSlug: 'bad' } },
+      },
+    ])
+
+    await reconcileSchedulers()
+
+    const keys = mockQueue.upsertJobScheduler.mock.calls.map((c) => c[0])
+    expect(keys).toEqual(expect.arrayContaining(['tierb:good', 'tierd:good']))
+    expect(mockQueue.removeJobScheduler).not.toHaveBeenCalledWith('tierd:bad')
+    expect(mockAlert).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ sourceSlug: 'bad', tier: 'maint' })
+    )
+    mockQueue.upsertJobScheduler.mockReset().mockResolvedValue(undefined)
+  })
+})
+
+describe('reconcileSchedulers maintenance placement', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockQueue.getJobSchedulers.mockResolvedValue([])
+    mockQueue.getJobs.mockResolvedValue([])
+  })
+  afterEach(() => {
+    mockRegions.splice(0, mockRegions.length, 'local')
+  })
+
+  it('keeps the primary on local and adds an SG standby copy for sentinel/digest/housekeeping', async () => {
+    mockRegions.push('vps_sg')
+    await reconcileSchedulers()
+    const calls = mockQueue.upsertJobScheduler.mock.calls
+    const byKey = new Map(calls.map((c) => [c[0], c[2]]))
+    for (const id of ['maint:housekeeping', 'maint:freshness', 'maint:daily-digest']) {
+      expect(byKey.get(id)).toMatchObject({ data: {} })
+      expect(byKey.get(`${id}:vps_sg`)).toMatchObject({ data: { standby: true } })
+    }
+    expect(byKey.has('maint:onchain-enrich')).toBe(true)
+    expect(byKey.has('maint:onchain-enrich:vps_sg')).toBe(false)
+  })
+
+  it('registers no standby when the SG region is not configured', async () => {
+    await reconcileSchedulers()
+    const keys = mockQueue.upsertJobScheduler.mock.calls.map((c) => String(c[0]))
+    expect(keys.some((k) => k.endsWith(':vps_sg'))).toBe(false)
+  })
+})
+
+describe('Tier-A lane split and revive priority (audit P2-13)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockQueue.getJobSchedulers.mockResolvedValue([])
+    mockQueue.getJobs.mockResolvedValue([])
+    mockDbQuery.mockReset().mockResolvedValue({ rows: [] })
+  })
+
+  it('uses max(configured, observed) board size', () => {
+    expect(effectiveTierABoardSize(2000, 20000)).toBe(20000)
+    expect(effectiveTierABoardSize(2000, 500)).toBe(2000)
+    expect(effectiveTierABoardSize(null, 1500)).toBe(1500)
+    expect(effectiveTierABoardSize(null, undefined)).toBeNull()
+  })
+
+  it('moves a board that outgrew its stale expected_count off the fast lane', async () => {
+    ;(getActiveSources as jest.Mock).mockResolvedValueOnce([
+      {
+        slug: 'grown',
+        phase: 1,
+        fetch_region: 'local',
+        expected_count: 2000,
+        cadence_tier_a_seconds: 3600,
+        cadence_tier_b_seconds: 7200,
+        cadence_tier_d_seconds: 1800,
+        deep_profile_topn: 300,
+        timeframes_derived: [],
+        meta: {},
+      },
+    ])
+    mockDbQuery.mockResolvedValueOnce({ rows: [{ slug: 'grown', observed: '25000' }] })
+
+    await reconcileSchedulers()
+
+    const bulkKeys = mockQueue.upsertJobScheduler.mock.calls.map((c) => c[0])
+    const fastKeys = mockFastQueue.upsertJobScheduler.mock.calls.map((c) => c[0])
+    expect(bulkKeys).toContain('tiera:grown')
+    expect(fastKeys).not.toContain('tiera:grown')
+  })
+
+  it('falls back to expected_count when the observed-size read fails', async () => {
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    mockDbQuery.mockRejectedValueOnce(new Error('db down'))
+    ;(getActiveSources as jest.Mock).mockResolvedValueOnce([
+      {
+        slug: 'small',
+        phase: 1,
+        fetch_region: 'local',
+        expected_count: 500,
+        cadence_tier_a_seconds: 3600,
+        cadence_tier_b_seconds: 7200,
+        cadence_tier_d_seconds: 1800,
+        deep_profile_topn: 300,
+        timeframes_derived: [],
+        meta: {},
+      },
+    ])
+    await reconcileSchedulers()
+    expect(mockFastQueue.upsertJobScheduler.mock.calls.map((c) => c[0])).toContain('tiera:small')
+    error.mockRestore()
+  })
+
+  it('revive kicks run one notch ahead of their tier but never above priority 1', () => {
+    expect(revivePriority(9)).toBe(8)
+    expect(revivePriority(6)).toBe(5)
+    expect(revivePriority(2)).toBe(1)
+    expect(revivePriority(1)).toBe(1)
   })
 })
