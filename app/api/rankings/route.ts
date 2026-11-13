@@ -8,7 +8,7 @@
  * filtered in application code.
  *
  * Query parameters:
- * - window: 7d | 30d | 90d | composite (required)
+ * - window: 7d | 30d | 90d | composite (required; composite is served and labelled as 90D)
  * - category: futures | spot | onchain (optional; platform takes precedence)
  * - platform: canonical active source (optional)
  * - limit: 1..500 (default 100)
@@ -172,8 +172,14 @@ function publicSeason(window: PublicRankingWindow): TradingPeriod {
   return (window === 'composite' ? '90D' : window.toUpperCase()) as TradingPeriod
 }
 
-function responseWindow(window: PublicRankingWindow): '7D' | '30D' | '90D' | 'COMPOSITE' {
-  return window === 'composite' ? 'COMPOSITE' : (window.toUpperCase() as '7D' | '30D' | '90D')
+/**
+ * The response labels the season actually served. There is no published
+ * 70/25/5 composite cohort — `window=composite` is served from the 90D
+ * season — so labelling it `COMPOSITE` claimed a score that was never
+ * computed. lib/contracts/core-api.ts allows only 7D/30D/90D here.
+ */
+function responseWindow(window: PublicRankingWindow): '7D' | '30D' | '90D' {
+  return publicSeason(window)
 }
 
 function sourceTypeForCategory(category: PublicRankingCategory): string {
