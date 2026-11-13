@@ -2,19 +2,23 @@
  * GET /api/cron/compute-leaderboard-watchdog — Vercel-side safety net for the
  * compute-leaderboard chain.
  *
- * WHY: compute-leaderboard is NOT a Vercel cron — it is triggered by the Mac
- * Mini ingest worker (every 2h, `worker/src/scheduler.ts`). If that worker or
- * the trigger chain dies, serving leaderboards silently stop recomputing while
- * `sync-ranking-store` keeps publishing the stale ranks. Detection already
- * exists (meta-monitor / worker-heartbeat), but recovery was MANUAL. This
- * watchdog closes that gap: if serving is stale beyond one full compute cycle,
- * it fires the compute itself and alerts.
+ * WHY: leaderboard scoring is NOT a Vercel cron — it is driven by the separate
+ * legacy `arena-worker` process (`worker/src/index.ts` + `worker/src/scheduler.ts`,
+ * every 2h), not by the ingest worker. If that process dies, serving
+ * leaderboards silently stop recomputing. This watchdog detects a season
+ * stale beyond one full compute cycle, tries the HTTP fallback and alerts.
  *
- * SAFETY: compute-leaderboard holds a Redis idempotency lock
- * (`cron:compute-leaderboard:running`), so a double-trigger (worker + watchdog)
- * is a no-op — the second caller skips. Freshness is checked PER SEASON
- * (7D/30D/90D) and only the stale season(s) are fired; a subsequent tick
- * re-fires any still-stale season.
+ * HONESTY CONTRACT (2026-11 audit P1-1 / P2-6):
+ *   - a failed freshness query is a FAILED run (alert + throw → withCron logs
+ *     error), never a quiet `{checked:false}` success;
+ *   - a fallback is `triggered` only when compute-leaderboard answered 2xx
+ *     (or the request was still running at our timeout). A 410 tombstone /
+ *     401 / 5xx / network error is `triggered:false`, and the alert says the
+ *     fallback FAILED and a human must act — never "已兜底".
+ *
+ * Note: freshness here is `leaderboard_ranks.computed_at`, which cannot prove
+ * sealed publication (docs/SLO.md §3). The public, publication-aware signal is
+ * /api/health, probed externally by .github/workflows/public-freshness-probe.yml.
  */
 
 import { NextRequest } from 'next/server'
@@ -63,7 +67,14 @@ export const GET = withCron(
     const queryErr = freshness.find((f) => f.error)
     if (queryErr) {
       logger.error('[compute-watchdog] freshness query failed:', queryErr.error)
-      return { checked: false, error: queryErr.error }
+      await sendAlert({
+        level: 'critical',
+        title: 'compute-leaderboard 看门狗失明',
+        message: `看门狗无法读取 leaderboard 新鲜度(${queryErr.season}),本轮无法判断是否停更。`,
+        details: { season: queryErr.season, error: queryErr.error },
+      }).catch((e) => logger.error('[compute-watchdog] alert failed:', e))
+      // Throw so withCron records the run as failed instead of success.
+      throw new Error(`compute-watchdog freshness query failed: ${queryErr.error}`)
     }
 
     const staleSeasons = freshness.filter((f) => f.ageMs == null || (f.ageMs ?? 0) > STALE_MS)
@@ -71,11 +82,11 @@ export const GET = withCron(
       return { stale: false, ages: freshness.map((f) => ({ [f.season]: f.ageMin })) }
     }
 
-    // One or more seasons stalled > 3h — the worker-triggered chain missed them.
-    // Fire each stale season's compute ourselves. The compute endpoint's Redis
-    // idempotency lock dedups against any concurrent worker trigger, so a
-    // double-fire is a no-op. Timeout/abort is expected (compute is long-running
-    // and continues on its own invocation) — treat "kicked" as triggered.
+    // One or more seasons stalled > 3h — the arena-worker chain missed them.
+    // Try the HTTP fallback per season. Only a 2xx answer (or a request still
+    // running at our timeout — compute is long and continues on its own
+    // invocation) counts as triggered. During V1 compute-leaderboard is a 410
+    // tombstone, so this honestly reports triggered:false.
     const base = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.arenafi.org'
     const secret = process.env.CRON_SECRET
     const triggers: Array<{ season: string; triggered: boolean; note: string }> = []
@@ -89,24 +100,33 @@ export const GET = withCron(
           headers: { Authorization: `Bearer ${secret}` },
           signal: AbortSignal.timeout(60_000),
         })
-        triggers.push({ season: s.season, triggered: true, note: `HTTP ${resp.status}` })
+        triggers.push({ season: s.season, triggered: resp.ok, note: `HTTP ${resp.status}` })
       } catch (e) {
+        const timedOut = e instanceof Error && e.name === 'TimeoutError'
         triggers.push({
           season: s.season,
-          triggered: true,
-          note:
-            e instanceof Error && e.name === 'TimeoutError'
-              ? 'kicked (still running)'
-              : `err ${String(e)}`,
+          triggered: timedOut,
+          note: timedOut ? 'kicked (still running at timeout)' : `err ${String(e)}`,
         })
       }
     }
 
     const staleDesc = staleSeasons.map((s) => `${s.season} ${s.ageMin}min`).join(', ')
+    const kicked = triggers.filter((t) => t.triggered).map((t) => t.season)
+    const failed = triggers.filter((t) => !t.triggered)
+    const outcome =
+      failed.length === 0
+        ? `看门狗已兜底触发这些 season(${kicked.join(', ')}),请检查 arena-worker。`
+        : `兜底触发失败:${failed.map((t) => `${t.season}(${t.note})`).join(', ')}` +
+          (kicked.length > 0 ? `;已触发:${kicked.join(', ')}` : '') +
+          '。需人工处理 arena-worker / 算分链。'
     await sendAlert({
       level: 'critical',
-      title: 'compute-leaderboard 看门狗触发',
-      message: `服务层 leaderboard 部分 season 已 >3h 未重算(${staleDesc})——Mac Mini worker 触发链可能已死。看门狗已兜底触发这些 season。请检查 worker。`,
+      title:
+        failed.length === 0
+          ? 'compute-leaderboard 看门狗触发'
+          : 'compute-leaderboard 看门狗:停更且兜底失败',
+      message: `服务层 leaderboard 部分 season 已 >3h 未重算(${staleDesc})——arena-worker 算分链可能已死。${outcome}`,
       details: { staleSeasons: staleSeasons.map((s) => ({ [s.season]: s.ageMin })), triggers },
     }).catch((e) => logger.error('[compute-watchdog] alert failed:', e))
 
