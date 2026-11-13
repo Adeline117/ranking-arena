@@ -62,12 +62,13 @@ In `full` mode, the build job:
 1. validates and checks out the exact target;
 2. proves it is current `origin/main`;
 3. builds dependencies on Node 22 Linux x64 with deterministic `npm ci`;
-4. resolves and actually imports every critical worker module; and
+4. actually imports every critical worker module; and
 5. emits a six-field manifest binding target SHA, worker release ID, dependency
    input hash, Node major, architecture, and tarball SHA-256.
 
-The deploy job independently recomputes and strictly parses that manifest. It
-also rechecks current main, pinned SSH trust, and the live Node 22/x64 runtime.
+The deploy job rechecks current main, configures pinned SSH trust, and verifies
+the live Node 22/x64 runtime. `worker/deploy-ingest-sg.sh` strictly parses and
+verifies the manifest itself.
 Every third-party Action in this production workflow is pinned to a full commit.
 
 `code-only` intentionally skips the artifact build. The remote transaction still
