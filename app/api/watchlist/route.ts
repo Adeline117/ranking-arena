@@ -317,10 +317,19 @@ export const POST = withAuth(
     // Enforce max watchlist size (200)
     // KEEP 'exact' — limit enforcement, scoped per-user via (user_id)
     // index. Must be accurate to block the 201st add.
-    const { count } = await supabase
+    const { count, error: countError } = await supabase
       .from('trader_watchlist')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id)
+    if (countError) {
+      if (isTableMissing(countError)) {
+        log.warn('trader_watchlist table missing — watchlist writes disabled')
+        return watchlistUnavailable()
+      }
+      // A failed count must not read as "0 items" and skip the size limit.
+      log.error('POST size check failed', { error: countError.message })
+      return serverError('Internal server error')
+    }
     if ((count ?? 0) >= 200) {
       return badRequest('Watchlist full (max 200)')
     }
@@ -347,11 +356,17 @@ export const POST = withAuth(
     }
 
     // Return updated watchlist so client can mutate SWR cache immediately
-    const { data: updated } = await supabase
+    const { data: updated, error: readError } = await supabase
       .from('trader_watchlist')
       .select('source, source_trader_id, handle, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
+    if (readError) {
+      // The client replaces its cache with this list; an empty 200 would
+      // un-star every trader. Fail so the hook refetches instead.
+      log.error('POST re-read failed', { error: readError.message })
+      return serverError('Internal server error')
+    }
 
     // Return raw NextResponse to maintain backward-compatible shape { watchlist: [...] }
     return NextResponse.json({ watchlist: updated ?? [] })
@@ -390,11 +405,17 @@ export const DELETE = withAuth(
     }
 
     // Return updated watchlist so client can mutate SWR cache immediately
-    const { data: updated } = await supabase
+    const { data: updated, error: readError } = await supabase
       .from('trader_watchlist')
       .select('source, source_trader_id, handle, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
+    if (readError) {
+      // The client replaces its cache with this list; an empty 200 would
+      // un-star every trader. Fail so the hook refetches instead.
+      log.error('DELETE re-read failed', { error: readError.message })
+      return serverError('Internal server error')
+    }
 
     // Return raw NextResponse to maintain backward-compatible shape { watchlist: [...] }
     return NextResponse.json({ watchlist: updated ?? [] })
