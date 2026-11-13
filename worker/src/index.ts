@@ -8,7 +8,6 @@
  */
 
 import { isV1RankingCommandChainPublished } from '../../lib/cron/v1-ranking-command-chain-publication'
-import type { RankPublicationAlertSink } from '../../lib/rankings/publication/publish-season'
 
 // ENDGAME (ARENA_DATA_SPEC v1.2): legacy fetch/enrich removed — leaderboard
 // data is produced by arena-ingest-worker. This worker only keeps the
@@ -89,11 +88,13 @@ async function main() {
   // (lib/rankings/publication/alert-routing) gives every isolated source its
   // own season×source page-cooldown key and a refusal its own key; exclusion
   // warnings and restorations go to the digest. The orchestrator logs and swallows delivery failures itself.
-  const rankPublicationAlert: RankPublicationAlertSink = async (publicationAlert) => {
-    for (const routed of routeRankPublicationAlert(publicationAlert)) {
-      await ingestAlert(getRankingCommandChainConnection(), routed)
+  // Inline type import: the entry keeps the V1 gate as its only top-level import.
+  const rankPublicationAlert: import('../../lib/rankings/publication/publish-season').RankPublicationAlertSink =
+    async (publicationAlert) => {
+      for (const routed of routeRankPublicationAlert(publicationAlert)) {
+        await ingestAlert(getRankingCommandChainConnection(), routed)
+      }
     }
-  }
 
   console.log('[worker] Arena Pipeline Worker starting...')
 
