@@ -370,6 +370,7 @@ const zhCore = {
   ok: '确定',
   rankingFilteredByExchange: '已按 {exchange} 筛选',
   rankingClearExchangeFilter: '清除交易所筛选',
+  errorTimeout: '请求超时，请稍后重试',
 } as const
 
 export default zhCore

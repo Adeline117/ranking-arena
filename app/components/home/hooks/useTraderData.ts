@@ -638,6 +638,9 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
 
       const controller = new AbortController()
       abortControllers.set(cancelKey, controller)
+      // Distinguishes our own 8s deadline from a superseding/user cancel: a
+      // timeout is a failure (error + retry), never a silent "no data".
+      let timedOut = false
 
       if (!opts?.silent) dispatch({ type: 'LOAD_START' })
 
@@ -656,7 +659,10 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         }
 
         // 8s timeout prevents indefinite hang if API is slow
-        const timeoutId = setTimeout(() => controller.abort(), 8_000)
+        const timeoutId = setTimeout(() => {
+          timedOut = true
+          controller.abort()
+        }, 8_000)
         let response: Response
         try {
           response = await fetch(url, { signal: controller.signal })
@@ -718,7 +724,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         // A superseded request has no UI authority. In particular it must not
         // clear the loading state owned by the newer request.
         if (requestSequence !== requestSequenceRef.current) return false
-        if (err instanceof Error && err.name === 'AbortError') {
+        if (err instanceof Error && err.name === 'AbortError' && !timedOut) {
           dispatch({ type: 'LOAD_ABORT' })
           if (commitTimeRange && pendingTimeRangeRef.current === timeRange) {
             pendingTimeRangeRef.current = null
@@ -731,7 +737,11 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
           }
           return false
         }
-        const errorMsg = err instanceof Error ? err.message : tRef.current('errorNetworkFailed')
+        const errorMsg = timedOut
+          ? tRef.current('errorTimeout')
+          : err instanceof Error
+            ? err.message
+            : tRef.current('errorNetworkFailed')
         dispatch({ type: 'LOAD_ERROR', error: errorMsg })
         if (commitTimeRange && pendingTimeRangeRef.current === timeRange) {
           pendingTimeRangeRef.current = null

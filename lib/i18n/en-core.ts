@@ -434,6 +434,7 @@ const enCore = {
   rankingsEmptyPeriodTitle: 'No ranked traders for this period yet',
   rankingFilteredByExchange: 'Filtered by {exchange}',
   rankingClearExchangeFilter: 'Clear exchange filter',
+  errorTimeout: 'Request timed out, please try again',
 } as const
 
 export default enCore
