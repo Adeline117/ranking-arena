@@ -13,7 +13,7 @@ import type { CategoryCounts } from '@/lib/getInitialTraders'
 import { RankingTable } from '../ranking/RankingTable'
 
 import TimeRangeSelector from './TimeRangeSelector'
-import { useRankingFilters, FREE_LEADERBOARD_LIMIT } from './useRankingFilters'
+import { useRankingFilters } from './useRankingFilters'
 import CategoryRankingTabs, { type CategoryType } from '../ranking/CategoryRankingTabs'
 import { trackEvent } from '@/lib/analytics/track'
 import ExchangeScopeNotice from './ExchangeScopeNotice'
@@ -21,7 +21,6 @@ import SearchElsewhereMatches from './SearchElsewhereMatches'
 
 const AdvancedFilterPanel = dynamic(() => import('./AdvancedFilterPanel'), { ssr: false })
 const FilterStatusMessages = dynamic(() => import('./FilterStatusMessages'), { ssr: false })
-const ProGate = dynamic(() => import('../ui/ProGate'), { ssr: false })
 const ProUpsellModal = dynamic(
   () => import('../ui/ProGate').then((m) => ({ default: m.ProUpsellModal })),
   { ssr: false }
@@ -223,9 +222,6 @@ export default function RankingSection({
         language={language}
         selectedExchange={selectedExchange}
         advancedFilteredCount={advancedFiltered.length}
-        tradersCount={totalCountIsExact === true ? totalCount : null}
-        hasActiveFilters={hasActiveFilters}
-        onResetFilters={handleResetFilters}
       />
 
       {staleDataWarning && (
@@ -295,24 +291,6 @@ export default function RankingSection({
         isStale={isStale}
         onResetFilters={handleResetFilters}
       />
-
-      <div
-        className="contain-layout-style"
-        style={{
-          minHeight:
-            !isPro && !loading && advancedFiltered.length > FREE_LEADERBOARD_LIMIT ? undefined : 0,
-        }}
-      >
-        {!isPro && !loading && advancedFiltered.length > FREE_LEADERBOARD_LIMIT && (
-          <ProGate
-            variant="inline"
-            description={t('showingTopFreeLimit').replace(
-              '{limit}',
-              String(FREE_LEADERBOARD_LIMIT)
-            )}
-          />
-        )}
-      </div>
 
       <ProUpsellModal
         open={proUpsellOpen}

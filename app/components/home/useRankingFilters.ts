@@ -72,17 +72,6 @@ function categoryFromUrl(value: string | null): CategoryType | null {
   return value === 'web3' || value === 'onchain' ? 'web3' : null
 }
 
-function canApplyPersistedExchange(): boolean {
-  // Local exchange preference is a convenience for the clean landing page,
-  // never an implicit extra filter on a share/deep link. Query URLs must be
-  // reproducible independently of the viewer's browser storage.
-  return (
-    typeof window !== 'undefined' &&
-    window.location.pathname === '/' &&
-    window.location.search === ''
-  )
-}
-
 function commitExchangeCohortUrl(exchange: string | null, eventTimeRange?: unknown): void {
   const params = new URLSearchParams(window.location.search)
   params.delete('exchange')
@@ -135,7 +124,6 @@ function getStoredPreferences() {
       }
     }
     return {
-      exchange: localStorage.getItem(LS_KEY_EXCHANGE),
       filterConfig,
     }
   } catch {
@@ -393,11 +381,15 @@ export function useRankingFilters({
     if (fex) config.exchange = fex.split(',').filter(Boolean)
 
     const storedPrefs = getStoredPreferences()
-    // A persisted exchange is a real server cohort, not a cosmetic filter.
-    // It must take the same fetch-before-reveal path as an `?ex=` share link;
-    // otherwise default SSR all-exchange rows are falsely labelled as scoped.
-    const persistedExchange = canApplyPersistedExchange() ? storedPrefs.exchange : undefined
-    const targetExchange = requestedExchange || persistedExchange || undefined
+    // The exchange scope comes from the URL only. The legacy `ranking-exchange`
+    // preference (written by a picker that no longer exists) silently scoped a
+    // clean homepage to one exchange with no visible way out; drop it.
+    try {
+      localStorage.removeItem(LS_KEY_EXCHANGE)
+    } catch {
+      /* ignore */
+    }
+    const targetExchange = requestedExchange || undefined
     const resolvedExchange = targetExchange
       ? resolveExchangeSlug(targetExchange.split(',')[0])
       : undefined
@@ -683,44 +675,6 @@ export function useRankingFilters({
       setSearchQuery(q)
       setCurrentPage(1)
       syncStateToUrl({ q, page: 1 })
-    },
-    [syncStateToUrl]
-  )
-
-  // Preset change handler
-  const _handlePresetChange = useCallback(
-    (preset: PresetId | null) => {
-      setActivePreset(preset)
-      setCurrentPage(1)
-      syncStateToUrl({ preset, page: 1 })
-      try {
-        if (preset) {
-          localStorage.setItem(LS_KEY_PRESET, preset)
-        } else {
-          localStorage.removeItem(LS_KEY_PRESET)
-        }
-      } catch {
-        /* ignore */
-      }
-    },
-    [syncStateToUrl]
-  )
-
-  // Exchange filter change handler
-  const _handleExchangeChange = useCallback(
-    (exchange: string | null) => {
-      setSelectedExchange(exchange)
-      setCurrentPage(1)
-      syncStateToUrl({ ex: exchange, page: 1 })
-      try {
-        if (exchange) {
-          localStorage.setItem(LS_KEY_EXCHANGE, exchange)
-        } else {
-          localStorage.removeItem(LS_KEY_EXCHANGE)
-        }
-      } catch {
-        /* ignore */
-      }
     },
     [syncStateToUrl]
   )

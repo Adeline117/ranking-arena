@@ -31,27 +31,6 @@ interface HomePageClientProps {
   initialClientCohortPending?: boolean
 }
 
-function hasPersistedExchangeCohort(): boolean {
-  // HomePageClient is loaded through the client-only Phase 2 boundary, so a
-  // synchronous preference read here cannot create an SSR hydration mismatch.
-  // It lets us keep default SSR rows neutral while a saved exchange scope is
-  // fetched instead of briefly relabelling the all-exchange cohort.
-  try {
-    // Stored preferences are allowed to choose the clean landing page only.
-    // A share/deep link is already a complete cohort statement; layering a
-    // local exchange over `?range=30D&page=3` would make its URL lie about
-    // the rows being shown and make copied/reloaded links non-reproducible.
-    return (
-      typeof window !== 'undefined' &&
-      window.location.pathname === '/' &&
-      window.location.search === '' &&
-      Boolean(localStorage.getItem('ranking-exchange'))
-    )
-  } catch {
-    return false
-  }
-}
-
 /**
  * 首页客户端组件
  * 处理交互状态和数据同步
@@ -73,9 +52,7 @@ export default function HomePageClient({
 }: HomePageClientProps) {
   const { isLoggedIn } = useAuthSession()
   const { t } = useLanguage()
-  const [requiresInitialClientCohort] = useState(
-    () => initialClientCohortPending || hasPersistedExchangeCohort()
-  )
+  const [requiresInitialClientCohort] = useState(() => initialClientCohortPending)
   const [initialCohortStatus, setInitialCohortStatus] = useState<'ready' | 'loading' | 'failed'>(
     () => (requiresInitialClientCohort ? 'loading' : 'ready')
   )

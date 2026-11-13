@@ -257,28 +257,17 @@ describe('URL / localStorage 状态恢复', () => {
     expect(result.current.filteredTraders.map((t) => t.id)).toEqual(['fut-1', 'web3-1'])
   })
 
-  it('a persisted exchange is an initial server cohort, never a cosmetic label on SSR all rows', async () => {
+  it('ignores and clears the legacy persisted exchange (no invisible exchange scope)', async () => {
     window.localStorage.setItem('ranking-exchange', 'binance-futures')
-    const settled = jest.fn()
-    const { result } = setup(FIXTURES, {
-      fetchPage: mockFetchPage,
-      initialPageIndex: 0,
-      requiresInitialCohortFetch: true,
-      onInitialCohortSettled: settled,
-    })
+    const { result } = setup(FIXTURES, { fetchPage: mockFetchPage, initialPageIndex: 0 })
 
     await act(async () => {
       await Promise.resolve()
     })
 
-    expect(result.current.selectedExchange).toBe('binance_futures')
-    expect(mockFetchPage).toHaveBeenLastCalledWith(0, {
-      category: undefined,
-      sortBy: 'arena_score',
-      sortDir: 'desc',
-      exchange: 'binance_futures',
-    })
-    expect(settled).toHaveBeenLastCalledWith(true)
+    expect(result.current.selectedExchange).toBeNull()
+    expect(mockFetchPage).not.toHaveBeenCalled()
+    expect(window.localStorage.getItem('ranking-exchange')).toBeNull()
   })
 
   it('does not layer a persisted exchange over a range/page deep link', async () => {
