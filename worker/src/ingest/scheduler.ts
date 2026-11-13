@@ -100,6 +100,20 @@ type PendingJobIdentity = {
   name: string
   data: unknown
   timestamp?: number
+  repeatJobKey?: string
+}
+
+/**
+ * A pending iteration owned by a BullMQ job scheduler. BullMQ only creates
+ * the NEXT iteration when this one is picked up, so deleting it breaks the
+ * repeat chain until the hourly revive notices (2026-11 audit P2-1). These
+ * are never dedup candidates.
+ */
+function isSchedulerIteration(job: PendingJobIdentity): boolean {
+  return (
+    (typeof job.repeatJobKey === 'string' && job.repeatJobKey.length > 0) ||
+    (typeof job.id === 'string' && job.id.startsWith('repeat:'))
+  )
 }
 
 function nonEmptyString(value: unknown): string | null {
@@ -112,6 +126,7 @@ function nonEmptyString(value: unknown): string | null {
  * pending job is safer than deleting work that belongs to another account.
  */
 function orphanDedupKey(job: PendingJobIdentity): string | null {
+  if (isSchedulerIteration(job)) return null
   const data = job.data && typeof job.data === 'object' ? (job.data as Record<string, unknown>) : {}
 
   if (job.name === INGEST_JOB.FIRST_PARTY) {
@@ -442,12 +457,18 @@ export async function reconcileSchedulers(): Promise<void> {
   // the reconcile.
   let deduped = 0
   try {
-    for (const region of INGEST_REGIONS) {
-      const q = getRegionQueue(region)
+    // Both lanes: Tier-A on the fast lane accumulates the same restart/kick
+    // debris as the bulk queue.
+    const lanes = INGEST_REGIONS.flatMap((region) => [
+      { q: getRegionQueue(region), queueName: regionQueueName(region) },
+      { q: getFastQueue(region), queueName: regionFastQueueName(region) },
+    ])
+    for (const { q, queueName } of lanes) {
       const jobs = await q.getJobs(['prioritized', 'waiting'], 0, 500)
       const newest = new Map<string, (typeof jobs)[number]>()
       let unscoped = 0
       for (const j of jobs) {
+        if (isSchedulerIteration(j)) continue // scheduler-owned: always kept
         const k = orphanDedupKey(j)
         if (!k) {
           unscoped++
@@ -472,7 +493,7 @@ export async function reconcileSchedulers(): Promise<void> {
       if (unscoped > 0) {
         console.warn(
           `[ingest-scheduler] orphan-dedup kept ${unscoped} unscoped pending jobs ` +
-            `in ${regionQueueName(region)}`
+            `in ${queueName}`
         )
       }
     }

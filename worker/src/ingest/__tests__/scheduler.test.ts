@@ -424,6 +424,56 @@ describe('reconcileSchedulers cleanup/revival', () => {
     expect(newer.remove).not.toHaveBeenCalled()
   })
 
+  it('never removes a pending scheduler iteration, even when a newer kick exists', async () => {
+    const iteration = {
+      id: 'repeat:tiera:srcx:1700000000000',
+      name: 'tiera:leaderboard',
+      data: { sourceSlug: 'srcx' },
+      timestamp: 100,
+      repeatJobKey: 'tiera:srcx',
+      remove: jest.fn().mockResolvedValue(undefined),
+    }
+    const olderKick = {
+      id: 'kick-old',
+      name: 'tiera:leaderboard',
+      data: { sourceSlug: 'srcx' },
+      timestamp: 150,
+      remove: jest.fn().mockResolvedValue(undefined),
+    }
+    const newerKick = {
+      id: 'revive-kick-tiera-srcx',
+      name: 'tiera:leaderboard',
+      data: { sourceSlug: 'srcx' },
+      timestamp: 200,
+      remove: jest.fn().mockResolvedValue(undefined),
+    }
+    mockQueue.getJobs.mockResolvedValue([iteration, olderKick, newerKick])
+
+    await reconcileSchedulers()
+
+    expect(iteration.remove).not.toHaveBeenCalled()
+    expect(olderKick.remove).toHaveBeenCalledTimes(1)
+    expect(newerKick.remove).not.toHaveBeenCalled()
+  })
+
+  it('also dedupes the fast lane', async () => {
+    const older = {
+      id: 'fast-old',
+      name: 'tiera:leaderboard',
+      data: { sourceSlug: 'srcx' },
+      timestamp: 100,
+      remove: jest.fn().mockResolvedValue(undefined),
+    }
+    const newer = { ...older, id: 'fast-new', timestamp: 200, remove: jest.fn() }
+    mockFastQueue.getJobs.mockResolvedValueOnce([older, newer])
+
+    await reconcileSchedulers()
+
+    expect(mockFastQueue.getJobs).toHaveBeenCalledWith(['prioritized', 'waiting'], 0, 500)
+    expect(older.remove).toHaveBeenCalledTimes(1)
+    expect(newer.remove).not.toHaveBeenCalled()
+  })
+
   it('uses the BullMQ job id to break equal-timestamp ties deterministically', async () => {
     const lowerId = {
       id: 'fp-a',
