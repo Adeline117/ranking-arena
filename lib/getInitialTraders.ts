@@ -62,6 +62,23 @@ export interface InitialTrader {
   /** First appearance on the board this run (NEW badge). */
   is_new?: boolean
   /**
+   * Display-only fields /api/traders also returns. Carried on the SSR row so
+   * the first paint and the client refresh render the same badges/metrics
+   * (both go through app/components/ranking/toUiTrader.ts). Optional because
+   * Redis payloads written before these existed simply lack them (→ unknown).
+   */
+  copiers?: number | null
+  sharpe_ratio?: number | null
+  sortino_ratio?: number | null
+  calmar_ratio?: number | null
+  profit_factor?: number | null
+  profitability_score?: number | null
+  risk_control_score?: number | null
+  execution_score?: number | null
+  trading_style?: string | null
+  avg_holding_hours?: number | null
+  trader_type?: string | null
+  /**
    * Cache-revalidation evidence copied from the verified cohort view. These
    * columns are public view fields, not derived UI state: retaining them lets
    * a Redis payload be rechecked before it can re-enter a ranking surface.
@@ -122,6 +139,17 @@ function mapUnifiedToInitial(t: UnifiedTrader): InitialTrader | null {
         : null,
     rank_change: t.rankChange ?? null,
     is_new: t.isNew === true,
+    copiers: t.copiers ?? null,
+    sharpe_ratio: t.sharpeRatio ?? null,
+    sortino_ratio: t.sortinoRatio ?? null,
+    calmar_ratio: t.calmarRatio ?? null,
+    profit_factor: t.profitFactor ?? null,
+    profitability_score: t.profitabilityScore ?? null,
+    risk_control_score: t.riskControlScore ?? null,
+    execution_score: t.executionScore ?? null,
+    trading_style: t.tradingStyle ?? null,
+    avg_holding_hours: t.avgHoldingHours ?? null,
+    trader_type: t.traderType ?? null,
     // getLeaderboard reads public_ranked_leaderboard, which fixes these
     // values as part of the database eligibility predicate. Preserve the
     // values actually observed at that boundary instead of manufacturing
