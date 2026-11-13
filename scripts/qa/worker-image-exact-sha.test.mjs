@@ -30,10 +30,6 @@ test('builds a deployable worker image whenever deterministic runtime inputs cha
     assert.ok(pushTrigger.includes(path), `missing worker image trigger for ${path}`)
   }
   assert.match(imageWorkflow, /node scripts\/ci\/worker-release-id\.mjs "\$GITHUB_SHA"/)
-  assert.match(
-    imageWorkflow,
-    /tag="quarantine-\$\{GITHUB_RUN_ID\}-\$\{GITHUB_RUN_ATTEMPT\}-\$\{GITHUB_SHA\}"/
-  )
   assert.doesNotMatch(imageWorkflow, /\$\{\{ env\.IMAGE \}\}:latest/)
   assert.match(imageWorkflow, /\/app\/DEPLOYED_SHA/)
   assert.match(imageWorkflow, /\/app\/WORKER_RELEASE_ID/)
@@ -66,56 +62,39 @@ test('worker image publication has no arbitrary-ref manual trigger', () => {
   assert.doesNotMatch(imageWorkflow, /manual worker image source/)
 })
 
-test('publishes only a quarantine tag until digest-level smoke succeeds', () => {
-  const buildStart = imageWorkflow.indexOf('- name: Build + push quarantine image')
+test('pushes nothing to the registry until the locally built image passes smoke', () => {
+  const buildStart = imageWorkflow.indexOf('- name: Build image locally')
   const smokeStart = imageWorkflow.indexOf(
-    '- name: Smoke quarantine digest — stamp + actual module loads'
+    '- name: Smoke image — baked stamps + actual module loads'
   )
-  const promoteStart = imageWorkflow.indexOf(
-    '- name: Promote verified digest to release and SHA aliases'
-  )
+  const loginStart = imageWorkflow.indexOf('- name: Log in to ghcr.io')
+  const pushStart = imageWorkflow.indexOf('- name: Push smoked image')
 
-  assert.ok(buildStart > 0, 'missing quarantine build')
-  assert.ok(smokeStart > buildStart, 'digest smoke must follow quarantine build')
-  assert.ok(promoteStart > smokeStart, 'formal aliases must follow successful smoke')
+  assert.ok(buildStart > 0, 'missing local build')
+  assert.ok(smokeStart > buildStart, 'smoke must follow the local build')
+  assert.ok(loginStart > smokeStart, 'registry login must follow successful smoke')
+  assert.ok(pushStart > loginStart, 'push must follow registry login')
 
-  const preSmokeBuild = imageWorkflow.slice(buildStart, smokeStart)
-  assert.match(preSmokeBuild, /tags: \$\{\{ steps\.quarantine\.outputs\.ref \}\}/)
-  assert.match(preSmokeBuild, /DEPLOYED_SHA=\$\{\{ github\.sha \}\}/)
-  assert.match(preSmokeBuild, /WORKER_RELEASE_ID=\$\{\{ steps\.worker_release\.outputs\.id \}\}/)
-  assert.doesNotMatch(preSmokeBuild, /^\s*tags:.*worker_release/m)
-  assert.doesNotMatch(preSmokeBuild, /^\s*tags:.*github\.sha/m)
+  const beforeLogin = imageWorkflow.slice(0, loginStart)
+  assert.doesNotMatch(beforeLogin, /docker push|push: true|secrets\./)
 
-  const smoke = imageWorkflow.slice(smokeStart, promoteStart)
-  assert.match(smoke, /digest_ref="\$\{IMAGE\}@\$\{DIGEST\}"/)
+  const build = imageWorkflow.slice(buildStart, smokeStart)
+  assert.match(build, /load: true/)
+  assert.match(build, /push: false/)
+  assert.match(build, /DEPLOYED_SHA=\$\{\{ github\.sha \}\}/)
+  assert.match(build, /WORKER_RELEASE_ID=\$\{\{ steps\.meta\.outputs\.release_id \}\}/)
+
+  const smoke = imageWorkflow.slice(smokeStart, loginStart)
   assert.match(smoke, /docker run --rm --entrypoint cat/)
-  assert.match(smoke, /\/app\/DEPLOYED_SHA/)
   assert.match(smoke, /\[ "\$baked_sha" = "\$DEPLOYED_SHA" \]/)
-  assert.match(smoke, /\/app\/WORKER_RELEASE_ID/)
   assert.match(smoke, /\[ "\$baked_release" = "\$WORKER_RELEASE_ID" \]/)
   assert.match(smoke, /await import\(m\)/)
   assert.match(smoke, /await import\('\.\/worker\/src\/ingest\/heartbeat\.ts'\)/)
   assert.doesNotMatch(smoke, /require\.resolve/)
   assert.doesNotMatch(smoke, /\|\| true/)
-})
 
-test('promotes the verified digest without overwriting conflicting formal aliases', () => {
-  const promoteStart = imageWorkflow.indexOf(
-    '- name: Promote verified digest to release and SHA aliases'
-  )
-  const recordStart = imageWorkflow.indexOf('- name: Upload digest deployment record')
-  const promote = imageWorkflow.slice(promoteStart, recordStart)
-
-  assert.match(promote, /docker buildx imagetools inspect "\$ref"/)
-  assert.match(promote, /if \[\[ "\$existing" != "\$DIGEST" \]\]/)
-  assert.match(promote, /refusing to overwrite \$ref/)
-  assert.match(promote, /missing\+=\("\$ref"\)/)
-  assert.match(
-    promote,
-    /docker buildx imagetools create "\$\{tag_args\[@\]\}" "\$\{IMAGE\}@\$\{DIGEST\}"/
-  )
-  assert.match(promote, /promoted_digest="\$\(inspect_digest "\$ref"\)"/)
-  assert.match(promote, /worker-image-release\.json/)
-  assert.match(promote, /digest_ref/)
-  assert.match(imageWorkflow, /actions\/upload-artifact@[0-9a-f]{40}/)
+  const push = imageWorkflow.slice(pushStart)
+  assert.match(push, /docker push "\$IMAGE:\$GITHUB_SHA"/)
+  assert.match(push, /docker push "\$IMAGE:\$WORKER_RELEASE_ID"/)
+  assert.doesNotMatch(push, /:latest/)
 })
