@@ -47,6 +47,16 @@ describe('evaluateCount — 发布门', () => {
     expect(v.baselineUsed).toBeNull()
   })
 
+  it('0 行快照永不通过（含 baseline=null 的新源自举期）', () => {
+    expect(evaluateCount(0, null).passed).toBe(false)
+    expect(evaluateCount(0, 0).passed).toBe(false)
+    expect(evaluateCount(0, null, 30).passed).toBe(false)
+    const v = evaluateCount(0, 40)
+    expect(v.passed).toBe(false)
+    expect(v.deviationPct).toBe(100)
+    expect(evaluateCount(Number.NaN, null).passed).toBe(false)
+  })
+
   it('baseline<=0 → pass（无效基线，放行）', () => {
     expect(evaluateCount(100, 0).passed).toBe(true)
     expect(evaluateCount(100, -5).passed).toBe(true)

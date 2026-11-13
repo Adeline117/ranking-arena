@@ -42,12 +42,25 @@ export function median(values: number[]): number | null {
   return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
 }
 
-/** Pure verdict given a baseline. baseline=null → pass (nothing to compare). */
+/**
+ * Pure verdict given a baseline. baseline=null → pass (nothing to compare),
+ * EXCEPT for an empty crawl: a snapshot with zero rows can never become the
+ * latest PASSED board. Without this, a new source with expected_count=NULL
+ * (and fewer than 3 passing cycles) would accept a 0-row crawl as "latest",
+ * and every snapshot-direct reader would serve that source as empty.
+ */
 export function evaluateCount(
   actual: number,
   baseline: number | null,
   maxDeviationPct = 10
 ): CountVerdict {
+  if (!Number.isFinite(actual) || actual <= 0) {
+    return {
+      passed: false,
+      baselineUsed: baseline,
+      deviationPct: baseline !== null && baseline > 0 ? 100 : null,
+    }
+  }
   if (baseline === null || baseline <= 0) {
     return { passed: true, baselineUsed: baseline, deviationPct: null }
   }
