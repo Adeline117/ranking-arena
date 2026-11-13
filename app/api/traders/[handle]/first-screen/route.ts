@@ -35,6 +35,7 @@ import { getReadReplica } from '@/lib/supabase/read-replica'
 import { logger } from '@/lib/logger'
 import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
 import type { TraderFirstScreen, TraderFirstScreenResponse } from '@/lib/data/serving/types'
+import { decodeRouteParam } from '@/lib/utils/decode-route-param'
 
 const handleSchema = z.string().min(1).max(255)
 const sourceSchema = z.string().min(1).max(64)
@@ -77,7 +78,7 @@ export async function GET(
     async ({ supabase, request: req }) => {
       const parsedHandle = handleSchema.safeParse(rawHandle)
       if (!parsedHandle.success) throw ApiError.validation('Invalid handle parameter')
-      const decodedHandle = decodeURIComponent(parsedHandle.data)
+      const decodedHandle = decodeRouteParam(parsedHandle.data)
 
       const parsedSource = sourceSchema.safeParse(req.nextUrl.searchParams.get('source'))
       if (!parsedSource.success) throw ApiError.validation('Invalid source parameter')

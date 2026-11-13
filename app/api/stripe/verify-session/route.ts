@@ -14,6 +14,7 @@ import {
   lifetimeActivationGranted,
 } from '@/lib/stripe/lifetime-entitlement'
 import { STRIPE_API_VERSION } from '@/lib/stripe/version'
+import { resolveProPriceIds } from '@/lib/stripe/price-ids'
 
 // 懒加载 Stripe 客户端
 function getStripe() {
@@ -26,11 +27,12 @@ function getStripe() {
   })
 }
 
-// 从价格 ID 获取订阅等级
+// 从价格 ID 获取订阅等级 — same env aliases as checkout and the webhook.
 function getPlanFromPriceId(priceId: string): 'monthly' | 'yearly' | null {
-  if (priceId && priceId === env.STRIPE_PRO_MONTHLY_PRICE_ID) return 'monthly'
-  if (priceId && priceId === env.STRIPE_PRO_YEARLY_PRICE_ID) return 'yearly'
-  if (priceId && priceId === process.env.STRIPE_PRO_PRICE_ID) return 'monthly'
+  if (!priceId) return null
+  const ids = resolveProPriceIds()
+  if (priceId === ids.monthly) return 'monthly'
+  if (priceId === ids.yearly) return 'yearly'
   return null
 }
 

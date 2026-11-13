@@ -115,6 +115,18 @@ describe('OverviewPerformanceCard period switching', () => {
     expect(screen.getByTestId('period-pnl')).toHaveAttribute('data-window', '90')
   })
 
+  it('shows an empty 90D tab instead of 30D numbers when the trader has no 90D row', () => {
+    // A 30D-only trader: the reader falls back so `pnl` holds the 30D value.
+    render(
+      <OverviewPerformanceCard performance={{ pnl: 300, pnl_30d: 300, has_period_90d: false }} />
+    )
+    expect(screen.getByTestId('period-pnl')).toHaveTextContent('')
+
+    fireEvent.click(screen.getByRole('button', { name: '30D period' }))
+    act(() => jest.advanceTimersByTime(200))
+    expect(screen.getByTestId('period-pnl')).toHaveTextContent('300')
+  })
+
   it('clears pending animation timers when the card unmounts', () => {
     const view = render(<OverviewPerformanceCard performance={performance} />)
     fireEvent.click(screen.getByRole('button', { name: '30D period' }))

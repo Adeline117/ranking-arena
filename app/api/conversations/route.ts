@@ -59,7 +59,7 @@ export const GET = withAuth(
       // COUNT(*) round-trip was pure waste.
       supabase
         .from('direct_messages')
-        .select('conversation_id')
+        .select('conversation_id, created_at')
         .eq('receiver_id', userId)
         .eq('read', false)
         .is('deleted_at', null)
@@ -67,7 +67,7 @@ export const GET = withAuth(
       // 一次性获取所有会话的成员设置（备注、置顶、静音等）
       supabase
         .from('conversation_members')
-        .select('conversation_id, remark, is_muted, is_pinned, is_blocked')
+        .select('conversation_id, remark, is_muted, is_pinned, is_blocked, cleared_before')
         .eq('user_id', userId)
         .in('conversation_id', conversationIds),
     ])
@@ -90,11 +90,27 @@ export const GET = withAuth(
       })
     })
 
-    // 构建未读计数映射（按 conversation_id 分组）
+    // "Delete conversation" (swipe) and "clear history" both set the member's
+    // cleared_before. Without honouring it here, a deleted conversation came
+    // back on the next load and its old unread messages kept inflating the
+    // unread badge.
+    const clearedBeforeMap = new Map<string, number>()
+    for (const setting of memberSettingsResult.data ?? []) {
+      if (setting.cleared_before) {
+        clearedBeforeMap.set(setting.conversation_id, new Date(setting.cleared_before).getTime())
+      }
+    }
+    const isAfterClear = (conversationId: string, at: string | null) => {
+      const clearedAt = clearedBeforeMap.get(conversationId)
+      return clearedAt === undefined || (at !== null && new Date(at).getTime() > clearedAt)
+    }
+
+    // 构建未读计数映射（按 conversation_id 分组，只计清空时间点之后的消息）
     const unreadMap = new Map<string, number>()
     if (unreadResult.data) {
       for (const msg of unreadResult.data) {
         const convId = msg.conversation_id
+        if (!isAfterClear(convId, msg.created_at)) continue
         unreadMap.set(convId, (unreadMap.get(convId) || 0) + 1)
       }
     }
@@ -115,8 +131,11 @@ export const GET = withAuth(
       }
     }
 
-    // 组装结果
-    const enhancedConversations = conversations.map((conv) => {
+    // 组装结果（清空后没有新消息的会话不再出现，来新消息后重新出现）
+    const visibleConversations = conversations.filter((conv) =>
+      isAfterClear(conv.id, conv.last_message_at)
+    )
+    const enhancedConversations = visibleConversations.map((conv) => {
       const otherUserId = conv.user1_id === userId ? conv.user2_id : conv.user1_id
       const otherUser = profileMap.get(otherUserId)
 

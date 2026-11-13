@@ -148,15 +148,40 @@ export default function ChatSettingsDrawer({
     showToast(t('chatHistoryCleared'), 'success')
   }
 
+  // conversation_members.is_blocked is only a display flag: DM permission
+  // (check_dm_permission) and the send triggers read blocked_users. Block
+  // through the canonical user-block API first, then mirror the flag so the
+  // drawer reflects it. Previously only the flag was written, so a "blocked"
+  // user could keep messaging.
   const handleBlock = async () => {
-    if (settings.is_blocked) {
-      await updateSetting({ is_blocked: false })
-    } else {
-      if (!confirm(t('confirmBlockMessage'))) {
+    const blocking = !settings.is_blocked
+    if (blocking && !confirm(t('confirmBlockMessage'))) {
+      return
+    }
+
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/users/${encodeURIComponent(otherUser.id)}/block`, {
+        method: blocking ? 'POST' : 'DELETE',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders(),
+        },
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        showToast(data.error || t('operationFailed'), 'error')
         return
       }
-      await updateSetting({ is_blocked: true })
+    } catch (error) {
+      logger.error('Failed to update block:', error)
+      showToast(t('networkError'), 'error')
+      return
+    } finally {
+      setSaving(false)
     }
+
+    await updateSetting({ is_blocked: blocking })
   }
 
   const profileUrl = getProfileUrl(otherUser)

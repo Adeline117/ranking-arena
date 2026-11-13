@@ -30,11 +30,18 @@ jest.mock('@/lib/types/premium', () => ({
 
 import { GET } from '../route'
 
+const subscriptionStatusFilter = jest.fn()
+
 function subscriptionQuery(tier: string | null) {
   return {
     select: () => ({
       eq: () => ({
-        maybeSingle: async () => ({ data: tier == null ? null : { tier }, error: null }),
+        in: (column: string, values: string[]) => {
+          subscriptionStatusFilter(column, values)
+          return {
+            maybeSingle: async () => ({ data: tier == null ? null : { tier }, error: null }),
+          }
+        },
       }),
     }),
   }
@@ -82,6 +89,8 @@ describe('GET /api/traders/[handle]/percentile', () => {
       },
     })
     expect(mockFrom).toHaveBeenCalledWith('subscriptions')
+    // Only a live subscription counts; canceled/expired rows keep tier='pro'.
+    expect(subscriptionStatusFilter).toHaveBeenCalledWith('status', ['active', 'trialing'])
     expect(mockFrom).not.toHaveBeenCalledWith('leaderboard_ranks')
     expect(mockFrom).not.toHaveBeenCalledWith('public_ranked_leaderboard')
   })
