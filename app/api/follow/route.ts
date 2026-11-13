@@ -146,6 +146,17 @@ export const POST = withAuth(
         if (error.code === '23505') {
           return { following: true }
         }
+        // The trader_follows_enforce_cap trigger (hard cap, serialized per
+        // user) rejected a follow that raced past the count check above.
+        if (error.code === '23514' && error.message?.includes('FOLLOW_LIMIT')) {
+          return NextResponse.json(
+            {
+              error: `Follow limit reached (${limit}). Upgrade to Pro for more.`,
+              code: 'FOLLOW_LIMIT',
+            },
+            { status: 429 }
+          )
+        }
         // 如果表不存在
         if (error.message?.includes('Could not find the table')) {
           logger.warn('trader_follows 表不存在')
