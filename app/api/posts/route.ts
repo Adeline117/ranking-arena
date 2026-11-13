@@ -36,7 +36,7 @@ import {
 } from '@/lib/utils/server-cache'
 import { del as cacheDel } from '@/lib/cache'
 import { fireAndForget } from '@/lib/utils/logger'
-import { sendNotifications } from '@/lib/data/notifications'
+import { notifyPostMentions } from '@/lib/data/post-mentions'
 import { extractAndSyncHashtags } from '@/lib/data/hashtags'
 import { logRpcError } from '@/lib/data/serving/log-rpc-error'
 import { ARENA_BOT_PUBLICATION_CACHE_EPOCH } from '@/lib/data/arena-bot-publication-policy'
@@ -569,47 +569,17 @@ export const POST = withAuth(
       'Sync hashtags for post'
     )
 
-    // Parse @mentions from content and send notifications (fire-and-forget)
-    const mentionRegex = /@(\w+)/g
-    const mentionHandles = [
-      ...new Set([...content.matchAll(mentionRegex)].map((m: RegExpExecArray) => m[1])),
-    ]
-    if (mentionHandles.length > 0) {
-      fireAndForget(
-        (async () => {
-          const { data: mentionedUsers } = await supabase
-            .from('user_profiles')
-            .select('id, handle')
-            .in('handle', mentionHandles)
-
-          if (mentionedUsers && mentionedUsers.length > 0) {
-            // Store resolved mentions on the post
-            await supabase
-              .from('posts')
-              .update({
-                mentions: mentionedUsers.map((u: { id: string; handle: string }) => u.handle),
-              })
-              .eq('id', post.id)
-
-            // Send mention notifications (deduped, each independently)
-            const notificationRows = mentionedUsers
-              .filter((m: { id: string }) => m.id !== user.id)
-              .map((m: { id: string }) => ({
-                user_id: m.id,
-                type: 'mention' as const,
-                title: `${userHandle} mentioned you in a post`,
-                message: (title || content).slice(0, 100),
-                actor_id: user.id,
-                link: `/post/${post.id}`,
-                reference_id: post.id,
-                read: false,
-              }))
-            sendNotifications(supabase, notificationRows, 'Mention notifications')
-          }
-        })(),
-        'Parse mentions and send notifications'
-      )
-    }
+    // Parse @mentions and notify mentioned users who can read the post (fire-and-forget)
+    fireAndForget(
+      notifyPostMentions(supabase, {
+        postId: post.id,
+        authorId: user.id,
+        authorHandle: userHandle,
+        title,
+        content,
+      }),
+      'Parse mentions and send notifications'
+    )
 
     // 创建帖子后清除相关缓存
     deleteServerCacheByPrefix(POSTS_CACHE_PREFIX)
