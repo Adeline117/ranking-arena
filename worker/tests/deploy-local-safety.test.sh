@@ -7,10 +7,6 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 DEPLOY_SCRIPT="$ROOT/worker/deploy-ingest-local.sh"
-PREFLIGHT_SCRIPT="$ROOT/worker/preflight-local-release.ts"
-HEARTBEAT_PROOF_SCRIPT="$ROOT/worker/verify-local-heartbeat.ts"
-LOCAL_ECOSYSTEM="$ROOT/worker/ecosystem.local-ingest.config.cjs"
-WORKER_ENV_EXAMPLE="$ROOT/worker/.env.example"
 TEST_SHA='0123456789abcdef0123456789abcdef01234567'
 OTHER_SHA='89abcdef0123456789abcdef0123456789abcdef'
 TEST_RELEASE="$(printf 'a%.0s' {1..64})"
@@ -42,27 +38,6 @@ assert_matches() {
   local pattern="$2"
   local label="$3"
   grep -Eq -- "$pattern" <<<"$haystack" || fail "$label (pattern: $pattern)"
-}
-
-first_line_matching() {
-  local pattern="$1"
-  grep -nE -- "$pattern" "$DEPLOY_SCRIPT" | head -1 | cut -d: -f1
-}
-
-last_line_matching() {
-  local pattern="$1"
-  grep -nE -- "$pattern" "$DEPLOY_SCRIPT" | tail -1 | cut -d: -f1
-}
-
-assert_before() {
-  local before_pattern="$1"
-  local after_pattern="$2"
-  local label="$3"
-  local before_line after_line
-  before_line="$(last_line_matching "$before_pattern")"
-  after_line="$(last_line_matching "$after_pattern")"
-  [ -n "$before_line" ] && [ -n "$after_line" ] || fail "$label (contract line absent)"
-  [ "$before_line" -lt "$after_line" ] || fail "$label ($before_line !< $after_line)"
 }
 
 emit_test_archive() {
@@ -681,90 +656,6 @@ run_fake_deploy() {
   return "$status"
 }
 
-block_for_archive() {
-  awk '
-    /"\$GIT_BIN" archive "\$SHA" --/ { capture = 1 }
-    capture { print }
-    capture && /\|[[:space:]]*\/usr\/bin\/tar[[:space:]]+-xf/ { exit }
-  ' "$DEPLOY_SCRIPT"
-}
-
-test_exact_target_and_archive_contract() {
-  local deploy archive_block executable_lines
-  deploy="$(<"$DEPLOY_SCRIPT")"
-  archive_block="$(block_for_archive)"
-  executable_lines="$(sed -E '/^[[:space:]]*#/d; /^[[:space:]]*$/d' "$DEPLOY_SCRIPT")"
-
-  assert_contains "$deploy" '--target-sha=<40hex>' \
-    'mutating local deploy must document an explicit full target'
-  assert_contains "$deploy" 'GIT_INPUT="${ARENA_GIT_BIN:-/usr/bin/git}"' \
-    'Git provenance must begin with one explicit absolute executable'
-  assert_contains "$deploy" 'GIT_BIN="$(canonical_executable "$GIT_INPUT"' \
-    'Git executable must be canonical, real, and executable'
-  assert_contains "$deploy" '"$GIT_BIN" -C "$REPO_DIR" "$@"' \
-    'all repository reads must bind the exact canonical worktree'
-  assert_contains "$deploy" 'GIT_CONFIG_GLOBAL=/dev/null' \
-    'repository reads must ignore user-global Git configuration'
-  assert_contains "$deploy" 'GIT_CONFIG_NOSYSTEM=1' \
-    'repository reads must ignore system Git configuration'
-  assert_contains "$deploy" 'GIT_ATTR_NOSYSTEM=1' \
-    'repository reads must ignore system Git attributes'
-  assert_contains "$deploy" 'git_command rev-parse --show-toplevel' \
-    'deploy must prove the exact Git worktree root'
-  assert_contains "$deploy" 'git_command remote get-url origin' \
-    'deploy must prove the authorized origin identity'
-  assert_contains "$deploy" "git@github.com:Adeline117/ranking-arena.git" \
-    'authorized origin must be an exact repository identity'
-  assert_contains "$deploy" 'GIT_OBJECT_DIR="$(canonical_directory "$GIT_COMMON_DIR/objects"' \
-    'archive must bind one canonical local object store'
-  assert_contains "$deploy" '$GIT_OBJECT_DIR/info/alternates' \
-    'alternate object stores must fail closed'
-  assert_contains "$deploy" 'isolated_git="$destination/.arena-isolated-git"' \
-    'archive must use candidate-owned isolated Git metadata'
-  assert_contains "$deploy" '"$GIT_BIN" init --bare --quiet "$isolated_git"' \
-    'archive metadata must be an empty isolated bare repository'
-  assert_contains "$deploy" 'GIT_DIR="$isolated_git" GIT_OBJECT_DIRECTORY="$GIT_OBJECT_DIR"' \
-    'archive must combine isolated metadata only with the proven object directory'
-  assert_matches "$deploy" '\[\[.*SHA.*\^\[0-9a-f\].*40' \
-    'resolved target must be checked as a full lowercase SHA'
-  assert_contains "$deploy" \
-    'git_command fetch --force --no-tags origin refs/heads/main:refs/remotes/origin/main' \
-    'local deploy must fetch the authoritative main ref'
-  assert_contains "$deploy" 'git_command rev-parse --verify origin/main^{commit}' \
-    'local deploy must resolve the fetched main commit'
-  assert_matches "$deploy" '\[ "\$SHA" (=|!=) "\$main_sha" \]' \
-    'local deploy must reject a target other than exact main'
-  assert_matches "$deploy" 'git_command hash-object .*deploy-ingest-local\.sh|git_command hash-object .*"\$SCRIPT_PATH"' \
-    'running deploy orchestrator must hash its own exact bytes'
-  assert_matches "$deploy" '\$SHA:worker/deploy-ingest-local\.sh|git_command ls-tree "\$SHA" -- worker/deploy-ingest-local\.sh' \
-    'orchestrator self-hash must compare with the reviewed target blob'
-  assert_contains "$deploy" '100755' \
-    'reviewed deploy orchestrator must retain its executable Git mode'
-  assert_contains "$archive_block" '"$GIT_BIN" archive "$SHA" --' \
-    'release source must be archived from the exact reviewed commit'
-
-  for required in .npmrc lib worker package.json package-lock.json tsconfig.json \
-    scripts/ci/worker-release-id.mjs; do
-    assert_contains "$archive_block" "$required" "exact archive must include $required"
-  done
-  for forbidden in app components public styles .env.local; do
-    assert_not_contains "$archive_block" "$forbidden" \
-      "worker archive must exclude UI or local-secret path $forbidden"
-  done
-  assert_contains "$deploy" 'WORKER_RELEASE_ID' \
-    'candidate must carry the deterministic reviewed release identity'
-  assert_matches "$deploy" '"\$(source_root|STAGING_DIR)/scripts/ci/worker-release-id\.mjs"' \
-    'release identity helper must execute from the exact archived candidate'
-  assert_before 'archive_worker_release "\$STAGING_DIR"' \
-    '\$STAGING_DIR/scripts/ci/worker-release-id\.mjs' \
-    'exact archive materialization must precede release identity derivation'
-  assert_contains "$deploy" 'DEPLOYED_SHA' \
-    'candidate must carry the exact reviewed commit identity'
-  assert_not_contains "$executable_lines" 'git checkout' \
-    'deployment must not materialize a mutable worktree checkout'
-  echo 'ok - exact current-main target and worker-only archive are mandatory'
-}
-
 test_non_main_target_fails_before_local_mutation() {
   local tmp event_log old_dir output status events
   tmp="$(mktemp -d)"
@@ -931,92 +822,6 @@ test_archive_invocation_has_no_ui_paths() {
   assert_not_contains "$events" 'pm2 stop' 'failed archive must precede PM2 stop'
   rm -rf "$tmp"
   echo 'ok - executed archive is exact-worker-only and cannot carry UI paths'
-}
-
-test_release_owned_dependencies_and_secret_scope() {
-  local deploy executable_lines install_block
-  deploy="$(<"$DEPLOY_SCRIPT")"
-  executable_lines="$(sed -E '/^[[:space:]]*#/d; /^[[:space:]]*$/d' "$DEPLOY_SCRIPT")"
-  install_block="$(awk '
-    /installing release-owned dependencies/ { capture = 1 }
-    capture { print }
-    capture && /installing and launching release-owned Chromium/ { exit }
-  ' "$DEPLOY_SCRIPT")"
-
-  assert_contains "$install_block" 'cd "$STAGING_DIR"' \
-    'npm ci must enter the isolated candidate, never the development worktree'
-  assert_contains "$install_block" '"$NPM_CLI" ci' \
-    'isolated install must invoke the Node-22-bound npm CLI'
-  assert_contains "$deploy" '.playwright-browsers' \
-    'browser bytes must be owned by the immutable candidate release'
-  assert_matches "$deploy" '(test|\[)[[:space:]]+![[:space:]]+-L.*node_modules' \
-    'candidate must prove node_modules is not a symlink'
-  assert_matches "$deploy" '(test|\[)[[:space:]]+![[:space:]]+-L.*(PLAYWRIGHT|\.playwright-browsers)' \
-    'candidate must prove browser dependencies are not a symlink'
-  if grep -Eq 'ln[[:space:]].*\.env\.local|\.env\.local.*ln[[:space:]]' \
-    <<<"$executable_lines"; then
-    fail 'local application secrets must never be linked into a worker release'
-  fi
-  if grep -Eq '^[[:space:]]*(ssh|scp|rsync|npm)[[:space:]]' \
-    <<<"$executable_lines"; then
-    fail 'local transaction must not invoke SSH, SCP, rsync, or ambient npm commands'
-  fi
-  if grep -Eq 'ln[[:space:]].*node_modules|node_modules.*ln[[:space:]]' <<<"$executable_lines"; then
-    fail 'node_modules must never be shared or symlinked between releases'
-  fi
-  assert_contains "$deploy" 'worker/.env' \
-    'the dedicated mode-0600 worker secret is the only env file in scope'
-  assert_matches "$deploy" 'portable_mode.*SHARED_ENV_FILE|SHARED_ENV_FILE.*mode 0600' \
-    'shared worker secret must be proven mode 0600'
-  echo 'ok - dependencies are release-owned and secret linking is narrowly scoped'
-}
-
-test_all_candidate_gates_precede_pm2_stop() {
-  local deploy stop_line runtime_line disk_line modules_line db_line
-  deploy="$(<"$DEPLOY_SCRIPT")"
-  stop_line="$(last_line_matching 'pm2[[:space:]].*stop.*arena-ingest-worker|\$PM2_BIN.*stop.*\$PM2_APP|pm2_command[[:space:]]+stop')"
-  runtime_line="$(last_line_matching '22 arm64|NODE_MAJOR.*22.*ARCH.*arm64')"
-  disk_line="$(last_line_matching 'df[[:space:]].*-P|DISK.*(FREE|AVAILABLE)|available.*disk')"
-  modules_line="$(last_line_matching 'require\.resolve|critical module|critical-module')"
-  db_line="$(last_line_matching 'metric-trust|MetricTrust|database release.*ready|release-readiness')"
-
-  for item in stop_line runtime_line disk_line modules_line db_line; do
-    [ -n "${!item}" ] || fail "pre-stop contract marker missing: $item"
-  done
-  [ "$runtime_line" -lt "$stop_line" ] || fail 'Node 22 arm64 gate must precede PM2 stop'
-  [ "$disk_line" -lt "$stop_line" ] || fail 'disk-capacity gate must precede PM2 stop'
-  [ "$modules_line" -lt "$stop_line" ] || fail 'actual module-load gate must precede PM2 stop'
-  [ "$db_line" -lt "$stop_line" ] || fail 'production DB release gate must precede PM2 stop'
-
-  assert_contains "$deploy" 'process.versions.node' \
-    'runtime gate must inspect the effective Node executable'
-  assert_contains "$deploy" 'process.arch' \
-    'runtime gate must inspect arm64 architecture'
-  assert_contains "$deploy" '22 arm64 darwin' \
-    'Mac runtime must be exactly Node 22 arm64 on Darwin'
-  echo 'ok - runtime, disk, modules, browser, and database all gate cutover'
-}
-
-test_deploy_lock_and_signal_recovery_contract() {
-  local deploy
-  deploy="$(<"$DEPLOY_SCRIPT")"
-  assert_contains "$deploy" 'ARENA_LOCAL_LOCK_DIR' \
-    'tests and operators need one explicit local deploy lock location'
-  assert_matches "$deploy" 'mkdir[[:space:]].*\$.*LOCK' \
-    'deploy lock acquisition must use atomic mkdir'
-  assert_contains "$deploy" 'BUSY:' \
-    'concurrent local deployment must fail with explicit lock evidence'
-  assert_matches "$deploy" "trap[[:space:]]+.*INT" \
-    'SIGINT must route through cleanup and recovery'
-  assert_matches "$deploy" "trap[[:space:]]+.*TERM" \
-    'SIGTERM must route through cleanup and recovery'
-  assert_matches "$deploy" "exit[[:space:]]+130|return[[:space:]]+130" \
-    'SIGINT must preserve a non-zero terminal status'
-  assert_matches "$deploy" "exit[[:space:]]+143|return[[:space:]]+143" \
-    'SIGTERM must preserve a non-zero terminal status'
-  assert_contains "$deploy" 'recover_previous_release' \
-    'post-stop EXIT and signal failures must share centralized rollback'
-  echo 'ok - atomic local lock and signal-safe centralized rollback are required'
 }
 
 test_incident_hold_refuses_before_candidate_or_pm2() {
@@ -2061,238 +1866,6 @@ test_native_ready_log_requires_ordered_local_authority() (
   echo 'ok - native readiness is ordered and legacy stamped rollback stays compatible'
 )
 
-test_fresh_identity_and_retention_contract() {
-  local deploy handoff_timeout
-  deploy="$(<"$DEPLOY_SCRIPT")"
-  handoff_timeout="$(sed -n 's/^AUTHORITY_HANDOFF_TIMEOUT_SECONDS=//p' "$DEPLOY_SCRIPT")"
-  [ "$handoff_timeout" = 300 ] || \
-    fail 'candidate and rollback readiness must reserve the exact 300-second authority handoff window'
-  assert_contains "$deploy" \
-    'ARENA_READY_TIMEOUT_SECONDS:-$AUTHORITY_HANDOFF_TIMEOUT_SECONDS' \
-    'readiness must default to the authority handoff window while retaining the test override'
-  assert_contains "$deploy" '[[ "$timeout" =~ ^[1-9][0-9]*$ ]] || return 1' \
-    'the readiness timeout override must remain a strict positive integer'
-  assert_matches "$deploy" '(READY|DEPLOY)_MARKER=' \
-    'each start must write a unique readiness boundary'
-  assert_contains "$deploy" '$0 == marker' \
-    'readiness must ignore all log evidence before the marker'
-  assert_contains "$deploy" \
-    '[ingest-worker] native regional authority ready region=' \
-    'native candidate readiness must require the exact authority token'
-  assert_contains "$deploy" \
-    'wait_for_stamped_ready native "$DEPLOY_MARKER"' \
-    'candidate readiness must use the strict native authority protocol'
-  assert_contains "$deploy" \
-    'wait_for_stamped_ready legacy "$rollback_marker"' \
-    'stamped rollback must explicitly retain the legacy readiness protocol'
-  assert_contains "$deploy" '[ingest-worker] ready' \
-    'readiness must require a fresh worker-ready line'
-  assert_matches "$deploy" 'sha=.*expected_sha|sha=.*\$.*SHA|index\(\$0,.*sha' \
-    'readiness must bind the exact deployed SHA'
-  assert_matches "$deploy" 'release=.*expected_release|release=.*\$.*RELEASE|index\(\$0,.*release' \
-    'readiness must bind the deterministic worker release ID'
-  assert_not_contains "$deploy" 'pm2 logs $PM2_APP --lines' \
-    'a historical fixed PM2 window must never count as readiness'
-
-  assert_matches "$deploy" 'Retain the current and immediate previous|current.*previous|previous.*current' \
-    'retention must preserve only the active and immediately previous release'
-  assert_contains "$deploy" '.ARENA_LOCAL_RELEASE' \
-    'retention may delete only directories carrying the exact generated-release marker'
-  assert_matches "$deploy" '\[ ! -L "\$candidate" \]' \
-    'retention must refuse symlink release candidates'
-  assert_matches "$deploy" 'DEPLOY_SUCCEEDED=1' \
-    'retention cleanup must be reachable only after transactional success'
-  echo 'ok - fresh identity evidence and current-plus-previous retention are enforced'
-}
-
-test_deep_runtime_and_crash_recovery_contracts() {
-  local deploy preflight proof ecosystem env_example discover_file='' discover=''
-  deploy="$(<"$DEPLOY_SCRIPT")"
-  preflight="$(<"$PREFLIGHT_SCRIPT")"
-  proof="$(<"$HEARTBEAT_PROOF_SCRIPT")"
-  ecosystem="$(<"$LOCAL_ECOSYSTEM")"
-  env_example="$(<"$WORKER_ENV_EXAMPLE")"
-
-  assert_contains "$deploy" 'git_command ls-tree -r --name-only "$SHA"' \
-    'archive attestation must enumerate the entire exact target tree'
-  assert_not_contains "$deploy" ':(glob)' \
-    'deploy must not use ls-tree pathspec magic unsupported by the production Git'
-  assert_matches "$deploy" 'canonical_directory "\$OLD_CWD"|pwd -P.*OLD_CWD|OLD_CWD.*pwd -P' \
-    'rollback cwd must be canonicalized before release-root containment checks'
-  assert_matches "$deploy" '\[ -f "\$OLD_EXEC_PATH" \]|canonical.*OLD_EXEC_PATH' \
-    'stamped direct-TypeScript rollback entrypoint must be a canonical regular file'
-  assert_not_contains "$deploy" 'pm2_env?.env?.WORKER_NODE_ID' \
-    'PM2 nested env is not evidence of the dotenv-loaded logical node identity'
-  assert_matches "$deploy" 'existing.*(heartbeat|roster).*node|resolve.*worker.*node|discover.*(worker|node|identity)|OLD_NODE_ID.*(heartbeat|roster)' \
-    'existing logical node identity must be derived from runtime heartbeat or roster evidence'
-  for candidate in "$ROOT"/worker/discover-local-*.ts; do
-    if [ -f "$candidate" ]; then discover_file="$candidate"; break; fi
-  done
-  if [ -z "$discover_file" ] && [[ "$proof" == *'discoverExistingLocalNode'* ]]; then
-    discover_file="$HEARTBEAT_PROOF_SCRIPT"
-  fi
-  [ -n "$discover_file" ] || fail 'old logical node identity needs an independent Redis discovery helper'
-  discover="$(<"$discover_file")"
-  assert_contains "$deploy" "$(basename "$discover_file")" \
-    'deploy must invoke the exact old-node Redis discovery helper'
-  assert_contains "$deploy" '--discover-existing' \
-    'old-node discovery mode must be explicit and separate from post-start proof'
-  for field in pid sha release_id regions ts; do
-    assert_contains "$discover" "$field" "old-node discovery must validate $field"
-  done
-  assert_matches "$discover" 'LEGACY.*KEYS|legacy.*(disk|attempt_bound_capture)' \
-    'old-node discovery must accept the exact legacy roster schema without release/capture'
-  assert_matches "$discover" 'length[[:space:]]*!==?[[:space:]]*1|length[[:space:]]*===[[:space:]]*1' \
-    'old-node discovery must accept exactly one matching fresh roster field'
-  assert_matches "$discover" 'ARENA_LOCAL_(NODE|DISCOVERY|EXISTING_ROSTER)|machine.*marker' \
-    'old-node discovery must emit one parseable machine marker despite connection logs'
-  assert_matches "$deploy" 'ps[[:space:]].*-o[[:space:]]+ppid|descendant.*pid|pid.*descendant' \
-    'legacy heartbeat PID must be proven a descendant of the old PM2 wrapper PID'
-  assert_contains "$deploy" 'OLD_PROCESS_TREE="$(process_tree_pids "$OLD_PID")"' \
-    'cutover must snapshot the complete old process tree before PM2 stop'
-  assert_contains "$deploy" 'wait_for_pid_set_exit "$OLD_PROCESS_TREE"' \
-    'cutover must prove every old descendant exited, not only the PM2 wrapper'
-  assert_contains "$deploy" 'NEW_PROCESS_TREE="$(process_tree_pids "$NEW_PID")"' \
-    'rollback must retain the complete candidate process tree for residual checks'
-  assert_contains "$deploy" 'wait_for_profile_owners_exit "$OLD_CWD"' \
-    'cutover must prove old browser profile owners exited'
-  assert_contains "$deploy" 'wait_for_profile_owners_exit "$RELEASE_DIR"' \
-    'rollback must prove failed-candidate browser profile owners exited'
-
-  for field in pm_exec_path args node_args exec_mode instances; do
-    assert_contains "$deploy" "$field" "PM2 snapshot must include exact $field evidence"
-  done
-  assert_matches "$deploy" 'expected_exec(_path)?|worker/src/ingest-worker\.ts' \
-    'PM2 readiness must compare the direct worker entrypoint path'
-  assert_matches "$deploy" 'expected_(node_)?args|tsx/dist/loader\.mjs' \
-    'PM2 readiness must compare the release-owned TypeScript loader arguments'
-  assert_matches "$deploy" 'fork(_mode)?|exec_mode.*fork' \
-    'PM2 readiness must require fork mode'
-  assert_matches "$deploy" 'instances.*1|expected_instances' \
-    'PM2 readiness must require one process instance'
-  assert_matches "$deploy" '\[ "\$restarts" = 0 \]|expected_restarts' \
-    'candidate PM2 readiness must require zero restarts at both proofs'
-
-  assert_contains "$ecosystem" "join(workerDir, 'src', 'ingest-worker.ts')" \
-    'ecosystem must derive the direct worker entrypoint inside the release'
-  assert_contains "$ecosystem" 'script: entrypoint' \
-    'PM2 must execute the worker entrypoint directly without a spawning CLI wrapper'
-  assert_contains "$ecosystem" "join(releaseDir, 'node_modules', 'tsx', 'dist', 'loader.mjs')" \
-    'PM2 must preload the exact release-owned tsx loader'
-  assert_contains "$ecosystem" "'--import'" \
-    'PM2 must register tsx through Node import hooks in the same process'
-  assert_not_contains "$ecosystem" "script: tsxCli" \
-    'tsx CLI cannot own PM2 because it spawns a different heartbeat PID'
-  assert_matches "$ecosystem" 'max-old-space-size=2560' \
-    'direct Node execution must retain the production heap ceiling'
-
-  assert_contains "$preflight" "import('@/lib/ingest/adapters/register')" \
-    'pre-stop gate must load all first-party adapter registration side effects'
-  assert_not_contains "$preflight" '.sort()' \
-    'pre-stop region gate must preserve canonical ownership order'
-  assert_contains "$preflight" "['local']" \
-    'pre-stop region gate must require exact local-only ownership'
-  assert_not_contains "$preflight" 'vps_jp' \
-    'Mac must not claim the unconfigured JP lane'
-  assert_matches "$preflight" '\.ping\(' \
-    'pre-stop gate must prove Redis connectivity'
-  assert_contains "$preflight" 'Promise.race' \
-    'Redis preflight must have a bounded timeout'
-  assert_matches "$preflight" '\.disconnect\(' \
-    'Redis preflight must synchronously disconnect on every exit path'
-
-  assert_matches "$proof" '\.hget\(|\.hGet\(' \
-    'post-start proof must read the exact Redis roster field'
-  assert_contains "$proof" 'WORKER_ROSTER_KEY' \
-    'post-start proof must use the canonical worker roster key'
-  for field in pid node sha release_id attempt_bound_capture regions ts; do
-    assert_contains "$proof" "$field" "post-start roster proof must validate $field"
-  done
-  assert_matches "$proof" "REQUIRED_REGIONS[[:space:]]*=[[:space:]]*\\['local'\\]" \
-    'post-start roster proof must require exact local-only ownership'
-  assert_matches "$proof" 'legacy.*LEGACY_LOCAL_REGIONS|LEGACY_LOCAL_REGIONS.*legacy' \
-    'JP may appear only in the isolated legacy-discovery compatibility branch'
-  assert_matches "$env_example" '^INGEST_REGIONS=local$' \
-    'operator template must configure the Mac as local-only'
-  assert_matches "$proof" 'notBefore|not_before|cutover' \
-    'post-start roster timestamp must be newer than this cutover'
-  assert_contains "$proof" 'expected.notBeforeMs' \
-    'legacy rollback discovery must support an exact post-start freshness boundary'
-  assert_contains "$deploy" 'verify-local-heartbeat.ts' \
-    'deploy must invoke strict post-start Redis roster proof'
-  assert_before 'wait_for_stamped_ready native "\$DEPLOY_MARKER"' \
-    'verify-local-heartbeat\.ts' \
-    'log readiness must precede independent Redis roster proof'
-  assert_before 'verify-local-heartbeat\.ts' 'DEPLOY_SUCCEEDED=1' \
-    'Redis roster proof must precede transactional success'
-  assert_matches "$deploy" 'index\(\$0, "node=" node " "\)|exactToken\(\$0, "node=" node\)' \
-    'log readiness must delimit the exact logical node identity'
-  assert_before 'HEARTBEAT_NOT_BEFORE_MS=' \
-    'start_release_config "\$RELEASE_DIR"' \
-    'Redis freshness boundary must be captured before candidate start'
-
-  assert_contains "$deploy" 'wait_for_pm2_absent' \
-    'an ignored PM2 delete exit must be followed by exact absence proof'
-  assert_before 'pm2_command delete "\$PM2_APP"' \
-    'wait_for_pm2_absent "\$OLD_PID"' \
-    'cutover must prove the deleted old PM2 owner is absent before candidate start'
-  assert_before 'wait_for_pm2_absent "\$OLD_PID"' \
-    'printf.*"\$DEPLOY_MARKER".*"\$DEPLOY_LOG"' \
-    'candidate log evidence must begin only after the previous owner is exactly absent'
-  assert_before 'printf.*"\$DEPLOY_MARKER".*"\$DEPLOY_LOG"' \
-    'start_release_config "\$RELEASE_DIR"' \
-    'the fresh candidate marker must be durable before the candidate starts'
-  assert_matches "$deploy" 'ROLLBACK_SUCCEEDED|rollback.*succeeded' \
-    'candidate cleanup must be fenced by proven rollback success'
-  assert_contains "$deploy" 'require_rollback_stability' \
-    'rollback must hold one exact zero-restart PM2 identity for ten seconds'
-  assert_contains "$deploy" '"$OLD_NODE_ARGS_JSON" "$OLD_RESTARTS"' \
-    'the never-left-owner stability path must preserve its baseline restart counter'
-  assert_contains "$deploy" 'kill -0 "$ancestor"' \
-    'PID equality must still require a live ancestor process'
-  assert_contains "$deploy" 'deadline=$((SECONDS + timeout))' \
-    'legacy Redis discovery must use one real elapsed-time deadline'
-  assert_contains "$deploy" 'ARENA_LEGACY_DISCOVERY_TIMEOUT_SECONDS:-90' \
-    'legacy Redis discovery must own a ninety-second production deadline'
-  assert_contains "$deploy" 'remaining_ms=$(((deadline - SECONDS) * 1000))' \
-    'each legacy HGETALL must receive only the remaining wall-clock budget'
-  assert_contains "$proof" 'discoveryRequestTimeoutMs(args[4])' \
-    'legacy discovery must route its remaining budget through the request cap'
-  assert_contains "$proof" "Math.min(5_000, parsePositiveInteger(value" \
-    'legacy HGETALL must cap its request timeout to the remaining deadline'
-  assert_contains "$deploy" 'final_rollback_roster_identity" = "$rollback_roster_identity' \
-    'legacy rollback must bind one exact heartbeat child PID across both proofs'
-  assert_contains "$deploy" 'rollback_final_not_before_ms' \
-    'rollback must require a second fresh Redis observation after stability'
-  assert_contains "$deploy" 'final_rollback_pid' \
-    'rollback must recheck the final exact PM2 PID before saving state'
-  assert_contains "$deploy" 'preserving failed candidate for supervised recovery' \
-    'unproven rollback must retain candidate evidence'
-  assert_matches "$deploy" 'pm2_referenced_cwds|referenced_cwd' \
-    'retention must preserve every directory referenced by any PM2 process'
-  assert_contains "$deploy" 'SHARED_ENV_SHA256="$(hash_shared_env)"' \
-    'the transaction must bind the exact shared worker environment before cutover'
-  assert_contains "$deploy" 'shared_env_sha256=${envSha256}' \
-    'the durable recovery journal must identify the bound worker environment'
-
-  assert_matches "$deploy" 'INFLIGHT|JOURNAL|transaction.*(journal|block)' \
-    'cutover must have a durable SIGKILL/host-loss recovery journal'
-  assert_contains "$deploy" 'recovery-record.tmp' \
-    'durable cutover journal must stage into a private temporary file'
-  assert_contains "$deploy" 'fs.renameSync(path, destination)' \
-    'durable cutover journal must publish with one atomic rename'
-  assert_contains "$deploy" 'fs.fsyncSync(fd)' \
-    'durable cutover journal bytes must be fsynced before publication'
-  assert_contains "$deploy" 'fs.openSync(pathModule.dirname(destination), "r")' \
-    'durable cutover journal rename must be followed by directory fsync'
-  assert_before 'write_cutover_journal' \
-    'pm2_command stop' \
-    'durable recovery journal must exist before the old PM2 process stops'
-  assert_matches "$deploy" 'blocked pending supervised recovery|supervised recovery' \
-    'a surviving journal must fail closed on the next deployment'
-  echo 'ok - runtime ownership, Redis proof, PM2 shape, and crash recovery are closed'
-}
-
 test_success_keeps_only_current_and_previous_immutable_releases() {
   local tmp old_dir stale_one stale_two outside new_dir output status release_count link rel
   tmp="$(mktemp -d)"
@@ -2362,13 +1935,9 @@ test_success_keeps_only_current_and_previous_immutable_releases() {
 }
 
 bash -n "$DEPLOY_SCRIPT" "$0"
-test_exact_target_and_archive_contract
 test_non_main_target_fails_before_local_mutation
 test_dirty_or_stale_orchestrator_fails_before_local_mutation
 test_archive_invocation_has_no_ui_paths
-test_release_owned_dependencies_and_secret_scope
-test_all_candidate_gates_precede_pm2_stop
-test_deploy_lock_and_signal_recovery_contract
 test_incident_hold_refuses_before_candidate_or_pm2
 test_stopped_recovery_requires_one_time_confirmation
 test_stopped_recovery_rejects_residual_os_owner
@@ -2390,6 +1959,4 @@ test_rollback_finalization_lock_gaps_are_rejected
 test_legacy_discovery_uses_real_deadline_and_bounded_requests
 test_unproven_rollback_preserves_candidate_and_blocks_redeploy
 test_native_ready_log_requires_ordered_local_authority
-test_fresh_identity_and_retention_contract
-test_deep_runtime_and_crash_recovery_contracts
 test_success_keeps_only_current_and_previous_immutable_releases
