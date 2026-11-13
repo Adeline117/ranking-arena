@@ -373,7 +373,7 @@ describe('partitioned V4 worker startup readiness', () => {
     expect(queries[4]).toContain(TIER_A_EXECUTION_CONSTRAINT_CATALOG_SHA256)
     expect(queries[4]).toContain(TIER_A_EXECUTION_TRIGGER_CATALOG_SHA256)
     expect(queries[4]).toContain('pg_catalog.count(*) = 65')
-    expect(queries[4]).toContain('pg_catalog.count(*) = 21')
+    expect(queries[4]).toContain('pg_catalog.count(*) = 24')
     expect(queries[4]).toContain('pg_catalog.count(attribute.attrelid) = 33')
     expect(queries[4]).toContain('pg_catalog.count(function_row.oid) = 17')
     expect(queries[4]).toContain("'verification_round'::name")
@@ -567,7 +567,7 @@ describe('partitioned V4 worker startup readiness', () => {
     const enforcementMigration = readFileSync(
       join(
         process.cwd(),
-        'supabase/migrations/20260729061000_tier_a_execution_claim_enforcement.sql'
+        'supabase/migrations/20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql'
       ),
       'utf8'
     )
@@ -726,7 +726,7 @@ SET statement_timeout = '5s'`)
           '0',
         ].join('|')
     ).sort()
-    expect(triggerRows).toHaveLength(21)
+    expect(triggerRows).toHaveLength(24)
     expect(sha256(triggerRows.join('\n'))).toBe(TIER_A_EXECUTION_TRIGGER_CATALOG_SHA256)
   })
 

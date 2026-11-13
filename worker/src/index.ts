@@ -38,7 +38,7 @@ async function main() {
 
   const [
     { Worker },
-    { getConnection, closeConnection },
+    { getRankingCommandChainConnection, closeRankingCommandChainConnection },
     { QUEUE_NAME, JOB, getQueue },
     { PIPELINE_WORKER_CONCURRENCY },
     { assertSuccessfulMeilisearchSyncResponse },
@@ -47,6 +47,8 @@ async function main() {
     { assertMetricTrustWorkerReadiness },
     { startScoringHeartbeat, scoringHeartbeatNodeId },
     { markWorkerStarted, recordWorkerProgress },
+    { publishLeaderboardSeason, pgRankPublicationDatabase, createDefaultCohortScorer },
+    { ingestClientConnect },
   ] = await Promise.all([
     import('bullmq'),
     import('./connection'),
@@ -58,7 +60,21 @@ async function main() {
     import('./ingest/metric-trust-readiness'),
     import('./scoring-heartbeat'),
     import('./ingest/progress'),
+    import('../../lib/rankings/publication/publish-season'),
+    import('../../lib/ingest/db'),
   ])
+
+  // The season publication runs in-process on the worker's direct postgres
+  // connection (the fence/claim/seal RPCs are owner-only), as one transaction.
+  const rankPublicationDatabase = pgRankPublicationDatabase(async () => {
+    const client = await ingestClientConnect()
+    return {
+      query: (text: string, values?: readonly unknown[]) =>
+        client.query(text, values ? [...values] : undefined),
+      release: (destroy?: boolean) => client.release(destroy),
+    }
+  })
+  const scoreCohort = createDefaultCohortScorer()
 
   console.log('[worker] Arena Pipeline Worker starting...')
 
@@ -77,27 +93,22 @@ async function main() {
     async (job) => {
       switch (job.name) {
         case JOB.COMPUTE_LEADERBOARD: {
-          // Trigger Vercel's compute-leaderboard endpoint (still runs there)
-          const { season } = job.data as { season: string }
-          const cronSecret = process.env.CRON_SECRET
-          if (!cronSecret) {
-            job.log('[skip] CRON_SECRET not set, cannot trigger compute-leaderboard')
-            return { skipped: true }
-          }
-          const siteUrl = process.env.SITE_URL || 'https://www.arenafi.org'
-          job.log(`Triggering compute-leaderboard for ${season}`)
-          const resp = await fetch(`${siteUrl}/api/cron/compute-leaderboard?season=${season}`, {
-            headers: { Authorization: `Bearer ${cronSecret}` },
-            signal: AbortSignal.timeout(300_000), // 5 min timeout
+          // Score + publish one season: claim -> cohort upsert -> cleanup ->
+          // rerank -> seal, all-or-nothing (lib/rankings/publication). The
+          // former HTTP trigger targeted a 410 route tombstone.
+          const { season } = job.data as { season: '7D' | '30D' | '90D' }
+          job.log(`Publishing leaderboard season ${season}`)
+          const published = await publishLeaderboardSeason(season, {
+            database: rankPublicationDatabase,
+            scoreCohort,
+            log: (message) => void job.log(message),
           })
-          const body = await resp.json().catch(() => ({}))
           job.log(
-            `compute-leaderboard ${season}: ${resp.status} — ${JSON.stringify(body).slice(0, 200)}`
+            `published ${season}: cohort=${published.scoreCohortId} rows=${published.publishedRankCount} sources=${published.sources.length}`
           )
-          if (!resp.ok) throw new Error(`compute-leaderboard ${season} returned ${resp.status}`)
-          // Output watermark (audit P2-8): only a successful compute counts.
+          // Output watermark (audit P2-8): only a successful publication counts.
           await recordWorkerProgress(getConnection(), 'scoring', scoringHeartbeatNodeId())
-          return { season, status: resp.status, ...body }
+          return published
         }
 
         case JOB.SYNC_MEILISEARCH: {
@@ -122,7 +133,7 @@ async function main() {
       }
     },
     {
-      connection: getConnection(),
+      connection: getRankingCommandChainConnection(),
       concurrency: PIPELINE_WORKER_CONCURRENCY,
       removeOnComplete: { age: 24 * 3600, count: 1000 }, // Keep last 1000 completed jobs for 24h
       removeOnFail: { age: 7 * 24 * 3600, count: 5000 }, // Keep failed jobs for 7 days
@@ -172,7 +183,7 @@ async function main() {
     console.error('[worker] UNCAUGHT EXCEPTION:', err)
     worker
       .close()
-      .then(() => closeConnection())
+      .then(() => closeRankingCommandChainConnection())
       .finally(() => process.exit(1))
   })
   process.on('unhandledRejection', (reason) => {
@@ -199,7 +210,7 @@ async function main() {
     console.log(`\n[worker] ${signal} received, shutting down gracefully...`)
     clearInterval(heartbeatTimer)
     await worker.close()
-    await closeConnection()
+    await closeRankingCommandChainConnection()
     console.log('[worker] Shutdown complete')
     process.exit(0)
   }
