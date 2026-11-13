@@ -101,18 +101,29 @@ export const POST = withAuth(
 
     if (action === 'follow') {
       // Enforce follow limit per tier (free=10, pro=100)
-      const [{ count: followCount }, { data: sub }] = await Promise.all([
-        supabase
-          .from('trader_follows')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', user.id),
-        supabase
-          .from('subscriptions')
-          .select('tier')
-          .eq('user_id', user.id)
-          .in('status', ['active', 'trialing'])
-          .maybeSingle(),
-      ])
+      const [{ count: followCount, error: countError }, { data: sub, error: subError }] =
+        await Promise.all([
+          supabase
+            .from('trader_follows')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', user.id),
+          supabase
+            .from('subscriptions')
+            .select('tier')
+            .eq('user_id', user.id)
+            .in('status', ['active', 'trialing'])
+            .maybeSingle(),
+        ])
+      // A failed lookup must not read as "0 follows" (limit bypass) or as
+      // "free tier" (a paying user wrongly blocked at 10).
+      if (countError || subError) {
+        logger.error('Follow limit lookup failed', {
+          userId: user.id,
+          countError: countError?.message,
+          subError: subError?.message,
+        })
+        return serverError('Follow failed')
+      }
       const tier = sub?.tier || 'free'
       const limit = PRO_FREE_PROMO || tier === 'pro' || tier === 'elite' ? 100 : 10
       if ((followCount ?? 0) >= limit) {
