@@ -1,4 +1,5 @@
 import 'server-only'
+import { resolveProPriceIds } from './price-ids'
 import Stripe from 'stripe'
 import { API_PRICING, PRICING } from '@/lib/config/pricing'
 import { stripeMetadataUserId } from '@/lib/stripe/identity'
@@ -101,22 +102,8 @@ export const stripe = {
   },
 }
 
-// 价格 ID 配置 - Pro 会员的月付/年付/终身价格
-// Falls back to STRIPE_PRO_PRICE_ID for both if specific monthly/yearly IDs not set
-export const STRIPE_PRICE_IDS = {
-  monthly:
-    optionalEnv('STRIPE_PRO_MONTHLY_PRICE_ID') ||
-    optionalEnv('STRIPE_PRICE_MONTHLY_ID') ||
-    optionalEnv('STRIPE_PRO_PRICE_ID') ||
-    '',
-  yearly:
-    optionalEnv('STRIPE_PRO_YEARLY_PRICE_ID') ||
-    optionalEnv('STRIPE_PRICE_YEARLY_ID') ||
-    optionalEnv('STRIPE_ELITE_PRICE_ID') ||
-    optionalEnv('STRIPE_PRO_PRICE_ID') ||
-    '',
-  lifetime: optionalEnv('STRIPE_PRO_LIFETIME_PRICE_ID'),
-}
+// 价格 ID 配置 - Pro 会员的月付/年付/终身价格（解析规则见 ./price-ids）
+export const STRIPE_PRICE_IDS = resolveProPriceIds(optionalEnv)
 
 // B2B API tier price IDs — separate from Pro membership
 export const STRIPE_API_PRICE_IDS = {
