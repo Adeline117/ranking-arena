@@ -135,8 +135,10 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   const recovery = migrationArray('RECOVERY_MIGRATIONS')
   const quarantined = migrationArray('QUARANTINED_PREDEPLOY_MIGRATIONS')
   const superseded = migrationArray('SUPERSEDED_MIGRATIONS')
+  const singleFile = migrationArray('ADR023_SINGLE_FILE_MIGRATIONS')
   const all = [
     ...predeploy,
+    ...singleFile,
     ...postdeploy,
     ...concurrentRecovery,
     ...recovery,
@@ -164,7 +166,14 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
+    '20261113150757_clean_derived_formal_win_rate.sql',
     '20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql',
+  ])
+  // Classified, never emitted: applied one file at a time via ADR-023 at the
+  // positions docs/LAUNCH_CHECKLIST.md fixes.
+  assert.deepEqual(singleFile, [
+    '20261111194845_fix_gmx_source_contract_current_population.sql',
+    '20261111134937_record_provenance_clocks_prod_reader.sql',
   ])
   assert.equal(recoveryPrerequisites.length, 41)
   // Recovery repairs the frozen 41-migration cutover: every predeploy migration
@@ -195,12 +204,14 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, [
+    '20260715231500_fix_gmx_source_contract.sql',
     '20260716104500_collection_read_write_boundaries.sql',
     '20260725017250_normalize_leaderboard_rank_max_drawdown.sql',
     '20260728122000_bitget_bots_canonical_timeframe.sql',
     '20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql',
     '20260729061000_tier_a_execution_claim_enforcement.sql',
     '20260729230000_token_ranking_generation_barrier.sql',
+    '20260803090000_record_provenance_clocks.sql',
     '20260804043000_retire_legacy_token_rankings.sql',
     '20260804044000_freeze_legacy_position_history_relations.sql',
     '20260804045000_quarantine_bingx_rank_authority.sql',
@@ -212,7 +223,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260817060000_trader_series_publication_isolation.sql',
     '20260817061000_legacy_raw_metric_publication_isolation.sql',
   ])
-  assert.equal(new Set(all).size, 177)
+  assert.equal(new Set(all).size, 182)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
   assert.deepEqual(predeploy.slice(-108), [
     '20260718120000_leaderboard_source_freshness.sql',
@@ -1189,7 +1200,7 @@ test('recovery emitters remain internal while every public recovery path is disa
 test('status makes intentionally quarantined and superseded migrations explicit', () => {
   assert.match(
     source,
-    /phase in predeploy postdeploy concurrent-recovery recovery quarantined superseded/
+    /phase in predeploy single-file postdeploy concurrent-recovery recovery quarantined superseded/
   )
   assert.match(source, /quarantined-unapplied/)
   assert.match(source, /quarantined-exact-forward-repair-required/)
@@ -1205,7 +1216,8 @@ test('every superseded migration names a superseder and forward replacements tak
   const predeploy = migrationArray('PREDEPLOY_MIGRATIONS')
   const postdeploy = migrationArray('POSTDEPLOY_MIGRATIONS')
   const superseded = migrationArray('SUPERSEDED_MIGRATIONS')
-  const ordered = [...predeploy, ...postdeploy]
+  const singleFile = migrationArray('ADR023_SINGLE_FILE_MIGRATIONS')
+  const ordered = [...predeploy, ...postdeploy, ...singleFile]
   // Superseders that are not ordered launch files: a separately applied repo
   // migration, and the production ledger version that already holds 001418.
   const external = new Map([
@@ -1294,4 +1306,62 @@ test('every superseded migration names a superseder and forward replacements tak
     postdeploy.at(-1),
     '20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql'
   )
+})
+
+test('ADR-023 single-file migrations are classified, never emitted, and their slots are documented', () => {
+  const singleFile = migrationArray('ADR023_SINGLE_FILE_MIGRATIONS')
+  const predeploy = migrationArray('PREDEPLOY_MIGRATIONS')
+  const emitted = [
+    ...predeploy,
+    ...migrationArray('POSTDEPLOY_MIGRATIONS'),
+    ...migrationArray('CONCURRENT_RECOVERY_MIGRATIONS'),
+    ...migrationArray('RECOVERY_MIGRATIONS'),
+  ]
+  for (const migration of singleFile) {
+    assert.ok(!emitted.includes(migration), `${migration} must not be in an emitted phase`)
+    const rendered = spawnSync(
+      'bash',
+      [
+        resolve(ROOT, 'scripts/maintenance/apply-launch-migrations.sh'),
+        'render-predeploy-one',
+        migration,
+      ],
+      { cwd: ROOT, encoding: 'utf8' }
+    )
+    assert.equal(rendered.status, 2, rendered.stderr)
+    assert.match(rendered.stderr, /not in the ordered candidate manifest/)
+  }
+  // 052000 (predeploy) only accepts the copier aggregate body 134937 installs,
+  // so the single-file slot sits between token retirement and 052000.
+  assert.ok(
+    readFileSync(
+      resolve(ROOT, 'supabase/migrations/20261111134937_record_provenance_clocks_prod_reader.sql'),
+      'utf8'
+    ).includes('32879cff833594969c2cf3c09b7fdea921a624338b03b2c9c4f717f8bfbf7cf4') &&
+      readFileSync(
+        resolve(
+          ROOT,
+          'supabase/migrations/20260804052000_fail_closed_unbound_copier_aggregates.sql'
+        ),
+        'utf8'
+      ).includes('32879cff833594969c2cf3c09b7fdea921a624338b03b2c9c4f717f8bfbf7cf4')
+  )
+  assert.ok(
+    predeploy.indexOf('20261111133300_retire_legacy_token_rankings_cron_api.sql') <
+      predeploy.indexOf('20260804052000_fail_closed_unbound_copier_aggregates.sql')
+  )
+  const checklist = readFileSync(resolve(ROOT, 'docs/LAUNCH_CHECKLIST.md'), 'utf8')
+  for (const anchor of [
+    '`20261111194845_fix_gmx_source_contract_current_population.sql`',
+    '`20260715232500_quarantine_gmx_mixed_pnl.sql`',
+    '`20261111134937_record_provenance_clocks_prod_reader.sql`',
+    '`20260803100000_record_surface_publication_substrate.sql`',
+    '`20260803101000_verified_position_history_publication_writer.sql`',
+    '`20261111133300_retire_legacy_token_rankings_cron_api.sql`',
+    '`20260804052000_fail_closed_unbound_copier_aggregates.sql`',
+    '`20261113150757_clean_derived_formal_win_rate.sql`',
+  ]) {
+    assert.ok(checklist.includes(anchor), `LAUNCH_CHECKLIST.md must place ${anchor}`)
+  }
+  assert.doesNotMatch(checklist, /17 个迁移都不在清单里/)
 })

@@ -32,9 +32,9 @@ ORDERED_PREDEPLOY_SNAPSHOT_DIR=''
 # replacements take the slot of the original they supersede, and three inserts
 # run where the rehearsal ran them (191927/191928 bracket 20260722053000;
 # 140053 precedes 20260725016500). The record-provenance chain (20260803*) and
-# the GMX source-contract chain (20260715231500/232500) stay outside this
-# manifest, so their replacements 20261111134937 and 20261111194845 remain in
-# scripts/qa/launch-inventory-gap.json pending an owner ordering decision.
+# the GMX source-contract pair (20260715231500/232500) stay outside this
+# manifest on purpose; their replacements are classified explicitly in
+# ADR023_SINGLE_FILE_MIGRATIONS below.
 PREDEPLOY_MIGRATIONS=(
   20260716111600_atomic_group_application_review.sql
   20260716111700_group_application_read_write_boundary.sql
@@ -226,12 +226,38 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # These contracts revoke compatibility writes or change identity uniqueness
 # used by old routes. They must run only after the target application is serving
 # production.
+# 20261113150757 (formal win-rate cleanup, #441) is a data repair, not a
+# contract: old code still runs correctly after it, but the pre-60f4cc288 BTCC
+# parser and the pre-bf3fa8a4d on-chain enrichment rewrite the very values it
+# cleans. It therefore runs only after the ingest-worker release carrying both
+# fixes has replaced every old writer, and before the next derive-boards run
+# and publication. It touches no table 192134 guards, so 192134 stays last.
 POSTDEPLOY_MIGRATIONS=(
   20260716192000_social_edge_write_contract.sql
   20260717120000_trader_follows_composite_identity.sql
+  20261113150757_clean_derived_formal_win_rate.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
+
+# Classified but NEVER emitted by this runner: each is applied by itself through
+# the ADR-023 single-file channel inside its own operational window, at the
+# position docs/LAUNCH_CHECKLIST.md ("ADR-023 单文件迁移") fixes. They are not a
+# phase of the ordered manifest; render-predeploy-one rejects them.
+# - 20261111134937 replaces 20260803090000, the first file of the
+#   record/publication chain (0900 -> 20260803100000 -> 20260803101000) that
+#   docs/V1_EXECUTION_STATUS_2026-08-03.md interleaves with the RAW-only bridge
+#   deploy and legacy-call drain. Predeploy 20260804052000 requires the copier
+#   aggregate body it installs, so it must be exact before 052000 runs.
+# - 20261111194845 replaces 20260715231500 (GMX PnL v2 PREPARE). It and the
+#   CUTOVER 20260715232500 run back to back with GMX ingest and
+#   compute-leaderboard stopped throughout, before the first predeploy file
+#   (the slot the 2026-11-11 whole-database rehearsal proved).
+ADR023_SINGLE_FILE_MIGRATIONS=(
+  20261111194845_fix_gmx_source_contract_current_population.sql
+  20261111134937_record_provenance_clocks_prod_reader.sql
+)
+readonly -a ADR023_SINGLE_FILE_MIGRATIONS
 
 # Recovery repairs the immutable application snapshot whose original cutover
 # was exactly these 41 migrations. Keep this prerequisite frozen: later launch
@@ -317,13 +343,17 @@ readonly -a RECOVERY_MIGRATIONS
 # - The rest fail on production state and were replaced by 20261111* forward
 #   migrations that run in the original's ordered slot (PR #400/#401; the
 #   whole-database rehearsal passed 113/113 with these replacements).
+# - 20260715231500 and 20260803090000 likewise fail on production state; their
+#   replacements are ADR-023 single-file migrations (see above), not ordered.
 SUPERSEDED_MIGRATIONS=(
+  20260715231500_fix_gmx_source_contract.sql
   20260716104500_collection_read_write_boundaries.sql
   20260725017250_normalize_leaderboard_rank_max_drawdown.sql
   20260728122000_bitget_bots_canonical_timeframe.sql
   20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql
   20260729061000_tier_a_execution_claim_enforcement.sql
   20260729230000_token_ranking_generation_barrier.sql
+  20260803090000_record_provenance_clocks.sql
   20260804043000_retire_legacy_token_rankings.sql
   20260804044000_freeze_legacy_position_history_relations.sql
   20260804045000_quarantine_bingx_rank_authority.sql
@@ -339,6 +369,8 @@ readonly -a SUPERSEDED_MIGRATIONS
 
 superseder_version() {
   case "$1" in
+    20260715231500_fix_gmx_source_contract.sql) printf '%s' 20261111194845 ;;
+    20260803090000_record_provenance_clocks.sql) printf '%s' 20261111134937 ;;
     20260716104500_collection_read_write_boundaries.sql) printf '%s' 20260717230000 ;;
     20260725017250_normalize_leaderboard_rank_max_drawdown.sql) printf '%s' 20261111185914 ;;
     20260728122000_bitget_bots_canonical_timeframe.sql) printf '%s' 20261111134210 ;;
@@ -1049,10 +1081,12 @@ status() {
       'WITH target(version, phase, ordinal, expected_name, expected_hash, superseder) AS (VALUES'
     local ordinal=0
     local separator=''
-    for phase in predeploy postdeploy concurrent-recovery recovery quarantined superseded; do
+    for phase in predeploy single-file postdeploy concurrent-recovery recovery quarantined superseded; do
       local -a phase_migrations
       if [[ "$phase" == "predeploy" ]]; then
         phase_migrations=("${PREDEPLOY_MIGRATIONS[@]}")
+      elif [[ "$phase" == "single-file" ]]; then
+        phase_migrations=("${ADR023_SINGLE_FILE_MIGRATIONS[@]}")
       elif [[ "$phase" == "postdeploy" ]]; then
         phase_migrations=("${POSTDEPLOY_MIGRATIONS[@]}")
       elif [[ "$phase" == "concurrent-recovery" ]]; then
