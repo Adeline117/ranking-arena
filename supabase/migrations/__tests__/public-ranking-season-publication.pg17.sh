@@ -21,6 +21,7 @@
 #   20260816184500 public_ranked_leaderboard_source_freshness_gate
 #   20261113010326 release_leaderboard_rank_generation_lease_after_seal
 #   20261113011058 leaderboard_publication_source_isolation
+#   20261113110430 rank_publication_source_evidence_binding
 # leaderboard_ranks itself is created in the reviewed codec layout of
 # 20261111140053 (the forward repair that rebuilds it in production).
 
@@ -44,6 +45,7 @@ CHAIN=(
   20260816184500_public_ranked_leaderboard_source_freshness_gate.sql
   20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql
   20261113011058_leaderboard_publication_source_isolation.sql
+  20261113110430_rank_publication_source_evidence_binding.sql
 )
 
 for executable in initdb pg_ctl psql; do
@@ -139,7 +141,9 @@ CREATE TABLE arena.leaderboard_snapshots (
   timeframe smallint NOT NULL,
   scraped_at timestamptz NOT NULL,
   actual_count integer NOT NULL,
-  count_check_passed boolean NOT NULL
+  count_check_passed boolean NOT NULL,
+  raw_object_id bigint,
+  meta jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE TABLE arena.leaderboard_entries (
   snapshot_id bigint NOT NULL,
@@ -417,6 +421,23 @@ assert_equal "isolation rows cleared, restore event recorded" "0|1" "$(psql_db -
          (SELECT pg_catalog.count(*) FROM arena.leaderboard_publication_source_isolation_events
            WHERE filter_source = 'bybit' AND action = 'restored')")"
 assert_equal "public view row count" "7" "$(view_count)"
+assert_equal "every source is bound with its evidence grade" \
+  '{"bybit":"count_check_only","hyperliquid":"count_check_only","binance_futures":"count_check_only"}' \
+  "$(json_field "$OUT" result.evidenceGrades)"
+assert_equal "evidence rows bind the exact passed snapshots" "binance_futures:{101},bybit:{202},hyperliquid:{301}" \
+  "$(psql_db -Atqc "SELECT string_agg(source || ':' || snapshot_ids::text, ',' ORDER BY source)
+     FROM arena.leaderboard_rank_publication_source_evidence WHERE score_cohort_id = '$COHORT_ONE'")"
+assert_equal "anon sees the served evidence level per source" "binance_futures:count_check_only,bybit:count_check_only,hyperliquid:count_check_only" \
+  "$(psql_db -Atqc "SET ROLE anon; SELECT string_agg(source || ':' || evidence_grade, ',' ORDER BY source)
+     FROM public.public_ranked_leaderboard_source_evidence WHERE season_id = '90D'")"
+if psql_db -qc "DELETE FROM arena.leaderboard_rank_publication_source_evidence" >/dev/null 2>&1; then
+  echo "publication evidence is not immutable" >&2; exit 1
+fi
+EVIDENCE_ERROR="$(psql_db -Atqc "SELECT public.record_leaderboard_rank_publication_evidence('90D',
+  '$COHORT_ONE', '[]'::jsonb)" 2>&1 || true)"
+[[ "$EVIDENCE_ERROR" == *"only by the transaction that sealed the cohort"* ]] || {
+  echo "evidence was recordable outside the sealing transaction: $EVIDENCE_ERROR" >&2; exit 1
+}
 
 # Ranks are 1..N, follow arena_score DESC, and every row carries the cohort.
 assert_equal "view rank order matches arena_score" "t" "$(psql_db -Atqc "
@@ -568,6 +589,14 @@ SELECT 102, scraped_at, input.trader_id, input.rank
 FROM arena.leaderboard_snapshots, (VALUES (11, 1), (12, 2), (14, 3)) AS input(trader_id, rank)
 WHERE id = 102;
 SQL
+# Attempt-bound capture for binance's new board: a metric-trust run exists.
+psql_db -q <<'SQL'
+CREATE TABLE arena.metric_trust_runs (
+  source_run_id text PRIMARY KEY, snapshot_id bigint NOT NULL, manifest_raw_object_id bigint NOT NULL
+);
+UPDATE arena.leaderboard_snapshots SET raw_object_id = 9001 WHERE id = 102;
+INSERT INTO arena.metric_trust_runs VALUES (repeat('a', 64), 102, 9002);
+SQL
 OUT="$(publish 90D)"
 assert_equal "second cycle publishes" "true" "$(json_field "$OUT" ok)"
 COHORT_TWO="$(json_field "$OUT" result.scoreCohortId)"
@@ -584,6 +613,12 @@ assert_equal "every served row is the new cohort" "7" "$(psql_db -Atqc "
 assert_equal "generation sequence advanced past the foreign claim" "4" \
   "$(json_field "$OUT" result.generationSeq)"
 assert_equal "second cycle released its lease" "true" "$(json_field "$OUT" result.leaseReleased)"
+assert_equal "attempt-bound source is graded and traceable to run/manifest/RAW" \
+  "attempt_bound|{102}|{9001}|{$(printf 'a%.0s' {1..64})}|{9002}" \
+  "$(psql_db -Atqc "SELECT evidence_grade || '|' || snapshot_ids::text || '|' || raw_object_ids::text
+       || '|' || source_run_ids::text || '|' || manifest_raw_object_ids::text
+     FROM arena.leaderboard_rank_publication_source_evidence
+     WHERE score_cohort_id = '$COHORT_TWO' AND source = 'binance_futures'")"
 
 # ---------------------------------------------------------------------------
 # Positive 3: an immediate re-publication is no longer blocked by the previous

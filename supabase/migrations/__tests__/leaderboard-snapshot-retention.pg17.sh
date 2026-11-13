@@ -120,4 +120,33 @@ assert_equal "service_role may run it, anon may not" "true|false" "$(psql_db -At
   SELECT has_function_privilege('service_role', 'arena.prune_leaderboard_snapshots(integer,integer)', 'EXECUTE')
     || '|' || has_function_privilege('anon', 'arena.prune_leaderboard_snapshots(integer,integer)', 'EXECUTE')")"
 
+# 20261113110430 later pins snapshots bound as publication evidence. Install
+# minimal serving-authority stand-ins, apply it, and prove the pin.
+psql_db -q <<'SQL'
+ALTER TABLE arena.leaderboard_rank_publications
+  ADD COLUMN season_id text NOT NULL DEFAULT '90D',
+  ADD CONSTRAINT leaderboard_rank_publications_id_season_id_key UNIQUE (id, season_id);
+CREATE TABLE arena.public_ranked_leaderboard_serving_heads (season_id text, score_cohort_id uuid);
+CREATE TABLE arena.public_ranked_leaderboard_serving_sources (
+  season_id text, source text, score_cohort_id uuid, source_as_of timestamptz
+);
+CREATE FUNCTION arena.public_ranked_leaderboard_serving_seasons(p_observed_at timestamptz)
+RETURNS TABLE (season_id text) LANGUAGE sql STABLE AS $$ SELECT NULL::text WHERE false $$;
+INSERT INTO arena.leaderboard_snapshots VALUES (8, 1, 90, '2025-01-07 00:00:00+00', true),
+  (9, 1, 90, '2025-01-08 00:00:00+00', true);
+SQL
+PGOPTIONS='-c client_min_messages=warning' psql_db -q   -f "$ROOT_DIR/supabase/migrations/20261113110430_rank_publication_source_evidence_binding.sql" >/dev/null
+psql_db -q <<'SQL'
+-- Bypass the in-transaction recorder: the pin only needs an evidence row.
+ALTER TABLE arena.leaderboard_rank_publication_source_evidence DISABLE TRIGGER USER;
+INSERT INTO arena.leaderboard_rank_publication_source_evidence
+  (score_cohort_id, season_id, source, evidence_grade, snapshot_ids)
+VALUES ('00000000-0000-4000-8000-000000000001', '90D', 'binance_futures', 'count_check_only', '{8}');
+SQL
+psql_db -Atqc "SELECT arena.prune_leaderboard_snapshots(90, 100)" >/dev/null
+# 9 is now binance's latest passed board, so 5 loses that pin and goes; 8 is
+# old and not latest, kept only because a sealed cohort's evidence binds it.
+assert_equal "evidence-bound snapshot stays, superseded latest goes" "2,3,4,6,8,9" \
+  "$(psql_db -Atqc "SELECT string_agg(id::text, ',' ORDER BY id) FROM arena.leaderboard_snapshots")"
+
 echo "leaderboard snapshot retention PostgreSQL 17 proof passed"

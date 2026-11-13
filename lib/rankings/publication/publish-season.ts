@@ -261,6 +261,12 @@ export interface PublishLeaderboardSeasonResult {
   isolatedSources: IsolatedSourceSummary[]
   /** Previously isolated sources that rejoined with this cohort. */
   restoredSources: string[]
+  /**
+   * Evidence level per published source, bound immutably to the sealed cohort
+   * (20261113110430): 'attempt_bound' (metric-trust capture) or
+   * 'count_check_only'. null when the binding migration is not installed.
+   */
+  evidenceGrades: Record<string, 'attempt_bound' | 'count_check_only'> | null
 }
 
 interface PublishableRow {
@@ -930,7 +936,46 @@ async function publishInTransaction(
       )
     }
 
-    // 10. Release the claim lease, bound to this cohort and this transaction
+    // 10. Bind every published source to its snapshots / RAW / acquisition
+    // runs and record its evidence grade, in the sealing transaction.
+    const evidenceAvailable = await tx.query<{ available: boolean }>(
+      `SELECT pg_catalog.to_regprocedure(
+         'public.record_leaderboard_rank_publication_evidence(text,uuid,jsonb)'
+       ) IS NOT NULL AS available`
+    )
+    let evidenceGrades: PublishLeaderboardSeasonResult['evidenceGrades'] = null
+    if (evidenceAvailable.rows[0]?.available === true) {
+      const recorded = await tx.query<{
+        result: { grades: Record<string, 'attempt_bound' | 'count_check_only'> }
+      }>(
+        `SELECT public.record_leaderboard_rank_publication_evidence(
+           p_season_id => $1, p_score_cohort_id => $2::uuid, p_source_publications => $3::jsonb
+         ) AS result`,
+        [
+          season,
+          scoreCohortId,
+          JSON.stringify(
+            freshPublications.map((publication) => ({
+              source: publication.source,
+              snapshot_ids: publication.snapshot_ids,
+            }))
+          ),
+        ]
+      )
+      evidenceGrades = recorded.rows[0]?.result.grades ?? null
+      const countOnly = Object.entries(evidenceGrades ?? {})
+        .filter(([, grade]) => grade === 'count_check_only')
+        .map(([source]) => source)
+      if (countOnly.length > 0) {
+        log(
+          `[${season}] count-check-only evidence (no attempt-bound capture): ${countOnly.join(', ')}`
+        )
+      }
+    } else {
+      log(`[${season}] publication evidence binding not installed; grades not recorded`)
+    }
+
+    // 11. Release the claim lease, bound to this cohort and this transaction
     // (the release RPC requires the seal receipt this transaction inserted).
     const releaseAvailable = await tx.query<{ available: boolean }>(
       `SELECT pg_catalog.to_regprocedure(
@@ -1014,6 +1059,7 @@ async function publishInTransaction(
       leaseReleased,
       isolatedSources,
       restoredSources,
+      evidenceGrades,
     }
   })
 }

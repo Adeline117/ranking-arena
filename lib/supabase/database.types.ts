@@ -9341,6 +9341,15 @@ export type Database = {
         }
         Relationships: []
       }
+      public_ranked_leaderboard_source_evidence: {
+        Row: {
+          evidence_grade: string | null
+          season_id: string | null
+          source: string | null
+          source_as_of: string | null
+        }
+        Relationships: []
+      }
       public_user_profiles: {
         Row: {
           avatar_url: string | null

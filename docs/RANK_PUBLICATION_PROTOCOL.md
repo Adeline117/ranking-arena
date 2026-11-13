@@ -167,6 +167,18 @@ persistLeaderboardRanks` 已于 2026-11-13 删除；`scripts/qa/public-ranking-s
   发布事务内的隔离与封存同时生效，不会造成空窗。
 - 任何来源水位超过 48 小时、或 `computed_at` 超过 48 小时 → 整季下线。
 
+## 证据绑定与证据等级（20261113110430）
+
+- 封存确认在服务后，编排器在同一事务里调用 `public.record_leaderboard_rank_publication_evidence`，
+  为每个发布来源写一行不可变的 `arena.leaderboard_rank_publication_source_evidence`：
+  所用快照 id、RAW 对象 id、信任采集 run id 与 manifest RAW id，以及证据等级。
+- 证据等级：该来源所有快照都有 metric-trust run → `attempt_bound`；否则（例如
+  `INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED` 关闭时的 count-check-only 发布）→ `count_check_only`。
+- 只接受本事务刚封存的 cohort、与封存 proof 完全一致的来源集合、该来源自己的已通过板。
+- 公开视图 `public.public_ranked_leaderboard_source_evidence`（anon 可读）给出当前在服务季每个来源的
+  `evidence_grade` 与 `source_as_of`，前端可据此区分证据等级。
+- 快照保留策略（20261113110021）同时保留被证据绑定的快照。
+
 ## 其他公开读取入口（直读快照的 anon RPC）
 
 `arena_weekly_leaders / arena_exchange_rankings / arena_first_screen / arena_core_modules`
