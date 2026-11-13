@@ -36,16 +36,32 @@ const ROUTE = 'app/api/cron/compute-leaderboard/route.ts'
 const ORCHESTRATOR = 'lib/rankings/publication/publish-season.ts'
 const WORKER_ENTRY = 'worker/src/index.ts'
 
-// Legacy direct writers. They never set rank_publication_id, so any call
-// would bump the season fence and blank the sealed public season.
+// Legacy direct writers, deleted 2026-11-13. They never set
+// rank_publication_id, so any call would bump the season fence and blank the
+// sealed public season. They must not come back.
 const LEGACY_WRITERS = [
-  { name: 'upsertLeaderboard', file: 'app/api/cron/compute-leaderboard/write-leaderboard.ts' },
-  { name: 'zeroOutExcluded', file: 'app/api/cron/compute-leaderboard/write-leaderboard.ts' },
-  { name: 'atomicPlatformCleanup', file: 'app/api/cron/compute-leaderboard/rerank-cleanup.ts' },
-  { name: 'cleanupStaleRows', file: 'app/api/cron/compute-leaderboard/rerank-cleanup.ts' },
-  { name: 'rerankAllRows', file: 'app/api/cron/compute-leaderboard/rerank-cleanup.ts' },
-  { name: 'persistLeaderboardRanks', file: 'lib/pipeline/storage.ts' },
+  'upsertLeaderboard',
+  'zeroOutExcluded',
+  'atomicPlatformCleanup',
+  'cleanupStaleRows',
+  'rerankAllRows',
+  'persistLeaderboardRanks',
 ]
+const LEGACY_WRITER_FILES = [
+  'app/api/cron/compute-leaderboard/write-leaderboard.ts',
+  'app/api/cron/compute-leaderboard/rerank-cleanup.ts',
+]
+
+// Any production write to public.leaderboard_ranks: PostgREST builder chains
+// and raw SQL. Reads (.select) stay allowed everywhere.
+const DIRECT_RANK_WRITE = [
+  /from\(\s*['"`]leaderboard_ranks['"`]\s*\)\s*\.\s*(?:upsert|insert|update|delete)\s*\(/u,
+  /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?)\s+(?:ONLY\s+)?(?:"?public"?\.)?"?leaderboard_ranks"?\b/iu,
+]
+
+function directRankWriters(files, readFile) {
+  return files.filter((path) => DIRECT_RANK_WRITE.some((pattern) => pattern.test(readFile(path))))
+}
 
 function productionSources(dir, out = []) {
   for (const name of readdirSync(join(root, dir))) {
@@ -61,7 +77,7 @@ function productionSources(dir, out = []) {
 }
 
 const allProductionSources = () =>
-  ['app', 'lib', 'worker']
+  ['app', 'lib', 'worker', 'scripts']
     .flatMap((dir) => productionSources(dir))
     .filter((path) => !path.endsWith('database.types.ts'))
 
@@ -162,19 +178,21 @@ test('只有编排器写 leaderboard_ranks.rank_publication_id', () => {
   assert.deepEqual(writers, [ORCHESTRATOR])
 })
 
-test('旧的直接写入函数没有生产调用方（会破坏封存）', () => {
-  const sources = allProductionSources()
-  for (const { name, file } of LEGACY_WRITERS) {
-    const callers = sources
-      .filter((path) => path !== file && !path.startsWith('app/api/cron/compute-leaderboard/'))
-      .filter((path) => new RegExp(`\\b${name}\\s*\\(`).test(read(path)))
-    // Inside the compute-leaderboard directory only the defining module may
-    // mention the writer (the route is a tombstone).
-    const routeDirCallers = sources
-      .filter((path) => path.startsWith('app/api/cron/compute-leaderboard/') && path !== file)
-      .filter((path) => new RegExp(`\\b${name}\\s*\\(`).test(read(path)))
-    assert.deepEqual([...callers, ...routeDirCallers], [], `${name} 不得有生产调用方`)
+test('旧的直接写入函数已删除且不得复活（会破坏封存）', () => {
+  for (const file of LEGACY_WRITER_FILES) {
+    assert.throws(() => statSync(join(root, file)), /ENOENT/, `${file} 不得恢复`)
   }
+  const sources = allProductionSources()
+  for (const name of LEGACY_WRITERS) {
+    const definers = sources.filter((path) =>
+      new RegExp(`(?:function|async)\\s+${name}\\s*\\(`).test(read(path))
+    )
+    assert.deepEqual(definers, [], `${name} 不得重新定义`)
+  }
+})
+
+test('除发布编排器外，生产代码不得直写 leaderboard_ranks', () => {
+  assert.deepEqual(directRankWriters(allProductionSources(), read), [ORCHESTRATOR])
 })
 
 test('守卫在接线缺失时会失败', () => {
@@ -205,4 +223,16 @@ test('守卫在接线缺失时会失败', () => {
     /只能调用同一个发布编排器/
   )
   assert.doesNotThrow(() => assertRouteIsTombstoneOrOrchestrated(read(ROUTE)))
+  const synthetic = {
+    'a.ts': "await supabase\n  .from('leaderboard_ranks')\n  .delete().in('id', ids)",
+    'b.ts': "await supabase.from('leaderboard_ranks').upsert(rows)",
+    'c.ts': 'await client.query(`UPDATE public.leaderboard_ranks SET rank = NULL`)',
+    'd.ts': 'await sql`DELETE FROM leaderboard_ranks WHERE season_id = ${s}`',
+    'e.ts': "await supabase.from('leaderboard_ranks').select('id').eq('season_id', s)",
+    'f.ts': 'SELECT * FROM public.leaderboard_ranks',
+  }
+  assert.deepEqual(
+    directRankWriters(Object.keys(synthetic), (path) => synthetic[path]),
+    ['a.ts', 'b.ts', 'c.ts', 'd.ts']
+  )
 })

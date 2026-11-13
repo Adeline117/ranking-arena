@@ -160,8 +160,9 @@ p_expected_rank_count, p_expected_batch_count, p_computed_at, p_lease_seconds)`�
 ## 失效与"空窗"规则（读取时生效）
 
 - 任何来源的任意一行被改动（含旧式直接写入）→ 季 fence 前移 → 整季下线，直到下一次成功封存。
-  因此旧写入函数 `upsertLeaderboard / zeroOutExcluded / atomicPlatformCleanup / cleanupStaleRows / rerankAllRows /
-persistLeaderboardRanks` 必须保持没有生产调用方（`scripts/qa/public-ranking-seal-wiring.test.mjs` 守卫）。
+  旧写入函数 `upsertLeaderboard / zeroOutExcluded / atomicPlatformCleanup / cleanupStaleRows / rerankAllRows /
+persistLeaderboardRanks` 已于 2026-11-13 删除；`scripts/qa/public-ranking-seal-wiring.test.mjs` 守卫禁止它们复活，
+  并禁止 app/lib/worker/scripts 中除编排器外的任何代码直写 `leaderboard_ranks`（PostgREST 写链或 SQL 写语句）。
 - expected 集合变化（新增 serving 来源、在发布事务之外改动隔离行）→ 整季下线，直到按新集合重新封存。
   发布事务内的隔离与封存同时生效，不会造成空窗。
 - 任何来源水位超过 48 小时、或 `computed_at` 超过 48 小时 → 整季下线。

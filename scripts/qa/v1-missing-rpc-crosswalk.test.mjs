@@ -261,13 +261,16 @@ test('rejects generated-type and runtime-consumer references forged outside exec
             `\n// ${expected}\ntype ForgedRpcReference = '${expected}'\n`
         )
       } else {
-        const consumerPath = resolve(repoRoot, 'app/api/cron/compute-leaderboard/rerank-cleanup.ts')
+        const consumerPath = resolve(
+          repoRoot,
+          'app/api/cron/compute-leaderboard/database-contract.ts'
+        )
         const original = readFileSync(consumerPath, 'utf8')
-        const expected = ".rpc('rerank_public_eligible_leaderboard'"
+        const expected = "rpc('rerank_public_eligible_leaderboard'"
         assert.ok(original.includes(expected))
         writeFileSync(
           consumerPath,
-          original.replace(expected, ".rpc('removed_rerank_rpc'") +
+          original.replace(expected, "rpc('removed_rerank_rpc'") +
             `\n// ${expected}\nconst forgedRpcReference = ${JSON.stringify(expected)}\n`
         )
       }

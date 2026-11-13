@@ -37,10 +37,7 @@ export const MISSING_RPC_DEFINITIONS = Object.freeze([
       kind: 'explicit-service-role',
       migration: '20260729223000_rerank_public_eligible_rows_only.sql',
     }),
-    consumers: Object.freeze([
-      'app/api/cron/compute-leaderboard/database-contract.ts',
-      'app/api/cron/compute-leaderboard/rerank-cleanup.ts',
-    ]),
+    consumers: Object.freeze(['app/api/cron/compute-leaderboard/database-contract.ts']),
     definingMigration: '20260729223000_rerank_public_eligible_rows_only.sql',
     endState: 'service-only/ranking-authority-writer',
     expectedAcl: 'service_role-execute-only',
