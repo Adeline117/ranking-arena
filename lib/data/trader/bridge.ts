@@ -56,6 +56,7 @@ export function toTraderPageData(
   // period (90D → 30D → 7D fallback, queries.ts), so `?? t.*` here made a
   // 30D-only source render its 30D ROI/score under the 90D tab.
   const performance: Record<string, unknown> = {
+    has_period_90d: p90 != null,
     roi_90d: p90?.roi ?? null,
     roi_30d: p30?.roi ?? null,
     roi_7d: p7?.roi ?? null,

@@ -292,6 +292,56 @@ describe('/api/follow', () => {
       expect(followResult).toBe(true)
     })
 
+    it('fails closed instead of skipping the follow limit when the lookup errors', async () => {
+      mockGetAuthUser.mockResolvedValue(mockUser)
+      const supabase = createMockSupabase({ data: null, error: { message: 'db down' } })
+      mockGetSupabaseAdmin.mockReturnValue(supabase)
+
+      const req = new NextRequest('http://localhost/api/follow', {
+        method: 'POST',
+        body: { traderId: 'trader-abc', source: 'bybit', action: 'follow' },
+      })
+      const res = await POST(req)
+
+      expect(res.status).toBe(500)
+      // Only the two limit lookups ran; no insert was attempted.
+      expect(supabase.from).toHaveBeenCalledTimes(2)
+    })
+
+    it('maps the database hard-cap rejection to 429 instead of a 500', async () => {
+      mockGetAuthUser.mockResolvedValue(mockUser)
+      // Lookups pass (a concurrent request is about to fill the last slot); the
+      // insert then hits the BEFORE INSERT cap trigger.
+      const results = [
+        { data: null, error: null, count: 99 },
+        { data: { tier: 'pro' }, error: null },
+        { data: null, error: { code: '23514', message: 'FOLLOW_LIMIT' } },
+      ]
+      let call = 0
+      const from = jest.fn(() => {
+        const result = results[Math.min(call++, results.length - 1)]
+        const handler: ProxyHandler<object> = {
+          get(_target, prop) {
+            if (prop === 'then') return (resolve: (v: unknown) => void) => resolve(result)
+            if (prop === 'catch' || prop === 'finally') return undefined
+            return jest.fn(() => new Proxy({}, handler))
+          },
+        }
+        return new Proxy({}, handler)
+      })
+      mockGetSupabaseAdmin.mockReturnValue({ from })
+
+      const req = new NextRequest('http://localhost/api/follow', {
+        method: 'POST',
+        body: { traderId: 'trader-abc', source: 'bybit', action: 'follow' },
+      })
+      const res = await POST(req)
+      const body = await res.json()
+
+      expect(res.status).toBe(429)
+      expect(body.code).toBe('FOLLOW_LIMIT')
+    })
+
     it('successfully unfollows a trader', async () => {
       mockGetAuthUser.mockResolvedValue(mockUser)
       mockGetSupabaseAdmin.mockReturnValue(createMockSupabase({ data: null, error: null }))

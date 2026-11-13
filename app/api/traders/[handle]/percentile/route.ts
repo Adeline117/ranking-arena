@@ -16,6 +16,7 @@ import {
 import { resolveTrader } from '@/lib/data/unified'
 import { hasFeatureAccess, normalizeSubscriptionTier } from '@/lib/types/premium'
 import { SOURCE_TYPE_MAP, type SourceType } from '@/lib/constants/exchanges'
+import { decodeRouteParam } from '@/lib/utils/decode-route-param'
 
 export const runtime = 'nodejs'
 
@@ -52,6 +53,7 @@ export async function GET(
       .from('subscriptions')
       .select('tier')
       .eq('user_id', user.id)
+      .in('status', ['active', 'trialing'])
       .maybeSingle()
 
     const tier = normalizeSubscriptionTier(subscription?.tier)
@@ -63,7 +65,7 @@ export async function GET(
 
     // 解析参数
     const resolvedParams = await params
-    const handle = decodeURIComponent(resolvedParams.handle)
+    const handle = decodeRouteParam(resolvedParams.handle)
 
     // Resolve trader via unified layer
     const resolved = await resolveTrader(supabase, { handle })

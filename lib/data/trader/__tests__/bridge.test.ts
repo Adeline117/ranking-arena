@@ -324,3 +324,28 @@ describe('集合映射', () => {
     expect(st[0]).toMatchObject({ handle: 'sk1', id: 'sk1', followers: undefined, source: 'okx' })
   })
 })
+
+describe('rank placement (read by the trader page header)', () => {
+  it('exposes rank at the top level, not inside performance', () => {
+    const page = toTraderPageData(detail({ trader: { rank: 42 } }))
+    expect(page.rank).toBe(42)
+    expect(perf(detail({ trader: { rank: 42 } }))).not.toHaveProperty('rank')
+  })
+
+  it('the trader page reads the top-level rank', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { readFileSync } = require('node:fs') as typeof import('node:fs')
+    const page = readFileSync('app/(app)/trader/[handle]/page.tsx', 'utf8')
+    expect(page).toContain('rank: (serverTraderData.rank as number | null | undefined) ?? null')
+    expect(page).not.toMatch(/performance as Record<string, unknown>\)\.rank\b/)
+  })
+})
+
+describe('has_period_90d', () => {
+  it('flags a trader without a 90D period row so the 90D tab is not filled from 30D', () => {
+    expect(perf(detail({ periods: { '30D': { roi: 12 }, '90D': null } })).has_period_90d).toBe(
+      false
+    )
+    expect(perf(detail({ periods: { '90D': { roi: 50 } } })).has_period_90d).toBe(true)
+  })
+})

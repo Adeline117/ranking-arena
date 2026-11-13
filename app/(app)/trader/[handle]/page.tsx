@@ -13,6 +13,7 @@ import { isRetiredSource } from '@/lib/constants/retired-sources'
 import { getDataMode } from '@/lib/constants/serving-cutover'
 import { resolveServingTrader } from '@/lib/data/serving/resolve'
 import { getPublicFirstScreen } from '@/lib/data/serving/first-screen'
+import { headlineWindowFor } from '@/lib/data/serving/headline-window'
 import { fetchSimilarTraders } from '@/lib/data/trader/similar'
 import { getSourceCapabilities } from '@/lib/data/serving/capabilities'
 import { getTraderAvatarSrc } from '@/lib/utils/avatar'
@@ -631,6 +632,7 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
       pnl: best?.headlinePnl?.value ?? null,
       win_rate: bestWinRate,
       max_drawdown: typeof best?.extras.mdd === 'number' ? (best.extras.mdd as number) : null,
+      headline_window: headlineWindowFor(best?.timeframe),
       is_verified_data: verifiedKeys.has(
         verifiedTraderKey(servingResolved.source, servingResolved.exchangeTraderId)
       ),
@@ -785,7 +787,10 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
           max_drawdown: (serverTraderData.performance as Record<string, unknown>).max_drawdown as
             | number
             | null,
-          rank: (serverTraderData.performance as Record<string, unknown>).rank as number | null,
+          // toTraderPageData puts the sealed-cohort rank at the top level; the
+          // performance object has no `rank` key, so reading it there left the
+          // header rank badge permanently empty for these traders.
+          rank: (serverTraderData.rank as number | null | undefined) ?? null,
           profitability_score: (serverTraderData.performance as Record<string, unknown>)
             .profitability_score as number | null,
           risk_control_score: (serverTraderData.performance as Record<string, unknown>)

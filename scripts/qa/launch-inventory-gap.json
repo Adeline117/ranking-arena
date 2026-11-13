@@ -17,6 +17,26 @@
     "20260817061000_legacy_raw_metric_publication_isolation.sql",
     "20260817134214_quarantine_legacy_platform_stats_rpc.sql",
     "20261013094743_retire_v2_partition_cron_extend_arena_partitions.sql",
-    "20261113014105_arena_score_unknown_trades_confidence.sql"
+    "20261111132444_rank_history_service_only_acl_hosted_role_graph.sql",
+    "20261111132445_trader_activities_publication_fence_hosted_role_graph.sql",
+    "20261111132446_notification_ranking_change_reader_fence_hosted_role_graph.sql",
+    "20261111132447_arena_bot_legacy_publication_isolation_hosted_role_graph.sql",
+    "20261111132448_trader_series_publication_isolation_hosted_role_graph.sql",
+    "20261111132450_legacy_raw_metric_publication_isolation_hosted_role_graph.sql",
+    "20261111133259_token_ranking_generation_barrier_cron_api.sql",
+    "20261111133300_retire_legacy_token_rankings_cron_api.sql",
+    "20261111134210_bitget_bots_canonical_timeframe_partial_seed.sql",
+    "20261111134416_quarantine_bitget_bot_cumulative_rank_authority_prod_reader.sql",
+    "20261111134937_record_provenance_clocks_prod_reader.sql",
+    "20261111135144_freeze_legacy_position_history_relations_prod_creator.sql",
+    "20261111135302_quarantine_bingx_rank_authority_blocked_spot.sql",
+    "20261111140053_leaderboard_ranks_codec_layout_rebuild.sql",
+    "20261111185914_normalize_leaderboard_rank_max_drawdown_prod_constraint.sql",
+    "20261111191927_binance_spot_contract_registration_serving_hold.sql",
+    "20261111191928_binance_spot_contract_registration_serving_restore.sql",
+    "20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql",
+    "20261111194845_fix_gmx_source_contract_current_population.sql",
+    "20261113014105_arena_score_unknown_trades_confidence.sql",
+    "20261113104533_trader_follows_hard_cap_lock.sql"
   ]
 }

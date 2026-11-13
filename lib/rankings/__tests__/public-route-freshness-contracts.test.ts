@@ -32,8 +32,10 @@ describe('public ranking freshness route contracts', () => {
 
     // `computed_at` remains a cache-row age guard. Its existence must not be
     // mistaken for the response freshness authority, which is source_as_of.
+    // The guard now delegates to the shared cohort predicate, which reads
+    // computed_at only as a row-age bound.
     expect(main).toMatch(
-      /function isWithinPublicServingFreshness[\s\S]*?const computedAt = row\.computed_at/
+      /function isWithinPublicServingFreshness[\s\S]*?computed_at: row\.computed_at/
     )
     expect(main).toContain('lastUpdated: freshnessSummary.asOf')
     expect(main).not.toMatch(/lastUpdated:\s*(?:row\.)?computed_at/)

@@ -45,6 +45,7 @@ import {
   traderDetailMatchesRequestedRoute,
 } from '@/app/components/trader/linked-account-view'
 import TraderTabs from '@/app/components/trader/TraderTabs'
+import { headlineWindowFor, type HeadlineWindow } from '@/lib/data/serving/headline-window'
 import DataProvenanceBadge from '@/app/components/trader/DataProvenanceBadge'
 import { type ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
 // MarketCorrelationCard removed -- beta_btc/beta_eth/alpha never computed by pipeline (P0-5)
@@ -181,6 +182,8 @@ export interface UnregisteredTraderData {
   /** True when this account has an active read-only API authorization. */
   is_verified_data?: boolean
   is_platform_dead?: boolean
+  /** Serving board window that `rank`/`roi` came from (absent = legacy 90D). */
+  headline_window?: HeadlineWindow
 }
 
 // TraderTabKey moved to ./hooks/useTraderTabs
@@ -240,6 +243,7 @@ function firstScreenToTraderData(
     win_rate: bestWinRate,
     max_drawdown: typeof best?.extras.mdd === 'number' ? (best.extras.mdd as number) : null,
     is_verified_data: isVerifiedData,
+    headline_window: headlineWindowFor(best?.timeframe),
   }
 }
 
@@ -1106,10 +1110,16 @@ export default function TraderProfileClient({
   const visibleIsVerifiedData = isPrimaryAccount
     ? isVerifiedData
     : Boolean(selectedServingReady && parsedSelectedServingResponse?.is_verified_data)
+  // A serving headline taken from a non-90D board keeps its own window so the
+  // share card never labels a 30D rank/ROI as 90D.
+  const headlineWindow = accountDetailReady ? visibleData.headline_window : undefined
+  const headlineIsNon90 = headlineWindow != null && headlineWindow !== '90d'
   const headerAccountMetrics = resolveTraderHeaderAccountMetrics(suppressAccountContent, {
-    roi90d:
-      exactPerformance?.roi_90d ??
-      (accountDetailReady && visibleData.roi != null ? visibleData.roi : undefined),
+    roi90d: headlineIsNon90
+      ? (visibleData.roi ?? undefined)
+      : (exactPerformance?.roi_90d ??
+        (accountDetailReady && visibleData.roi != null ? visibleData.roi : undefined)),
+    headlineWindow,
     arenaScore:
       exactPerformance?.arena_score_90d ??
       exactPerformance?.arena_score ??
@@ -1453,6 +1463,7 @@ export default function TraderProfileClient({
             followers={traderProfile?.followers ?? undefined}
             source={visibleSource}
             roi90d={headerAccountMetrics.roi90d}
+            headlineWindow={headerAccountMetrics.headlineWindow}
             arenaScore={headerAccountMetrics.arenaScore}
             scoreConfidence={headerAccountMetrics.scoreConfidence}
             tradesCount={headerAccountMetrics.tradesCount}

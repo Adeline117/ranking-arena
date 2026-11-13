@@ -160,6 +160,7 @@ import {
   getInitialTraders,
   homeInitialTradersCacheKeys,
 } from '../getInitialTraders'
+import { PUBLIC_COHORT_MIN_ARENA_SCORE_EXCLUSIVE } from '@/lib/rankings/public-cohort'
 
 describe('SSR public ranking cohort', () => {
   beforeEach(() => {
@@ -209,6 +210,13 @@ describe('SSR public ranking cohort', () => {
       (cohort.range as jest.Mock).mock.invocationCallOrder[0]
     )
     expect(freshness.in).toHaveBeenCalledWith('source', ['binance_futures'])
+    // Same cohort as /api/traders (which serves every page after hydration):
+    // only the shared public-cohort floor (lib/rankings/public-cohort.ts), no
+    // extra SSR-only arena_score floor, or server page N and client page N differ.
+    const scoreFloorCalls = ((cohort.gt as jest.Mock | undefined)?.mock.calls ?? []).filter(
+      ([column]) => column === 'arena_score'
+    )
+    expect(scoreFloorCalls).toEqual([['arena_score', PUBLIC_COHORT_MIN_ARENA_SCORE_EXCLUSIVE]])
   })
 
   it('keeps totals unknown even on terminal pages until a same-predicate count authority exists', async () => {

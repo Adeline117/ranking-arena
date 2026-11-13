@@ -1,4 +1,6 @@
 import 'server-only'
+import { createHash } from 'node:crypto'
+import { resolveProPriceIds } from './price-ids'
 import Stripe from 'stripe'
 import { API_PRICING, PRICING } from '@/lib/config/pricing'
 import { stripeMetadataUserId } from '@/lib/stripe/identity'
@@ -101,22 +103,8 @@ export const stripe = {
   },
 }
 
-// 价格 ID 配置 - Pro 会员的月付/年付/终身价格
-// Falls back to STRIPE_PRO_PRICE_ID for both if specific monthly/yearly IDs not set
-export const STRIPE_PRICE_IDS = {
-  monthly:
-    optionalEnv('STRIPE_PRO_MONTHLY_PRICE_ID') ||
-    optionalEnv('STRIPE_PRICE_MONTHLY_ID') ||
-    optionalEnv('STRIPE_PRO_PRICE_ID') ||
-    '',
-  yearly:
-    optionalEnv('STRIPE_PRO_YEARLY_PRICE_ID') ||
-    optionalEnv('STRIPE_PRICE_YEARLY_ID') ||
-    optionalEnv('STRIPE_ELITE_PRICE_ID') ||
-    optionalEnv('STRIPE_PRO_PRICE_ID') ||
-    '',
-  lifetime: optionalEnv('STRIPE_PRO_LIFETIME_PRICE_ID'),
-}
+// 价格 ID 配置 - Pro 会员的月付/年付/终身价格（解析规则见 ./price-ids）
+export const STRIPE_PRICE_IDS = resolveProPriceIds(optionalEnv)
 
 // B2B API tier price IDs — separate from Pro membership
 export const STRIPE_API_PRICE_IDS = {
@@ -378,7 +366,14 @@ export async function createCheckoutSession(params: {
   // Idempotency key prevents duplicate checkout sessions if the client retries
   // (double-click, network retry, browser prefetch). Stripe deduplicates within 24h.
   // Key is scoped to customer + price so switching plans creates a new session.
-  const idempotencyKey = `checkout_${params.customerId}_${params.priceId}_${Math.floor(Date.now() / 60_000)}`
+  // The params digest matters: Stripe rejects a reused key whose request body
+  // differs, so toggling the trial or adding a promo code inside the same minute
+  // used to fail checkout with an idempotency error instead of a new session.
+  const paramsDigest = createHash('sha256')
+    .update(JSON.stringify(sessionParams))
+    .digest('hex')
+    .slice(0, 16)
+  const idempotencyKey = `checkout_${params.customerId}_${params.priceId}_${Math.floor(Date.now() / 60_000)}_${paramsDigest}`
   const session = await stripe.checkout.sessions.create(sessionParams, {
     idempotencyKey,
   })
@@ -446,13 +441,17 @@ export async function createOneTimePaymentSession(params: {
 }
 
 // 创建客户门户会话 (用于管理订阅)
+type PortalFlowData = NonNullable<Stripe.BillingPortal.SessionCreateParams['flow_data']>
+
 export async function createPortalSession(
   customerId: string,
-  returnUrl: string
+  returnUrl: string,
+  flowData?: PortalFlowData
 ): Promise<Stripe.BillingPortal.Session> {
   const session = await stripe.billingPortal.sessions.create({
     customer: customerId,
     return_url: returnUrl,
+    ...(flowData ? { flow_data: flowData } : {}),
   })
 
   return session

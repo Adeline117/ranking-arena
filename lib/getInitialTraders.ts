@@ -575,7 +575,9 @@ async function fetchInitialLeaderboardPage(
     limit,
     offset: page * limit,
     // No page-specific score floor: getLeaderboard applies the shared public
-    // cohort predicate, identical to /api/traders (the client's later pages).
+    // cohort predicate (lib/rankings/public-cohort.ts), identical to
+    // /api/traders, which takes over after hydration and serves every later
+    // page — so server page N and client page N are the same row range.
     sortBy: 'arena_score',
     signal,
   })

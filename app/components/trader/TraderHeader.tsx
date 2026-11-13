@@ -40,6 +40,8 @@ interface TraderHeaderProps {
   proBadgeTier?: 'pro' | null
   activeSince?: string
   roi90d?: number
+  /** Board window of the headline rank/ROI when it is not 90D. */
+  headlineWindow?: string
   /** Arena Score for display in header */
   arenaScore?: number | null
   /** Score confidence level — 'full', 'partial', or 'minimal' */
@@ -100,6 +102,7 @@ export default function TraderHeader({
   proBadgeTier,
   activeSince,
   roi90d,
+  headlineWindow,
   arenaScore,
   scoreConfidence,
   tradesCount,
@@ -445,6 +448,7 @@ export default function TraderHeader({
           userId={userId}
           rank={rank}
           roi90d={roi90d}
+          headlineWindow={headlineWindow}
           arenaScore={arenaScore}
           onFollowChange={(delta) => setFollowerCount((prev) => Math.max(0, prev + delta))}
         />

@@ -1,5 +1,0 @@
-export { TradingSection } from './TradingSection'
-export { EquityCurveSection } from './EquityCurveSection'
-export { ComparePortfolioSection } from './ComparePortfolioSection'
-export { BreakdownSection } from './BreakdownSection'
-export { PositionHistorySection } from './PositionHistorySection'
