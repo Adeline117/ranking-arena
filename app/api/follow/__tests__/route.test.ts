@@ -292,6 +292,22 @@ describe('/api/follow', () => {
       expect(followResult).toBe(true)
     })
 
+    it('fails closed instead of skipping the follow limit when the lookup errors', async () => {
+      mockGetAuthUser.mockResolvedValue(mockUser)
+      const supabase = createMockSupabase({ data: null, error: { message: 'db down' } })
+      mockGetSupabaseAdmin.mockReturnValue(supabase)
+
+      const req = new NextRequest('http://localhost/api/follow', {
+        method: 'POST',
+        body: { traderId: 'trader-abc', source: 'bybit', action: 'follow' },
+      })
+      const res = await POST(req)
+
+      expect(res.status).toBe(500)
+      // Only the two limit lookups ran; no insert was attempted.
+      expect(supabase.from).toHaveBeenCalledTimes(2)
+    })
+
     it('successfully unfollows a trader', async () => {
       mockGetAuthUser.mockResolvedValue(mockUser)
       mockGetSupabaseAdmin.mockReturnValue(createMockSupabase({ data: null, error: null }))
