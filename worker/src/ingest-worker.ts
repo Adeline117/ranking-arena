@@ -203,6 +203,7 @@ async function runJob(
   // Safe hand-off point for a future queue/source claim coordinator. Only
   // one-way token digests and the public lease proof can cross this boundary.
   void provenance
+  const { runMaintenanceWithStandby } = await import('./ingest/maintenance-standby')
   switch (job.name) {
     case INGEST_JOB.TIER_A: {
       const { processTierA } = await import('./ingest/processors/tier-a-leaderboard')
@@ -235,15 +236,21 @@ async function runJob(
       return { mirrored: 0, failed: 0 }
     case INGEST_JOB.MAINTENANCE: {
       const { processMaintenance } = await import('./ingest/processors/maintenance')
-      return processMaintenance(job)
+      return runMaintenanceWithStandby(getConnection(), job.name, job.data, () =>
+        processMaintenance(job)
+      )
     }
     case INGEST_JOB.FRESHNESS: {
       const { processFreshness } = await import('./ingest/processors/freshness-sentinel')
-      return processFreshness(job)
+      return runMaintenanceWithStandby(getConnection(), job.name, job.data, () =>
+        processFreshness(job)
+      )
     }
     case INGEST_JOB.DAILY_DIGEST: {
       const { processDailyDigest } = await import('./ingest/processors/daily-digest')
-      return processDailyDigest(job)
+      return runMaintenanceWithStandby(getConnection(), job.name, job.data, () =>
+        processDailyDigest(job)
+      )
     }
     case INGEST_JOB.ONCHAIN_ENRICH: {
       const { processOnchainEnrich } = await import('./ingest/processors/onchain-enrich')

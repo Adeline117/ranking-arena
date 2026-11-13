@@ -29,6 +29,7 @@ const mockFastQueue = {
   add: jest.fn().mockResolvedValue(undefined),
 }
 const mockDbQuery = jest.fn().mockResolvedValue({ rows: [] })
+const mockRegions: string[] = ['local']
 
 // The scheduler's historical invariants stay unit-tested under an explicit
 // test-only GO. The checked-in V1 source gate remains fixed-off.
@@ -49,7 +50,7 @@ jest.mock('../queues', () => ({
     DAILY_DIGEST: 'maint:daily-digest',
     FIRST_PARTY: 'firstparty:sync',
   },
-  INGEST_REGIONS: ['local'],
+  INGEST_REGIONS: mockRegions,
   getIngestQueue: () => mockQueue,
   getRegionQueue: () => mockQueue,
   getFastQueue: () => mockFastQueue,
@@ -519,5 +520,35 @@ describe('reconcileSchedulers per-source isolation', () => {
       expect.objectContaining({ sourceSlug: 'bad', tier: 'maint' })
     )
     mockQueue.upsertJobScheduler.mockReset().mockResolvedValue(undefined)
+  })
+})
+
+describe('reconcileSchedulers maintenance placement', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockQueue.getJobSchedulers.mockResolvedValue([])
+    mockQueue.getJobs.mockResolvedValue([])
+  })
+  afterEach(() => {
+    mockRegions.splice(0, mockRegions.length, 'local')
+  })
+
+  it('keeps the primary on local and adds an SG standby copy for sentinel/digest/housekeeping', async () => {
+    mockRegions.push('vps_sg')
+    await reconcileSchedulers()
+    const calls = mockQueue.upsertJobScheduler.mock.calls
+    const byKey = new Map(calls.map((c) => [c[0], c[2]]))
+    for (const id of ['maint:housekeeping', 'maint:freshness', 'maint:daily-digest']) {
+      expect(byKey.get(id)).toMatchObject({ data: {} })
+      expect(byKey.get(`${id}:vps_sg`)).toMatchObject({ data: { standby: true } })
+    }
+    expect(byKey.has('maint:onchain-enrich')).toBe(true)
+    expect(byKey.has('maint:onchain-enrich:vps_sg')).toBe(false)
+  })
+
+  it('registers no standby when the SG region is not configured', async () => {
+    await reconcileSchedulers()
+    const keys = mockQueue.upsertJobScheduler.mock.calls.map((c) => String(c[0]))
+    expect(keys.some((k) => k.endsWith(':vps_sg'))).toBe(false)
   })
 })

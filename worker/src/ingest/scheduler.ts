@@ -9,7 +9,7 @@
 import { isV1IngestExecutionPublished } from '@/lib/ingest/v1-execution-publication'
 
 type ActiveSources = Awaited<ReturnType<typeof import('@/lib/ingest/sources').getActiveSources>>
-type StaticScheduler = { id: string; name: string; everyMs: number }
+type StaticScheduler = { id: string; name: string; everyMs: number; standby: boolean }
 
 let getActiveSources: typeof import('@/lib/ingest/sources').getActiveSources
 let getServingSourceNames: typeof import('@/lib/ingest/sources').getServingSourceNames
@@ -26,6 +26,7 @@ let INGEST_REGIONS: typeof import('./queues').INGEST_REGIONS
 let isFastTierA: typeof import('./queues').isFastTierA
 let regionFastQueueName: typeof import('./queues').regionFastQueueName
 let regionQueueName: typeof import('./queues').regionQueueName
+let MAINTENANCE_STANDBY_REGIONS: readonly string[] = []
 let STATIC_SCHEDULERS: readonly StaticScheduler[] = []
 let SOURCE_SCOPED_JOBS = new Set<string>()
 let GLOBAL_MAINTENANCE_JOBS = new Set<string>()
@@ -35,12 +36,13 @@ function loadSchedulerRuntime(): Promise<void> {
   if (schedulerRuntimeLoad !== undefined) return schedulerRuntimeLoad
 
   schedulerRuntimeLoad = (async () => {
-    const [sources, expectedMetrics, database, connection, queues] = await Promise.all([
+    const [sources, expectedMetrics, database, connection, queues, standby] = await Promise.all([
       import('@/lib/ingest/sources'),
       import('@/lib/ingest/adapters/expected-metrics'),
       import('@/lib/ingest/db'),
       import('../connection'),
       import('./queues'),
+      import('./maintenance-standby'),
     ])
 
     getActiveSources = sources.getActiveSources
@@ -59,15 +61,10 @@ function loadSchedulerRuntime(): Promise<void> {
     regionFastQueueName = queues.regionFastQueueName
     regionQueueName = queues.regionQueueName
 
-    // Maintenance jobs are framework-level, not per-source.
-    STATIC_SCHEDULERS = [
-      { id: 'maint:housekeeping', name: INGEST_JOB.MAINTENANCE, everyMs: 6 * 3600_000 },
-      { id: 'maint:freshness', name: INGEST_JOB.FRESHNESS, everyMs: 30 * 60_000 },
-      { id: 'maint:daily-digest', name: INGEST_JOB.DAILY_DIGEST, everyMs: 24 * 3600_000 },
-      // Top-N web3 wallets recomputed on-chain (durable; replaces WAF-blocked
-      // profile detail). 12h cadence — bounded by ONCHAIN_ENRICH_TOPN + retry.
-      { id: 'maint:onchain-enrich', name: INGEST_JOB.ONCHAIN_ENRICH, everyMs: 12 * 3600_000 },
-    ]
+    // Maintenance jobs are framework-level, not per-source. Cadences and
+    // primary/standby placement live in ./maintenance-standby.
+    STATIC_SCHEDULERS = standby.MAINTENANCE_SCHEDULES.map((job) => ({ ...job }))
+    MAINTENANCE_STANDBY_REGIONS = standby.MAINTENANCE_STANDBY_REGIONS
     SOURCE_SCOPED_JOBS = new Set<string>([
       INGEST_JOB.TIER_A,
       INGEST_JOB.TIER_B,
@@ -250,11 +247,32 @@ export async function reconcileSchedulers(): Promise<void> {
   }
   const failedSlugs = new Set(failedSources.map((f) => f.slug))
 
-  // Framework maintenance always runs on the primary (local) node.
+  // Framework maintenance: PRIMARY on the local node (unchanged id), plus a
+  // STANDBY copy per standby region (SG) that only executes when the primary
+  // is overdue (see ./maintenance-standby). Without it, the Mac dying took
+  // the freshness sentinel, digest and partition pre-creation down with it.
   const localQueue = getIngestQueue()
   for (const s of STATIC_SCHEDULERS) {
     wanted.set(s.id, regionQueueName('local'))
     await localQueue.upsertJobScheduler(s.id, { every: s.everyMs }, { name: s.name, data: {} })
+    if (!s.standby) continue
+    for (const region of MAINTENANCE_STANDBY_REGIONS) {
+      if (!(INGEST_REGIONS as readonly string[]).includes(region)) continue
+      const id = `${s.id}:${region}`
+      wanted.set(id, regionQueueName(region))
+      try {
+        await getRegionQueue(region).upsertJobScheduler(
+          id,
+          { every: s.everyMs },
+          { name: s.name, data: { standby: true } }
+        )
+      } catch (err) {
+        console.error(
+          `[ingest-scheduler] standby maintenance ${id} registration failed: ` +
+            (err instanceof Error ? err.message : String(err))
+        )
+      }
+    }
   }
 
   // V1 CEX API keys are account connections, not public-profile proof. Do not
