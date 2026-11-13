@@ -24,7 +24,10 @@ import { withCron } from '@/lib/api/with-cron'
 import { getSharedRedis } from '@/lib/cache/redis-client'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { logger } from '@/lib/logger'
-import { evaluateWorkerHeartbeatTopology } from '@/lib/ingest/worker-heartbeat-topology'
+import {
+  evaluateWorkerHeartbeatTopology,
+  SCORING_HEARTBEAT_REGION,
+} from '@/lib/ingest/worker-heartbeat-topology'
 import {
   REQUIRED_RELEASE_REGIONS,
   summarizeWorkerRuntimeDrift,
@@ -151,6 +154,11 @@ export const GET = withCron('worker-heartbeat-check', async (_request: NextReque
   const pruned: string[] = []
   const liveReleases: Array<{ node: string; release_id: string; sha: string }> = []
   const highDisk: Array<{ node: string; disk: number }> = []
+  // Scoring process (arena-worker) beats share the roster but are not ingest
+  // nodes: tracked separately so they neither count as crawl coverage nor
+  // trip the ingest runtime-drift alarm.
+  const scoringHealthy: string[] = []
+  const scoringDown: Array<{ node: string; age_min: number }> = []
 
   for (const [node, raw] of entries) {
     const beat = parseBeat(raw)
@@ -161,9 +169,13 @@ export const GET = withCron('worker-heartbeat-check', async (_request: NextReque
       continue
     }
     const age = now - beat.ts
+    const scoringOnly = beat.regions.every((r) => r === SCORING_HEARTBEAT_REGION)
     if (age >= DECOMMISSION_MS) {
       await redis.hdel(ROSTER_KEY, node)
       pruned.push(node)
+    } else if (scoringOnly) {
+      if (age >= STALE_MS) scoringDown.push({ node, age_min: Math.round(age / 60_000) })
+      else scoringHealthy.push(node)
     } else if (age >= STALE_MS) {
       down.push({ node, age_min: Math.round(age / 60_000), regions: beat.regions ?? [] })
     } else {
@@ -254,6 +266,28 @@ export const GET = withCron('worker-heartbeat-check', async (_request: NextReque
     ).catch((err) => logger.warn('[worker-heartbeat-check] alert failed:', err))
   }
 
+  // Scoring liveness: the scoring process is the only writer of the public
+  // leaderboard, so "no fresh scoring heartbeat" pages even while every
+  // crawler is healthy. Roster-independent like region coverage: it keeps
+  // paging after a dead scoring node is pruned.
+  if (scoringHealthy.length === 0) {
+    await sendRateLimitedAlert(
+      {
+        title: 'Scoring worker (arena-worker) DOWN',
+        message:
+          `No fresh heartbeat from the scoring process — leaderboards are not being ` +
+          `recomputed or published.\n` +
+          (scoringDown.length > 0
+            ? scoringDown.map((d) => `🔴 ${d.node} — no heartbeat for ${d.age_min}min`).join('\n')
+            : 'No scoring heartbeat in the roster at all.'),
+        level: 'critical',
+        details: { scoringDown },
+      },
+      'worker-heartbeat:scoring',
+      15 * 60_000
+    ).catch((err) => logger.warn('[worker-heartbeat-check] scoring alert failed:', err))
+  }
+
   // Continuous fleet topology invariant. Candidate-release readiness protects
   // deployments; this independent cron catches a duplicate/combined owner or
   // disabled capture that appears later while the fleet is already running.
@@ -333,5 +367,6 @@ export const GET = withCron('worker-heartbeat-check', async (_request: NextReque
     uncovered: uncovered.length > 0 ? uncovered : undefined,
     pruned: pruned.length > 0 ? pruned : undefined,
     topology,
+    scoring: { healthy: scoringHealthy, down: scoringDown },
   }
 })

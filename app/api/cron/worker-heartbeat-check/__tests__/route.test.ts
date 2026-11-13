@@ -122,6 +122,7 @@ describe('GET /api/cron/worker-heartbeat-check topology invariant', () => {
     const response = await run({
       mac: beat(['local']),
       sg: beat(['vps_sg'], { sha: OTHER_SHA }),
+      'scoring@mac': beat(['scoring'], { attemptBoundCapture: false }),
     })
     const body = await response.json()
 
@@ -131,6 +132,49 @@ describe('GET /api/cron/worker-heartbeat-check topology invariant', () => {
     })
     expect(topologyAlert()).toBeUndefined()
     expect(mockSendAlert).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET /api/cron/worker-heartbeat-check scoring process coverage', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    jest.spyOn(Date, 'now').mockReturnValue(NOW)
+    mockHdel.mockResolvedValue(1)
+    mockSendAlert.mockResolvedValue({ channels: [], rateLimited: false, sent: true })
+  })
+  afterEach(() => jest.restoreAllMocks())
+
+  const scoringAlert = () =>
+    mockSendAlert.mock.calls.find((c) => c[1] === 'worker-heartbeat:scoring')
+
+  test('pages when no scoring heartbeat exists even though crawlers are healthy', async () => {
+    await run({ mac: beat(['local']), sg: beat(['vps_sg']) })
+    expect(scoringAlert()?.[0]).toMatchObject({ level: 'critical' })
+  })
+
+  test('pages with the stale scoring node and keeps it out of crawl coverage', async () => {
+    const response = await run({
+      mac: beat(['local']),
+      sg: beat(['vps_sg']),
+      'scoring@mac': beat(['scoring'], { ts: NOW - 30 * 60_000 }),
+    })
+    const body = await response.json()
+    expect(scoringAlert()?.[0].message).toContain('scoring@mac')
+    expect(body.down).toEqual([])
+    expect(body.scoring.down).toEqual([{ node: 'scoring@mac', age_min: 30 }])
+  })
+
+  test('a healthy scoring beat with a different release does not trip ingest drift', async () => {
+    const response = await run({
+      mac: beat(['local']),
+      sg: beat(['vps_sg']),
+      'scoring@mac': beat(['scoring'], { releaseId: 'unknown', attemptBoundCapture: false }),
+    })
+    const body = await response.json()
+    expect(scoringAlert()).toBeUndefined()
+    expect(mockSendAlert).not.toHaveBeenCalled()
+    expect(body.topology.scoring_nodes).toEqual(['scoring@mac'])
+    expect(body.topology.ready).toBe(true)
   })
 })
 

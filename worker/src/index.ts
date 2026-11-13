@@ -45,6 +45,7 @@ async function main() {
     { registerSchedules },
     { startDashboard },
     { assertMetricTrustWorkerReadiness },
+    { startScoringHeartbeat },
   ] = await Promise.all([
     import('bullmq'),
     import('./connection'),
@@ -54,6 +55,7 @@ async function main() {
     import('./scheduler'),
     import('./dashboard'),
     import('./ingest/metric-trust-readiness'),
+    import('./scoring-heartbeat'),
   ])
 
   console.log('[worker] Arena Pipeline Worker starting...')
@@ -173,6 +175,11 @@ async function main() {
     console.error('[worker] UNHANDLED REJECTION:', reason)
   })
 
+  // Liveness heartbeat on the shared roster (same mechanism as the ingest
+  // worker). The first HSET must commit before this process reports ready,
+  // so a scoring worker that cannot be monitored does not run unmonitored.
+  const heartbeatTimer = await startScoringHeartbeat(getConnection())
+
   console.log(
     `[worker] Ready — processing queue "${QUEUE_NAME}" with ` +
       `concurrency=${PIPELINE_WORKER_CONCURRENCY}`
@@ -185,6 +192,7 @@ async function main() {
   // 4. Graceful shutdown
   const shutdown = async (signal: string) => {
     console.log(`\n[worker] ${signal} received, shutting down gracefully...`)
+    clearInterval(heartbeatTimer)
     await worker.close()
     await closeConnection()
     console.log('[worker] Shutdown complete')
