@@ -16,6 +16,7 @@
     "20260817060000_trader_series_publication_isolation.sql",
     "20260817061000_legacy_raw_metric_publication_isolation.sql",
     "20260817134214_quarantine_legacy_platform_stats_rpc.sql",
-    "20261013094743_retire_v2_partition_cron_extend_arena_partitions.sql"
+    "20261013094743_retire_v2_partition_cron_extend_arena_partitions.sql",
+    "20261113014105_arena_score_unknown_trades_confidence.sql"
   ]
 }

@@ -12,6 +12,7 @@ MIGRATION="$ROOT_DIR/supabase/migrations/20260722051000_leaderboard_score_input_
 PNL_MIGRATION="$ROOT_DIR/supabase/migrations/20260722052000_leaderboard_score_input_manifest_rank_eligible_pnl.sql"
 V5_SCORER_MIGRATION="$ROOT_DIR/supabase/migrations/20260729070000_pure_arena_score_v5_zero_metric_scorer.sql"
 V2_MIGRATION="$ROOT_DIR/supabase/migrations/20260729070500_leaderboard_score_input_manifest_v2.sql"
+UNKNOWN_TRADES_MIGRATION="$ROOT_DIR/supabase/migrations/20261113014105_arena_score_unknown_trades_confidence.sql"
 FIXTURE="$ROOT_DIR/supabase/migrations/__tests__/fixtures/leaderboard-score-input-manifest-v1.json"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
@@ -1610,5 +1611,107 @@ if [[ "$reapply_output" != *"manifest contract already exists; audit before inst
   echo "$reapply_output" >&2
   exit 1
 fi
+
+
+# ── 20261113014105: unknown trade count → ~5-trade sample confidence ──
+# Capture a historical v1 manifest sealed under the old definition, apply the
+# scorer change (twice: the second run must be a verified no-op), then prove
+# the scorers, both encoders and both verifiers bind to the new definition.
+psql_cmd -q <<'SQL'
+CREATE TABLE public.unknown_trades_before AS
+SELECT stored.manifest_id
+FROM arena.leaderboard_score_input_manifests AS stored
+WHERE stored.manifest->>'contract' = 'leaderboard-score-input-manifest@1'
+  AND stored.valid_until > pg_catalog.statement_timestamp()
+ORDER BY stored.manifest_id
+LIMIT 1;
+SQL
+PGOPTIONS="-c client_min_messages=warning" psql_cmd -q -f "$UNKNOWN_TRADES_MIGRATION"
+PGOPTIONS="-c client_min_messages=warning" psql_cmd -q -f "$UNKNOWN_TRADES_MIGRATION"
+
+psql_cmd -q <<'SQL'
+DO $unknown_trades_proof$
+DECLARE
+  v_fixture jsonb := (SELECT payload FROM public.manifest_fixture);
+  v_inputs jsonb := '[
+    {"source":"s","source_trader_id":"unknown","roi":50,"pnl":5000,"max_drawdown":10,"win_rate":55,"sharpe_ratio":1,"profit_factor":1.5,"trades_count":null},
+    {"source":"s","source_trader_id":"zero","roi":50,"pnl":5000,"max_drawdown":10,"win_rate":55,"sharpe_ratio":1,"profit_factor":1.5,"trades_count":0},
+    {"source":"s","source_trader_id":"five","roi":50,"pnl":5000,"max_drawdown":10,"win_rate":55,"sharpe_ratio":1,"profit_factor":1.5,"trades_count":5},
+    {"source":"s","source_trader_id":"ten","roi":50,"pnl":5000,"max_drawdown":10,"win_rate":55,"sharpe_ratio":1,"profit_factor":1.5,"trades_count":10}
+  ]'::jsonb;
+  v_scorer text;
+  v_result jsonb;
+  v_conf jsonb;
+  v_sealed jsonb;
+  v_verified jsonb;
+  v_manifest jsonb;
+  v_old_id uuid := (SELECT manifest_id FROM public.unknown_trades_before);
+BEGIN
+  FOREACH v_scorer IN ARRAY ARRAY['v4', 'v5']::text[] LOOP
+    EXECUTE pg_catalog.format(
+      'SELECT arena.compute_arena_scores_%s_json($1, $2)', v_scorer
+    ) INTO v_result USING '30D', v_inputs;
+    SELECT pg_catalog.jsonb_object_agg(o.value->>'sourceTraderId', o.value->'confidence')
+    INTO v_conf
+    FROM pg_catalog.jsonb_array_elements(v_result->'outputs') AS o(value);
+    -- unknown (null) and zero trades score exactly like 5 real trades, below 10.
+    IF v_conf->'five' IS NULL OR v_conf->'ten' IS NULL
+       OR v_conf->'unknown' IS DISTINCT FROM v_conf->'five'
+       OR v_conf->'zero' IS DISTINCT FROM v_conf->'five'
+       OR (v_conf->>'zero')::numeric >= (v_conf->>'ten')::numeric THEN
+      RAISE EXCEPTION '% unknown-trades confidence drifted: %', v_scorer, v_conf;
+    END IF;
+  END LOOP;
+
+  v_sealed := arena.seal_leaderboard_score_input_manifest_v1(
+    v_fixture->>'period', v_fixture->>'sourceBundleDigest', v_fixture->>'scoreRowsDigest',
+    v_fixture->>'physicalBoardsDigest', v_fixture->'sourceEvidence',
+    v_fixture->>'enrichmentContract', v_fixture->'enrichmentEvidence',
+    v_fixture->>'eligibilityContract', v_fixture->'eligibilityEvidence',
+    v_fixture->'inputs', pg_catalog.statement_timestamp() + interval '1 hour'
+  );
+  SELECT stored.manifest INTO STRICT v_manifest
+  FROM arena.leaderboard_score_input_manifests AS stored
+  WHERE stored.manifest_id = (v_sealed->>'manifestId')::uuid;
+  v_verified := arena.verify_leaderboard_score_input_manifest_v1((v_sealed->>'manifestId')::uuid);
+  IF v_manifest->'scorer'->>'definitionDigest' IS DISTINCT FROM
+       'da0e644623441dfa6e50ca957c607350216175f0e9172ce156f1c3be129b1e33'
+     OR (v_verified->>'valid')::boolean IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'v1 manifest does not bind the new v4 definition: %, %',
+      v_manifest->'scorer', v_verified;
+  END IF;
+
+  v_sealed := arena.seal_leaderboard_score_input_manifest_v2(
+    v_fixture->>'period', v_fixture->>'sourceBundleDigest', v_fixture->>'scoreRowsDigest',
+    v_fixture->>'physicalBoardsDigest', v_fixture->'sourceEvidence',
+    v_fixture->>'enrichmentContract', v_fixture->'enrichmentEvidence',
+    v_fixture->>'eligibilityContract', v_fixture->'eligibilityEvidence',
+    v_fixture->'inputs', pg_catalog.statement_timestamp() + interval '1 hour'
+  );
+  SELECT stored.manifest INTO STRICT v_manifest
+  FROM arena.leaderboard_score_input_manifests AS stored
+  WHERE stored.manifest_id = (v_sealed->>'manifestId')::uuid;
+  v_verified := arena.verify_leaderboard_score_input_manifest_v2((v_sealed->>'manifestId')::uuid);
+  IF v_manifest->'scorer'->>'definitionDigest' IS DISTINCT FROM
+       'e4c88c9ffb921ac4a66813f9485eaa0ddd353e48f1db51129cf7ed00a3b9d324'
+     OR (v_verified->>'valid')::boolean IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'v2 manifest does not bind the new v5 definition: %, %',
+      v_manifest->'scorer', v_verified;
+  END IF;
+
+  -- A manifest sealed under the old definition no longer verifies as valid.
+  IF v_old_id IS NOT NULL THEN
+    BEGIN
+      v_verified := arena.verify_leaderboard_score_input_manifest_v1(v_old_id);
+      IF (v_verified->>'valid')::boolean IS DISTINCT FROM false THEN
+        RAISE EXCEPTION 'old-definition manifest still verifies after the scorer change: %', v_verified;
+      END IF;
+    EXCEPTION
+      WHEN SQLSTATE '55000' THEN NULL;
+    END;
+  END IF;
+END
+$unknown_trades_proof$;
+SQL
 
 echo "leaderboard score-input manifest PostgreSQL 17 proof passed"

@@ -37,7 +37,7 @@ function probe(
   return { score: r.totalScore, confidence: r.confidence }
 }
 
-describe('Arena Score V5 — unknown/zero trade counts never out-rank small real samples', () => {
+describe('Arena Score V4/V5 — unknown/zero trade counts never out-rank small real samples', () => {
   it('unknown (0/null) confidence equals the ~5-trade equivalent', () => {
     const zero = probe(computeArenaScoresV5, 0)
     const unknown = probe(computeArenaScoresV5, null)
@@ -57,11 +57,13 @@ describe('Arena Score V5 — unknown/zero trade counts never out-rank small real
     expect(s10).toBeLessThan(s21)
   })
 
-  it('V4 keeps the frozen legacy 0.3 contract (golden vectors / PG17 parity)', () => {
-    const v4Zero = probe(computeArenaScoresV4, 0)
-    const v4TwentyOne = probe(computeArenaScoresV4, 21)
-    // legacy defect preserved for reproducibility: unknown ≈ 21.4 trades
-    expect(v4Zero.score).toBeGreaterThanOrEqual(v4TwentyOne.score)
+  it('V4 uses the same unknown-trades confidence (PG17 migration 20261113014105 + golden vectors)', () => {
+    for (const t of [0, 1, 10, 21]) {
+      expect(probe(computeArenaScoresV4, t).confidence).toBe(
+        probe(computeArenaScoresV5, t).confidence
+      )
+    }
+    expect(probe(computeArenaScoresV4, 0).score).toBeLessThan(probe(computeArenaScoresV4, 10).score)
   })
 })
 

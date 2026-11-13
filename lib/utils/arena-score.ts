@@ -724,16 +724,14 @@ export const ARENA_V4_CONFIG = {
   PNL_LO: 1_000,
   PNL_HI: 10_000_000,
   SAMPLE_K: 50, // 样本量置信:trades/(trades+50) → 50 笔=0.5,250=0.83
-  // V4 历史契约:成交数未知(null/0)时 cN 固定 0.3(≈21.4 笔)。该值已冻结在
-  // PG17 纯函数评分器(20260722041000)与 golden vectors 里,改动会让 TS/SQL
-  // 双实现与已发布 score manifest 失配(parity canary fail-closed),故 V4 不动。
-  LEGACY_UNKNOWN_TRADES_CN: 0.3,
-  // V5 起:未知按"约 5 笔真实成交"计样本置信:5/(5+50)≈0.091。
-  // 0.3 会让 0 成交/未知成交的号比 1–21 笔真实交易员置信度更高(审计探针:
-  // t=0→60.6 分、t=1→23.1、t=10→47.7、t=21→59.9)。上游没有可靠的逐源
+  // 成交数未知(null/0)时按"约 5 笔真实成交"计样本置信:5/(5+50)≈0.091(V4 与 V5 同)。
+  // 旧值 0.3(≈21.4 笔)让 0 成交/未知成交的号比 1–21 笔真实交易员置信度更高
+  // (审计探针:t=0→60.6 分、t=1→23.1、t=10→47.7、t=21→59.9)。上游没有可靠的逐源
   // "成交数是否真实提供"声明接入评分(expected-metrics 按 adapter 键、评分按旧
   // serving 源名,且部分 CEX 用 0 表示未知),无法区分"真 0"与"未知";
   // 取保守下界:未知永远不高于小样本真实交易员。
+  // PG17 双实现:迁移 20261113014105 同步改写 compute_arena_scores_v4/v5_json,
+  // golden vectors 已按新口径重签——三者必须一起上线。
   UNKNOWN_TRADES_EQUIV: 5,
   CONF_FLOOR: 0.35, // 置信度下限——真实交易员永不归零
   // 显示分 = composite 队内百分位 × DISPLAY_PCT + composite 相对值 × (1−);
@@ -845,15 +843,11 @@ function computeArenaScoresV4OrV5(
 
     // Confidence:样本量 × 数据完整度(软准入门槛)
     // 0 = "未知交易数"(很多 CEX 源对未知返回 0),不是真的 0 笔——按 null(未知)处理,
-    // 否则 cN=0→置信度触底,结构性压低合法源。V5 起未知的样本置信只按
-    // UNKNOWN_TRADES_EQUIV 笔计,绝不高于小样本真实交易员;V4 保留冻结的 0.3。
+    // 否则 cN=0→置信度触底,结构性压低合法源。但未知的样本置信只按
+    // UNKNOWN_TRADES_EQUIV 笔计,绝不高于小样本真实交易员(见配置注释)。
     const trades = t.tradesCount != null && t.tradesCount > 0 ? t.tradesCount : null
-    const cN =
-      trades != null
-        ? trades / (trades + V.SAMPLE_K)
-        : zeroRiskMetricsAreKnown
-          ? V.UNKNOWN_TRADES_EQUIV / (V.UNKNOWN_TRADES_EQUIV + V.SAMPLE_K)
-          : V.LEGACY_UNKNOWN_TRADES_CN
+    const sampleTrades = trades ?? V.UNKNOWN_TRADES_EQUIV
+    const cN = sampleTrades / (sampleTrades + V.SAMPLE_K)
     const presentCnt = [shArr[i], mddArr[i], winArr[i], pfArr[i]].filter((v) => v != null).length
     const cC = Math.max(presentCnt / 4, 0.25)
     const confidence = V.CONF_FLOOR + (1 - V.CONF_FLOOR) * Math.cbrt(Math.max(0.01, cN * cC))
@@ -900,9 +894,7 @@ export function computeArenaScoresV4(
 
 /**
  * Shadow Arena Score v5 contract. Trusted zero win rate and zero maximum
- * drawdown are real observations; only null is missing. Unknown trade counts
- * (null/0) get the confidence of ~UNKNOWN_TRADES_EQUIV real trades, never more
- * than a small real sample. Do not use this for
+ * drawdown are real observations; only null is missing. Do not use this for
  * publication until the v2 manifest/projection pipeline has passed its canary.
  */
 export function computeArenaScoresV5(
