@@ -105,4 +105,14 @@ describe('Tier-D fails closed on unusable position captures', () => {
     })
     expect(mockPublishPositions).toHaveBeenCalledWith(bitgetSource, 7, [], expect.any(String))
   })
+
+  it('selects targets only from fresh, native, deterministically ordered PASSED snapshots', async () => {
+    mockGetAdapter.mockReturnValue(adapterReturning({ code: '200', data: [] }))
+    await processTierD(job)
+    const [sql, params] = mockDbQuery.mock.calls[0]
+    expect(String(sql)).toContain('AND NOT is_derived')
+    expect(String(sql)).toContain('scraped_at > now() - make_interval(secs => $3::int)')
+    expect(String(sql)).toContain('ORDER BY timeframe, scraped_at DESC, id DESC')
+    expect(params).toEqual([1, 10, 72 * 3600])
+  })
 })

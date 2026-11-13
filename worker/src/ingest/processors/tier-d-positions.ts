@@ -16,6 +16,7 @@ import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { writeRawObject } from '@/lib/ingest/raw'
 import { publishPositions } from '@/lib/ingest/serving/publish'
 import { parsePositionSnapshot } from '@/lib/ingest/core/position-snapshot'
+import { NATIVE_COHORT_MAX_SNAPSHOT_AGE_SECONDS } from '@/lib/ingest/native-cohort'
 import type { TierJobData } from '../queues'
 import {
   assertSourceMatchesConsumedRegion,
@@ -29,7 +30,9 @@ interface TargetTrader {
 }
 
 /**
- * Top-ranked traders from the latest PASSED snapshot of each timeframe.
+ * Top-ranked traders from the latest PASSED native snapshot of each timeframe,
+ * bounded by the same max age as the native cohort (stale membership is not
+ * a current top-N).
  * Join on snapshot_id ONLY — never on scraped_at equality (JS Date
  * round-trips truncate pg microseconds; see tier-b for the full story).
  */
@@ -39,7 +42,9 @@ async function getPositionTargets(sourceId: number, topN: number): Promise<Targe
        SELECT DISTINCT ON (timeframe) id AS snapshot_id
          FROM arena.leaderboard_snapshots
         WHERE source_id = $1 AND count_check_passed
-        ORDER BY timeframe, scraped_at DESC
+          AND NOT is_derived
+          AND scraped_at > now() - make_interval(secs => $3::int)
+        ORDER BY timeframe, scraped_at DESC, id DESC
      )
      SELECT DISTINCT t.id, t.exchange_trader_id, t.meta
        FROM latest l
@@ -47,7 +52,7 @@ async function getPositionTargets(sourceId: number, topN: number): Promise<Targe
        JOIN arena.traders t ON t.id = e.trader_id
       WHERE e.rank <= $2
         AND (t.meta->>'claimed') IS DISTINCT FROM 'true'`,
-    [sourceId, topN]
+    [sourceId, topN, NATIVE_COHORT_MAX_SNAPSHOT_AGE_SECONDS]
   )
   return rows
 }
