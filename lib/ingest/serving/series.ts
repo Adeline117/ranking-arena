@@ -139,6 +139,33 @@ export async function downsampleSnapshotEntries(keepAllDays = 7): Promise<number
 }
 
 /**
+ * Snapshot retention (20261113110021): delete snapshots (and their entries)
+ * older than `retentionDays`, never the latest passed board, a board a sealed
+ * publication was built from, or a snapshot referenced by trust evidence or a
+ * Tier-A receipt. Skips (returns a marker) until the migration is installed.
+ */
+export async function pruneLeaderboardSnapshots(
+  retentionDays = 180,
+  batchLimit = 5000
+): Promise<{ deleted_snapshots: number; deleted_entries: number } | 'not_installed'> {
+  const pool = getIngestPool()
+  const { rows: installed } = await pool.query<{ present: boolean }>(
+    `SELECT pg_catalog.to_regprocedure('arena.prune_leaderboard_snapshots(integer,integer)')
+       IS NOT NULL AS present`
+  )
+  if (installed[0]?.present !== true) return 'not_installed'
+  const { rows } = await pool.query<{
+    result: { deleted_snapshots: number; deleted_entries: number }
+  }>(`SELECT arena.prune_leaderboard_snapshots($1::integer, $2::integer) AS result`, [
+    retentionDays,
+    batchLimit,
+  ])
+  const result = rows[0]?.result
+  if (!result) throw new Error('[retention] snapshot prune returned no result')
+  return { deleted_snapshots: result.deleted_snapshots, deleted_entries: result.deleted_entries }
+}
+
+/**
  * History retention by tier (spec §13.5): long-tail traders keep a bounded
  * window; topN/ranked traders keep full history. "Ranked" = appeared in a
  * passed snapshot within the last 30 days.
