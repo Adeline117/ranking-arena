@@ -3,6 +3,7 @@
  * Related account data is retained until the hard-delete cron runs.
  */
 
+import { PENDING_DELETION_BAN_DURATION } from '@/lib/auth/deletion-ban'
 import { createHash, randomBytes } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -140,7 +141,7 @@ export const POST = withAuth(
     }
 
     const { error: banError } = await adminSupabase.auth.admin.updateUserById(user.id, {
-      ban_duration: '720h',
+      ban_duration: PENDING_DELETION_BAN_DURATION,
     })
     const { error: signOutError } = await adminSupabase.auth.admin.signOut(user.id, 'global')
     if (banError || signOutError) {

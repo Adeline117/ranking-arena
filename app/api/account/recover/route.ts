@@ -1,5 +1,6 @@
 /** Recover an account during its 30-day deletion grace period. */
 
+import { PENDING_DELETION_BAN_DURATION } from '@/lib/auth/deletion-ban'
 import { createHash } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -36,7 +37,7 @@ export const dynamic = 'force-dynamic'
 
 async function banOnce(userId: string): Promise<boolean> {
   const { error } = await getSupabaseAdmin().auth.admin.updateUserById(userId, {
-    ban_duration: '720h',
+    ban_duration: PENDING_DELETION_BAN_DURATION,
   })
   if (error) {
     logger.error('Failed to restore deletion ban', { userId, error: error.message })

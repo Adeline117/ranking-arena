@@ -110,7 +110,7 @@ describe('account deletion scheduling', () => {
     expect(mockRpc.mock.calls[0][1].p_recovery_token_hash).not.toBe(body.recovery_token)
     expect(mockStripeUpdate).toHaveBeenCalledWith('sub_123', { cancel_at_period_end: true })
     expect(mockLocalSubscriptionUpdate).toHaveBeenCalledWith({ cancel_at_period_end: true })
-    expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: '720h' })
+    expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: '876000h' })
     expect(mockAdminSignOut).toHaveBeenCalledWith('user-1', 'global')
     expect(mockFrom).toHaveBeenCalledTimes(2)
   })

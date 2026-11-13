@@ -189,7 +189,7 @@ describe('account recovery', () => {
       ban_duration: 'none',
     })
     expect(mockAdminUpdateUser).toHaveBeenNthCalledWith(2, 'user-1', {
-      ban_duration: '720h',
+      ban_duration: '876000h',
     })
     expect(mockRpc).not.toHaveBeenCalled()
   })
@@ -203,7 +203,7 @@ describe('account recovery', () => {
 
     expect(response.status).toBe(500)
     expect(mockAdminUpdateUser).toHaveBeenLastCalledWith('user-1', {
-      ban_duration: '720h',
+      ban_duration: '876000h',
     })
   })
 
@@ -269,7 +269,7 @@ describe('account recovery', () => {
     const response = await POST(request({ email: 'user@example.com', password: 'pw' }))
 
     expect(response.status).toBe(401)
-    expect(mockAdminUpdateUser).toHaveBeenLastCalledWith('user-1', { ban_duration: '720h' })
+    expect(mockAdminUpdateUser).toHaveBeenLastCalledWith('user-1', { ban_duration: '876000h' })
     expect(mockRpc).not.toHaveBeenCalled()
   })
 
