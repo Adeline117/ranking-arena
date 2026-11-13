@@ -47,7 +47,7 @@ async function main() {
     { startDashboard },
     { assertMetricTrustWorkerReadiness },
     { publishLeaderboardSeason, pgRankPublicationDatabase, createDefaultCohortScorer },
-    { ingestClientConnect },
+    { rankPublicationClientConnect, closeRankPublicationPool },
     { alert: ingestAlert },
     { syncPublicRankingsToMeilisearch },
     { routeRankPublicationAlert },
@@ -67,10 +67,12 @@ async function main() {
     import('../../lib/rankings/publication/alert-routing'),
   ])
 
-  // The season publication runs in-process on the worker's direct postgres
-  // connection (the fence/claim/seal RPCs are owner-only), as one transaction.
+  // The season publication (and the Meilisearch read) runs in-process on the
+  // worker's direct postgres connection (the fence/claim/seal RPCs are
+  // owner-only), as one transaction, on a dedicated 2-client pool so it neither
+  // starves nor is starved by ingest (lib/ingest/db.ts RANK_PUBLICATION_POOL_MAX).
   const connectPublicationClient = async () => {
-    const client = await ingestClientConnect()
+    const client = await rankPublicationClientConnect()
     return {
       query: (text: string, values?: readonly unknown[]) =>
         client.query(text, values ? [...values] : undefined),
@@ -214,6 +216,7 @@ async function main() {
     console.log(`\n[worker] ${signal} received, shutting down gracefully...`)
     await worker.close()
     await closeRankingCommandChainConnection()
+    await closeRankPublicationPool()
     console.log('[worker] Shutdown complete')
     process.exit(0)
   }
