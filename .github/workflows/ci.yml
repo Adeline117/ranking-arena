@@ -399,6 +399,19 @@ jobs:
       - name: Supabase typed-client bypass ratchet
         run: npm run qa:cast-ratchet
 
+      # 未检查 Supabase 错误棘轮：`const { data } = await x.from()/rpc()` 不取 error、
+      # 取了不用、或 `await x.from().insert()` 丢弃结果 → 查询失败(列漂移 42703 /
+      # RLS / 网络)被当成"空结果"静默吞掉。这是 2026-06 起修复提交的头号根因
+      # (docs/BUG_RECURRENCE_2026-11.md)。存量清单只许减少；基准提交从事件文件读取。
+      # 纯本地 AST 扫描 <2s，无网络、无 secret。
+      - name: Unchecked Supabase error ratchet
+        run: |
+          set -euo pipefail
+          UNCHECKED_SUPABASE_ERROR_BASE_REF="$(jq -r '.pull_request.base.sha // .before // empty' "$GITHUB_EVENT_PATH")"
+          case "$UNCHECKED_SUPABASE_ERROR_BASE_REF" in 0000000000000000000000000000000000000000) UNCHECKED_SUPABASE_ERROR_BASE_REF= ;; esac
+          export UNCHECKED_SUPABASE_ERROR_BASE_REF
+          npm run qa:unchecked-supabase-error
+
       # Deployable layers must not grow new reverse dependencies (lib->app,
       # lib->worker, UI->API route, ...). The checked-in baseline is the known
       # debt ledger and may only shrink; the base baseline is read at the event's

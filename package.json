@@ -87,6 +87,7 @@
     "qa:insert-drift": "node scripts/qa/insert-column-drift-check.mjs",
     "qa:read-drift": "node scripts/qa/read-column-drift-check.mjs",
     "qa:cast-ratchet": "node scripts/qa/supabase-cast-ratchet.mjs",
+    "qa:unchecked-supabase-error": "node scripts/qa/unchecked-supabase-error.mjs",
     "qa:api-auth": "node scripts/qa/api-auth-coverage-check.mjs",
     "qa:architecture": "node scripts/qa/architecture-boundary-check.mjs",
     "qa:migrations": "node scripts/qa/check-migration-ledger.mjs",
