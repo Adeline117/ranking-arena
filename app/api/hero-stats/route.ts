@@ -12,7 +12,8 @@
  * separate number.
  *
  * Response: { sourceBoardCount, exchangeCount, traderCount, isDefault? }
- * Cache: 1 hour (getHeroStats already caches in Redis; CDN caches the response).
+ * Cache: 1 hour for real data (getHeroStats already caches in Redis; CDN caches
+ * the response); 30s for isDefault fallbacks.
  */
 
 import { NextResponse } from 'next/server'
@@ -32,7 +33,11 @@ export async function GET() {
     },
     {
       headers: {
-        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
+        // Fallback defaults are not facts: keep them out of the CDN's long
+        // cache so a transient RPC failure can't pin them for a day.
+        'Cache-Control': stats.isDefault
+          ? 'public, s-maxage=30, stale-while-revalidate=30'
+          : 'public, s-maxage=3600, stale-while-revalidate=86400',
       },
     }
   )

@@ -5,6 +5,16 @@ import {
 } from './worker-release-readiness'
 
 const CLOCK_SKEW_TOLERANCE_MS = 60_000
+
+/**
+ * Pseudo-region written by the scoring process (`arena-worker`,
+ * worker/src/index.ts) into the same roster hash as the ingest workers. It is
+ * NOT an ingest region: release readiness and the ingest topology invariants
+ * ignore it; it is reported separately so a dead scoring process is visible
+ * even while every crawler is healthy (2026-11 audit P1-3).
+ */
+export const SCORING_HEARTBEAT_REGION = 'scoring'
+
 const COMMIT_SHA = /^[0-9a-f]{40}$/
 const RELEASE_ID = /^[0-9a-f]{64}$/
 const REQUIRED_REGION_SET = new Set<string>(REQUIRED_RELEASE_REGIONS)
@@ -35,6 +45,8 @@ export interface WorkerHeartbeatTopology {
   owners: Record<string, WorkerTopologyOwner[]>
   ready: boolean
   required_regions: string[]
+  /** Fresh scoring-process (arena-worker) heartbeats; informational, not part of `ready`. */
+  scoring_nodes: string[]
 }
 
 function decodeHeartbeat(raw: unknown): RawHeartbeat | null {
@@ -80,6 +92,7 @@ export function evaluateWorkerHeartbeatTopology(
     REQUIRED_RELEASE_REGIONS.map((region) => [region, [] as WorkerTopologyOwner[]])
   ) as Record<string, WorkerTopologyOwner[]>
   const invalidNodes: Array<{ node: string; reason: string }> = []
+  const scoringNodes: string[] = []
 
   for (const [rawNode, raw] of Object.entries(roster ?? {}).sort(([a], [b]) =>
     a.localeCompare(b)
@@ -113,6 +126,7 @@ export function evaluateWorkerHeartbeatTopology(
       continue
     }
     if (ageMs >= WORKER_HEARTBEAT_STALE_MS) continue
+    if (regions.includes(SCORING_HEARTBEAT_REGION)) scoringNodes.push(node)
 
     const requiredRegions = regions.filter((region) => REQUIRED_REGION_SET.has(region))
     if (requiredRegions.length === 0) continue
@@ -185,5 +199,6 @@ export function evaluateWorkerHeartbeatTopology(
       captureDisabledNodes.length === 0 &&
       distinctReleaseIds.length === 1,
     required_regions: [...REQUIRED_RELEASE_REGIONS],
+    scoring_nodes: scoringNodes,
   }
 }

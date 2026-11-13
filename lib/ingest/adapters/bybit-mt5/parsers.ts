@@ -253,8 +253,20 @@ function mt5Side(v: unknown): 'long' | 'short' | null {
  * those stay NULL (NULL-collapse, spec §6). TP/SL kept in raw.
  */
 export function parseBybitMt5Positions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
+  // Fail closed: Tier-D replaces the whole book. Success = retCode 0 (all
+  // captured bybit-mt5 fixtures); anything else, or a non-array list, throws.
+  const retCode = (raw as Dict | null)?.retCode
+  if (retCode !== 0 && retCode !== '0') {
+    throw new Error(
+      `[bybit_mt5] positions returned a non-success API envelope (retCode=${String(retCode)})`
+    )
+  }
   const list = result(raw).openPositionList
-  if (!Array.isArray(list)) return []
+  if (!Array.isArray(list)) {
+    throw new Error(
+      '[bybit_mt5] positions returned a malformed envelope (openPositionList is not an array)'
+    )
+  }
   const out: ParsedPosition[] = []
   for (const item of list as Dict[]) {
     if (!item.symbol) continue

@@ -40,6 +40,7 @@ import type {
   SourceRow,
   Timeframe,
 } from '../../core/types'
+import { HistoryPageCapReachedError } from '../../core/history-page-cap'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { apiFetcher, replayJson, type JsonFetcher } from '../../fetch/capture'
@@ -316,6 +317,11 @@ const bitmartAdapter: SourceAdapter = {
           oldest.kind === 'position_history' ? oldest.closedAt : 'ts' in oldest ? oldest.ts : null
         if (oldestTs && oldestTs <= cursor) return // overlap reached
       }
+    }
+    // Every page was full and no overlap was reached: older rows exist beyond
+    // the budget. Never let a cut orders/transfers stream look complete.
+    if (kind === 'orders' || kind === 'transfers') {
+      throw new HistoryPageCapReachedError(src.slug, kind, maxPages)
     }
   },
 

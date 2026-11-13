@@ -160,6 +160,7 @@ import {
   getInitialTraders,
   homeInitialTradersCacheKeys,
 } from '../getInitialTraders'
+import { PUBLIC_COHORT_MIN_ARENA_SCORE_EXCLUSIVE } from '@/lib/rankings/public-cohort'
 
 describe('SSR public ranking cohort', () => {
   beforeEach(() => {
@@ -210,11 +211,12 @@ describe('SSR public ranking cohort', () => {
     )
     expect(freshness.in).toHaveBeenCalledWith('source', ['binance_futures'])
     // Same cohort as /api/traders (which serves every page after hydration):
-    // no extra arena_score floor, or server page N and client page N differ.
+    // only the shared public-cohort floor (lib/rankings/public-cohort.ts), no
+    // extra SSR-only arena_score floor, or server page N and client page N differ.
     const scoreFloorCalls = ((cohort.gt as jest.Mock | undefined)?.mock.calls ?? []).filter(
       ([column]) => column === 'arena_score'
     )
-    expect(scoreFloorCalls).toEqual([])
+    expect(scoreFloorCalls).toEqual([['arena_score', PUBLIC_COHORT_MIN_ARENA_SCORE_EXCLUSIVE]])
   })
 
   it('keeps totals unknown even on terminal pages until a same-predicate count authority exists', async () => {
@@ -308,7 +310,10 @@ describe('SSR public ranking cohort', () => {
 
   it.each([
     ['partial witness', { pnl: null }],
-    ['witness outside the six-hour cohort window', { computed_at: '2026-07-24T01:00:00.000Z' }],
+    // Same shared public-cohort predicate as the visible rows (lib/rankings/public-cohort).
+    ['witness outside the 48h public cohort window', { computed_at: '2026-07-22T11:00:00.000Z' }],
+    ['witness without a positive score', { arena_score: 0 }],
+    ['witness beyond the |roi| anomaly bound', { roi: 50_001 }],
     ['witness not after the last visible rank', { rank: 1 }],
     ['witness from a source without a cached watermark', { source: 'bybit' }],
   ])(
@@ -352,7 +357,7 @@ describe('SSR public ranking cohort', () => {
     expect(freshness.in).toHaveBeenCalledWith('source', ['binance_futures', 'bybit'])
   })
 
-  it('serves a valid fallback cache as stale but rejects old source-only cache shapes', async () => {
+  it('serves a valid fallback cache as stale only after the DB fails, and rejects old source-only shapes', async () => {
     const legacySourceOnly = {
       traders: [{ id: 'legacy', source: 'binance_futures', rank: 1 }],
       lastUpdated: '2026-07-24T11:00:00.000Z',
@@ -363,7 +368,7 @@ describe('SSR public ranking cohort', () => {
     const fallback = validCachedResult('fallback-safe')
     mockCacheGet.mockResolvedValueOnce(legacySourceOnly).mockResolvedValueOnce(fallback)
     mockFrom.mockImplementation(() => {
-      throw new Error('a valid fallback cache must avoid database work')
+      throw new Error('database unavailable')
     })
 
     const result = await getInitialTraders('90D', 20, 0)
@@ -373,16 +378,41 @@ describe('SSR public ranking cohort', () => {
     expect(result.totalCount).toBeNull()
     expect(result.totalCountIsExact).toBe(false)
     expect(result.categoryCounts).toEqual({ all: null, futures: null, spot: null, onchain: null })
-    expect(mockFrom).not.toHaveBeenCalled()
+    // The DB is tried first: a DB-level withdrawal must not hide behind the fallback TTL.
+    expect(mockFrom).toHaveBeenCalled()
   })
 
-  it('rechecks cached rows against the homepage six-hour cohort window and source watermarks', async () => {
+  it('prefers fresh DB rows over a still-valid fallback cache on a primary miss', async () => {
+    mockCacheGet
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(validCachedResult('fallback-row'))
+    mockFrom.mockImplementation((relation: string) => {
+      if (relation === 'public_ranked_leaderboard') return cohortQuery([cohortRow('db-row', 1)])
+      if (relation === 'leaderboard_source_freshness') {
+        return resultQuery([
+          { source: 'binance_futures', source_as_of: '2026-07-24T11:00:00.000Z' },
+        ])
+      }
+      throw new Error(`unexpected relation ${relation}`)
+    })
+
+    const result = await getInitialTraders('90D', 20, 0)
+
+    expect(result.traders.map((trader) => trader.id)).toEqual(['db-row'])
+    expect(mockCacheSet).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.anything(),
+      expect.objectContaining({ ttl: 300 })
+    )
+  })
+
+  it('rechecks cached rows against the shared 48-hour cohort window and source watermarks', async () => {
     const staleByHomepageWindow = {
-      ...validCachedResult('six-hours-old'),
+      ...validCachedResult('beyond-48-hours'),
       traders: [
         {
-          ...cachedTrader('six-hours-old'),
-          computed_at: '2026-07-24T05:59:59.999Z',
+          ...cachedTrader('beyond-48-hours'),
+          computed_at: '2026-07-22T11:59:59.999Z',
         },
       ],
     }

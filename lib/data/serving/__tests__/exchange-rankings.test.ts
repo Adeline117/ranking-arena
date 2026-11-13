@@ -46,4 +46,24 @@ describe('getExchangeRankings', () => {
     )
     expect(result.rows.map((r) => r.productType)).toEqual([null, null, 'spot'])
   })
+
+  it('keeps an unknown currency null and drops unit-less money (never defaults to USDT)', async () => {
+    const base = { source: 'x_futures', asOf: '2026-11-12T00:00:00Z', copierPnl: { value: 12 } }
+    const result = await getExchangeRankings(
+      rpcClient({
+        nonLegacyCount: 3,
+        rows: [
+          { ...base, currency: null },
+          { ...base, source: 'y_futures', currency: 'BTC' },
+          { ...base, source: 'z_futures', currency: 'USDC' },
+        ],
+      }),
+      30
+    )
+    expect(result.rows.map((r) => [r.source, r.currency, r.copierPnl])).toEqual([
+      ['x_futures', null, null],
+      ['y_futures', null, null],
+      ['z_futures', 'USDC', { value: 12, currency: 'USDC' }],
+    ])
+  })
 })

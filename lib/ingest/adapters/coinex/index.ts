@@ -28,6 +28,7 @@ import type {
   SourceRow,
   Timeframe,
 } from '../../core/types'
+import { CopierPageCapReachedError } from '../../core/history-page-cap'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
@@ -272,6 +273,9 @@ const coinexAdapter: SourceAdapter = {
       yield { pageIndex, payload, url, fetchedAt: new Date().toISOString() }
       if (!hasNext) return
     }
+    // Budget exhausted while the source still had pages: never let a cut
+    // capture pass as a complete (unbounded) Tier-B copier snapshot.
+    throw new CopierPageCapReachedError(src.slug, maxPages)
   },
 
   parseLeaderboard: parseCoinexLeaderboardPage,

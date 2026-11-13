@@ -18,7 +18,8 @@ export interface ExchangeRankingRow {
   exchangeName: string
   /** Null when the RPC did not report a known product type — never guessed. */
   productType: 'spot' | 'futures' | 'cfd' | 'onchain' | null
-  currency: ServingCurrency
+  /** null = the RPC reported no/unknown currency (spec §5.8: never guess a unit). */
+  currency: ServingCurrency | null
   rankedTraders: number
   medianRoi: number | null
   topDecileRoi: number | null
@@ -71,9 +72,12 @@ export async function getExchangeRankings(
     const r = raw as Record<string, unknown>
     if (typeof r.source !== 'string' || typeof r.asOf !== 'string') continue
 
-    const currency = CURRENCIES.has(r.currency as string) ? (r.currency as ServingCurrency) : 'USDT'
+    // Spec §5.8: money always carries its REAL currency. An unknown/missing
+    // currency stays null (never defaulted to USDT), and a money value without
+    // a known unit is not rendered as money at all.
+    const currency = CURRENCIES.has(r.currency as string) ? (r.currency as ServingCurrency) : null
     const copierPnlValue =
-      r.copierPnl && typeof r.copierPnl === 'object'
+      currency !== null && r.copierPnl && typeof r.copierPnl === 'object'
         ? numOrNull((r.copierPnl as Record<string, unknown>).value)
         : null
 
@@ -91,7 +95,8 @@ export async function getExchangeRankings(
       medianRoi: numOrNull(r.medianRoi),
       topDecileRoi: numOrNull(r.topDecileRoi),
       pctProfitable: numOrNull(r.pctProfitable),
-      copierPnl: copierPnlValue === null ? null : { value: copierPnlValue, currency },
+      copierPnl:
+        copierPnlValue === null || currency === null ? null : { value: copierPnlValue, currency },
       botShare: numOrNull(r.botShare),
       provenance: { source: r.source, asOf: r.asOf, derived: r.derived === true },
     })

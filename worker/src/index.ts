@@ -45,6 +45,8 @@ async function main() {
     { registerSchedules },
     { startDashboard },
     { assertMetricTrustWorkerReadiness },
+    { startScoringHeartbeat, scoringHeartbeatNodeId },
+    { markWorkerStarted, recordWorkerProgress },
   ] = await Promise.all([
     import('bullmq'),
     import('./connection'),
@@ -54,6 +56,8 @@ async function main() {
     import('./scheduler'),
     import('./dashboard'),
     import('./ingest/metric-trust-readiness'),
+    import('./scoring-heartbeat'),
+    import('./ingest/progress'),
   ])
 
   console.log('[worker] Arena Pipeline Worker starting...')
@@ -91,6 +95,8 @@ async function main() {
             `compute-leaderboard ${season}: ${resp.status} — ${JSON.stringify(body).slice(0, 200)}`
           )
           if (!resp.ok) throw new Error(`compute-leaderboard ${season} returned ${resp.status}`)
+          // Output watermark (audit P2-8): only a successful compute counts.
+          await recordWorkerProgress(getConnection(), 'scoring', scoringHeartbeatNodeId())
           return { season, status: resp.status, ...body }
         }
 
@@ -173,6 +179,12 @@ async function main() {
     console.error('[worker] UNHANDLED REJECTION:', reason)
   })
 
+  // Liveness heartbeat on the shared roster (same mechanism as the ingest
+  // worker). The first HSET must commit before this process reports ready,
+  // so a scoring worker that cannot be monitored does not run unmonitored.
+  const heartbeatTimer = await startScoringHeartbeat(getConnection())
+  await markWorkerStarted(getConnection(), scoringHeartbeatNodeId())
+
   console.log(
     `[worker] Ready — processing queue "${QUEUE_NAME}" with ` +
       `concurrency=${PIPELINE_WORKER_CONCURRENCY}`
@@ -185,6 +197,7 @@ async function main() {
   // 4. Graceful shutdown
   const shutdown = async (signal: string) => {
     console.log(`\n[worker] ${signal} received, shutting down gracefully...`)
+    clearInterval(heartbeatTimer)
     await worker.close()
     await closeConnection()
     console.log('[worker] Shutdown complete')

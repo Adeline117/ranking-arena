@@ -223,11 +223,38 @@ describe('parseBybitCopytradePositions', () => {
     expect(positions[1].size).toBe(11442) // POL qty matches rendered UI
   })
 
-  it('returns [] for protected traders (openTradeInfoProtection)', () => {
+  it('throws for protected traders (hidden book is not an empty book)', () => {
+    expect(() =>
+      parseBybitCopytradePositions(
+        { retCode: 0, result: { data: [], openTradeInfoProtection: 1 } },
+        ctx
+      )
+    ).toThrow(/未结仓位保护/)
+    expect(() =>
+      parseBybitCopytradePositions(
+        { retCode: 0, result: { data: [], openTradeInfoProtection: true } },
+        ctx
+      )
+    ).toThrow(/未结仓位保护/)
+  })
+
+  it('throws on business errors / malformed envelopes instead of reporting a flat book', () => {
+    expect(() => parseBybitCopytradePositions({}, ctx)).toThrow(/retCode=undefined/)
+    expect(() => parseBybitCopytradePositions({ retCode: 10001, result: {} }, ctx)).toThrow(
+      /retCode=10001/
+    )
+    expect(() => parseBybitCopytradePositions({ retCode: 0, result: { data: null } }, ctx)).toThrow(
+      /malformed/
+    )
+  })
+
+  it('accepts a genuine empty book from an unprotected success envelope', () => {
     expect(
-      parseBybitCopytradePositions({ result: { data: [], openTradeInfoProtection: 1 } }, ctx)
+      parseBybitCopytradePositions(
+        { retCode: 0, result: { data: [], openTradeInfoProtection: 0 } },
+        ctx
+      )
     ).toEqual([])
-    expect(parseBybitCopytradePositions({}, ctx)).toEqual([])
   })
 })
 
