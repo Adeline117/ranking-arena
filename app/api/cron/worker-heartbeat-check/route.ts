@@ -28,6 +28,7 @@ import {
   evaluateWorkerHeartbeatTopology,
   SCORING_HEARTBEAT_REGION,
 } from '@/lib/ingest/worker-heartbeat-topology'
+import { evaluateWorkerProgress, WORKER_PROGRESS_KEYS } from '@/lib/ingest/worker-progress'
 import {
   REQUIRED_RELEASE_REGIONS,
   summarizeWorkerRuntimeDrift,
@@ -290,6 +291,49 @@ export const GET = withCron(
       ).catch((err) => logger.warn('[worker-heartbeat-check] scoring alert failed:', err))
     }
 
+    // Output watermarks (audit P2-8): a live heartbeat with no publication is
+    // the queue-wedge failure mode that stayed green for hours. A read failure
+    // is logged and reported as unknown, never as healthy.
+    let progress: ReturnType<typeof evaluateWorkerProgress> = { stalled: [], unknown: [] }
+    try {
+      const [started, tierA, scoring] = await Promise.all([
+        redis.hgetall(WORKER_PROGRESS_KEYS.started),
+        redis.hgetall(WORKER_PROGRESS_KEYS.tier_a),
+        redis.hgetall(WORKER_PROGRESS_KEYS.scoring),
+      ])
+      progress = evaluateWorkerProgress({
+        ingestNodes: healthy,
+        scoringNodes: scoringHealthy,
+        started: (started as Record<string, unknown> | null) ?? null,
+        tierA: (tierA as Record<string, unknown> | null) ?? null,
+        scoring: (scoring as Record<string, unknown> | null) ?? null,
+        now,
+      })
+    } catch (err) {
+      logger.error('[worker-heartbeat-check] progress watermark read failed:', err)
+      progress = { stalled: [], unknown: [...healthy, ...scoringHealthy] }
+    }
+    if (progress.stalled.length > 0) {
+      await sendRateLimitedAlert(
+        {
+          title: `Worker alive but NOT producing: ${progress.stalled.map((p) => p.node).join(', ')}`,
+          message:
+            'Heartbeat is fresh but the output watermark is stale (wedged queue / failing publish).\n' +
+            progress.stalled
+              .map(
+                (p) =>
+                  `🟠 ${p.node} [${p.kind === 'tier_a' ? 'Tier-A publication' : 'scoring publication'}] ` +
+                  `last success ${p.last_success_at ?? 'never since start'} — ${p.stalled_minutes}min`
+              )
+              .join('\n'),
+          level: 'critical',
+          details: { stalled: progress.stalled },
+        },
+        'worker-heartbeat:progress',
+        60 * 60_000
+      ).catch((err) => logger.warn('[worker-heartbeat-check] progress alert failed:', err))
+    }
+
     // Continuous fleet topology invariant. Candidate-release readiness protects
     // deployments; this independent cron catches a duplicate/combined owner or
     // disabled capture that appears later while the fleet is already running.
@@ -372,6 +416,7 @@ export const GET = withCron(
       pruned: pruned.length > 0 ? pruned : undefined,
       topology,
       scoring: { healthy: scoringHealthy, down: scoringDown },
+      progress,
     }
   },
   { maxDurationSec: maxDuration }

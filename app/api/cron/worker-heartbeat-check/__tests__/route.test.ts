@@ -205,3 +205,30 @@ describe('GET /api/cron/worker-heartbeat-check when blind', () => {
     expect(mockSendAlert.mock.calls[0][1]).toBe('worker-heartbeat:blind')
   })
 })
+
+describe('GET /api/cron/worker-heartbeat-check output watermarks', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    jest.spyOn(Date, 'now').mockReturnValue(NOW)
+    mockHdel.mockResolvedValue(1)
+    mockSendAlert.mockResolvedValue({ channels: [], rateLimited: false, sent: true })
+  })
+  afterEach(() => jest.restoreAllMocks())
+
+  test('pages when a live node has not published Tier-A within the threshold', async () => {
+    mockHgetall
+      .mockResolvedValueOnce({
+        mac: beat(['local']),
+        sg: beat(['vps_sg']),
+        'scoring@mac': beat(['scoring'], { attemptBoundCapture: false }),
+      })
+      .mockResolvedValueOnce({ mac: String(NOW - 48 * 3600_000), sg: String(NOW - 3600_000) })
+      .mockResolvedValueOnce({ mac: String(NOW - 20 * 3600_000), sg: String(NOW - 600_000) })
+      .mockResolvedValueOnce({ 'scoring@mac': String(NOW - 3600_000) })
+    const response = await GET(new NextRequest('http://localhost/api/cron/worker-heartbeat-check'))
+    const body = await response.json()
+    const alert = mockSendAlert.mock.calls.find((c) => c[1] === 'worker-heartbeat:progress')
+    expect(alert?.[0]).toMatchObject({ level: 'critical' })
+    expect(body.progress.stalled.map((p: { node: string }) => p.node)).toEqual(['mac'])
+  })
+})

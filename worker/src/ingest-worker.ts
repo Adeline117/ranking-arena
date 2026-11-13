@@ -495,6 +495,9 @@ async function main(): Promise<void> {
       runtime,
       startHeartbeat: async () => {
         const timer = await startHeartbeat(redis, nativeConfig.consumedRegions, runtimeIdentity)
+        // Output-watermark grace baseline (audit P2-8); best-effort, never throws.
+        const { markWorkerStarted } = await import('./ingest/progress')
+        await markWorkerStarted(redis, runtimeIdentity.node)
         try {
           processCoordinator.bindHeartbeatTimer(() => clearInterval(timer))
           processCoordinator.assertStartupOpen()
