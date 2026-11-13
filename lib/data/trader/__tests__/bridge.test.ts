@@ -80,6 +80,31 @@ describe('overall_score 70/25/5 综合', () => {
   })
 })
 
+describe('90D fields never borrow the primary (30D/7D) period', () => {
+  it('30D-only trader: roi_90d / arena_score_90d / overall_score are null', () => {
+    const d = detail({
+      trader: { roi: 42, arenaScore: 77 },
+      periods: { '90D': null, '30D': { roi: 42, arenaScore: 77 }, '7D': null },
+    })
+    const p = perf(d)
+    expect(p.roi_90d).toBeNull()
+    expect(p.arena_score_90d).toBeNull()
+    expect(p.overall_score).toBeNull()
+    // 30D values remain on their own labels
+    expect(p.roi_30d).toBe(42)
+    expect(p.arena_score_30d).toBe(77)
+  })
+
+  it('uses the 90D period values when present', () => {
+    const d = detail({
+      trader: { roi: 10, arenaScore: 50 },
+      periods: { '90D': { roi: 120, arenaScore: 88 }, '30D': null, '7D': null },
+    })
+    expect(perf(d).roi_90d).toBe(120)
+    expect(perf(d).arena_score_90d).toBe(88)
+  })
+})
+
 describe('score confidence provenance', () => {
   it('keeps missing confidence unknown instead of inventing full', () => {
     expect(perf(detail({ trader: { scoreConfidence: null } })).score_confidence).toBeNull()
