@@ -122,6 +122,7 @@
     "qa:supabase-managed-graph-pg17": "bash supabase/migrations/__tests__/supabase-managed-role-graph.pg17.sh",
     "qa:public-ranked-leaderboard-pg17": "bash supabase/migrations/__tests__/public-ranked-leaderboard.pg17.sh",
     "qa:public-ranking-season-publication-pg17": "bash supabase/migrations/__tests__/public-ranking-season-publication.pg17.sh",
+    "qa:codec-rebuild-slot-guard-pg17": "bash supabase/migrations/__tests__/leaderboard-ranks-codec-layout-rebuild-slot-guard.pg17.sh",
     "qa:score-alias-pg17": "bash supabase/migrations/__tests__/bitget-bot-rank-authority-quarantine.pg17.sh",
     "qa:bingx-rank-quarantine-pg17": "bash supabase/migrations/__tests__/bingx-rank-authority-quarantine.pg17.sh",
     "qa:score-v5-pg17": "bash supabase/migrations/__tests__/pure-arena-score-v5-zero-metrics.pg17.sh",

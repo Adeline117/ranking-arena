@@ -147,6 +147,17 @@ persistLeaderboardRanks` 必须保持没有生产调用方（`scripts/qa/public-
 - expected 集合变化（新增 serving 来源、隔离一个来源）→ 整季下线，直到按新集合重新封存。
 - 任何来源水位超过 48 小时、或 `computed_at` 超过 48 小时 → 整季下线。
 
+## 迁移回放顺序（20261111140053 的文件名陷阱）
+
+- `20261111140053_leaderboard_ranks_codec_layout_rebuild.sql` 的设计槽位是"紧挨在 `20260725016500` 之前"，
+  但文件名时间戳排在最后。**只能按 `scripts/maintenance/apply-launch-migrations.sh` 的顺序回放**，
+  不能用 `supabase db reset / db push` 之类的文件名顺序。
+- 迁移开头的 `launch_slot_guard` 会在检测到后续状态（codec 编码函数、季级 fence 表或
+  `leaderboard_rank_season_*_fence` 触发器）时直接报 `out of its launch slot`，不做任何改动。
+- 重建只恢复 3 个每源 fence 触发器；它的 preflight 要求触发器集合**恰好**是这 3 个，所以不可能在
+  `20260816184500` 之后执行，也就不会丢掉季级 fence 触发器。
+- 证明：`npm run qa:codec-rebuild-slot-guard-pg17`（已挂进 CI）。
+
 ## 代码位置
 
 | 作用                            | 文件                                                                                                                                          |
