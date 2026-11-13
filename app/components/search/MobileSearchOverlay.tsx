@@ -9,6 +9,7 @@ import SearchDropdown from './SearchDropdown'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { addToHistory } from '@/lib/services/search-history'
 import { useModalA11y } from '@/lib/hooks/useModalA11y'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 interface MobileSearchOverlayProps {
   open: boolean
@@ -22,16 +23,21 @@ interface MobileSearchOverlayProps {
  */
 export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverlayProps) {
   const { t, language: _language } = useLanguage()
+  const { userId } = useAuthSession()
   const router = useRouter()
   const [query, setQuery] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const saveToHistory = useCallback((q: string) => {
-    const trimmed = q.trim()
-    if (!trimmed) return
-    // Use the shared search-history service for consistency
-    addToHistory(trimmed)
-  }, [])
+  const saveToHistory = useCallback(
+    (q: string) => {
+      const trimmed = q.trim()
+      if (!trimmed) return
+      // Use the shared search-history service for consistency (with userId so
+      // logged-in history syncs to the server like the dropdown does)
+      void addToHistory(trimmed, userId ?? undefined)
+    },
+    [userId]
+  )
 
   useEffect(() => {
     if (open && inputRef.current) {
