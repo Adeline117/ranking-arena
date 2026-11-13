@@ -66,7 +66,7 @@ function reattestChangedMigration(inventory, migrationFile, contents) {
 
 function assertRetirementAclMutationRejected(mutate, expectedError) {
   const inventory = buildLaunchMigrationInventory({ repoRoot: ROOT })
-  const migrationFile = '20260804043000_retire_legacy_token_rankings.sql'
+  const migrationFile = '20261111133300_retire_legacy_token_rankings_cron_api.sql'
   const repoRoot = copyCrosswalkEvidenceRepo()
   try {
     const migrationPath = resolve(repoRoot, `supabase/migrations/${migrationFile}`)
