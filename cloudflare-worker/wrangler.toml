@@ -2,11 +2,14 @@ name = "ranking-arena-proxy"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
-# Route through non-US Cloudflare edge to avoid Binance geo-blocking
-# Smart placement was routing to blocked US regions; disabled.
-# Workers subrequests egress from the colo nearest to the origin server,
-# so Binance (Singapore origin) should egress from a non-US colo.
-# If still blocked, set PROXY_FALLBACK_URL to a VPS-based proxy.
+# Smart placement is ENABLED below (this is what every deploy of this file
+# ships). Commit a98b5a6b4 changed this comment to "smart placement ... disabled"
+# because it had been routing to geo-blocked US regions, but never removed the
+# setting — the comment and the config contradicted each other (2026-11 doc
+# correction). Whether to disable it is an owner decision: changing it alters
+# the proxy's egress region on the next deploy, and V1 agents must not deploy
+# or reconfigure the proxy. If Binance is still blocked, PROXY_FALLBACK_URL
+# selects a VPS-based proxy instead.
 [placement]
 mode = "smart"
 
