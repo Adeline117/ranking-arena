@@ -49,6 +49,7 @@ async function main() {
     { publishLeaderboardSeason, pgRankPublicationDatabase, createDefaultCohortScorer },
     { ingestClientConnect },
     { alert: ingestAlert },
+    { syncPublicRankingsToMeilisearch },
   ] = await Promise.all([
     import('bullmq'),
     import('./connection'),
@@ -61,18 +62,20 @@ async function main() {
     import('../../lib/rankings/publication/publish-season'),
     import('../../lib/ingest/db'),
     import('../../lib/ingest/alerting'),
+    import('../../lib/search/meilisearch-sync'),
   ])
 
   // The season publication runs in-process on the worker's direct postgres
   // connection (the fence/claim/seal RPCs are owner-only), as one transaction.
-  const rankPublicationDatabase = pgRankPublicationDatabase(async () => {
+  const connectPublicationClient = async () => {
     const client = await ingestClientConnect()
     return {
       query: (text: string, values?: readonly unknown[]) =>
         client.query(text, values ? [...values] : undefined),
       release: (destroy?: boolean) => client.release(destroy),
     }
-  })
+  }
+  const rankPublicationDatabase = pgRankPublicationDatabase(connectPublicationClient)
   const scoreCohort = createDefaultCohortScorer()
   // Publication alerts go through the shared ingest alert interface: a refused
   // or degraded season pages (Tier-A, phase 0); exclusion warnings go to the
@@ -120,19 +123,17 @@ async function main() {
         }
 
         case JOB.SYNC_MEILISEARCH: {
-          // Trigger Vercel's sync-meilisearch endpoint
-          const msSecret = process.env.CRON_SECRET
-          if (!msSecret) return { skipped: true, reason: 'no CRON_SECRET' }
-          const msUrl = process.env.SITE_URL || 'https://www.arenafi.org'
-          job.log('Triggering sync-meilisearch')
-          const msResp = await fetch(`${msUrl}/api/cron/sync-meilisearch`, {
-            headers: { Authorization: `Bearer ${msSecret}` },
-            signal: AbortSignal.timeout(120_000),
+          // In-process sync from the sealed public view. The former HTTP call
+          // targeted /api/cron/sync-meilisearch, a V1 410 tombstone.
+          job.log('Syncing sealed public rankings to Meilisearch')
+          const synced = await syncPublicRankingsToMeilisearch({
+            connect: connectPublicationClient,
+            meiliUrl: process.env.MEILISEARCH_URL ?? '',
+            meiliAdminKey: process.env.MEILISEARCH_ADMIN_KEY ?? '',
+            log: (message) => void job.log(message),
           })
-          const msBody = await msResp.json().catch(() => ({}))
-          job.log(`sync-meilisearch: ${msResp.status}`)
-          assertSuccessfulMeilisearchSyncResponse(msResp.ok, msResp.status, msBody)
-          return { status: msResp.status, ...msBody }
+          assertSuccessfulMeilisearchSyncResponse(true, 200, synced)
+          return synced
         }
 
         default:
