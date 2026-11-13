@@ -75,24 +75,65 @@ describe('SSRRankingTable responsive layout', () => {
     expect(container.querySelectorAll('.ssr-card')).toHaveLength(0)
   })
 
-  it('keeps the desktop grid in critical CSS and reflows the same cells below 768px', () => {
+  it('keeps the desktop grid in critical CSS and reflows the same cells into compact rows below 768px', () => {
     const css = getCriticalCss().replace(/\s+/g, '')
 
     expect(css).toContain(
       // Mirrors RankingTable's default desktop template (score/roi/pnl/win/mdd).
       '.ssr-ranking-grid{display:grid;grid-template-columns:40pxminmax(0,1.5fr)58px96px80px64px64px;'
     )
+    // Owner decision 2026-11-13: ~56px flat rows (rank | trader | score | one
+    // metric) shared with the client MobileRankRows — no per-row cards/tiles.
     expect(css).toContain(
-      '@media(max-width:767px){.ssr-ranking-table{padding:0010px;background:transparent}.ssr-ranking-header,.ssr-filter-bar{display:none}'
+      '.ssr-ranking-table{padding:0;background:transparent}.ssr-ranking-header{display:none}'
     )
     expect(css).toContain(
-      'grid-template-columns:32pxminmax(0,1fr)auto;grid-template-areas:"ranktraderscore""roiroiroi""supportsupportsupport";'
+      '.mrow-head,.mrow{display:grid;grid-template-columns:24pxminmax(0,1fr)44px84px;'
     )
-    expect(css).toContain(
-      '.ssr-supporting-metrics{grid-area:support;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));'
-    )
+    expect(css).toContain('.mrow{position:relative;height:56px;min-height:56px;margin:0;')
+    expect(css).toContain('.mrow-top-1{box-shadow:inset3px00var(--color-rank-gold)}')
+    expect(css).toContain('.ssr-supporting-metrics{display:contents}')
+    // Only the chosen secondary metric is visible (default ROI).
+    expect(css).toContain('html:not([data-rank-metric]).mrow.mrow-m-roi')
+    expect(css).not.toContain('grid-template-areas:"ranktraderscore""roiroiroi"')
     expect(css).not.toContain('.ssr-desktop-row')
     expect(css).not.toContain('.ssr-mobile-card')
+  })
+
+  it('marks every SSR row cell with the shared compact-row classes', async () => {
+    const view = await SSRRankingTable({ traders })
+    const { container } = render(view)
+    const row = container.querySelector('.ssr-ranking-entry')
+
+    expect(row).toHaveClass('mrow')
+    for (const cls of [
+      '.mrow-rank',
+      '.mrow-trader',
+      '.mrow-name',
+      '.mrow-tag',
+      '.mrow-score',
+      '.mrow-m-roi',
+      '.mrow-m-pnl',
+      '.mrow-m-win',
+      '.mrow-m-mdd',
+    ]) {
+      expect(row?.querySelector(cls)).not.toBeNull()
+    }
+    expect(container.querySelector('.mrow-head')).not.toBeNull()
+  })
+
+  it('renders Win% and MDD neutral and keeps gain/loss color only on ROI and PnL', async () => {
+    const view = await SSRRankingTable({ traders })
+    const { container } = render(view)
+    const row = container.querySelector('.ssr-ranking-entry') as HTMLElement
+
+    const win = row.querySelector('.ssr-winrate-cell .ssr-metric-value') as HTMLElement
+    expect(win.getAttribute('style')).toBeNull()
+    const mdd = row.querySelector('.ssr-mdd-cell') as HTMLElement
+    expect(mdd).toHaveTextContent('-8.4%')
+    expect(mdd).not.toHaveTextContent('▼')
+    expect(mdd.innerHTML).not.toContain('accent-error')
+    expect(row.querySelector('.ssr-roi-cell')?.innerHTML).toContain('accent-success')
   })
 
   it('distinguishes zero, tiny, and invalid drawdown in the server-rendered shell', async () => {

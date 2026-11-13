@@ -3,14 +3,14 @@
  *
  * One row DOM serves both viewports: desktop gets the same grid information
  * architecture as RankingTable, while CSS reflows those cells into the
- * hydrated TraderCard layout on mobile. Keeping a single link/value tree avoids
+ * hydrated compact mobile rows (.mrow, MobileRankRows.tsx). Keeping a single link/value tree avoids
  * duplicate accessible content and the old mobile-card → desktop-table flash.
  */
 
 import type { CSSProperties } from 'react'
 import type { InitialTrader } from '@/lib/getInitialTraders'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
-import { getScoreColorInfo } from '@/lib/utils/score-colors'
+import { getScoreColor } from '@/lib/utils/score-colors'
 import { formatDrawdown } from '@/lib/utils/format'
 import Metric from '@/app/components/ui/Metric'
 import ScoreMiniBar from '@/app/components/ranking/ScoreMiniBar'
@@ -70,8 +70,26 @@ export default async function SSRRankingTable({ traders }: Props) {
         <span>Win</span>
         <span>MDD</span>
       </div>
+      {/* Mobile column header — same geometry as the client MobileRankHeader.
+          The metric label follows html[data-rank-metric] like the rows. */}
+      <div className="mrow-head" aria-hidden="true">
+        <span>#</span>
+        <span>Trader</span>
+        <span className="mrow-head-score">Score</span>
+        <span className="mrow-head-metric">
+          <span className="mrow-head-metric-label">
+            <span className="mrow-m mrow-m-roi">ROI</span>
+            <span className="mrow-m mrow-m-pnl">PnL</span>
+            <span className="mrow-m mrow-m-win">Win%</span>
+            <span className="mrow-m mrow-m-mdd">MDD</span>
+            <svg width={8} height={8} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M4 8h16l-8 10z" />
+            </svg>
+          </span>
+        </span>
+      </div>
 
-      <div className="ssr-ranking-body">
+      <div className="ssr-ranking-body mrow-list">
         {traders.map((trader) => {
           const rank = trader.rank
           const roi = trader.roi != null && Number.isFinite(trader.roi) ? trader.roi : null
@@ -79,19 +97,13 @@ export default async function SSRRankingTable({ traders }: Props) {
             trader.arena_score != null && Number.isFinite(Number(trader.arena_score))
               ? Number(trader.arena_score)
               : null
-          const scoreStyle = score != null ? getScoreColorInfo(score) : null
+          const scoreColor = score != null ? getScoreColor(score) : null
           const winRate =
             trader.win_rate != null && Number.isFinite(trader.win_rate)
               ? `${Number(trader.win_rate).toFixed(1)}%`
               : trader.trades_count === 0
                 ? t('holderBadge')
                 : '—'
-          const drawdownMagnitude =
-            trader.max_drawdown != null &&
-            Number.isFinite(trader.max_drawdown) &&
-            Math.abs(trader.max_drawdown) <= 100
-              ? Math.abs(trader.max_drawdown)
-              : null
           const drawdownDisplay = formatDrawdown(trader.max_drawdown)
           const href = `/trader/${encodeURIComponent(trader.id)}?platform=${encodeURIComponent(trader.source)}`
 
@@ -99,14 +111,14 @@ export default async function SSRRankingTable({ traders }: Props) {
             <a
               key={`${trader.source}-${trader.id}`}
               href={href}
-              className={`ssr-ranking-entry ssr-ranking-grid${rank <= 3 ? ` ssr-ranking-entry-rank-${rank}` : ''}`}
+              className={`ssr-ranking-entry ssr-ranking-grid mrow${rank <= 3 ? ` ssr-ranking-entry-rank-${rank} mrow-top mrow-top-${rank}` : ''}`}
               aria-label={`Rank ${rank}: ${trader.handle}. Arena Score ${score != null ? score.toFixed(0) : 'unknown'}, ROI ${roi != null ? `${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%` : 'unknown'}`}
             >
-              <div className="ssr-rank-cell">
+              <div className="ssr-rank-cell mrow-rank">
                 <RankBadge rank={rank} />
               </div>
 
-              <div className="ssr-trader-cell">
+              <div className="ssr-trader-cell mrow-trader">
                 <span className="ssr-trader-avatar" aria-hidden="true">
                   {trader.avatar_url_mirror || trader.avatar_url ? (
                     <img
@@ -121,80 +133,55 @@ export default async function SSRRankingTable({ traders }: Props) {
                     getInitial(trader.handle)
                   )}
                 </span>
-                <span className="ssr-trader-copy">
-                  <span className="ssr-trader-name">{trader.handle}</span>
-                  <span className="ssr-source-tag">{getSourceTypeLabel(trader.source_type)}</span>
+                <span className="ssr-trader-copy mrow-copy">
+                  <span className="ssr-trader-name mrow-name">{trader.handle}</span>
+                  <span className="ssr-source-tag mrow-tag">
+                    {getSourceTypeLabel(trader.source_type)}
+                  </span>
                 </span>
               </div>
 
+              {/* Score ring: 1px tier-colored border + neutral 18px number, no
+                  fill (owner 2026-11-13) — mirrors ArenaScoreCircle. */}
               <div
-                className="ssr-score-cell"
+                className="ssr-score-cell mrow-score-cell"
                 aria-hidden="true"
                 style={
-                  scoreStyle
+                  scoreColor
                     ? ({
-                        '--ssr-score-bg': scoreStyle.bgGradient,
-                        '--ssr-score-border': scoreStyle.borderColor,
-                        '--ssr-score-color': scoreStyle.color,
+                        '--ssr-score-ring': scoreColor,
+                        '--mrow-score-ring': scoreColor,
                       } as CSSProperties)
                     : undefined
                 }
               >
-                <span className="ssr-score-badge">{score != null ? score.toFixed(0) : '—'}</span>
+                <span className="ssr-score-badge mrow-score">
+                  {score != null ? score.toFixed(0) : '—'}
+                </span>
                 {score != null && <ScoreMiniBar score={score} width={50} height={4} />}
               </div>
 
-              <div className="ssr-roi-cell">
-                {roi != null && (
-                  <div className="ssr-roi-track" aria-hidden="true">
-                    <span
-                      style={{
-                        width: `${Math.min(100, Math.abs(roi) / 20)}%`,
-                        background:
-                          roi >= 0 ? 'var(--color-accent-success)' : 'var(--color-accent-error)',
-                      }}
-                    />
-                  </div>
-                )}
+              <div className="ssr-roi-cell mrow-m mrow-m-roi">
                 <Metric value={roi} format="roi" size="md" showArrow as="span" />
               </div>
 
               <div className="ssr-supporting-metrics">
-                <div className="ssr-metric-cell ssr-pnl-cell">
-                  <span className="ssr-mobile-metric-label">PnL</span>
+                {/* PnL keeps gain/loss color; Win% and MDD are neutral
+                    supporting stats (owner 2026-11-13). */}
+                <div className="ssr-metric-cell ssr-pnl-cell mrow-m mrow-m-pnl">
                   <Metric value={trader.pnl} format="pnl" size="sm" showArrow as="span" />
                 </div>
 
-                <div className="ssr-metric-cell ssr-winrate-cell">
-                  <span className="ssr-mobile-metric-label">Win%</span>
-                  <span
-                    className="ssr-metric-value"
-                    style={{
-                      color:
-                        trader.win_rate != null && trader.win_rate > 50
-                          ? 'var(--color-accent-success)'
-                          : undefined,
-                    }}
-                  >
-                    {winRate}
-                  </span>
+                <div className="ssr-metric-cell ssr-winrate-cell mrow-m mrow-m-win">
+                  <span className="ssr-metric-value rank-stat">{winRate}</span>
                 </div>
 
-                <div className="ssr-metric-cell ssr-mdd-cell">
-                  <span className="ssr-mobile-metric-label">MDD</span>
-                  <Metric
-                    value={drawdownMagnitude == null ? null : -drawdownMagnitude}
-                    format="percent"
-                    display={drawdownDisplay}
-                    size="sm"
-                    showArrow
-                    as="span"
-                  />
+                <div className="ssr-metric-cell ssr-mdd-cell mrow-m mrow-m-mdd">
+                  <span className="ssr-metric-value rank-stat">{drawdownDisplay}</span>
                 </div>
 
                 <div className="ssr-metric-cell ssr-sharpe-cell">
-                  <span className="ssr-mobile-metric-label">Sharpe</span>
-                  <span className="ssr-metric-value">
+                  <span className="ssr-metric-value rank-stat">
                     {trader.sharpe != null && Number.isFinite(Number(trader.sharpe))
                       ? Number(trader.sharpe).toFixed(2)
                       : '—'}
