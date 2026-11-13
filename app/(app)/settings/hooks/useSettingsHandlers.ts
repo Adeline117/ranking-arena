@@ -1651,9 +1651,6 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     const confirmed = await showConfirm(t('logoutTitle'), t('logoutConfirm'))
     if (!confirmed || !viewerIsCurrent(scope)) return
     try {
-      const { clearProStatusCache } = await import('@/lib/hooks/useProStatus')
-      if (!viewerIsCurrent(scope)) return
-      clearProStatusCache()
       try {
         sessionStorage.clear()
       } catch {

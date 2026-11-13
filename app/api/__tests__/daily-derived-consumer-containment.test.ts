@@ -2,7 +2,7 @@
  * @jest-environment node
  */
 
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { GET as getEquity } from '@/app/api/traders/[handle]/equity/route'
 import { GET as getIndicators } from '@/app/api/traders/[handle]/indicators/route'
@@ -68,17 +68,10 @@ describe('unproven daily-derived public consumers', () => {
     )
   })
 
-  it('rejects legacy equity cache bodies at the React Query boundary', () => {
-    const hook = readFileSync(join(root, 'lib/hooks/useSWR.ts'), 'utf8')
-    const functionStart = hook.indexOf('export function useTraderEquity(')
-    const functionEnd = hook.indexOf('\n}\n\ninterface PositionsResponse', functionStart)
-    const equityHook = hook.slice(functionStart, functionEnd)
-
-    expect(functionStart).toBeGreaterThan(-1)
-    expect(functionEnd).toBeGreaterThan(functionStart)
-    expect(equityHook).toContain("queryKey: ['trader-equity', 'daily-publication-v1', handle]")
-    expect(equityHook).toContain('acceptPublishedEquity(await fetcher<unknown>(url))')
-    expect(equityHook).not.toContain('placeholderData')
+  it('keeps the legacy SWR equity hook deleted', () => {
+    // lib/hooks/useSWR.ts (and its useTraderEquity) had no importer and was
+    // removed 2026-11-12; a restored copy could reopen legacy equity caches.
+    expect(existsSync(join(root, 'lib/hooks/useSWR.ts'))).toBe(false)
   })
 
   it('epochs cached profile statistics after removing legacy daily-derived claims', () => {
