@@ -134,6 +134,7 @@ const zhCore = {
   heroStatUpdated: '更新频率',
   heroProBadge: '升级 Pro — 解锁全部交易员和高级筛选',
   heroProBadgePromo: 'Pro 功能限免中 · 全部已解锁',
+  heroNeutralityShort: '任何来源都不能付费买排名。',
   heroScoreExplainer: 'Arena Score 按同一规则对所有当前来源板的交易员排名——一眼看清你的真实位置。',
   heroSubtitle: '汇总 {boards} 个当前有排名数据的来源板，每 2 小时使用最新可用数据重新计算',
   home: '首页',

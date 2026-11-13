@@ -2942,6 +2942,7 @@ const ja = {
     'Arena Score はすべての稼働中ソースボードのトレーダーを同じ基準で順位付けします。',
   heroNeutrality:
     '掲載順位を購入できるソースはありません——すべての稼働中ボードに同じルールを適用します。',
+  heroNeutralityShort: '掲載順位を購入できるソースはありません。',
   heroHowRanked: 'ランキングの仕組み →',
   heroCTABrowse: 'ランキングを見る',
   heroCTASignUp: '無料登録',

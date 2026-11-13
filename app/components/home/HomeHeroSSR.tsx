@@ -130,7 +130,15 @@ export default async function HomeHeroSSR({
               maxWidth: 540,
             }}
           >
-            <HomeHeroText k="heroScoreExplainer" /> <HomeHeroText k="heroNeutrality" />
+            <span className="home-hero-score-explainer">
+              <HomeHeroText k="heroScoreExplainer" />{' '}
+            </span>
+            <span className="home-hero-neutrality">
+              <HomeHeroText k="heroNeutrality" />
+            </span>
+            <span className="home-hero-neutrality-short">
+              <HomeHeroText k="heroNeutralityShort" />
+            </span>
           </p>
           {/* Trust affordance: put "how is this ranked / where's the data from"
               next to the hero, not buried in the footer — a first-time airdrop

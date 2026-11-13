@@ -3043,13 +3043,20 @@ input[type='search']::-webkit-search-cancel-button:hover {
   border-color: var(--color-accent-primary-60);
 }
 
+/* Short neutrality pledge: mobile-only one-liner (see the mobile hero block). */
+.home-hero-neutrality-short {
+  display: none;
+}
+
 /* Mobile hero: compressed so the ranking rows reach the iPhone SE first
    screen (owner decision 2026-11-13). Kept: headline, subtitle (which already
    states the live-board count and the 2h cadence), the Sign-up CTA and the
-   methodology link — CTA + link share one row. Hidden below 768px only: the
-   explainer paragraph, the stat tiles (a verbatim repeat of the subtitle's
-   numbers) and the Pro pill (repeats the site-wide promo banner). The hero is
-   one server-rendered element, so the first paint and hydration agree. */
+   methodology link — CTA + link share one row — and the neutrality pledge as
+   one small line (heroNeutralityShort). Hidden below 768px only: the long
+   pledge wording, the Score sentence (the methodology link covers it), the
+   stat tiles (a verbatim repeat of the subtitle's numbers) and the Pro pill
+   (repeats the site-wide promo banner). The hero is one server-rendered
+   element, so the first paint and hydration agree. */
 @media (max-width: 767px) {
   .home-hero {
     display: grid !important;
@@ -3057,6 +3064,7 @@ input[type='search']::-webkit-search-cancel-button:hover {
     grid-template-areas:
       'title title'
       'sub sub'
+      'trust trust'
       'cta link';
     align-items: center;
     column-gap: 14px;
@@ -3089,9 +3097,27 @@ input[type='search']::-webkit-search-cancel-button:hover {
     font-size: 0.8125rem !important;
     line-height: 1.4 !important;
     max-width: none !important;
-    margin-bottom: 10px !important;
+    margin-bottom: 4px !important;
   }
-  .home-hero-explainer,
+  /* The neutrality pledge stays on mobile (trust is the product's promise);
+     the Score sentence is covered by the methodology link next to the CTA. */
+  .home-hero-explainer {
+    grid-area: trust;
+    position: relative;
+    z-index: 1;
+    font-size: 0.75rem !important;
+    line-height: 1.4 !important;
+    max-width: none !important;
+    margin: 0 0 10px !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .home-hero-neutrality-short {
+    display: inline;
+  }
+  .home-hero-neutrality,
+  .home-hero-score-explainer,
   .home-hero-stats,
   .home-hero-pro {
     display: none !important;
@@ -3106,6 +3132,10 @@ input[type='search']::-webkit-search-cancel-button:hover {
     margin-top: 0 !important;
     justify-self: start;
     align-self: center;
+    /* The link keeps a 44px touch target; centre its text in it so it lines
+       up with the Sign-up button instead of hugging the top edge. */
+    display: inline-flex !important;
+    align-items: center;
   }
 
   /* B2C mobile leaderboard: keep the primary toolbar to one decision row. */
