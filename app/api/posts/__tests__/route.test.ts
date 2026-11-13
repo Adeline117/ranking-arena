@@ -618,6 +618,41 @@ describe('/api/posts', () => {
       expect(body.success).not.toBe(true)
     })
 
+    it.each([['groups'], ['group_members'], ['group_bans']])(
+      'fails closed (500, no post) when the %s gate lookup errors',
+      async (failingTable) => {
+        mockGetAuthUser.mockResolvedValue({ id: 'user-1', email: 'test@test.com' })
+        mockGetUserHandle.mockResolvedValue('testuser')
+        const ok: Record<string, unknown> = {
+          groups: { dissolved_at: null },
+          group_members: { muted_until: null },
+          group_bans: null,
+        }
+        mockSupabase.from.mockImplementation((table: string) =>
+          table in ok
+            ? table === failingTable
+              ? mockQueryResult(null, { message: 'db down' })
+              : mockQueryResult(ok[table])
+            : mockChain()
+        )
+
+        const req = new NextRequest('http://localhost/api/posts', {
+          method: 'POST',
+          body: {
+            title: 'Hi',
+            content: 'Group post',
+            group_id: '33333333-3333-4333-8333-333333333333',
+          },
+        })
+        const res = await POST(req)
+
+        expect(res.status).toBe(500)
+        expect(mockCreatePost).not.toHaveBeenCalled()
+        mockSupabase.from.mockReset()
+        mockSupabase.from.mockReturnValue(mockChain())
+      }
+    )
+
     it('creates post successfully with valid input', async () => {
       const mockPost = { id: 'post-new', title: 'My Post', content: 'Great content' }
       mockGetAuthUser.mockResolvedValue({ id: 'user-1', email: 'test@test.com' })

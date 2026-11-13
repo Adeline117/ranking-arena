@@ -24,7 +24,7 @@ import {
   ErrorCode,
 } from '@/lib/api'
 import { withPublic, withAuth } from '@/lib/api/middleware'
-import { badRequest, forbidden, notFound } from '@/lib/api/response'
+import { badRequest, forbidden, notFound, serverError } from '@/lib/api/response'
 import { socialFeatureGuard } from '@/lib/features'
 import { getPosts, createPost, getUserPostReactions, getUserPostVotes } from '@/lib/data/posts'
 import { getWeightedPosts } from '@/lib/data/posts-weighted'
@@ -35,7 +35,7 @@ import {
   CacheTTL,
 } from '@/lib/utils/server-cache'
 import { del as cacheDel } from '@/lib/cache'
-import { fireAndForget } from '@/lib/utils/logger'
+import { fireAndForget, logger } from '@/lib/utils/logger'
 import { notifyPostMentions } from '@/lib/data/post-mentions'
 import { extractAndSyncHashtags } from '@/lib/data/hashtags'
 import { logRpcError } from '@/lib/data/serving/log-rpc-error'
@@ -542,6 +542,16 @@ export const POST = withAuth(
           .eq('user_id', user.id)
           .maybeSingle(),
       ])
+      // A failed lookup must not read as "no ban" / "no group": fail closed.
+      const gateError = groupRes.error || memberRes.error || banRes.error
+      if (gateError) {
+        logger.error('Group posting gate lookup failed', {
+          groupId: group_id,
+          userId: user.id,
+          error: gateError.message,
+        })
+        return serverError('Could not verify group permissions')
+      }
       if (!groupRes.data) return notFound('Group not found')
       if (groupRes.data.dissolved_at)
         return badRequest('This group has been dissolved — no new posts')
