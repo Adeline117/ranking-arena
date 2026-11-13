@@ -1190,7 +1190,115 @@ describe('Tier-B profile coverage accounting', () => {
       String(sql).includes("'history_truncated'")
     )
     expect(truncation).toBeDefined()
-    expect(truncation?.[1]).toEqual([42, 'orders', 25, expect.anything()])
+    expect(truncation?.[1]).toEqual([
+      42,
+      'orders',
+      25,
+      expect.anything(),
+      // The mock adapter declares no continuation: recorded explicitly (#440).
+      JSON.stringify({ state: 'unsupported', reason: 'adapter_not_wired' }),
+    ])
+  })
+
+  it('runs one bounded backward continuation after a complete forward pass (#440)', async () => {
+    mockProfileTimeframes.mockReturnValue([30])
+    mockParseProfile.mockReturnValue(profile(30, true))
+    mockGetHistoryCursor.mockResolvedValue('2026-07-15T10:00:00.000Z')
+    const olderRow: ParsedHistoryRow = {
+      ...orderRow,
+      ts: '2026-07-01T00:00:00.000Z',
+      dedupeHash: 'o2',
+    }
+    mockGetHistory.mockImplementation(async function* (...args: unknown[]) {
+      if (args[6] === undefined) {
+        yield* orderHistoryStream()
+        return
+      }
+      yield { pageIndex: 20, payload: 'continuation', url: 'u', fetchedAt: 'f' }
+    })
+    mockParseHistory.mockImplementation((payload: unknown) =>
+      payload === 'continuation' ? [orderRow, olderRow] : [orderRow]
+    )
+    const marker = {
+      detected_at: '2026-07-14T00:00:00Z',
+      page_cap: 20,
+      oldest_captured_at: '2026-07-15T11:00:00.000Z',
+    }
+    mockDbQuery.mockImplementation(async (sql: string) =>
+      String(sql).includes("meta->'history_truncated'->$2::text AS marker")
+        ? { rows: [{ marker }], rowCount: 1 }
+        : { rows: [], rowCount: 1 }
+    )
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: true,
+        positionHistory: false,
+        orders: true,
+        transfers: false,
+        copiers: false,
+      },
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      parseHistory: mockParseHistory,
+      validateProfile: mockValidateProfile,
+      historyContinuation: () => ({ supported: true, mode: 'page_offset' }),
+    })
+
+    await expect(processTierB(job)).resolves.toMatchObject({ tradersCrawled: 1, errors: 0 })
+
+    expect(mockGetHistory).toHaveBeenCalledTimes(2)
+    // Pre-#440 marker: forward run covered pages 1..20 → overlap page 20.
+    expect(mockGetHistory.mock.calls[1][6]).toEqual({
+      continuation: { mode: 'page_offset', startPage: 20 },
+    })
+    expect(mockGetHistory.mock.calls[1][4]).toBeNull()
+    expect(mockPublishHistoryRows).toHaveBeenLastCalledWith(
+      src,
+      42,
+      'orders',
+      [orderRow, olderRow],
+      null
+    )
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) => String(sql).includes("meta - 'history_truncated'"))
+    ).toBe(true)
+  })
+
+  it('does not continue in the same run whose forward pass was cut (bounded per run)', async () => {
+    mockProfileTimeframes.mockReturnValue([30])
+    mockParseProfile.mockReturnValue(profile(30, true))
+    mockGetHistory.mockImplementation(async function* () {
+      yield* orderHistoryStream()
+      throw new HistoryPageCapReachedError('gtrade', 'orders', 25, 26)
+    })
+    mockParseHistory.mockReturnValue([orderRow])
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: true,
+        positionHistory: false,
+        orders: true,
+        transfers: false,
+        copiers: false,
+      },
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      parseHistory: mockParseHistory,
+      validateProfile: mockValidateProfile,
+      historyContinuation: () => ({ supported: true, mode: 'page_offset' }),
+    })
+
+    await expect(processTierB(job)).resolves.toMatchObject({ tradersCrawled: 1, errors: 0 })
+    expect(mockGetHistory).toHaveBeenCalledTimes(1)
+    const truncation = mockDbQuery.mock.calls.find(([sql]) =>
+      String(sql).includes("'history_truncated'")
+    )
+    expect(JSON.parse(String(truncation?.[1]?.[4]))).toMatchObject({
+      state: 'pending',
+      mode: 'page_offset',
+      resume_page: 26,
+    })
   })
 
   it('still fails a history crawl on a non-cap fetch error', async () => {
