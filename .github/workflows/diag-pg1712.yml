@@ -1,0 +1,29 @@
+name: diag-pg1712 (temporary, do not merge)
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install PG17 (same as ci.yml)
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-17
+          /usr/lib/postgresql/17/bin/postgres --version
+      - name: Probe pg_attribute for generation tables
+        run: |
+          B=/usr/lib/postgresql/17/bin; D=$RUNNER_TEMP/pg
+          $B/initdb -D $D --auth-local=trust --auth-host=trust --encoding=UTF8 --username=postgres --no-locale >/dev/null
+          $B/pg_ctl -D $D -o "-p 55432 -k $RUNNER_TEMP" -w start >/dev/null
+          P="$B/psql -h $RUNNER_TEMP -p 55432 -U postgres -X -v ON_ERROR_STOP=1"
+          $P -c 'CREATE SCHEMA arena'
+          sed -n 275,373p supabase/migrations/20260725015000_leaderboard_rank_generation_claim.sql | $P -q
+          $P -c "SELECT attrelid::regclass, attnum, attname, atttypid::regtype, attnotnull, atthasdef, attgenerated, attidentity, atttypmod, attndims, attacl, attoptions, attfdwoptions, attcollation, attstattarget, attcompression, attstorage FROM pg_attribute WHERE attrelid IN ('arena.leaderboard_rank_generation_claims'::regclass,'arena.leaderboard_rank_generation_heads'::regclass) AND attnum>0 ORDER BY 1,2"
