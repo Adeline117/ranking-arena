@@ -3,16 +3,22 @@
 const mockSendAlert = jest.fn()
 const mockHdel = jest.fn()
 const mockHgetall = jest.fn()
+let mockRedisUnavailable = false
 
 jest.mock('@/lib/api/with-cron', () => ({
   withCron: (_name: string, handler: Function) => async (request: unknown) => {
-    const result = await handler(request, {})
-    return Response.json({ ok: true, ...result })
+    try {
+      const result = await handler(request, {})
+      return Response.json({ ok: true, ...result })
+    } catch (err) {
+      return Response.json({ ok: false, error: String(err) }, { status: 500 })
+    }
   },
 }))
 
 jest.mock('@/lib/cache/redis-client', () => ({
-  getSharedRedis: async () => ({ hdel: mockHdel, hgetall: mockHgetall }),
+  getSharedRedis: async () =>
+    mockRedisUnavailable ? null : { hdel: mockHdel, hgetall: mockHgetall },
 }))
 
 jest.mock('@/lib/alerts/send-alert', () => ({
@@ -125,5 +131,33 @@ describe('GET /api/cron/worker-heartbeat-check topology invariant', () => {
     })
     expect(topologyAlert()).toBeUndefined()
     expect(mockSendAlert).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET /api/cron/worker-heartbeat-check when blind', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockSendAlert.mockResolvedValue({ channels: [], rateLimited: false, sent: true })
+  })
+  afterEach(() => {
+    mockRedisUnavailable = false
+  })
+
+  test('pages and fails the run when Redis is unavailable', async () => {
+    mockRedisUnavailable = true
+    const response = await GET(new NextRequest('http://localhost/api/cron/worker-heartbeat-check'))
+    expect(response.status).toBe(500)
+    expect(mockSendAlert).toHaveBeenCalledWith(
+      expect.objectContaining({ level: 'critical' }),
+      'worker-heartbeat:blind',
+      expect.any(Number)
+    )
+  })
+
+  test('pages and fails the run when the roster read throws', async () => {
+    mockHgetall.mockRejectedValueOnce(new Error('ECONNRESET'))
+    const response = await GET(new NextRequest('http://localhost/api/cron/worker-heartbeat-check'))
+    expect(response.status).toBe(500)
+    expect(mockSendAlert.mock.calls[0][1]).toBe('worker-heartbeat:blind')
   })
 })

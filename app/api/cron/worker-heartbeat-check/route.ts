@@ -111,14 +111,36 @@ function safeJson(s: string): Record<string, unknown> | null {
 }
 
 export const GET = withCron('worker-heartbeat-check', async (_request: NextRequest) => {
-  const redis = await getSharedRedis()
-  if (!redis) {
-    // No Redis = can't verify; report rather than silently pass.
-    logger.warn('[worker-heartbeat-check] Redis unavailable — cannot verify worker liveness')
-    return { count: 0, nodes: 0, down: [], note: 'redis-unavailable' }
+  // No Redis (unconfigured, client error, or roster read failure) = the
+  // dead-man's switch is blind. Page and fail the run instead of the old
+  // `{count:0}` success (audit P2-4): "cannot see the workers" must never
+  // look like "workers fine".
+  let redis: Awaited<ReturnType<typeof getSharedRedis>> = null
+  let roster: Record<string, unknown> | null = null
+  let blindReason: string | null = null
+  try {
+    redis = await getSharedRedis()
+    if (!redis) blindReason = 'Redis client unavailable'
+    else roster = (await redis.hgetall(ROSTER_KEY)) as Record<string, unknown> | null
+  } catch (err) {
+    blindReason = `roster read failed: ${err instanceof Error ? err.message : String(err)}`
   }
-
-  const roster = (await redis.hgetall(ROSTER_KEY)) as Record<string, unknown> | null
+  if (!redis || blindReason) {
+    logger.error(`[worker-heartbeat-check] cannot verify worker liveness — ${blindReason}`)
+    await sendRateLimitedAlert(
+      {
+        title: 'Worker heartbeat check BLIND (Redis unavailable)',
+        message:
+          `worker-heartbeat-check cannot read the shared heartbeat roster (${ROSTER_KEY}). ` +
+          `Ingest/scoring worker liveness is UNVERIFIED until Redis is reachable again.`,
+        level: 'critical',
+        details: { reason: blindReason },
+      },
+      'worker-heartbeat:blind',
+      60 * 60_000
+    ).catch((err) => logger.warn('[worker-heartbeat-check] blind alert failed:', err))
+    throw new Error(`worker-heartbeat-check blind: ${blindReason}`)
+  }
   const now = Date.now()
   const entries = Object.entries(roster ?? {})
   const topology = evaluateWorkerHeartbeatTopology(roster, now)
