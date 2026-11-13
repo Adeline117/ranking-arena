@@ -287,6 +287,20 @@ describe('OAuth callback identity ownership', () => {
     expect(getAuthRedirectAcquisitionReceipt()).toBeNull()
   })
 
+  it.each([
+    ['error=access_denied&error_description=User+cancelled', '/login?error=oauth_cancelled'],
+    [
+      'error=server_error&error_description=Contact+support%40evil.example+100%25',
+      '/login?error=auth_failed',
+    ],
+  ])('hands off a fixed code for a provider error (%s)', async (query, target) => {
+    mockSearchParams = new URLSearchParams(query)
+
+    render(<AuthCallbackPage />)
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith(target))
+  })
+
   it('fails closed and rolls back only the exact session when its profile is missing', async () => {
     const capturedSession = session('user-a', {
       user_metadata: { avatar_url: 'https://example.com/avatar.png' },

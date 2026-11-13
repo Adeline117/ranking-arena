@@ -15,6 +15,7 @@ import {
   type PublicProfileRankingVisibility,
 } from '@/lib/data/trader/public-profile-ranking'
 import { withAuth } from '@/lib/api/middleware'
+import { resolveServerTier } from '@/lib/premium/resolve-server-tier'
 import {
   compareAccountKey,
   parseCompareAccounts,
@@ -121,15 +122,13 @@ function projectCurrentRankedCompareData(
  */
 export const GET = withAuth(
   async ({ supabase, user, request }) => {
-    // 获取用户订阅等级
-    const { data: subscription } = await supabase
-      .from('subscriptions')
-      .select('tier')
-      .eq('user_id', user.id)
-      .in('status', ['active', 'trialing'])
-      .maybeSingle()
-
-    const tier = subscription?.tier || 'free'
+    // Same tier resolution the client's /api/subscription uses (profile-only
+    // Pro grants count); a failed lookup is 503, not "free".
+    const tierResult = await resolveServerTier(supabase, user.id)
+    if (!tierResult.ok) {
+      return error('Subscription status temporarily unavailable', 503)
+    }
+    const tier = tierResult.tier
 
     // 检查是否有权限。2026-07-04 修 U6-1(二次):此前只查 subscriptions.tier,
     // 不认 PRO_FREE_PROMO 全站限免 → promo 期间所有非 Pro 用户(即全体)对比 API

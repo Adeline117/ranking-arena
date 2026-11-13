@@ -24,7 +24,11 @@ jest.mock('@/lib/logger', () => ({
 }))
 
 import { act, renderHook } from '@testing-library/react'
-import { invalidateStoredRefreshToken, useMultiAccount } from '../useMultiAccount'
+import {
+  invalidateStoredRefreshToken,
+  signOutAndForgetAccounts,
+  useMultiAccount,
+} from '../useMultiAccount'
 import { useMultiAccountStore, type StoredAccount } from '@/lib/stores/multiAccountStore'
 import {
   __resetViewerScopeForTests,
@@ -531,5 +535,24 @@ describe('multi-account viewer-scope commits', () => {
     expect(mockCentralSignOut).toHaveBeenCalledTimes(1)
     expect(getViewerScope().viewerKey).toBe('anon')
     expect(useMultiAccountStore.getState().accounts).toEqual([])
+  })
+
+  it('plain logout forgets every stored account, revokes inactive tokens, and drops the add-account flag', async () => {
+    synchronizeViewerScope(true, 'user-b')
+    useMultiAccountStore.setState({
+      accounts: [account('user-a', 'stored-a', false), account('user-b', 'stored-b', true)],
+    })
+    window.localStorage.setItem('arena_adding_account', 'true')
+    const plainSignOut = jest.fn(async () => {
+      synchronizeViewerScope(true, null)
+    })
+
+    await signOutAndForgetAccounts(plainSignOut)
+
+    expect(plainSignOut).toHaveBeenCalledTimes(1)
+    expect(mockIsolatedRefreshSession).toHaveBeenCalledTimes(1)
+    expect(mockIsolatedRefreshSession).toHaveBeenCalledWith({ refresh_token: 'stored-a' })
+    expect(useMultiAccountStore.getState().accounts).toEqual([])
+    expect(window.localStorage.getItem('arena_adding_account')).toBeNull()
   })
 })
