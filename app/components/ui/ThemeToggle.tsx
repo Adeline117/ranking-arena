@@ -96,8 +96,8 @@ export default function ThemeToggle() {
               }
             )
           })
+          // eslint-disable-next-line no-restricted-syntax -- intentional fire-and-forget
           .catch(() => {
-            // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
             // Animation failed, theme still applied
           })
 
