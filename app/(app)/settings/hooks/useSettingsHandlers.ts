@@ -10,6 +10,7 @@ import { validateHandle } from '../validation'
 import { isHapticsEnabled } from '@/lib/utils/haptics'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 import { signOutAndForgetAccounts } from '@/lib/hooks/useMultiAccount'
+import { getPasswordStrength } from '@/app/(app)/login/components/loginHelpers'
 import {
   buildAccountRecoveryLoginPath,
   persistAccountRecoveryToken,
@@ -1054,8 +1055,13 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
       showToast(t('validationPasswordMismatch'), 'error')
       return
     }
-    if (newPassword.length < 6) {
-      showToast(t('validationPasswordMinLength'), 'error')
+    // Same floor as signup and password reset (8+ chars, strength >= 2).
+    if (newPassword.length < 8) {
+      showToast(t('resetPasswordPasswordMinLength'), 'error')
+      return
+    }
+    if (getPasswordStrength(newPassword).level < 2) {
+      showToast(t('resetPasswordPasswordTooWeak'), 'error')
       return
     }
     submittingRef.current = true

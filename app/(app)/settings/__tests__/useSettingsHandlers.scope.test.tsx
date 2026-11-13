@@ -258,6 +258,36 @@ describe('useSettingsHandlers viewer ownership', () => {
     expect(hook.result.current.initialValuesRef.current?.handle).toBe('alpha')
   })
 
+  it('rejects a 6-character new password, matching the signup and reset floor', async () => {
+    mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const hook = renderHook(() =>
+      useSettingsHandlers({
+        auth: authFor('user-a', scope.sessionGeneration),
+        showToast,
+        showConfirm,
+        t,
+      })
+    )
+    await waitFor(() => expect(hook.result.current.loading).toBe(false))
+
+    act(() => {
+      hook.result.current.setCurrentPassword('old-password-1')
+      hook.result.current.setNewPassword('abc123')
+      hook.result.current.setConfirmNewPassword('abc123')
+    })
+    await act(async () => {
+      await hook.result.current.handleChangePassword()
+    })
+
+    expect(showToast).toHaveBeenCalledWith('resetPasswordPasswordMinLength', 'error')
+    const { tokenRefreshCoordinator } = jest.requireMock('@/lib/auth/token-refresh') as {
+      tokenRefreshCoordinator: { reauthenticateWithPassword: jest.Mock }
+    }
+    expect(tokenRefreshCoordinator.reauthenticateWithPassword).not.toHaveBeenCalled()
+  })
+
   it('blocks A form actions while B ownership is still unresolved', async () => {
     const publicB = deferred<ReturnType<typeof publicProfile>>()
     const sensitiveB = deferred<ReturnType<typeof sensitiveProfile>>()
