@@ -9,7 +9,13 @@ export class HistoryPageCapReachedError extends Error {
   constructor(
     readonly sourceSlug: string,
     readonly kind: 'orders' | 'transfers',
-    readonly pageCap: number
+    readonly pageCap: number,
+    /**
+     * Page-numbered sources: the first page NOT fetched (the backward
+     * continuation resume point, see history-continuation.ts). Undefined for
+     * sources that do not page by number.
+     */
+    readonly nextPage?: number
   ) {
     super(
       `[${sourceSlug}] ${kind} reached page cap ${pageCap} before cursor overlap or a short page`
