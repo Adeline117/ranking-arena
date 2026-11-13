@@ -1,5 +1,7 @@
 import { createPgRpcClient } from '../pg-rpc-client'
 import {
+  classifyPublishableRow,
+  exclusionAlertDetails,
   fitNumeric,
   publishLeaderboardSeason,
   RankPublicationError,
@@ -96,6 +98,62 @@ describe('toPublishableRow', () => {
     ['non-canonical source', { source: 'Binance' }],
   ])('rejects rows the database seal would refuse: %s', (_label, overrides) => {
     expect(toPublishableRow(scored(overrides))).toBeNull()
+  })
+})
+
+describe('classifyPublishableRow', () => {
+  it.each([
+    ['partial completeness', { score_completeness: 'partial' as const }, 'incomplete_or_estimated'],
+    ['estimated metrics', { metrics_estimated: true }, 'incomplete_or_estimated'],
+    ['outlier', { is_outlier: true }, 'outlier'],
+    ['zero score', { arena_score: 0 }, 'arena_score_out_of_range'],
+    ['ROI beyond the clamp', { roi: 10000.5 }, 'roi_out_of_range'],
+    ['missing pnl', { pnl: null as unknown as number }, 'pnl_out_of_range'],
+    ['missing win rate', { win_rate: null }, 'win_rate_missing_or_out_of_range'],
+    ['missing drawdown', { max_drawdown: null }, 'max_drawdown_missing'],
+    ['drawdown rounding to 100%', { max_drawdown: 99.996 }, 'max_drawdown_liquidated'],
+    ['drawdown overflowing numeric(5,2)', { max_drawdown: 1500 }, 'max_drawdown_liquidated'],
+    ['negative drawdown', { max_drawdown: -1 }, 'max_drawdown_negative'],
+    ['untrimmed identity', { source_trader_id: ' x' }, 'invalid_identity'],
+  ])('names the exclusion reason: %s', (_label, overrides, reason) => {
+    expect(classifyPublishableRow(scored(overrides))).toEqual({ reason })
+  })
+
+  it('returns the row when every rule passes', () => {
+    expect(classifyPublishableRow(scored())).toHaveProperty('row.source', 'binance_futures')
+  })
+})
+
+describe('exclusionAlertDetails', () => {
+  it('stays quiet under both thresholds', () => {
+    expect(
+      exclusionAlertDetails(
+        { scored: 100, excluded: 10, byReason: {}, bySource: { a: { max_drawdown_missing: 10 } } },
+        new Map([['a', 100]])
+      )
+    ).toBeNull()
+  })
+
+  it('alerts when the season-wide exclusion share is over 25%', () => {
+    expect(
+      exclusionAlertDetails({ scored: 100, excluded: 30, byReason: {}, bySource: {} }, new Map())
+    ).toMatchObject({ seasonRatio: 0.3, sources: [] })
+  })
+
+  it('alerts on one source losing more than half of a meaningful cohort', () => {
+    const details = exclusionAlertDetails(
+      {
+        scored: 1000,
+        excluded: 30,
+        byReason: {},
+        bySource: { small: { max_drawdown_missing: 5 }, big: { max_drawdown_missing: 25 } },
+      },
+      new Map([
+        ['small', 6],
+        ['big', 40],
+      ])
+    )
+    expect(details?.sources).toEqual([{ source: 'big', scored: 40, excluded: 25 }])
   })
 })
 

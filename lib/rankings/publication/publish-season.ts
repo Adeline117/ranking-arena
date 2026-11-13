@@ -137,13 +137,65 @@ export function createDefaultCohortScorer(): RankPublicationCohortScorer {
   }
 }
 
+/**
+ * One operator-facing alert raised by a publication. The orchestrator never
+ * depends on the alert channel: delivery failures are logged and swallowed so
+ * the publication outcome (commit or rollback) is decided only by the data.
+ */
+export interface RankPublicationAlert {
+  season: PublicationWindow
+  /** 'critical' = the season was not published; 'warning' = published, degraded. */
+  severity: 'critical' | 'warning'
+  code: 'excluded_rows_over_threshold' | 'season_publication_refused' | 'sources_isolated'
+  message: string
+  details: Record<string, unknown>
+}
+
+export type RankPublicationAlertSink = (alert: RankPublicationAlert) => Promise<void> | void
+
 export interface PublishLeaderboardSeasonDependencies {
   database: RankPublicationDatabase
   /** Must return the publishable cohort (scoreTraders' `scoredFiltered`). */
   scoreCohort: RankPublicationCohortScorer
   newScoreCohortId?: () => string
   log?: (message: string) => void
+  /** Operator alert channel (worker: lib/ingest/alerting). Optional. */
+  alert?: RankPublicationAlertSink
 }
+
+/** Why a scored trader did not become a published row. */
+export type RankRowExclusionReason =
+  | 'source_not_expected'
+  | 'invalid_identity'
+  | 'incomplete_or_estimated'
+  | 'outlier'
+  | 'arena_score_out_of_range'
+  | 'roi_out_of_range'
+  | 'pnl_out_of_range'
+  | 'win_rate_missing_or_out_of_range'
+  | 'max_drawdown_missing'
+  | 'max_drawdown_liquidated'
+  | 'max_drawdown_negative'
+
+export interface RankRowExclusionSummary {
+  /** Scored traders considered (expected + unexpected sources). */
+  scored: number
+  excluded: number
+  byReason: Partial<Record<RankRowExclusionReason, number>>
+  /** source -> reason -> count (expected sources only). */
+  bySource: Record<string, Partial<Record<RankRowExclusionReason, number>>>
+}
+
+/**
+ * Alert (not refuse) when more than this share of a season's scored rows, or
+ * of one expected source's scored rows (with at least
+ * RANK_EXCLUSION_ALERT_MIN_SOURCE_ROWS of them), is excluded. Mass exclusion
+ * is how a silent upstream metric regression (e.g. NULL drawdowns from a stale
+ * trader_stats join) would otherwise shrink the public board unnoticed.
+ */
+export const RANK_EXCLUSION_ALERT_RATIO = 0.25
+export const RANK_EXCLUSION_ALERT_SOURCE_RATIO = 0.5
+export const RANK_EXCLUSION_ALERT_MIN_SOURCE_ROWS = 20
 
 export interface PublishedSourceSummary {
   source: string
@@ -160,6 +212,7 @@ export interface PublishLeaderboardSeasonResult {
   publishedRankCount: number
   deletedRankCount: number
   sources: PublishedSourceSummary[]
+  exclusions: RankRowExclusionSummary
 }
 
 interface PublishableRow {
@@ -225,6 +278,19 @@ function fitInteger(value: number | null | undefined): number | null {
  * columns become NULL instead of failing the whole season.
  */
 export function toPublishableRow(trader: ScoredTrader): PublishableRow | null {
+  const verdict = classifyPublishableRow(trader)
+  return 'row' in verdict ? verdict.row : null
+}
+
+/**
+ * Same projection as toPublishableRow, but says WHY a row is excluded so the
+ * publication can count and report exclusions instead of dropping them
+ * silently. The first failing rule wins (identity, then completeness, then the
+ * numeric policy in column order).
+ */
+export function classifyPublishableRow(
+  trader: ScoredTrader
+): { row: PublishableRow } | { reason: RankRowExclusionReason } {
   const source = trader.source
   const traderId = trader.source_trader_id
   if (
@@ -233,70 +299,120 @@ export function toPublishableRow(trader: ScoredTrader): PublishableRow | null {
     traderId.trim() === '' ||
     traderId !== traderId.trim()
   ) {
-    return null
+    return { reason: 'invalid_identity' }
   }
-  if (
-    trader.score_completeness !== 'full' ||
-    trader.metrics_estimated !== false ||
-    trader.is_outlier === true
-  ) {
-    return null
+  if (trader.score_completeness !== 'full' || trader.metrics_estimated !== false) {
+    return { reason: 'incomplete_or_estimated' }
   }
+  if (trader.is_outlier === true) return { reason: 'outlier' }
   const arenaScore = fitNumeric(trader.arena_score, 10, 2)
   const roi = fitNumeric(trader.roi, 12, 4)
   const pnl = fitNumeric(trader.pnl, 18, 2)
   const winRate = fitNumeric(trader.win_rate, 5, 2)
   const maxDrawdown = fitNumeric(trader.max_drawdown, 5, 2)
-  if (
-    arenaScore === null ||
-    arenaScore <= 0 ||
-    arenaScore > 100 ||
-    roi === null ||
-    roi < -10000 ||
-    roi > 10000 ||
-    pnl === null ||
-    pnl < -100_000_000 ||
-    pnl > 1_000_000_000 ||
-    winRate === null ||
-    winRate < 0 ||
-    winRate > 100 ||
-    maxDrawdown === null ||
-    maxDrawdown < 0 ||
-    maxDrawdown >= 100
-  ) {
-    return null
+  if (arenaScore === null || arenaScore <= 0 || arenaScore > 100) {
+    return { reason: 'arena_score_out_of_range' }
   }
+  if (roi === null || roi < -10000 || roi > 10000) return { reason: 'roi_out_of_range' }
+  if (pnl === null || pnl < -100_000_000 || pnl > 1_000_000_000) {
+    return { reason: 'pnl_out_of_range' }
+  }
+  if (winRate === null || winRate < 0 || winRate > 100) {
+    return { reason: 'win_rate_missing_or_out_of_range' }
+  }
+  if (maxDrawdown === null) {
+    // A raw value that only overflowed numeric(5,2) is >= 1000 => liquidated.
+    return {
+      reason:
+        trader.max_drawdown !== null &&
+        trader.max_drawdown !== undefined &&
+        Number.isFinite(trader.max_drawdown) &&
+        trader.max_drawdown >= 100
+          ? 'max_drawdown_liquidated'
+          : 'max_drawdown_missing',
+    }
+  }
+  if (maxDrawdown < 0) return { reason: 'max_drawdown_negative' }
+  if (maxDrawdown >= 100) return { reason: 'max_drawdown_liquidated' }
   return {
-    source,
-    source_type: SOURCE_TYPE_MAP[source] || 'futures',
-    source_trader_id: traderId,
-    arena_score: arenaScore,
-    arena_score_v3: trader.arena_score_v3 ?? null,
-    arena_score_v4: trader.arena_score_v4 ?? null,
-    score_factors: trader.score_factors ?? null,
-    roi,
-    pnl,
-    win_rate: winRate,
-    max_drawdown: maxDrawdown,
-    followers: fitInteger(trader.followers),
-    copiers: fitInteger(trader.copiers),
-    trades_count: fitInteger(trader.trades_count),
-    handle: trader.handle,
-    avatar_url: trader.avatar_url,
-    profitability_score: fitNumeric(trader.profitability_score, 6, 2),
-    risk_control_score: fitNumeric(trader.risk_control_score, 6, 2),
-    execution_score: fitNumeric(trader.execution_score, 6, 2),
-    score_completeness: 'full',
-    trading_style: trader.trading_style,
-    avg_holding_hours: fitNumeric(trader.avg_holding_hours, 10, 2),
-    style_confidence: fitNumeric(trader.style_confidence, 6, 4),
-    sharpe_ratio: fitNumeric(trader.sharpe_ratio, 10, 4),
-    sortino_ratio: fitNumeric(trader.sortino_ratio, 10, 4),
-    profit_factor: fitNumeric(trader.profit_factor, 10, 4),
-    calmar_ratio: fitNumeric(trader.calmar_ratio, 10, 4),
-    trader_type: trader.trader_type || (source === 'web3_bot' ? 'bot' : null),
-    is_outlier: false,
-    metrics_estimated: false,
+    row: {
+      source,
+      source_type: SOURCE_TYPE_MAP[source] || 'futures',
+      source_trader_id: traderId,
+      arena_score: arenaScore,
+      arena_score_v3: trader.arena_score_v3 ?? null,
+      arena_score_v4: trader.arena_score_v4 ?? null,
+      score_factors: trader.score_factors ?? null,
+      roi,
+      pnl,
+      win_rate: winRate,
+      max_drawdown: maxDrawdown,
+      followers: fitInteger(trader.followers),
+      copiers: fitInteger(trader.copiers),
+      trades_count: fitInteger(trader.trades_count),
+      handle: trader.handle,
+      avatar_url: trader.avatar_url,
+      profitability_score: fitNumeric(trader.profitability_score, 6, 2),
+      risk_control_score: fitNumeric(trader.risk_control_score, 6, 2),
+      execution_score: fitNumeric(trader.execution_score, 6, 2),
+      score_completeness: 'full',
+      trading_style: trader.trading_style,
+      avg_holding_hours: fitNumeric(trader.avg_holding_hours, 10, 2),
+      style_confidence: fitNumeric(trader.style_confidence, 6, 4),
+      sharpe_ratio: fitNumeric(trader.sharpe_ratio, 10, 4),
+      sortino_ratio: fitNumeric(trader.sortino_ratio, 10, 4),
+      profit_factor: fitNumeric(trader.profit_factor, 10, 4),
+      calmar_ratio: fitNumeric(trader.calmar_ratio, 10, 4),
+      trader_type: trader.trader_type || (source === 'web3_bot' ? 'bot' : null),
+      is_outlier: false,
+      metrics_estimated: false,
+    },
+  }
+}
+
+function bump<K extends string>(counts: Partial<Record<K, number>>, key: K): void {
+  counts[key] = (counts[key] ?? 0) + 1
+}
+
+/** Exclusion alerts for a season that is otherwise publishable. */
+export function exclusionAlertDetails(
+  summary: RankRowExclusionSummary,
+  scoredBySource: ReadonlyMap<string, number>
+): {
+  seasonRatio: number
+  sources: Array<{ source: string; scored: number; excluded: number }>
+} | null {
+  const seasonRatio = summary.scored === 0 ? 0 : summary.excluded / summary.scored
+  const sources: Array<{ source: string; scored: number; excluded: number }> = []
+  for (const [source, reasons] of Object.entries(summary.bySource)) {
+    const excluded = Object.values(reasons).reduce((total, count) => total + (count ?? 0), 0)
+    const scored = scoredBySource.get(source) ?? 0
+    if (
+      scored >= RANK_EXCLUSION_ALERT_MIN_SOURCE_ROWS &&
+      excluded / scored > RANK_EXCLUSION_ALERT_SOURCE_RATIO
+    ) {
+      sources.push({ source, scored, excluded })
+    }
+  }
+  if (seasonRatio <= RANK_EXCLUSION_ALERT_RATIO && sources.length === 0) return null
+  return { seasonRatio, sources }
+}
+
+async function deliverAlert(
+  deps: PublishLeaderboardSeasonDependencies,
+  log: (message: string) => void,
+  alert: RankPublicationAlert
+): Promise<void> {
+  log(`[${alert.season}] ALERT ${alert.severity} ${alert.code}: ${alert.message}`)
+  if (!deps.alert) return
+  try {
+    await deps.alert(alert)
+  } catch (error) {
+    // Alert delivery must never decide a publication outcome; log loudly.
+    console.error(
+      `[rank-publication] alert delivery failed for ${alert.season} ${alert.code}:`,
+      error instanceof Error ? error.message : error
+    )
   }
 }
 
@@ -469,17 +585,29 @@ export async function publishLeaderboardSeason(
     const rows: PublishableRow[] = []
     const identities = new Map<string, string[]>(expectedSources.map((source) => [source, []]))
     const seen = new Set<string>()
-    let excluded = 0
+    const exclusions: RankRowExclusionSummary = {
+      scored: scored.length,
+      excluded: 0,
+      byReason: {},
+      bySource: {},
+    }
+    const scoredBySource = new Map<string, number>()
     for (const trader of scored) {
       if (!expected.has(trader.source)) {
-        excluded += 1
+        exclusions.excluded += 1
+        bump(exclusions.byReason, 'source_not_expected')
         continue
       }
-      const row = toPublishableRow(trader)
-      if (!row) {
-        excluded += 1
+      scoredBySource.set(trader.source, (scoredBySource.get(trader.source) ?? 0) + 1)
+      const verdict = classifyPublishableRow(trader)
+      if ('reason' in verdict) {
+        exclusions.excluded += 1
+        bump(exclusions.byReason, verdict.reason)
+        exclusions.bySource[trader.source] ??= {}
+        bump(exclusions.bySource[trader.source], verdict.reason)
         continue
       }
+      const row = verdict.row
       const key = JSON.stringify([row.source, row.source_trader_id])
       if (seen.has(key)) {
         throw new RankPublicationError(
@@ -504,8 +632,9 @@ export async function publishLeaderboardSeason(
       )
     }
     log(
-      `[${season}] ${rows.length} publishable rows across ${expectedSources.length} sources (${excluded} excluded)`
+      `[${season}] ${rows.length} publishable rows across ${expectedSources.length} sources (${exclusions.excluded} excluded: ${JSON.stringify(exclusions.byReason)})`
     )
+    const exclusionAlert = exclusionAlertDetails(exclusions, scoredBySource)
 
     const finalRankCounts = new Map(
       expectedSources.map((source) => [source, identities.get(source)?.length ?? 0])
@@ -582,6 +711,26 @@ export async function publishLeaderboardSeason(
       )
     }
 
+    if (exclusionAlert) {
+      // Raised inside the transaction only after the season is confirmed
+      // served; a later COMMIT failure still surfaces as the job error.
+      await deliverAlert(deps, log, {
+        season,
+        severity: 'warning',
+        code: 'excluded_rows_over_threshold',
+        message: `${exclusions.excluded}/${exclusions.scored} scored rows excluded (${(
+          exclusionAlert.seasonRatio * 100
+        ).toFixed(1)}%)${
+          exclusionAlert.sources.length > 0
+            ? `; sources over ${RANK_EXCLUSION_ALERT_SOURCE_RATIO * 100}%: ${exclusionAlert.sources
+                .map((entry) => `${entry.source} ${entry.excluded}/${entry.scored}`)
+                .join(', ')}`
+            : ''
+        }`,
+        details: { byReason: exclusions.byReason, sources: exclusionAlert.sources },
+      })
+    }
+
     return {
       season,
       scoreCohortId,
@@ -595,6 +744,7 @@ export async function publishLeaderboardSeason(
         source_as_of: proof.source_as_of,
         published_rank_count: proof.published_rank_count,
       })),
+      exclusions,
     }
   })
 }

@@ -8,6 +8,7 @@
  */
 
 import { isV1RankingCommandChainPublished } from '../../lib/cron/v1-ranking-command-chain-publication'
+import type { RankPublicationAlertSink } from '../../lib/rankings/publication/publish-season'
 
 // ENDGAME (ARENA_DATA_SPEC v1.2): legacy fetch/enrich removed — leaderboard
 // data is produced by arena-ingest-worker. This worker only keeps the
@@ -47,6 +48,7 @@ async function main() {
     { assertMetricTrustWorkerReadiness },
     { publishLeaderboardSeason, pgRankPublicationDatabase, createDefaultCohortScorer },
     { ingestClientConnect },
+    { alert: ingestAlert },
   ] = await Promise.all([
     import('bullmq'),
     import('./connection'),
@@ -58,6 +60,7 @@ async function main() {
     import('./ingest/metric-trust-readiness'),
     import('../../lib/rankings/publication/publish-season'),
     import('../../lib/ingest/db'),
+    import('../../lib/ingest/alerting'),
   ])
 
   // The season publication runs in-process on the worker's direct postgres
@@ -71,6 +74,16 @@ async function main() {
     }
   })
   const scoreCohort = createDefaultCohortScorer()
+  // Publication alerts go through the shared ingest alert interface: a refused
+  // or degraded season pages (Tier-A, phase 0); exclusion warnings go to the
+  // digest. The orchestrator logs and swallows delivery failures itself.
+  const rankPublicationAlert: RankPublicationAlertSink = (publicationAlert) =>
+    ingestAlert(getRankingCommandChainConnection(), {
+      sourceSlug: `rank-publication:${publicationAlert.season}`,
+      phase: 0,
+      tier: publicationAlert.severity === 'critical' ? 'A' : 'B',
+      message: `[${publicationAlert.code}] ${publicationAlert.message}`,
+    })
 
   console.log('[worker] Arena Pipeline Worker starting...')
 
@@ -98,6 +111,7 @@ async function main() {
             database: rankPublicationDatabase,
             scoreCohort,
             log: (message) => void job.log(message),
+            alert: rankPublicationAlert,
           })
           job.log(
             `published ${season}: cohort=${published.scoreCohortId} rows=${published.publishedRankCount} sources=${published.sources.length}`
