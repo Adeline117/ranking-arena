@@ -294,6 +294,31 @@ describe('LoginPageClient exact identity boundary', () => {
     expect(screen.queryByText(raw)).not.toBeInTheDocument()
   })
 
+  it('clears the rate-limit error after its countdown in any language', async () => {
+    await renderLogin()
+    mockSignInWithPassword.mockResolvedValueOnce({
+      data: { session: null, user: null },
+      error: { message: 'Too many requests' },
+    })
+    jest.useFakeTimers({ advanceTimers: true })
+    try {
+      fireEvent.click(screen.getByTestId('password-login'))
+      // The mocked t() returns the key, like a locale whose copy has none of
+      // the English/Chinese substrings the old clear logic looked for.
+      expect(await screen.findByText('loginRateLimitRetry')).toBeInTheDocument()
+
+      for (let second = 0; second <= 31; second++) {
+        await act(async () => {
+          await jest.advanceTimersByTimeAsync(1000)
+        })
+      }
+
+      expect(screen.queryByText('loginRateLimitRetry')).not.toBeInTheDocument()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   it('maps the callback profile provisioning code to a localized message', async () => {
     mockSearchParams = new URLSearchParams('error=profile_provisioning_failed')
     await renderLogin()
