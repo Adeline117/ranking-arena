@@ -79,7 +79,7 @@ export default function HomePage({
   initialClientCohortKey,
 }: HomePageProps) {
   // SSR TopNav stays visible permanently (no portal, no removal).
-  // globals.css no longer hides #ssr-topnav when Phase 2 loads.
+  // The server-rendered TopNav in app/page.tsx is never hidden when Phase 2 loads.
 
   // SSR shell hiding moved to HomePageClient.tsx — only hides when data is ready.
 

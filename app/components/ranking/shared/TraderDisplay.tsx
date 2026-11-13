@@ -345,10 +345,12 @@ export function ArenaScoreBadge({
   const isLegendary = finiteScore >= 90
   const isElite = finiteScore >= 95
 
+  // Static halo only: an opacity-breathing glow + sweeping shimmer on a score
+  // made 90+ numbers flicker (opacity 0.9↔1) and never settle.
   const glowStyle = isElite
-    ? { animation: 'score-legendary-glow-intense 2.5s ease-in-out infinite' }
+    ? { boxShadow: '0 0 10px var(--color-accent-primary-60)' }
     : isLegendary
-      ? { animation: 'score-legendary-glow 3s ease-in-out infinite' }
+      ? { boxShadow: '0 0 8px var(--color-accent-primary-40)' }
       : finiteScore >= 80
         ? { boxShadow: `0 0 6px ${alpha(tokens.colors.accent.primary, 15)}` }
         : {}
@@ -379,21 +381,6 @@ export function ArenaScoreBadge({
         ...glowStyle,
       }}
     >
-      {/* Shimmer overlay for 90+ */}
-      {isLegendary && (
-        <Box
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background:
-              'linear-gradient(90deg, transparent 0%, var(--glass-bg-medium) 40%, var(--glass-border-heavy) 50%, var(--glass-bg-medium) 60%, transparent 100%)',
-            backgroundSize: '200% 100%',
-            animation: 'score-shimmer 3s ease-in-out infinite',
-            borderRadius: 'inherit',
-            pointerEvents: 'none',
-          }}
-        />
-      )}
       <Box
         style={{
           position: 'absolute',

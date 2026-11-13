@@ -6,51 +6,18 @@
    Separators breathe. Hover reveals, not shouts.
    ============================================================ */
 
-/* === Medal Glow Animations === */
-/* Use filter: drop-shadow instead of box-shadow for GPU-composited animation */
-@keyframes medalGlowGold {
-  0%,
-  100% {
-    filter: drop-shadow(0 0 6px var(--color-gold-glow));
-  }
-  50% {
-    filter: drop-shadow(0 0 14px var(--color-gold-glow));
-  }
-}
-
-@keyframes medalGlowSilver {
-  0%,
-  100% {
-    filter: drop-shadow(0 0 5px var(--color-silver-glow));
-  }
-  50% {
-    filter: drop-shadow(0 0 12px var(--color-silver-glow));
-  }
-}
-
-@keyframes medalGlowBronze {
-  0%,
-  100% {
-    filter: drop-shadow(0 0 5px var(--color-bronze-glow));
-  }
-  50% {
-    filter: drop-shadow(0 0 12px var(--color-bronze-glow));
-  }
-}
-
-.medal-glow-gold,
-.medal-glow-silver,
-.medal-glow-bronze {
-  will-change: filter;
-}
+/* === Medal glow — static ===
+   Data surfaces never loop: a pulsing glow on three rows pulls the eye away
+   from the numbers and kept three compositor layers alive (will-change).
+   The honour stays as a fixed soft halo. */
 .medal-glow-gold {
-  animation: medalGlowGold 2.5s ease-in-out infinite;
+  box-shadow: 0 0 8px var(--color-gold-glow);
 }
 .medal-glow-silver {
-  animation: medalGlowSilver 2.5s ease-in-out infinite;
+  box-shadow: 0 0 6px var(--color-silver-glow);
 }
 .medal-glow-bronze {
-  animation: medalGlowBronze 2.5s ease-in-out infinite;
+  box-shadow: 0 0 6px var(--color-bronze-glow);
 }
 
 /* Row entrance animation removed for performance — 20 simultaneous
@@ -68,13 +35,10 @@
   opacity: 1 !important;
 }
 
-/* Touch devices have no hover — the compare control would otherwise be
-   invisible (inline opacity:0) and unusable. Keep it persistently visible. */
-@media (hover: none) and (pointer: coarse) {
-  .compare-checkbox-cell {
-    opacity: 1 !important;
-  }
-}
+/* Touch devices: no persistent checkbox. Compare is reached through the
+   swipe-to-reveal action (TraderRowSwipeActions); a selected row still shows
+   its checked box via the inline opacity:1. A permanently visible empty box
+   sat on top of the top-3 medal bars as a stray black square. */
 
 /* Tabular nums for all numeric cells */
 .ranking-row [class*='roi'],
@@ -178,14 +142,17 @@
    "a gradient" — they have presence, depth, and atmosphere.
    ============================================================ */
 
-/* Shared hero treatment */
+/* Shared hero treatment: medal bar + tint only. No outer glow — it bled
+   over the neighbouring rows (inline HERO_STYLE_RANK_N matches this). */
 .ranking-row.rank-1,
 .ranking-row.rank-2,
 .ranking-row.rank-3 {
   border-radius: 14px;
 }
 
-/* Visual separator: gap between top 3 and rest of table */
+/* Visual separator: gap between top 3 and rest of table.
+   NOTE: in the table view each wrapper is the only child of its
+   keyboard-nav <div>, so this nth-child selector does not match there. */
 .swipe-row-wrapper:nth-child(3) {
   margin-bottom: 12px;
   padding-bottom: 12px;
@@ -199,34 +166,8 @@
   display: none;
 }
 
-/* Rank 1 shimmer — subtle moving highlight */
-@keyframes rank1Shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-
-.ranking-row.rank-1::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 215, 0, 0.04) 40%,
-    rgba(255, 215, 0, 0.08) 50%,
-    rgba(255, 215, 0, 0.04) 60%,
-    transparent 100%
-  );
-  background-size: 200% 100%;
-  animation: rank1Shimmer 6s ease-in-out infinite;
-  pointer-events: none;
-  z-index: 0;
-}
+/* (Rank-1 looping shimmer removed: the gold tint + medal bar carry the
+   honour; a 6s infinite sweep over the #1 row's numbers was distracting.) */
 
 /* #1 — Gold: warm, prestigious, luminous */
 .ranking-row.rank-1 {
@@ -238,7 +179,6 @@
   );
   box-shadow:
     inset 3px 0 0 var(--color-rank-gold),
-    0 2px 20px rgba(255, 215, 0, 0.08),
     inset 0 1px 0 rgba(255, 215, 0, 0.08);
 }
 
@@ -251,7 +191,6 @@
   ) !important;
   box-shadow:
     inset 3px 0 0 var(--color-rank-gold),
-    0 4px 28px rgba(255, 215, 0, 0.12),
     inset 0 1px 0 rgba(255, 215, 0, 0.12);
 }
 
@@ -265,7 +204,6 @@
   );
   box-shadow:
     inset 3px 0 0 var(--color-rank-silver),
-    0 2px 16px rgba(192, 192, 192, 0.06),
     inset 0 1px 0 rgba(192, 192, 192, 0.06);
 }
 
@@ -278,7 +216,6 @@
   ) !important;
   box-shadow:
     inset 3px 0 0 var(--color-rank-silver),
-    0 4px 24px rgba(192, 192, 192, 0.1),
     inset 0 1px 0 rgba(192, 192, 192, 0.1);
 }
 
@@ -292,7 +229,6 @@
   );
   box-shadow:
     inset 3px 0 0 var(--color-rank-bronze),
-    0 2px 16px rgba(205, 127, 50, 0.06),
     inset 0 1px 0 rgba(205, 127, 50, 0.06);
 }
 
@@ -305,7 +241,6 @@
   ) !important;
   box-shadow:
     inset 3px 0 0 var(--color-rank-bronze),
-    0 4px 24px rgba(205, 127, 50, 0.1),
     inset 0 1px 0 rgba(205, 127, 50, 0.1);
 }
 
@@ -336,11 +271,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .medal-glow-gold,
-  .medal-glow-silver,
-  .medal-glow-bronze {
-    animation: none;
-  }
   .ranking-row-link {
     animation: none;
   }
@@ -567,11 +497,20 @@
   display: none;
   align-items: stretch;
   z-index: 1;
+  /* Hidden until a swipe actually starts (data-swipe on the wrapper). The
+     content layer did not cover the wrapper's whole box (hero-row margins,
+     the top-3 separator padding), so the action strip underneath leaked as
+     purple/blue bars around rows 1–3. Base guard also lives in globals.css
+     because this sheet loads async after hydration. */
+  visibility: hidden;
 }
 
 @media (hover: none) and (pointer: coarse) {
   .swipe-row-actions {
     display: flex;
+  }
+  .swipe-row-wrapper[data-swipe] .swipe-row-actions {
+    visibility: visible;
   }
 }
 
@@ -593,8 +532,13 @@
 .swipe-row-content {
   position: relative;
   z-index: 2;
-  background: var(--color-bg-primary, #0f0f13);
-  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  /* flow-root: the hero row's vertical margins stay INSIDE this opaque layer
+     instead of collapsing through it onto the wrapper. */
+  display: flow-root;
+  /* Same surface as the table container and the SSR shell (was bg-primary,
+     so client rows were a different shade than the header / SSR rows). */
+  background: var(--color-bg-secondary, #14121c);
+  transition: transform var(--motion-slow, 260ms) var(--ease-standard, ease);
 }
 
 @media (hover: none) and (pointer: coarse) {
@@ -675,7 +619,7 @@
   }
   .ranking-hscroll[data-hscroll='true'] .ranking-row > :nth-child(1),
   .ranking-hscroll[data-hscroll='true'] .ranking-row > :nth-child(2) {
-    background: var(--color-bg-primary, #0a0910);
+    background: var(--color-bg-secondary, #14121c);
   }
 
   /* Top-3 heroes: tint the frozen cells to continue the medal gradient, layered
@@ -689,7 +633,7 @@
         rgba(255, 215, 0, 0.06) 70%,
         transparent 100%
       ),
-      var(--color-bg-primary, #0a0910);
+      var(--color-bg-secondary, #14121c);
   }
   .ranking-hscroll[data-hscroll='true'] .ranking-row.rank-2 > :nth-child(1),
   .ranking-hscroll[data-hscroll='true'] .ranking-row.rank-2 > :nth-child(2) {
@@ -700,7 +644,7 @@
         rgba(192, 192, 192, 0.04) 70%,
         transparent 100%
       ),
-      var(--color-bg-primary, #0a0910);
+      var(--color-bg-secondary, #14121c);
   }
   .ranking-hscroll[data-hscroll='true'] .ranking-row.rank-3 > :nth-child(1),
   .ranking-hscroll[data-hscroll='true'] .ranking-row.rank-3 > :nth-child(2) {
@@ -711,7 +655,7 @@
         rgba(205, 127, 50, 0.04) 70%,
         transparent 100%
       ),
-      var(--color-bg-primary, #0a0910);
+      var(--color-bg-secondary, #14121c);
   }
 
   /* Hover wash on the frozen cells for non-hero rows (heroes keep their tint). */
@@ -723,7 +667,7 @@
     > :nth-child(2) {
     background:
       linear-gradient(90deg, var(--color-accent-primary-08) 0%, transparent 60%),
-      var(--color-bg-primary, #0a0910);
+      var(--color-bg-secondary, #14121c);
   }
 }
 

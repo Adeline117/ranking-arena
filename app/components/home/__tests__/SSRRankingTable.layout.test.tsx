@@ -79,10 +79,11 @@ describe('SSRRankingTable responsive layout', () => {
     const css = getCriticalCss().replace(/\s+/g, '')
 
     expect(css).toContain(
-      '.ssr-ranking-grid{display:grid;grid-template-columns:40pxminmax(0,1.5fr)58pxminmax(72px,96px)minmax(64px,80px)60px60px;'
+      // Mirrors RankingTable's default desktop template (score/roi/pnl/win/mdd).
+      '.ssr-ranking-grid{display:grid;grid-template-columns:40pxminmax(0,1.5fr)58px96px80px64px64px;'
     )
     expect(css).toContain(
-      '@media(max-width:767px){.ssr-ranking-table{padding:0010px;background:transparent}.ssr-ranking-header{display:none}'
+      '@media(max-width:767px){.ssr-ranking-table{padding:0010px;background:transparent}.ssr-ranking-header,.ssr-filter-bar{display:none}'
     )
     expect(css).toContain(
       'grid-template-columns:32pxminmax(0,1fr)auto;grid-template-areas:"ranktraderscore""roiroiroi""supportsupportsupport";'

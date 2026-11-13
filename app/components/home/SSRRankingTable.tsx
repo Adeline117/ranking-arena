@@ -56,6 +56,11 @@ export default async function SSRRankingTable({ traders }: Props) {
 
   return (
     <section className="ssr-ranking-table" aria-label="Trader rankings">
+      {/* Reserves the client RankingFilters bar (category tabs + tools: 61px,
+          +2px for the client container's border offset — measured) so the
+          rows do not drop when the interactive table replaces this shell.
+          Desktop only — critical CSS hides it below 768px. */}
+      <div className="ssr-filter-bar" aria-hidden="true" />
       <div className="ssr-ranking-header ssr-ranking-grid" aria-hidden="true">
         <span>Rank</span>
         <span>Trader</span>
