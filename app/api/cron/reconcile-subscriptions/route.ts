@@ -242,5 +242,6 @@ export const GET = withCron(
       skipped: skippedCount,
       errors,
     }
-  }
+  },
+  { maxDurationSec: maxDuration }
 )

@@ -23,6 +23,11 @@ jest.mock('@/lib/ingest/db', () => ({
 }))
 jest.mock('@/lib/ingest/raw', () => ({ writeRawObject: jest.fn() }))
 const mockQueueAdd = jest.fn()
+const mockCloseCircuitCycle = jest.fn(async () => ({ alerted: false, failureRate: 0, samples: 0 }))
+jest.mock('../../circuit-cycle', () => ({
+  closeCircuitCycle: (...args: unknown[]) => mockCloseCircuitCycle(...(args as [])),
+}))
+jest.mock('../../../connection', () => ({ getConnection: jest.fn() }))
 jest.mock('../../queues', () => ({
   getRegionQueue: jest.fn(() => ({ add: (...args: unknown[]) => mockQueueAdd(...args) })),
   INGEST_JOB: { TIER_D: 'tier-d' },
@@ -148,6 +153,11 @@ describe('Tier-D fails closed on unusable position captures', () => {
     expect(data).toMatchObject({ sourceSlug: 'bitget_futures', contDepth: 1 })
     expect((data.tierDRemainingTraderIds as number[]).sort()).toHaveLength(2)
     expect(opts).toMatchObject({ priority: 3, jobId: 'tierd-cont-bitget_futures-1' })
+    // The circuit-breaker cycle still closes exactly once for this hop (#417).
+    expect(mockCloseCircuitCycle).toHaveBeenCalledTimes(1)
+    expect(mockCloseCircuitCycle.mock.calls[0]).toEqual(
+      expect.arrayContaining([expect.objectContaining({ slug: 'bitget_futures' }), 'D'])
+    )
   })
 
   it('a continuation crawls only the carried traders that are still in the top-N', async () => {

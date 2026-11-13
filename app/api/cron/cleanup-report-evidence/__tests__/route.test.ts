@@ -41,6 +41,7 @@ describe('cleanup report evidence cron worker', () => {
 
   it('uses the standard cron wrapper and leases a bounded batch', () => {
     expect(mockWithCron).toHaveBeenCalledWith('cleanup-report-evidence', expect.any(Function), {
+      maxDurationSec: 60,
       safetyTimeoutMs: 55_000,
     })
   })

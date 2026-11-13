@@ -18,6 +18,8 @@ import { publishPositions } from '@/lib/ingest/serving/publish'
 import { parsePositionSnapshot } from '@/lib/ingest/core/position-snapshot'
 import { NATIVE_COHORT_MAX_SNAPSHOT_AGE_SECONDS } from '@/lib/ingest/native-cohort'
 import { getRegionQueue, INGEST_JOB, type TierJobData } from '../queues'
+import { getConnection } from '../../connection'
+import { closeCircuitCycle } from '../circuit-cycle'
 import {
   assertSourceMatchesConsumedRegion,
   type ConsumedRegionContext,
@@ -176,6 +178,8 @@ export async function processTierD(
     }
   } finally {
     await session.close()
+    // Spec §4 per-cycle failure-rate alert (never throws).
+    await closeCircuitCycle(src, 'D', { redis: getConnection })
   }
 
   if (remainingIds.length > 0) {

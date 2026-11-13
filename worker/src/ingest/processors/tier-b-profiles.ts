@@ -47,6 +47,8 @@ import { publishCopierSnapshotInTransaction } from '@/lib/ingest/serving/copier-
 import { recordFieldInventory } from '@/lib/ingest/field-inventory'
 import { fireAndForget, logger } from '@/lib/utils/logger'
 import { getRegionQueue, INGEST_JOB, type TierJobData } from '../queues'
+import { getConnection } from '../../connection'
+import { closeCircuitCycle } from '../circuit-cycle'
 import {
   assertSourceMatchesConsumedRegion,
   type ConsumedRegionContext,
@@ -729,6 +731,8 @@ export async function processTierB(
     }
   } finally {
     await session.close()
+    // Spec §4 per-cycle failure-rate alert (never throws).
+    await closeCircuitCycle(src, 'B', { redis: getConnection })
   }
 
   result.remaining = topTraders.length - attempted
