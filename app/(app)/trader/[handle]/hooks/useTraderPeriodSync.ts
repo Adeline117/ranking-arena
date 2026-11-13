@@ -32,14 +32,16 @@ export function useTraderPeriodSync(): Period {
   const selectedPeriod = usePeriodStore((s) => s.period)
   const setPeriod = usePeriodStore((s) => s.setPeriod)
 
-  // 1. URL → store on mount
+  // 1. URL → store on mount and on every trader change (pathname). The URL is
+  //    the authority: no `?period=` means 90D. The store is global and
+  //    survives client navigation, so without this reset picking 7D on
+  //    trader A made trader B open on 7D under a URL that says 90D — and a
+  //    shared link then showed different numbers than the sharer saw.
   const urlPeriod = searchParams.get('period')
   useEffect(() => {
-    if (urlPeriod && ['7D', '30D', '90D'].includes(urlPeriod)) {
-      setPeriod(urlPeriod as Period)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on mount
-  }, [])
+    setPeriod(urlPeriod && ['7D', '30D', '90D'].includes(urlPeriod) ? (urlPeriod as Period) : '90D')
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- per page/trader, not per period tick
+  }, [pathname])
 
   // 2. store → URL on change (skip first fire to avoid mount race)
   const periodSyncCountRef = useRef(0)
