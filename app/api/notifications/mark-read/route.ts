@@ -8,6 +8,7 @@
 import { withAuth } from '@/lib/api/middleware'
 import { badRequest, serverError, success } from '@/lib/api/response'
 import { createLogger } from '@/lib/utils/logger'
+import { delByPattern } from '@/lib/cache'
 
 const log = createLogger('api:notifications-mark-read')
 
@@ -38,6 +39,8 @@ export const POST = withAuth(
         return serverError('Failed to mark notifications as read')
       }
 
+      // Same invalidation as PUT /api/notifications: the list is cached 30s.
+      await delByPattern(`notifications:${user.id}:*`)
       return success({ message: 'All marked as read' })
     }
 
@@ -56,6 +59,8 @@ export const POST = withAuth(
       return serverError('Failed to mark notifications as read')
     }
 
+    // Same invalidation as PUT /api/notifications: the list is cached 30s.
+    await delByPattern(`notifications:${user.id}:*`)
     return success({ message: `${notification_ids.length} notifications marked as read` })
   },
   { name: 'notifications-mark-read', rateLimit: 'write' }
