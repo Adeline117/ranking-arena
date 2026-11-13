@@ -6,51 +6,18 @@
    Separators breathe. Hover reveals, not shouts.
    ============================================================ */
 
-/* === Medal Glow Animations === */
-/* Use filter: drop-shadow instead of box-shadow for GPU-composited animation */
-@keyframes medalGlowGold {
-  0%,
-  100% {
-    filter: drop-shadow(0 0 6px var(--color-gold-glow));
-  }
-  50% {
-    filter: drop-shadow(0 0 14px var(--color-gold-glow));
-  }
-}
-
-@keyframes medalGlowSilver {
-  0%,
-  100% {
-    filter: drop-shadow(0 0 5px var(--color-silver-glow));
-  }
-  50% {
-    filter: drop-shadow(0 0 12px var(--color-silver-glow));
-  }
-}
-
-@keyframes medalGlowBronze {
-  0%,
-  100% {
-    filter: drop-shadow(0 0 5px var(--color-bronze-glow));
-  }
-  50% {
-    filter: drop-shadow(0 0 12px var(--color-bronze-glow));
-  }
-}
-
-.medal-glow-gold,
-.medal-glow-silver,
-.medal-glow-bronze {
-  will-change: filter;
-}
+/* === Medal glow — static ===
+   Data surfaces never loop: a pulsing glow on three rows pulls the eye away
+   from the numbers and kept three compositor layers alive (will-change).
+   The honour stays as a fixed soft halo. */
 .medal-glow-gold {
-  animation: medalGlowGold 2.5s ease-in-out infinite;
+  box-shadow: 0 0 8px var(--color-gold-glow);
 }
 .medal-glow-silver {
-  animation: medalGlowSilver 2.5s ease-in-out infinite;
+  box-shadow: 0 0 6px var(--color-silver-glow);
 }
 .medal-glow-bronze {
-  animation: medalGlowBronze 2.5s ease-in-out infinite;
+  box-shadow: 0 0 6px var(--color-bronze-glow);
 }
 
 /* Row entrance animation removed for performance — 20 simultaneous
@@ -198,34 +165,8 @@
   display: none;
 }
 
-/* Rank 1 shimmer — subtle moving highlight */
-@keyframes rank1Shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-
-.ranking-row.rank-1::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 215, 0, 0.04) 40%,
-    rgba(255, 215, 0, 0.08) 50%,
-    rgba(255, 215, 0, 0.04) 60%,
-    transparent 100%
-  );
-  background-size: 200% 100%;
-  animation: rank1Shimmer 6s ease-in-out infinite;
-  pointer-events: none;
-  z-index: 0;
-}
+/* (Rank-1 looping shimmer removed: the gold tint + medal bar carry the
+   honour; a 6s infinite sweep over the #1 row's numbers was distracting.) */
 
 /* #1 — Gold: warm, prestigious, luminous */
 .ranking-row.rank-1 {
@@ -335,11 +276,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .medal-glow-gold,
-  .medal-glow-silver,
-  .medal-glow-bronze {
-    animation: none;
-  }
   .ranking-row-link {
     animation: none;
   }

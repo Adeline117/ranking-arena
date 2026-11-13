@@ -1070,26 +1070,9 @@ select:focus-visible {
   animation: contentReveal 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
 }
 
-/* Hero section subtle border glow animation */
-@keyframes heroGlow {
-  0%,
-  100% {
-    border-color: var(--color-border-primary);
-  }
-  50% {
-    border-color: var(--color-accent-primary-30, rgba(147, 115, 181, 0.3));
-  }
-}
-
-#ssr-hero-shell section {
-  animation: heroGlow 4s ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  #ssr-hero-shell section {
-    animation: none;
-  }
-}
+/* (Hero border no longer "breathes": a 4s infinite border-color loop is a
+   non-composited repaint on the LCP element and competes with the rankings.
+   The section keeps its static border from HomeHeroSSR.) */
 
 /* scrollTicker is needed for the market ticker on homepage */
 @keyframes scrollTicker {
@@ -3649,45 +3632,8 @@ td[data-numeric],
   word-break: break-word;
 }
 
-/* Arena Score glow animation for top performers.
-   Removed box-shadow keyframe (unused + non-composited paint).
-   Use score-legendary-glow (filter-based, composited) instead. */
-
-/* Purple tier (90+) shimmer effect */
-@keyframes score-shimmer {
-  0% {
-    background-position: -200% center;
-  }
-  100% {
-    background-position: 200% center;
-  }
-}
-
-/* score-legendary-glow: uses opacity + filter (both GPU-composited, no layout/paint)
-   Previously used box-shadow which triggers paint layer updates on every frame. */
-@keyframes score-legendary-glow {
-  0%,
-  100% {
-    filter: drop-shadow(0 0 4px rgba(139, 92, 246, 0.4));
-    opacity: 0.9;
-  }
-  50% {
-    filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.6));
-    opacity: 1;
-  }
-}
-
-@keyframes score-legendary-glow-intense {
-  0%,
-  100% {
-    filter: drop-shadow(0 0 5px rgba(139, 92, 246, 0.5));
-    opacity: 0.9;
-  }
-  50% {
-    filter: drop-shadow(0 0 11px rgba(139, 92, 246, 0.7));
-    opacity: 1;
-  }
-}
+/* Arena Score 90+ badge: static halo (TraderDisplay ArenaScoreBadge). The
+   former score-shimmer / score-legendary-glow loops were removed. */
 
 /* ============================================
    Groups / Community Layout
@@ -3748,19 +3694,7 @@ td[data-numeric],
   box-shadow: 0 0 0 3px var(--color-accent-primary-15, rgba(139, 111, 168, 0.15)) !important;
 }
 
-/* Empty state illustration pulse */
-@keyframes empty-state-float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-6px);
-  }
-}
-.empty-state-icon {
-  animation: empty-state-float 3s ease-in-out infinite;
-}
+/* Empty state icon is static (the infinite float loop was removed). */
 
 /* Activity badge / member count badge */
 .member-badge {
