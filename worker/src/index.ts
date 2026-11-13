@@ -127,7 +127,11 @@ async function main() {
             `published ${season}: cohort=${published.scoreCohortId} rows=${published.publishedRankCount} sources=${published.sources.length}`
           )
           // Output watermark (audit P2-8): only a successful publication counts.
-          await recordWorkerProgress(getConnection(), 'scoring', scoringHeartbeatNodeId())
+          await recordWorkerProgress(
+            getRankingCommandChainConnection(),
+            'scoring',
+            scoringHeartbeatNodeId()
+          )
           return published
         }
 
@@ -211,8 +215,8 @@ async function main() {
   // Liveness heartbeat on the shared roster (same mechanism as the ingest
   // worker). The first HSET must commit before this process reports ready,
   // so a scoring worker that cannot be monitored does not run unmonitored.
-  const heartbeatTimer = await startScoringHeartbeat(getConnection())
-  await markWorkerStarted(getConnection(), scoringHeartbeatNodeId())
+  const heartbeatTimer = await startScoringHeartbeat(getRankingCommandChainConnection())
+  await markWorkerStarted(getRankingCommandChainConnection(), scoringHeartbeatNodeId())
 
   console.log(
     `[worker] Ready — processing queue "${QUEUE_NAME}" with ` +
