@@ -166,7 +166,7 @@ html[lang="ja"] .pro-promo-lang[data-pro-promo-lang="en"],html[lang="ko"] .pro-p
    ============================================ */
 .ranking-table-grid{display:grid;gap:8px;align-items:center;min-height:52px;padding:0 16px;contain:layout style}
 .ranking-table-grid.ranking-row{display:grid;gap:8px;align-items:center;min-height:52px;padding:0 16px;transition:background 0.15s ease}
-.sort-header{display:flex;align-items:center;gap:4px;background:none;border:none;padding:0;cursor:pointer;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;font-size:12px;font-weight:700;color:var(--text-tertiary,#6B6B7B)}
+.sort-header{display:flex;align-items:center;gap:4px;background:none;border:none;padding:0;cursor:pointer;text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap;font-size:10px;font-weight:500;color:var(--color-text-quaternary,var(--color-text-tertiary));min-height:44px}
 .toolbar-btn{display:flex;align-items:center;justify-content:center;gap:3px;padding:4px 8px;height:26px;border-radius:6px;border:1px solid var(--border-secondary,#3A3848);background:var(--bg-tertiary,#1C1926);color:var(--text-secondary,#A8A8B3);cursor:pointer;font-size:11px}
 
 /* ============================================
@@ -211,13 +211,14 @@ footer,.sidebar-contained{content-visibility:auto;contain-intrinsic-size:auto 30
    below 768px the same cells reflow, so no duplicate link/value tree exists. */
 .ssr-t{background:var(--color-bg-secondary);border-radius:16px;border:1px solid var(--color-border-primary);overflow:hidden}
 .ssr-ranking-table{width:100%;max-width:100%;min-width:0;overflow:hidden;background:var(--color-bg-secondary)}
-.ssr-ranking-grid{display:grid;grid-template-columns:40px minmax(0,1.5fr) 58px minmax(72px,96px) minmax(64px,80px) 60px 60px;column-gap:12px;align-items:center;min-width:0;max-width:100%}
-.ssr-ranking-header{min-height:52px;padding:8px 20px;border-top:1px solid var(--glass-border-light);border-bottom:1px solid var(--glass-border-light);background:var(--color-bg-secondary)}
+.ssr-ranking-grid{display:grid;grid-template-columns:40px minmax(0,1.5fr) 58px 96px 80px 64px 64px;column-gap:12px;align-items:center;min-width:0;max-width:100%}
+.ssr-filter-bar{height:61px}
+.ssr-ranking-header{min-height:61px;padding:8px 20px;border-bottom:1px solid var(--glass-border-light);background:var(--color-bg-secondary)}
 .ssr-ranking-header>span{min-width:0;color:var(--color-text-tertiary);font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ssr-ranking-header>span:first-child,.ssr-ranking-header>span:nth-child(3){text-align:center}
 .ssr-ranking-header>span:nth-child(n+4){text-align:right}
-.ssr-ranking-body{min-width:0}
-.ssr-ranking-entry{min-height:58px;padding:10px 20px;color:inherit;text-decoration:none;border-bottom:1px solid var(--color-border-primary);position:relative;contain:layout style}
+.ssr-ranking-body{min-width:0;display:flex;flex-direction:column}
+.ssr-ranking-entry{min-height:58px;padding:14px 20px;color:inherit;text-decoration:none;border-bottom:1px solid var(--color-border-primary);position:relative;contain:layout style}
 .ssr-ranking-entry:hover{background:linear-gradient(90deg,var(--color-accent-primary-08) 0%,transparent 50%)}
 .ssr-ranking-entry:focus-visible{outline:2px solid var(--color-brand);outline-offset:-2px;border-radius:4px}
 .ssr-ranking-entry:active{transform:scale(.998)}
@@ -250,7 +251,7 @@ footer,.sidebar-contained{content-visibility:auto;contain-intrinsic-size:auto 30
 .ssr-ranking-empty p:last-child{font-size:13px}
 @media(max-width:767px){
   .ssr-ranking-table{padding:0 0 10px;background:transparent}
-  .ssr-ranking-header{display:none}
+  .ssr-ranking-header,.ssr-filter-bar{display:none}
   .ssr-ranking-body{display:flex;flex-direction:column;gap:10px}
   .ssr-ranking-entry{display:grid;grid-template-columns:32px minmax(0,1fr) auto;grid-template-areas:"rank trader score" "roi roi roi" "support support support";column-gap:12px;row-gap:8px;width:100%;max-width:100%;min-height:0;margin:0;padding:12px 16px;border:1px solid var(--color-border-primary);border-radius:14px;background:var(--color-bg-secondary);box-shadow:none}
   .ssr-rank-cell{grid-area:rank}
