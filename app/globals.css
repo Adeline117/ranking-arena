@@ -4282,6 +4282,15 @@ td[data-numeric],
   bottom: 0;
   visibility: hidden;
 }
+/* Layout of the content layer must be final before the async sheet lands:
+   flow-root changes where the hero rows' margins live, and switching it late
+   registered as a layout shift on the top-3 rows. */
+.swipe-row-content {
+  position: relative;
+  z-index: 2;
+  display: flow-root;
+  background: var(--color-bg-secondary);
+}
 
 /* Flash animation for ranking value changes */
 @keyframes flash-green-bg {

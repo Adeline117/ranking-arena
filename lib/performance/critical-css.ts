@@ -212,7 +212,7 @@ footer,.sidebar-contained{content-visibility:auto;contain-intrinsic-size:auto 30
 .ssr-t{background:var(--color-bg-secondary);border-radius:16px;border:1px solid var(--color-border-primary);overflow:hidden}
 .ssr-ranking-table{width:100%;max-width:100%;min-width:0;overflow:hidden;background:var(--color-bg-secondary)}
 .ssr-ranking-grid{display:grid;grid-template-columns:40px minmax(0,1.5fr) 58px 96px 80px 64px 64px;column-gap:12px;align-items:center;min-width:0;max-width:100%}
-.ssr-filter-bar{height:61px}
+.ssr-filter-bar{height:63px}
 .ssr-ranking-header{min-height:61px;padding:8px 20px;border-bottom:1px solid var(--glass-border-light);background:var(--color-bg-secondary)}
 .ssr-ranking-header>span{min-width:0;color:var(--color-text-tertiary);font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ssr-ranking-header>span:first-child,.ssr-ranking-header>span:nth-child(3){text-align:center}
