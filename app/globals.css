@@ -4344,6 +4344,21 @@ td[data-numeric],
   color: var(--color-accent-error) !important;
 }
 
+/* Swipe-to-reveal guard (full rules in /styles/ranking-table.css, which loads
+   async after hydration). Until then the action buttons would render in flow
+   under every row; keep them out of layout and invisible until a swipe. */
+.swipe-row-wrapper {
+  position: relative;
+  overflow: hidden;
+}
+.swipe-row-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  visibility: hidden;
+}
+
 /* Flash animation for ranking value changes */
 @keyframes flash-green-bg {
   0% {
