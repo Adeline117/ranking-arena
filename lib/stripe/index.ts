@@ -1,4 +1,5 @@
 import 'server-only'
+import { createHash } from 'node:crypto'
 import { resolveProPriceIds } from './price-ids'
 import Stripe from 'stripe'
 import { API_PRICING, PRICING } from '@/lib/config/pricing'
@@ -365,7 +366,14 @@ export async function createCheckoutSession(params: {
   // Idempotency key prevents duplicate checkout sessions if the client retries
   // (double-click, network retry, browser prefetch). Stripe deduplicates within 24h.
   // Key is scoped to customer + price so switching plans creates a new session.
-  const idempotencyKey = `checkout_${params.customerId}_${params.priceId}_${Math.floor(Date.now() / 60_000)}`
+  // The params digest matters: Stripe rejects a reused key whose request body
+  // differs, so toggling the trial or adding a promo code inside the same minute
+  // used to fail checkout with an idempotency error instead of a new session.
+  const paramsDigest = createHash('sha256')
+    .update(JSON.stringify(sessionParams))
+    .digest('hex')
+    .slice(0, 16)
+  const idempotencyKey = `checkout_${params.customerId}_${params.priceId}_${Math.floor(Date.now() / 60_000)}_${paramsDigest}`
   const session = await stripe.checkout.sessions.create(sessionParams, {
     idempotencyKey,
   })
