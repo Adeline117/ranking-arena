@@ -245,8 +245,14 @@ async function checkFreshness(deadline: RequestDeadline): Promise<{
       displayName: string
       lastUpdate: string | null
       ageHours: number | null
-      status: 'fresh' | 'stale' | 'critical' | 'unknown'
+      status: 'fresh' | 'stale' | 'critical' | 'unknown' | 'quarantined'
       recordCount: number
+      quarantine?: Array<{
+        season: string
+        reasons: string[]
+        since: string
+        lastConfirmedAt: string
+      }>
     }>
   }
 }> {
@@ -264,7 +270,7 @@ async function checkFreshness(deadline: RequestDeadline): Promise<{
       return { status: 'fail', latency, message: 'Freshness authority timed out' }
     }
 
-    const { total, fresh, stale, critical, unknown } = report.report.summary
+    const { total, fresh, stale, critical, unknown, quarantined } = report.report.summary
     const coverageComplete =
       report.coverage.expectedSourceBoards > 0 &&
       report.coverage.visibleSourceBoards === report.coverage.expectedSourceBoards
@@ -283,7 +289,8 @@ async function checkFreshness(deadline: RequestDeadline): Promise<{
     }
 
     const message = [
-      `${fresh}/${total} sources fresh; ${stale} stale; ${critical} critical; ${unknown} unknown`,
+      `${fresh}/${total} sources fresh; ${stale} stale; ${critical} critical; ${unknown} unknown` +
+        ((quarantined ?? 0) > 0 ? `; ${quarantined} quarantined` : ''),
       ...authorityProblems,
     ].join('; ')
     const authorityComplete = report.report.ok && coverageComplete && publicationProven
@@ -309,6 +316,7 @@ async function checkFreshness(deadline: RequestDeadline): Promise<{
           ageHours: source.ageHours,
           status: source.status,
           recordCount: source.recordCount,
+          ...(source.quarantine ? { quarantine: source.quarantine } : {}),
         })),
       },
     }

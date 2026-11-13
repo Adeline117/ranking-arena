@@ -9609,6 +9609,16 @@ export type Database = {
           timeframe: number
         }[]
       }
+      arena_publication_source_isolations: {
+        Args: never
+        Returns: {
+          filter_source: string
+          first_isolated_at: string
+          isolated_at: string
+          reasons: string[]
+          season_id: string
+        }[]
+      }
       arena_records_page: {
         Args: {
           p_cursor?: string

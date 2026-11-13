@@ -1813,6 +1813,7 @@ const ko = {
   adminStatusStale: '오래됨',
   adminStatusCritical: '위험',
   adminStatusUnknown: '알 수 없음',
+  adminStatusQuarantined: '격리됨',
   adminNoDataLabel: '데이터 없음',
   adminLastUpdate: '가장 오래된 상류 워터마크: {time}',
   adminAgeHours: '경과: {hours}시간',

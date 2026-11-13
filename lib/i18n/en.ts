@@ -1896,6 +1896,7 @@ const en = {
   adminStatusStale: 'Stale',
   adminStatusCritical: 'Critical',
   adminStatusUnknown: 'Unknown',
+  adminStatusQuarantined: 'Quarantined',
   adminNoDataLabel: 'No data',
   adminLastUpdate: 'Oldest upstream watermark: {time}',
   adminAgeHours: 'Age: {hours} hours',

@@ -9,7 +9,11 @@ import {
   type ExpectedSourceWindow,
   type VisibleSourceWindow,
 } from '@/lib/rankings/source-freshness'
-import type { FreshnessReport, PlatformFreshnessStatus } from '@/lib/rankings/freshness-report'
+import type {
+  FreshnessReport,
+  PlatformFreshnessStatus,
+  SourceQuarantine,
+} from '@/lib/rankings/freshness-report'
 
 const STALE_THRESHOLD_MS = 8 * 60 * 60 * 1000
 const CRITICAL_THRESHOLD_MS = 24 * 60 * 60 * 1000
@@ -44,6 +48,107 @@ export interface FreshnessAuthoritySnapshot {
     season: '90D'
     publishedAt: string
   } | null
+}
+
+export interface SourceIsolationRow {
+  season_id: string
+  filter_source: string
+  reasons: string[]
+  first_isolated_at: string
+  isolated_at: string
+}
+
+/** PostgREST / PostgreSQL "function does not exist" (isolation not installed). */
+const MISSING_FUNCTION_CODES = new Set(['PGRST202', '42883'])
+
+function parseSourceIsolationRows(data: unknown): SourceIsolationRow[] {
+  if (!Array.isArray(data)) {
+    throw new TypeError('source isolation authority did not return rows')
+  }
+  return data.map((value, index) => {
+    if (
+      !isRuntimeRow(value) ||
+      typeof value.season_id !== 'string' ||
+      typeof value.filter_source !== 'string' ||
+      !Array.isArray(value.reasons) ||
+      !value.reasons.every((reason) => typeof reason === 'string') ||
+      typeof value.first_isolated_at !== 'string' ||
+      typeof value.isolated_at !== 'string'
+    ) {
+      throw new TypeError(`source isolation row ${index} is malformed`)
+    }
+    return {
+      season_id: value.season_id,
+      filter_source: value.filter_source,
+      reasons: value.reasons as string[],
+      first_isolated_at: value.first_isolated_at,
+      isolated_at: value.isolated_at,
+    }
+  })
+}
+
+function latestWatermark(rows: readonly PublicationFreshnessRow[], source: string): string | null {
+  let latest: string | null = null
+  for (const row of rows) {
+    if (row.source !== source || typeof row.source_as_of !== 'string') continue
+    if (!Number.isFinite(Date.parse(row.source_as_of))) continue
+    if (latest === null || Date.parse(row.source_as_of) > Date.parse(latest)) {
+      latest = row.source_as_of
+    }
+  }
+  return latest
+}
+
+/**
+ * Isolated sources leave the season's expected set, so without this they
+ * would silently vanish from the report. List every isolated source with its
+ * seasons, reasons and isolation start. A source that is otherwise fresh
+ * becomes `quarantined`; stale/critical/unknown stays the worse status.
+ */
+export function applySourceQuarantine(
+  platforms: readonly PlatformFreshnessStatus[],
+  isolations: readonly SourceIsolationRow[],
+  watermarkRows: readonly PublicationFreshnessRow[],
+  now = Date.now()
+): PlatformFreshnessStatus[] {
+  const bySource = new Map<string, SourceQuarantine[]>()
+  for (const isolation of isolations) {
+    const list = bySource.get(isolation.filter_source) ?? []
+    list.push({
+      season: isolation.season_id,
+      reasons: [...isolation.reasons],
+      since: isolation.first_isolated_at,
+      lastConfirmedAt: isolation.isolated_at,
+    })
+    bySource.set(isolation.filter_source, list)
+  }
+  const result = platforms.map((platform) => {
+    const quarantine = bySource.get(platform.platform)
+    if (!quarantine) return platform
+    bySource.delete(platform.platform)
+    return {
+      ...platform,
+      status: platform.status === 'fresh' ? ('quarantined' as const) : platform.status,
+      quarantine: quarantine.sort((a, b) => a.season.localeCompare(b.season)),
+    }
+  })
+  for (const [source, quarantine] of [...bySource.entries()].sort(([a], [b]) =>
+    a.localeCompare(b)
+  )) {
+    const lastUpdate = latestWatermark(watermarkRows, source)
+    const ageMs = lastUpdate === null ? null : Math.max(0, now - Date.parse(lastUpdate))
+    result.push({
+      platform: source,
+      displayName: source,
+      lastUpdate,
+      ageMs,
+      ageHours: ageMs === null ? null : Math.round((ageMs / (1000 * 60 * 60)) * 10) / 10,
+      status: 'quarantined',
+      recordCount: 0,
+      quarantine: quarantine.sort((a, b) => a.season.localeCompare(b.season)),
+    })
+  }
+  return result
 }
 
 function uniqueCount(values: readonly string[]): number {
@@ -190,7 +295,9 @@ export async function buildFreshnessAuthoritySnapshot(
     .select('season_id,source,source_as_of,recorded_at,score_cohort_id,published_rank_count')
     .in('season_id', [...RANKING_SEASONS])
 
-  const [expectedResult, visibleBySeason, watermarkResult] = await Promise.all([
+  const isolationQuery = supabase.rpc('arena_publication_source_isolations')
+
+  const [expectedResult, visibleBySeason, watermarkResult, isolationResult] = await Promise.all([
     signal ? expectedQuery.abortSignal(signal) : expectedQuery,
     Promise.all(
       RANKING_SEASONS.map(async (season) => {
@@ -204,6 +311,7 @@ export async function buildFreshnessAuthoritySnapshot(
       })
     ),
     signal ? watermarkQuery.abortSignal(signal) : watermarkQuery,
+    signal ? isolationQuery.abortSignal(signal) : isolationQuery,
   ])
 
   if (expectedResult.error) {
@@ -227,6 +335,18 @@ export async function buildFreshnessAuthoritySnapshot(
     throw new Error('source watermark freshness authority is unavailable')
   }
   const watermarkRows = parsePublicationFreshnessRows(watermarkResult.data)
+
+  let isolations: SourceIsolationRow[] = []
+  if (isolationResult.error) {
+    if (!MISSING_FUNCTION_CODES.has(isolationResult.error.code ?? '')) {
+      console.error('[freshness] source isolation authority failed:', isolationResult.error.message)
+      throw new Error('source isolation authority is unavailable')
+    }
+    // Isolation migration not installed: nothing can be isolated yet.
+    console.warn('[freshness] source isolation RPC not installed; reporting no quarantine')
+  } else {
+    isolations = parseSourceIsolationRows(isolationResult.data)
+  }
 
   const sourceStatuses = buildRegistrySourceFreshnessStatuses(
     expectedWindows,
@@ -275,26 +395,30 @@ export async function buildFreshnessAuthoritySnapshot(
     })
   }
 
-  const freshCount = results.filter((result) => result.status === 'fresh').length
+  const platforms = applySourceQuarantine(results, isolations, watermarkRows, now)
+  const freshCount = platforms.filter((result) => result.status === 'fresh').length
+  const quarantinedCount = platforms.filter((result) => result.status === 'quarantined').length
 
   const report: FreshnessReport = {
     ok:
       criticalPlatforms.length === 0 &&
       stalePlatforms.length === 0 &&
-      unknownPlatforms.length === 0,
+      unknownPlatforms.length === 0 &&
+      quarantinedCount === 0,
     checked_at: new Date(now).toISOString(),
     summary: {
-      total: results.length,
+      total: platforms.length,
       fresh: freshCount,
       stale: stalePlatforms.length,
       critical: criticalPlatforms.length,
       unknown: unknownPlatforms.length,
+      quarantined: quarantinedCount,
     },
     thresholds: {
       stale_hours: STALE_THRESHOLD_MS / (1000 * 60 * 60),
       critical_hours: CRITICAL_THRESHOLD_MS / (1000 * 60 * 60),
     },
-    platforms: results,
+    platforms,
   }
 
   return {

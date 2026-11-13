@@ -376,6 +376,11 @@ assert_equal "isolation row and event are recorded" "bybit:{stale}|1" "$(psql_db
             FROM arena.leaderboard_publication_source_isolations WHERE season_id = '90D') || '|' ||
          (SELECT pg_catalog.count(*) FROM arena.leaderboard_publication_source_isolation_events
            WHERE filter_source = 'bybit' AND action = 'isolated')")"
+assert_equal "monitoring RPC lists the isolation for service_role" "90D:bybit:{stale}" \
+  "$(psql_db -Atqc "SET ROLE service_role; SELECT season_id || ':' || filter_source || ':' || reasons::text
+     FROM public.arena_publication_source_isolations()")"
+assert_equal "monitoring RPC is not anon-callable" "f" "$(psql_db -Atqc "
+  SELECT pg_catalog.has_function_privilege('anon', 'public.arena_publication_source_isolations()', 'EXECUTE')")"
 assert_equal "serving head covers exactly the non-isolated sources" "binance_futures,hyperliquid" \
   "$(psql_db -Atqc "SELECT pg_catalog.string_agg(source, ',' ORDER BY source)
      FROM arena.public_ranked_leaderboard_serving_sources WHERE season_id = '90D'")"

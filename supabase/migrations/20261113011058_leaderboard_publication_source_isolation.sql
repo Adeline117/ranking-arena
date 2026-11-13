@@ -117,6 +117,33 @@ COMMENT ON TABLE arena.leaderboard_publication_source_isolations IS
 COMMENT ON TABLE arena.leaderboard_publication_source_isolation_events IS
   'Append-only log of publication source isolation/restoration decisions.';
 
+-- Monitoring view of the current isolations. Isolated sources leave the
+-- expected set, so the freshness report must list them from here instead of
+-- letting them disappear. Service-role only.
+CREATE OR REPLACE FUNCTION public.arena_publication_source_isolations()
+RETURNS TABLE (
+  season_id text,
+  filter_source text,
+  reasons text[],
+  first_isolated_at timestamptz,
+  isolated_at timestamptz
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+  SELECT isolation.season_id, isolation.filter_source, isolation.reasons,
+         isolation.first_isolated_at, isolation.isolated_at
+  FROM arena.leaderboard_publication_source_isolations AS isolation
+  ORDER BY isolation.filter_source, isolation.season_id;
+$function$;
+
+ALTER FUNCTION public.arena_publication_source_isolations() OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.arena_publication_source_isolations()
+  FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.arena_publication_source_isolations() TO service_role;
+
 -- Exclude isolated (season, filter_source) pairs from the freshness authority.
 -- The anchor is the shared serving predicate, present exactly once both in the
 -- original 20260718134000 body and after the Bitget-bot quarantine rewrite.
@@ -188,6 +215,10 @@ BEGIN
      OR pg_catalog.has_function_privilege('anon', v_function, 'EXECUTE')
      OR pg_catalog.has_function_privilege('authenticated', v_function, 'EXECUTE')
      OR NOT pg_catalog.has_function_privilege('service_role', v_function, 'EXECUTE')
+     OR pg_catalog.has_function_privilege(
+       'anon', 'public.arena_publication_source_isolations()', 'EXECUTE')
+     OR NOT pg_catalog.has_function_privilege(
+       'service_role', 'public.arena_publication_source_isolations()', 'EXECUTE')
      OR pg_catalog.has_table_privilege(
        'anon', 'arena.leaderboard_publication_source_isolations', 'SELECT')
      OR pg_catalog.has_table_privilege(
