@@ -76,6 +76,35 @@ const MAX_HOME_PAGE_INDEX = 40_000
 
 type HomeSearchParams = Record<string, string | string[] | undefined>
 
+/**
+ * Query keys that change WHICH rows the ranking shows (read by
+ * app/components/home/useRankingFilters.ts). Only these make the SSR snapshot
+ * unfaithful. Everything else — `ref` invite codes, `utm_*`, `fbclid`,
+ * `gclid`, … — is attribution that must never cost an invite/ad landing its
+ * server-rendered leaderboard (LCP + crawlers would otherwise see "Loading").
+ */
+const COHORT_QUERY_KEYS: ReadonlySet<string> = new Set([
+  'sort',
+  'order',
+  'category',
+  'ex',
+  'exchange',
+  'q',
+  'preset',
+  'fcat',
+  'roi_min',
+  'roi_max',
+  'dd_min',
+  'dd_max',
+  'min_pnl',
+  'min_score',
+  'min_wr',
+])
+
+function isCohortQueryKey(key: string): boolean {
+  return COHORT_QUERY_KEYS.has(key)
+}
+
 export interface HomeRankingQuery {
   timeRange: Period
   /** Zero-based, for the data reader/API boundary. The public URL is one-based. */
@@ -107,7 +136,8 @@ function canonicalClientCohortKey(
   params.set('page', String(pageIndex + 1))
 
   for (const key of Object.keys(searchParams).sort()) {
-    if (key === 'range' || key === 'page') continue
+    // Attribution params (ref/utm_*/fbclid/…) never define a cohort.
+    if (!isCohortQueryKey(key)) continue
     const raw = searchParams[key]
     const values = typeof raw === 'string' ? [raw] : Array.isArray(raw) ? raw : []
     for (const value of [...values].sort()) {
@@ -141,15 +171,17 @@ export function parseHomeRankingQuery(searchParams: HomeSearchParams): HomeRanki
     timeRange,
     pageIndex: requestedPage - 1,
     clientCohortKey: canonicalClientCohortKey(searchParams, timeRange, requestedPage - 1),
-    // Any query can describe a client-side filter/search state. Do not attach
-    // the canonical Top-20 ItemList to those URLs; it only belongs to `/`.
-    isCanonical: Object.keys(searchParams).length === 0,
+    // A cohort/range/page query describes a different list. Do not attach the
+    // canonical Top-20 ItemList to those URLs; it only belongs to `/` (plus
+    // attribution-only params such as `?ref=`/`?utm_source=`, same content).
+    isCanonical: !Object.keys(searchParams).some(
+      (key) => key === 'range' || key === 'page' || isCohortQueryKey(key)
+    ),
     // The server reader owns only range/page. Sort, category, exchange, search,
     // and advanced-filter URLs must stay neutral until the client obtains the
     // matching cohort instead of relabelling default SSR rows as filtered data.
-    requiresClientCohortFetch: Object.keys(searchParams).some(
-      (key) => key !== 'range' && key !== 'page'
-    ),
+    // Attribution params are ignored: they do not change the rows.
+    requiresClientCohortFetch: Object.keys(searchParams).some(isCohortQueryKey),
   }
 }
 
