@@ -27,6 +27,7 @@ const Pagination = dynamic(() => import('../ui/Pagination'), { ssr: false })
 
 // Extracted components — keep TraderRow/TraderCard static (LCP-critical)
 import { TraderRow } from './TraderRow'
+import { ROW_GAP, ROW_PADDING_X } from './TraderRowStyles'
 import { TraderCard } from './TraderCard'
 import { AvatarPreload } from '../ui/AvatarPreload'
 import { SortIndicator } from './Icons'
@@ -348,7 +349,7 @@ function RankingTableInner(props: {
   // horizontal-scroll threshold: the grid only overflows (and the frozen columns
   // engage) once the viewport is narrower than this. On wider screens the 1.5fr
   // name column absorbs the slack and min-width has no effect — layout unchanged.
-  // Uses the row's larger gap (12px) / padding (40px) so the box fully covers its
+  // Uses the shared row/header gap (12px) and padding (2 × 20px) so the box covers its
   // background + bottom border even in the overflow region.
   const desktopGridMinWidth = React.useMemo(() => {
     const widths: number[] = [40, 140] // rank, name (floor)
@@ -363,8 +364,8 @@ function RankingTableInner(props: {
     if (visibleColumns.includes('followers')) widths.push(70)
     if (visibleColumns.includes('trades')) widths.push(70)
     const cols = widths.reduce((a, b) => a + b, 0)
-    const gaps = (widths.length - 1) * 12 // row gap = tokens.spacing[3]
-    const padding = 40 // row horizontal padding = 2 × tokens.spacing[5]
+    const gaps = (widths.length - 1) * parseInt(ROW_GAP, 10)
+    const padding = 2 * parseInt(ROW_PADDING_X, 10)
     return cols + gaps + padding
   }, [visibleColumns])
 
@@ -827,7 +828,8 @@ function RankingTableInner(props: {
         p={0}
         radius="none"
         style={{
-          boxShadow: `0 0 0 1px var(--glass-border-light)`,
+          // One border only (a 1px boxShadow ring on top of the border drew a
+          // doubled edge).
           // 'clip' (NOT 'hidden'): clips identically but does not create a
           // scroll container, so the header's position:sticky keeps the
           // viewport as its scrollport and pins under the nav. 'hidden' makes
@@ -887,10 +889,11 @@ function RankingTableInner(props: {
             className="ranking-table-header ranking-table-grid ranking-table-grid-custom"
             style={{
               display: 'grid',
-              gap: tokens.spacing[2],
-              padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+              // Same gap / horizontal padding as the rows → labels sit exactly
+              // over their numbers.
+              gap: ROW_GAP,
+              padding: `${tokens.spacing[2]} ${ROW_PADDING_X}`,
               borderBottom: `1px solid var(--glass-border-light)`,
-              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
               background: 'var(--color-bg-secondary, #14121C)',
               borderRadius: onCategoryChange ? '0' : `${tokens.radius.xl} ${tokens.radius.xl} 0 0`,
               position: 'sticky',

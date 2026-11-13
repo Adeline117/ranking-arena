@@ -142,7 +142,8 @@
    "a gradient" — they have presence, depth, and atmosphere.
    ============================================================ */
 
-/* Shared hero treatment */
+/* Shared hero treatment: medal bar + tint only. No outer glow — it bled
+   over the neighbouring rows (inline HERO_STYLE_RANK_N matches this). */
 .ranking-row.rank-1,
 .ranking-row.rank-2,
 .ranking-row.rank-3 {
@@ -178,7 +179,6 @@
   );
   box-shadow:
     inset 3px 0 0 var(--color-rank-gold),
-    0 2px 20px rgba(255, 215, 0, 0.08),
     inset 0 1px 0 rgba(255, 215, 0, 0.08);
 }
 
@@ -191,7 +191,6 @@
   ) !important;
   box-shadow:
     inset 3px 0 0 var(--color-rank-gold),
-    0 4px 28px rgba(255, 215, 0, 0.12),
     inset 0 1px 0 rgba(255, 215, 0, 0.12);
 }
 
@@ -205,7 +204,6 @@
   );
   box-shadow:
     inset 3px 0 0 var(--color-rank-silver),
-    0 2px 16px rgba(192, 192, 192, 0.06),
     inset 0 1px 0 rgba(192, 192, 192, 0.06);
 }
 
@@ -218,7 +216,6 @@
   ) !important;
   box-shadow:
     inset 3px 0 0 var(--color-rank-silver),
-    0 4px 24px rgba(192, 192, 192, 0.1),
     inset 0 1px 0 rgba(192, 192, 192, 0.1);
 }
 
@@ -232,7 +229,6 @@
   );
   box-shadow:
     inset 3px 0 0 var(--color-rank-bronze),
-    0 2px 16px rgba(205, 127, 50, 0.06),
     inset 0 1px 0 rgba(205, 127, 50, 0.06);
 }
 
@@ -245,7 +241,6 @@
   ) !important;
   box-shadow:
     inset 3px 0 0 var(--color-rank-bronze),
-    0 4px 24px rgba(205, 127, 50, 0.1),
     inset 0 1px 0 rgba(205, 127, 50, 0.1);
 }
 
@@ -624,7 +619,7 @@
   }
   .ranking-hscroll[data-hscroll='true'] .ranking-row > :nth-child(1),
   .ranking-hscroll[data-hscroll='true'] .ranking-row > :nth-child(2) {
-    background: var(--color-bg-primary, #0a0910);
+    background: var(--color-bg-secondary, #14121c);
   }
 
   /* Top-3 heroes: tint the frozen cells to continue the medal gradient, layered
@@ -638,7 +633,7 @@
         rgba(255, 215, 0, 0.06) 70%,
         transparent 100%
       ),
-      var(--color-bg-primary, #0a0910);
+      var(--color-bg-secondary, #14121c);
   }
   .ranking-hscroll[data-hscroll='true'] .ranking-row.rank-2 > :nth-child(1),
   .ranking-hscroll[data-hscroll='true'] .ranking-row.rank-2 > :nth-child(2) {
@@ -649,7 +644,7 @@
         rgba(192, 192, 192, 0.04) 70%,
         transparent 100%
       ),
-      var(--color-bg-primary, #0a0910);
+      var(--color-bg-secondary, #14121c);
   }
   .ranking-hscroll[data-hscroll='true'] .ranking-row.rank-3 > :nth-child(1),
   .ranking-hscroll[data-hscroll='true'] .ranking-row.rank-3 > :nth-child(2) {
@@ -660,7 +655,7 @@
         rgba(205, 127, 50, 0.04) 70%,
         transparent 100%
       ),
-      var(--color-bg-primary, #0a0910);
+      var(--color-bg-secondary, #14121c);
   }
 
   /* Hover wash on the frozen cells for non-hero rows (heroes keep their tint). */
@@ -672,7 +667,7 @@
     > :nth-child(2) {
     background:
       linear-gradient(90deg, var(--color-accent-primary-08) 0%, transparent 60%),
-      var(--color-bg-primary, #0a0910);
+      var(--color-bg-secondary, #14121c);
   }
 }
 

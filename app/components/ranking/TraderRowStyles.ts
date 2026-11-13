@@ -6,32 +6,38 @@
 import { tokens } from '@/lib/design-tokens'
 import { TRADER_TEXT_TERTIARY, TRADER_ACCENT_ERROR } from './shared/TraderDisplay'
 
-// Hero row gradient styles (top 3) — more dramatic presence
+// Shared horizontal rhythm for the sticky column header AND every data row.
+// The header used gap 8 / padding-x 16 while rows used 12 / 20, so numeric
+// columns drifted 16–20px from their labels. Both now read these.
+export const ROW_GAP = tokens.spacing[3] // 12px
+export const ROW_PADDING_X = tokens.spacing[5] // 20px
+
+// Hero row styles (top 3): left medal bar + subtle tint. No horizontal margin
+// (hero numbers must line up with every other row and the header) and no
+// outer glow (it bled over neighbouring rows). Mirrored for the SSR first
+// paint in lib/performance/critical-css.ts (.ssr-ranking-entry-rank-N).
 export const HERO_STYLE_RANK_1: React.CSSProperties = {
   background:
     'linear-gradient(135deg, rgba(255,215,0,0.18) 0%, rgba(255,215,0,0.06) 35%, rgba(255,215,0,0.02) 70%, transparent 100%)',
-  boxShadow:
-    'inset 4px 0 0 var(--color-rank-gold), 0 4px 24px rgba(255,215,0,0.10), inset 0 1px 0 rgba(255,215,0,0.10)',
+  boxShadow: 'inset 4px 0 0 var(--color-rank-gold), inset 0 1px 0 rgba(255,215,0,0.10)',
   borderRadius: 14,
-  margin: '6px 4px 8px',
+  margin: '6px 0 8px',
   borderTop: '1px solid rgba(255,215,0,0.12)',
 }
 export const HERO_STYLE_RANK_2: React.CSSProperties = {
   background:
     'linear-gradient(135deg, rgba(192,192,192,0.14) 0%, rgba(192,192,192,0.04) 35%, transparent 80%)',
-  boxShadow:
-    'inset 4px 0 0 var(--color-rank-silver), 0 3px 18px rgba(192,192,192,0.08), inset 0 1px 0 rgba(192,192,192,0.08)',
+  boxShadow: 'inset 4px 0 0 var(--color-rank-silver), inset 0 1px 0 rgba(192,192,192,0.08)',
   borderRadius: 14,
-  margin: '4px 4px 6px',
+  margin: '4px 0 6px',
   borderTop: '1px solid rgba(192,192,192,0.08)',
 }
 export const HERO_STYLE_RANK_3: React.CSSProperties = {
   background:
     'linear-gradient(135deg, rgba(205,127,50,0.14) 0%, rgba(205,127,50,0.04) 35%, transparent 80%)',
-  boxShadow:
-    'inset 4px 0 0 var(--color-rank-bronze), 0 3px 18px rgba(205,127,50,0.08), inset 0 1px 0 rgba(205,127,50,0.08)',
+  boxShadow: 'inset 4px 0 0 var(--color-rank-bronze), inset 0 1px 0 rgba(205,127,50,0.08)',
   borderRadius: 14,
-  margin: '4px 4px 6px',
+  margin: '4px 0 6px',
   borderTop: '1px solid rgba(205,127,50,0.08)',
 }
 
@@ -74,8 +80,8 @@ export const HOLDER_CHIP_STYLE: React.CSSProperties = {
 export const ROW_BASE_STYLE: React.CSSProperties = {
   display: 'grid',
   alignItems: 'center',
-  gap: tokens.spacing[3],
-  padding: `${tokens.spacing[3.5]} ${tokens.spacing[5]}`,
+  gap: ROW_GAP,
+  padding: `${tokens.spacing[3.5]} ${ROW_PADDING_X}`,
   cursor: 'pointer',
   position: 'relative' as const,
 }

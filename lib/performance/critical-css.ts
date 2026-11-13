@@ -212,7 +212,7 @@ footer,.sidebar-contained{content-visibility:auto;contain-intrinsic-size:auto 30
 .ssr-t{background:var(--color-bg-secondary);border-radius:16px;border:1px solid var(--color-border-primary);overflow:hidden}
 .ssr-ranking-table{width:100%;max-width:100%;min-width:0;overflow:hidden;background:var(--color-bg-secondary)}
 .ssr-ranking-grid{display:grid;grid-template-columns:40px minmax(0,1.5fr) 58px minmax(72px,96px) minmax(64px,80px) 60px 60px;column-gap:12px;align-items:center;min-width:0;max-width:100%}
-.ssr-ranking-header{min-height:52px;padding:8px 20px;border-top:1px solid var(--glass-border-light);border-bottom:1px solid var(--glass-border-light);box-shadow:0 2px 8px rgba(0,0,0,0.15);background:var(--color-bg-secondary)}
+.ssr-ranking-header{min-height:52px;padding:8px 20px;border-top:1px solid var(--glass-border-light);border-bottom:1px solid var(--glass-border-light);background:var(--color-bg-secondary)}
 .ssr-ranking-header>span{min-width:0;color:var(--color-text-tertiary);font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ssr-ranking-header>span:first-child,.ssr-ranking-header>span:nth-child(3){text-align:center}
 .ssr-ranking-header>span:nth-child(n+4){text-align:right}
@@ -221,9 +221,9 @@ footer,.sidebar-contained{content-visibility:auto;contain-intrinsic-size:auto 30
 .ssr-ranking-entry:hover{background:linear-gradient(90deg,var(--color-accent-primary-08) 0%,transparent 50%)}
 .ssr-ranking-entry:focus-visible{outline:2px solid var(--color-brand);outline-offset:-2px;border-radius:4px}
 .ssr-ranking-entry:active{transform:scale(.998)}
-.ssr-ranking-entry-rank-1{min-height:72px;margin:6px 4px 8px;border-radius:14px;background:linear-gradient(135deg,rgba(255,215,0,.18) 0%,rgba(255,215,0,.06) 35%,rgba(255,215,0,.02) 70%,transparent 100%);box-shadow:inset 4px 0 0 var(--color-rank-gold),0 4px 24px rgba(255,215,0,.10)}
-.ssr-ranking-entry-rank-2{min-height:72px;margin:4px 4px 6px;border-radius:14px;background:linear-gradient(135deg,rgba(192,192,192,.14) 0%,rgba(192,192,192,.04) 35%,transparent 80%);box-shadow:inset 4px 0 0 var(--color-rank-silver),0 3px 18px rgba(192,192,192,.08)}
-.ssr-ranking-entry-rank-3{min-height:72px;margin:4px 4px 6px;border-radius:14px;background:linear-gradient(135deg,rgba(205,127,50,.14) 0%,rgba(205,127,50,.04) 35%,transparent 80%);box-shadow:inset 4px 0 0 var(--color-rank-bronze),0 3px 18px rgba(205,127,50,.08)}
+.ssr-ranking-entry-rank-1{min-height:72px;margin:6px 0 8px;border-radius:14px;background:linear-gradient(135deg,rgba(255,215,0,.18) 0%,rgba(255,215,0,.06) 35%,rgba(255,215,0,.02) 70%,transparent 100%);box-shadow:inset 4px 0 0 var(--color-rank-gold)}
+.ssr-ranking-entry-rank-2{min-height:72px;margin:4px 0 6px;border-radius:14px;background:linear-gradient(135deg,rgba(192,192,192,.14) 0%,rgba(192,192,192,.04) 35%,transparent 80%);box-shadow:inset 4px 0 0 var(--color-rank-silver)}
+.ssr-ranking-entry-rank-3{min-height:72px;margin:4px 0 6px;border-radius:14px;background:linear-gradient(135deg,rgba(205,127,50,.14) 0%,rgba(205,127,50,.04) 35%,transparent 80%);box-shadow:inset 4px 0 0 var(--color-rank-bronze)}
 .ssr-rank-cell{display:flex;align-items:center;justify-content:center;min-width:0}
 .ssr-rank-medal{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:var(--color-bg-primary);font-size:13px;font-weight:700}
 .ssr-rank-medal-1{background:linear-gradient(135deg,var(--color-medal-gold),var(--color-medal-gold-end))}
