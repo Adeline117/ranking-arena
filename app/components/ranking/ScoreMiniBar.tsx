@@ -25,6 +25,12 @@ export interface ScoreMiniBarProps {
   showValue?: boolean
   className?: string
   style?: React.CSSProperties
+  /**
+   * Localized accessible label. Hook-free component, so client callers pass
+   * it (e.g. t('arenaScoreOfHundredAria')); the English default stays for the
+   * server shell, which has no client language yet.
+   */
+  ariaLabel?: string
 }
 
 export default function ScoreMiniBar({
@@ -34,6 +40,7 @@ export default function ScoreMiniBar({
   showValue = false,
   className,
   style,
+  ariaLabel,
 }: ScoreMiniBarProps) {
   const finiteScore = normalizeFiniteScore(score)
   if (finiteScore == null) return null
@@ -61,7 +68,7 @@ export default function ScoreMiniBar({
       )}
       <div
         role="img"
-        aria-label={`Arena score ${rounded} of 100`}
+        aria-label={ariaLabel ?? `Arena score ${rounded} of 100`}
         style={{
           width,
           height,

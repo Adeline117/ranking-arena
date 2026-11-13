@@ -6737,6 +6737,17 @@ const ko = {
     '이 페이지에 일치 항목이 없습니다. Arena 전체에서 일치하는 트레이더:',
   rankingFiltersCurrentPageOnly:
     '필터는 이 페이지의 트레이더 50명에게만 적용됩니다. 다른 페이지에도 해당 트레이더가 있을 수 있습니다.',
+  roiUnknown: 'ROI 알 수 없음',
+  timeRangeAria: '기간',
+  showRangeRankingsAria: '{range} 랭킹 보기',
+  arenaScoreAria: 'Arena 점수: {score}',
+  arenaScoreOfHundredAria: 'Arena 점수 {score}/100',
+  platformTypeAria: '플랫폼 유형: {type}',
+  suspectedBotAria: '봇 의심',
+  tradingStyleAria: '거래 스타일: {style}',
+  noRankHistoryAria: '순위 기록 없음',
+  rankTrendAria: '순위 추이: {from} → {to}',
+  traderActionsAria: '{name} 작업',
 } as const
 
 export default ko

@@ -1,5 +1,7 @@
 'use client'
 
+import { t as i18nT } from '@/lib/i18n'
+
 interface RankDataPoint {
   rank: number
 }
@@ -23,7 +25,7 @@ export function RankSparkline({ data, width = 60, height = 20 }: RankSparklinePr
         height={height}
         viewBox={`0 0 ${width} ${height}`}
         role="img"
-        aria-label="No rank history"
+        aria-label={i18nT('noRankHistoryAria')}
       >
         {/* No-history state: a short centered dash reads as intentional
             "no trend yet" rather than a faint full-width line that looks broken. */}
@@ -74,7 +76,9 @@ export function RankSparkline({ data, width = 60, height = 20 }: RankSparklinePr
       width={width}
       height={height}
       viewBox={`0 0 ${width} ${height}`}
-      aria-label={`Rank trend: ${firstRank} → ${lastRank}`}
+      aria-label={i18nT('rankTrendAria')
+        .replace('{from}', String(firstRank))
+        .replace('{to}', String(lastRank))}
       role="img"
       style={{ overflow: 'visible' }}
     >

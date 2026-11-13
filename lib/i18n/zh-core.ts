@@ -379,6 +379,18 @@ const zhCore = {
   rankingSearchElsewhereTitle: '当前页没有匹配，以下是全站匹配的交易员：',
   rankingFiltersCurrentPageOnly:
     '筛选仅作用于当前页的 50 名交易员，其他页可能还有符合条件的交易员。',
+  roiUnknown: 'ROI 未知',
+  timeRangeAria: '时间范围',
+  showRangeRankingsAria: '查看 {range} 排名',
+  arenaScoreAria: 'Arena 评分：{score}',
+  arenaScoreOfHundredAria: 'Arena 评分 {score}（满分 100）',
+  platformTypeAria: '平台类型：{type}',
+  suspectedBotAria: '疑似机器人',
+  tradingStyleAria: '交易风格：{style}',
+  noRankHistoryAria: '暂无排名历史',
+  rankTrendAria: '排名走势：{from} → {to}',
+  traderActionsAria: '{name} 的操作',
+  botLabel: '机器人',
 } as const
 
 export default zhCore

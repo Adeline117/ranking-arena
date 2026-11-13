@@ -6867,6 +6867,17 @@ const en = {
   rankingSearchElsewhereTitle: 'No match on this page. Matching traders across Arena:',
   rankingFiltersCurrentPageOnly:
     'Filters apply to the 50 traders on this page only; other pages may have more matches.',
+  roiUnknown: 'ROI unknown',
+  timeRangeAria: 'Time range',
+  showRangeRankingsAria: 'Show {range} rankings',
+  arenaScoreAria: 'Arena Score: {score}',
+  arenaScoreOfHundredAria: 'Arena Score {score} of 100',
+  platformTypeAria: 'Platform type: {type}',
+  suspectedBotAria: 'Suspected bot',
+  tradingStyleAria: 'Trading style: {style}',
+  noRankHistoryAria: 'No rank history',
+  rankTrendAria: 'Rank trend: {from} → {to}',
+  traderActionsAria: '{name} actions',
 } as const
 
 export default en

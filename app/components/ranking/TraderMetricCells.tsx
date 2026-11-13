@@ -75,7 +75,7 @@ function AnimatedROI({
       weight="black"
       className="roi-value"
       style={{ ...ROI_TEXT_BASE_STYLE, color: roiColor }}
-      title={roi != null ? `${roi >= 0 ? '+' : ''}${Number(roi).toFixed(2)}%` : 'ROI unknown'}
+      title={roi != null ? `${roi >= 0 ? '+' : ''}${Number(roi).toFixed(2)}%` : i18nT('roiUnknown')}
     >
       {arrowGlyph && (
         <span aria-hidden="true" style={{ marginRight: '0.25em', fontSize: '0.8em' }}>
