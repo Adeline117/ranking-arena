@@ -639,6 +639,12 @@ function RankingTableInner(props: {
   const startIndex = hasServerPagination ? 0 : (currentPage - 1) * itemsPerPage
   const endIndex = hasServerPagination ? sortedTraders.length : startIndex + itemsPerPage
   const paginatedTraders = sortedTraders.slice(startIndex, endIndex)
+  // True whenever another server page provably exists (exact total or limit+1
+  // look-ahead). Used to suppress the card view's "end of list" footer.
+  const serverHasNextPage =
+    effectiveTotalCount !== null
+      ? totalPages !== null && currentPage < totalPages
+      : hasServerPagination && hasMore === true
 
   // Reset scroll position on page/sort/filter changes
   const tableScrollRef = useRef<HTMLDivElement>(null)
@@ -1364,9 +1370,27 @@ function RankingTableInner(props: {
                     </button>
                   </Box>
                 )}
+                {/* Mobile card view pages through the server cohort just like
+                  the desktop table: once the fetched page is fully expanded,
+                  expose the same limit+1 driven Pagination. Never claim
+                  "end of list" while the server still proves a next page. */}
+                {hasServerPagination && cardVisibleCount >= sortedTraders.length && (
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    totalCountIsExact={
+                      effectiveTotalCount !== null ? true : hasServerPagination ? false : true
+                    }
+                    hasMore={
+                      effectiveTotalCount === null && hasServerPagination ? hasMore === true : false
+                    }
+                    onPageChange={handlePaginationChange}
+                  />
+                )}
                 {cardVisibleCount >= sortedTraders.length &&
                   sortedTraders.length > 20 &&
-                  sortedTraders.length <= MAX_CARD_COUNT && (
+                  sortedTraders.length <= MAX_CARD_COUNT &&
+                  !serverHasNextPage && (
                     <Box style={{ textAlign: 'center', padding: tokens.spacing[4], opacity: 0.5 }}>
                       <Text size="xs" color="tertiary">
                         {t('endOfList')}
