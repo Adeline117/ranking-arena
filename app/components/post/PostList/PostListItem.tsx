@@ -394,32 +394,36 @@ export const PostListItem = memo(
           {/* Author actions: Pin/Edit/Delete */}
           {currentUserId && p.author_id === currentUserId && (
             <span style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
-              <button
-                onClick={(e) => onTogglePin(p, e)}
-                style={{
-                  background: p.is_pinned ? 'var(--color-accent-primary-10)' : 'transparent',
-                  border: 'none',
-                  color: p.is_pinned ? ARENA_PURPLE : tokens.colors.text.tertiary,
-                  cursor: 'pointer',
-                  fontSize: 12,
-                  padding: '2px 6px',
-                  borderRadius: tokens.radius.sm,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.color = ARENA_PURPLE
-                  e.currentTarget.style.background = 'var(--color-accent-primary-10)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = p.is_pinned
-                    ? ARENA_PURPLE
-                    : tokens.colors.text.tertiary
-                  e.currentTarget.style.background = p.is_pinned
-                    ? 'var(--color-accent-primary-10)'
-                    : 'transparent'
-                }}
-              >
-                {p.is_pinned ? t('unpin') : t('pin')}
-              </button>
+              {/* Group posts are pinned by group owners/admins on the group page;
+                  the pin API refuses a plain author there. */}
+              {!p.group_id && (
+                <button
+                  onClick={(e) => onTogglePin(p, e)}
+                  style={{
+                    background: p.is_pinned ? 'var(--color-accent-primary-10)' : 'transparent',
+                    border: 'none',
+                    color: p.is_pinned ? ARENA_PURPLE : tokens.colors.text.tertiary,
+                    cursor: 'pointer',
+                    fontSize: 12,
+                    padding: '2px 6px',
+                    borderRadius: tokens.radius.sm,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = ARENA_PURPLE
+                    e.currentTarget.style.background = 'var(--color-accent-primary-10)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = p.is_pinned
+                      ? ARENA_PURPLE
+                      : tokens.colors.text.tertiary
+                    e.currentTarget.style.background = p.is_pinned
+                      ? 'var(--color-accent-primary-10)'
+                      : 'transparent'
+                  }}
+                >
+                  {p.is_pinned ? t('unpin') : t('pin')}
+                </button>
+              )}
               <button
                 onClick={(e) => onStartEdit(p, e)}
                 style={{
