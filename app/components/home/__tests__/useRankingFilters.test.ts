@@ -292,7 +292,7 @@ describe('分类过滤（filterByCategory 真实实现）', () => {
       result.current.setCategory('web3')
       await Promise.resolve()
     })
-    expect(mockFetchPage).toHaveBeenCalledWith(0, { category: 'onchain' })
+    expect(mockFetchPage).toHaveBeenCalledWith(0, { category: 'onchain', exchange: undefined })
     expect(result.current.currentPage).toBe(1)
     expect(new URLSearchParams(window.location.search).get('category')).toBe('onchain')
     // API 已按分类过滤，客户端跳过 — 否则双重过滤会把返回页过滤成空
@@ -698,9 +698,77 @@ describe('重置与外部事件', () => {
       await Promise.resolve()
     })
     expect(result.current.selectedExchange).toBe('bybit')
-    expect(mockFetchPage).toHaveBeenCalledWith(0, { exchange: 'bybit' })
+    expect(mockFetchPage).toHaveBeenCalledWith(0, { exchange: 'bybit', category: undefined })
     expect(new URLSearchParams(window.location.search).get('ex')).toBe('bybit')
     expect(new URLSearchParams(window.location.search).get('page')).toBeNull()
+  })
+
+  it('switching category leaves the exchange scope so the tab label matches the rows', async () => {
+    const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+    await act(async () => {
+      window.dispatchEvent(
+        new CustomEvent('arena:filter-exchange', { detail: { exchange: 'bybit' } })
+      )
+      await Promise.resolve()
+    })
+    expect(result.current.selectedExchange).toBe('bybit')
+    await act(async () => {
+      result.current.setCategory('spot')
+      await Promise.resolve()
+    })
+    expect(mockFetchPage).toHaveBeenLastCalledWith(0, { category: 'spot', exchange: undefined })
+    expect(result.current.category).toBe('spot')
+    expect(result.current.selectedExchange).toBeNull()
+    const params = new URLSearchParams(window.location.search)
+    expect(params.get('ex')).toBeNull()
+    expect(params.get('category')).toBe('spot')
+  })
+
+  it('picking an exchange resets the category tab to all (API ignores category for exchange)', async () => {
+    const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+    await act(async () => {
+      result.current.setCategory('spot')
+      await Promise.resolve()
+    })
+    await act(async () => {
+      window.dispatchEvent(
+        new CustomEvent('arena:filter-exchange', { detail: { exchange: 'bybit' } })
+      )
+      await Promise.resolve()
+    })
+    expect(result.current.category).toBe('all')
+    expect(new URLSearchParams(window.location.search).get('category')).toBeNull()
+  })
+
+  it('?ex= with ?category= keeps the exchange cohort and labels it all-category', async () => {
+    window.history.replaceState(null, '', '/?ex=bybit&category=spot')
+    const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(result.current.category).toBe('all')
+    expect(mockFetchPage).toHaveBeenCalledWith(0, {
+      category: undefined,
+      sortBy: 'arena_score',
+      sortDir: 'desc',
+      exchange: 'bybit',
+    })
+  })
+
+  it('clearExchange drops only the exchange scope after the unscoped page lands', async () => {
+    window.history.replaceState(null, '', '/?ex=bybit')
+    const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(result.current.selectedExchange).toBe('bybit')
+    await act(async () => {
+      result.current.clearExchange()
+      await Promise.resolve()
+    })
+    expect(mockFetchPage).toHaveBeenLastCalledWith(0, { exchange: undefined, category: undefined })
+    expect(result.current.selectedExchange).toBeNull()
+    expect(new URLSearchParams(window.location.search).get('ex')).toBeNull()
   })
 
   it('an exchange marquee failure leaves the existing URL and displayed cohort untouched', async () => {

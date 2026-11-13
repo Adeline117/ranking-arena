@@ -6731,6 +6731,8 @@ const ko = {
   historyVerificationDesc:
     '이 트레이더의 과거 데이터가 검증을 통과하면 차트와 상세 통계가 여기에 표시됩니다.',
   historyVerificationCurrentRanking: '현재 랭킹 ({period})',
+  rankingFilteredByExchange: '{exchange}(으)로 필터링됨',
+  rankingClearExchangeFilter: '거래소 필터 해제',
 } as const
 
 export default ko

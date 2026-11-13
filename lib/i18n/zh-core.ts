@@ -368,6 +368,8 @@ const zhCore = {
   yes: '是',
   no: '否',
   ok: '确定',
+  rankingFilteredByExchange: '已按 {exchange} 筛选',
+  rankingClearExchangeFilter: '清除交易所筛选',
 } as const
 
 export default zhCore

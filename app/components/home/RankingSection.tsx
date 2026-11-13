@@ -16,6 +16,7 @@ import TimeRangeSelector from './TimeRangeSelector'
 import { useRankingFilters, FREE_LEADERBOARD_LIMIT } from './useRankingFilters'
 import CategoryRankingTabs, { type CategoryType } from '../ranking/CategoryRankingTabs'
 import { trackEvent } from '@/lib/analytics/track'
+import ExchangeScopeNotice from './ExchangeScopeNotice'
 
 const AdvancedFilterPanel = dynamic(() => import('./AdvancedFilterPanel'), { ssr: false })
 const FilterStatusMessages = dynamic(() => import('./FilterStatusMessages'), { ssr: false })
@@ -101,6 +102,7 @@ export default function RankingSection({
     savedFilters,
     hasActiveFilters,
     selectedExchange,
+    clearExchange,
     sortColumn,
     sortDir,
     currentPage,
@@ -196,6 +198,8 @@ export default function RankingSection({
           categoryCountsAreExact={categoryCountsAreExact}
         />
       </div>
+
+      <ExchangeScopeNotice exchange={selectedExchange} onClear={clearExchange} />
 
       <AdvancedFilterPanel
         showAdvancedFilter={showAdvancedFilter}

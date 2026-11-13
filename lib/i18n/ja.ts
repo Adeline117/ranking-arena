@@ -6503,6 +6503,8 @@ const ja = {
   historyVerificationDesc:
     'このトレーダーの履歴データが検証を通過すると、チャートと詳細な統計がここに表示されます。',
   historyVerificationCurrentRanking: '現在のランキング（{period}）',
+  rankingFilteredByExchange: '{exchange} で絞り込み中',
+  rankingClearExchangeFilter: '取引所の絞り込みを解除',
 } as const
 
 export default ja

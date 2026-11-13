@@ -6862,6 +6862,8 @@ const en = {
   historyVerificationDesc:
     'Charts and detailed statistics for this trader will appear once their historical data passes verification.',
   historyVerificationCurrentRanking: 'Current ranking ({period})',
+  rankingFilteredByExchange: 'Filtered by {exchange}',
+  rankingClearExchangeFilter: 'Clear exchange filter',
 } as const
 
 export default en

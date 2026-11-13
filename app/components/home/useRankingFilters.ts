@@ -83,12 +83,16 @@ function canApplyPersistedExchange(): boolean {
   )
 }
 
-function commitExchangeCohortUrl(exchange: string, eventTimeRange: unknown): void {
+function commitExchangeCohortUrl(exchange: string | null, eventTimeRange?: unknown): void {
   const params = new URLSearchParams(window.location.search)
   params.delete('exchange')
   params.delete('ex')
   params.delete('page')
-  params.set('ex', exchange)
+  // The API ignores category whenever an exchange is set, so an exchange
+  // cohort is always the all-category board of that exchange. Keep the URL
+  // honest about that instead of carrying a stale category label.
+  params.delete('category')
+  if (exchange) params.set('ex', exchange)
   if (eventTimeRange === '7D' || eventTimeRange === '30D' || eventTimeRange === '90D') {
     params.delete('range')
     if (eventTimeRange !== '90D') params.set('range', eventTimeRange)
@@ -105,6 +109,9 @@ function commitCategoryCohortUrl(category: CategoryType): void {
   const params = new URLSearchParams(window.location.search)
   params.delete('category')
   params.delete('page')
+  // Switching category leaves any exchange scope (see setCategory).
+  params.delete('ex')
+  params.delete('exchange')
   if (category !== 'all') params.set('category', category === 'web3' ? 'onchain' : category)
   const query = params.toString()
   window.history.replaceState(
@@ -262,15 +269,19 @@ export function useRankingFilters({
           // Keep the currently labelled cohort on screen until the server
           // confirms this exchange page. Otherwise old rows momentarily wear
           // a new filter label.
-          void fetchPage(0, { exchange }).then((succeeded) => {
+          // An exchange cohort is all-category (the API ignores category when
+          // exchange is set), so request and label it that way.
+          void fetchPage(0, { exchange, category: undefined }).then((succeeded) => {
             if (!succeeded) return
             const committedExchange = resolveExchangeSlug(exchange)
             setSelectedExchange(committedExchange)
+            setCategoryRaw('all')
             setCurrentPage(1)
             commitExchangeCohortUrl(committedExchange, timeRange)
           })
         } else {
           setSelectedExchange(exchange)
+          setCategoryRaw('all')
           setCurrentPage(1)
         }
       }
@@ -285,20 +296,49 @@ export function useRankingFilters({
       if (fetchPage) {
         // Do not relabel the current rows as a new category before the API
         // has returned that category's first page.
-        void fetchPage(0, { category: apiCategoryFor(cat) }).then((succeeded) => {
-          if (!succeeded) return
-          setCategoryRaw(cat)
-          setCurrentPage(1)
-          commitCategoryCohortUrl(cat)
-        })
+        // A category tab is a cross-exchange board. The API ignores category
+        // while an exchange is set, so carrying the exchange over would label
+        // one exchange's rows as e.g. "Spot". Leave the exchange scope.
+        void fetchPage(0, { category: apiCategoryFor(cat), exchange: undefined }).then(
+          (succeeded) => {
+            if (!succeeded) return
+            setCategoryRaw(cat)
+            setSelectedExchange(null)
+            setCurrentPage(1)
+            commitCategoryCohortUrl(cat)
+          }
+        )
       } else {
         setCategoryRaw(cat)
+        setSelectedExchange(null)
         setCurrentPage(1)
         commitCategoryCohortUrl(cat)
       }
     },
     [fetchPage]
   )
+
+  // "Filtered by X · Clear" affordance: drop only the exchange scope and keep
+  // sort order. Labels change only after the unscoped page has landed.
+  const clearExchange = useCallback(() => {
+    const commit = () => {
+      setSelectedExchange(null)
+      setCurrentPage(1)
+      try {
+        localStorage.removeItem(LS_KEY_EXCHANGE)
+      } catch {
+        /* ignore */
+      }
+      commitExchangeCohortUrl(null)
+    }
+    if (fetchPage) {
+      void fetchPage(0, { exchange: undefined, category: undefined }).then((succeeded) => {
+        if (succeeded) commit()
+      })
+      return
+    }
+    commit()
+  }, [fetchPage])
 
   // Reset pagination when time range changes
   const prevTimeRange = useRef(activeTimeRange)
@@ -383,7 +423,10 @@ export function useRankingFilters({
     if (!hasServerPage && urlPageIndex !== null) setCurrentPage(urlPageIndex + 1)
     if (urlQ) setSearchQuery(urlQ)
 
-    if (urlCategory) setCategoryRaw(urlCategory)
+    // `?ex=` wins over `?category=`: the API ignores category for an exchange
+    // cohort, so labelling the tab with it would contradict the rows.
+    const effectiveUrlCategory = resolvedExchange ? null : urlCategory
+    if (effectiveUrlCategory) setCategoryRaw(effectiveUrlCategory)
 
     if (urlSortRaw === 'alpha') {
       const canonicalParams = new URLSearchParams(window.location.search)
@@ -418,7 +461,7 @@ export function useRankingFilters({
           resolvedExchange !== undefined))
     if (shouldFetchInitialCohort && fetchPage) {
       void fetchPage(targetPageIndex, {
-        category: apiCategoryFor(urlCategory ?? 'all'),
+        category: apiCategoryFor(effectiveUrlCategory ?? 'all'),
         sortBy: SORT_BY[requestedSort],
         sortDir: requestedSortDir,
         exchange: resolvedExchange,
@@ -1033,6 +1076,7 @@ export function useRankingFilters({
     savedFilters,
     hasActiveFilters,
     selectedExchange,
+    clearExchange,
     // Sort/page/search
     sortColumn,
     sortDir,
