@@ -32,7 +32,11 @@ import { trackInteraction } from '@/lib/tracking'
 import { trackEvent } from '@/lib/analytics/track'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import dynamic from 'next/dynamic'
-import { buildJoinMembershipBody, parseMembershipAck } from './membership-client'
+import {
+  buildJoinMembershipBody,
+  joinFailureMessage,
+  parseMembershipAck,
+} from './membership-client'
 import { buildGroupLoginHref } from './login-intent'
 import {
   advanceGroupDetailResourceScope,
@@ -765,7 +769,12 @@ function GroupDetailScopedPage({
             data && typeof data === 'object' && !Array.isArray(data)
               ? (data as { error?: unknown }).error
               : null
-          throw new Error(typeof errorMessage === 'string' ? errorMessage : t('joinFailed'))
+          logger.error('Join error:', typeof errorMessage === 'string' ? errorMessage : res.status)
+          showToast(
+            joinFailureMessage(data, t, inviteToken ? 'inviteInvalidOrExpired' : 'joinFailed'),
+            'error'
+          )
+          return
         }
 
         const ack = parseMembershipAck(data)
