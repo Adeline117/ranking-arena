@@ -8,6 +8,7 @@ import BetaBanner from './components/layout/BetaBanner'
 import ProPromoBanner from './components/layout/ProPromoBanner'
 import { Analytics } from '@vercel/analytics/next'
 import { getAccountRecoveryBootstrapScript } from '@/lib/auth/account-recovery-bootstrap'
+import { MOBILE_METRIC_BOOTSTRAP_SCRIPT } from './components/ranking/mobile-metric'
 // Mounted in the ROOT layout (not just (app)/) so the homepage — the #1 airdrop
 // landing page — is no longer a client-error monitoring blind spot. Safe for LCP:
 // lib/sentry-init defers the Sentry chunk to requestIdleCallback (after `load`),
@@ -159,6 +160,8 @@ export default function RootLayout({
             __html: `try{var t=localStorage.getItem('theme');var e=t==='light'?'light':t==='dark'?'dark':window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',e)}catch(x){}`,
           }}
         />
+        {/* Mobile ranking secondary metric (ROI/PnL/Win%/MDD) before first paint. */}
+        <script dangerouslySetInnerHTML={{ __html: MOBILE_METRIC_BOOTSTRAP_SCRIPT }} />
         <script
           dangerouslySetInnerHTML={{
             __html: `if(!AbortSignal.timeout){AbortSignal.timeout=function(ms){var c=new AbortController();setTimeout(function(){c.abort(new DOMException('TimeoutError','TimeoutError'))},ms);return c.signal}}`,

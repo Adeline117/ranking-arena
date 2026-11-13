@@ -1154,6 +1154,47 @@ select:focus-visible {
 
 /* Skeleton shape variants removed — unused (Skeleton.tsx uses inline props) */
 
+/* Trader detail hero metrics (HeroMetrics.tsx): Arena Score is the primary
+   figure (owner 2026-11-13) — full-width above ROI | PnL on narrow cards,
+   Score | ROI | PnL in one row on wide ones. Lives here (render-blocking), not
+   in the async responsive.css, so the hero never reflows after first paint. */
+.hero-metrics-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas:
+    'score score'
+    'roi pnl';
+}
+.hero-metrics-score {
+  grid-area: score;
+}
+.hero-metrics-roi {
+  grid-area: roi;
+}
+.hero-metrics-pnl {
+  grid-area: pnl;
+}
+@media (min-width: 1024px) {
+  .hero-metrics-grid {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.25fr) minmax(0, 1fr);
+    grid-template-areas: 'score roi pnl';
+  }
+}
+/* Half-width ROI card on phones: keep a long ROI inside the card. */
+@media (max-width: 479px) {
+  .hero-metrics-roi .hero-metric-value > span {
+    font-size: 20px !important;
+  }
+}
+@media (max-width: 339px) {
+  .hero-metrics-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'score'
+      'roi'
+      'pnl';
+  }
+}
+
 /* ============================================
    Three-Column Layout
    ============================================ */
@@ -1228,7 +1269,7 @@ select:focus-visible {
 }
 
 /* Large desktop: no-left variant */
-@media (min-width: 1280px) and (max-width: 1440px) {
+@media (min-width: 1280px) and (max-width: 1439px) {
   .three-col-layout.three-col-no-left {
     grid-template-columns: 1fr 240px;
   }
@@ -1318,10 +1359,9 @@ select:focus-visible {
   .profile-header-actions.action-buttons > * {
     flex: 0 1 auto;
   }
-  .performance-main-grid {
-    grid-template-columns: 1fr !important;
-  }
-  .hero-metric-value {
+  /* Metric sets font-size inline on its inner value span, so target that span
+     (the old rule on the wrapper never applied). */
+  .hero-metric-value > span {
     font-size: 24px !important;
   }
   .metric-badges-grid {
@@ -1524,46 +1564,6 @@ select:focus-visible {
 .ranking-table-grid {
   contain: layout style;
   grid-template-columns: 48px minmax(140px, 2fr) 90px 100px 70px 70px 72px;
-}
-
-@media (max-width: 767px) {
-  .ranking-table-grid {
-    grid-template-columns: 32px 1fr 52px 56px 44px 44px;
-  }
-  .ranking-table-grid .col-pnl {
-    display: none !important;
-  }
-  /* Compact text for mobile columns */
-  .ranking-table-grid .col-winrate,
-  .ranking-table-grid .col-mdd,
-  .ranking-table-grid .col-score {
-    font-size: 11px !important;
-  }
-  .ranking-table-grid .roi-cell .roi-value {
-    font-size: 13px !important;
-  }
-  .ranking-table-grid .roi-cell .pnl-value {
-    display: none !important;
-  }
-  /* Tighter padding on mobile */
-  .ranking-table-grid {
-    padding-left: 8px !important;
-    padding-right: 8px !important;
-    gap: 4px !important;
-  }
-  /* Hide mobile score badge in trader name since score column is visible */
-  .ranking-table-grid .mobile-score-badge {
-    display: none !important;
-  }
-  /* Hide source tag on mobile to save space */
-  .ranking-table-grid .source-tag {
-    display: none !important;
-  }
-  /* Smaller avatar on mobile */
-  .ranking-table-grid .avatar-container {
-    width: 28px !important;
-    height: 28px !important;
-  }
 }
 
 /* ============================================
@@ -2790,12 +2790,13 @@ input[type='search']::-webkit-search-cancel-button:hover {
   }
 
   /* Performance cards */
-  .performance-main-grid {
-    grid-template-columns: 1fr 1fr !important;
+  .hero-metrics-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    grid-template-areas: 'score roi pnl' !important;
     gap: 8pt !important;
   }
 
-  .performance-main-grid > div {
+  .hero-metrics-grid > div {
     background: #f8f8f8 !important;
     border: 1px solid #ddd !important;
     border-radius: 4pt !important;
@@ -2995,20 +2996,9 @@ input[type='search']::-webkit-search-cancel-button:hover {
   color: var(--color-text-primary);
   position: relative;
 }
-.home-page-container {
-  max-width: 1400px;
-  margin: 0 auto;
-  position: relative;
-  z-index: 1;
-  padding: 8px 16px;
-}
-
-/* Wide desktop: expand outer container to match three-col-layout */
-@media (min-width: 1441px) {
-  .home-page-container {
-    max-width: 1600px;
-  }
-}
+/* .home-page-container geometry (width, gutter, padding-top) lives in
+   lib/performance/critical-css.ts (.home-container / containerCss, generated
+   from tokens.layout) so first paint and hydration share one source. */
 .home-mesh-bg {
   display: none;
 }
@@ -3053,64 +3043,105 @@ input[type='search']::-webkit-search-cancel-button:hover {
   border-color: var(--color-accent-primary-60);
 }
 
-/* The ranking controls should enter the first mobile viewport. The hero keeps
-   the trust essentials (what Arena ranks, coverage, freshness and methodology)
-   while dropping desktop-scale whitespace and decorative hierarchy. */
+/* Short neutrality pledge: mobile-only one-liner (see the mobile hero block). */
+.home-hero-neutrality-short {
+  display: none;
+}
+
+/* Mobile hero: compressed so the ranking rows reach the iPhone SE first
+   screen (owner decision 2026-11-13). Kept: headline, subtitle (which already
+   states the live-board count and the 2h cadence), the Sign-up CTA and the
+   methodology link — CTA + link share one row — and the neutrality pledge as
+   one small line (heroNeutralityShort). Hidden below 768px only: the long
+   pledge wording, the Score sentence (the methodology link covers it), the
+   stat tiles (a verbatim repeat of the subtitle's numbers) and the Pro pill
+   (repeats the site-wide promo banner). The hero is one server-rendered
+   element, so the first paint and hydration agree. */
 @media (max-width: 767px) {
-  #ssr-hero-shell {
-    padding: 8px 8px 0 !important;
-  }
   .home-hero {
-    min-height: 0 !important;
-    margin-bottom: 12px !important;
-    padding: 20px 18px 16px !important;
-    border-radius: 14px !important;
-  }
-  .home-hero-main {
     display: grid !important;
-    grid-template-columns: 1fr !important;
-    gap: 14px !important;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      'title title'
+      'sub sub'
+      'trust trust'
+      'cta link';
+    align-items: center;
+    column-gap: 14px;
+    min-height: 0 !important;
+    margin-bottom: 8px !important;
+    padding: 14px 14px 12px !important;
+    border-radius: 12px !important;
   }
-  .home-hero-copy {
-    flex-basis: auto !important;
+  .home-hero-main,
+  .home-hero-copy,
+  .home-hero-actions {
+    display: contents !important;
+  }
+  /* Grid items sit above the absolutely positioned decorative mesh. */
+  .home-hero-title,
+  .home-hero-subtitle,
+  .home-hero-methodology,
+  .home-hero-cta {
+    position: relative;
+    z-index: 1;
   }
   .home-hero-title {
-    font-size: clamp(1.75rem, 9vw, 2.25rem) !important;
-    line-height: 1.05 !important;
-    margin-bottom: 8px !important;
+    grid-area: title;
+    font-size: clamp(1.25rem, 5.6vw, 1.5rem) !important;
+    line-height: 1.1 !important;
+    margin-bottom: 4px !important;
   }
   .home-hero-subtitle {
-    font-size: 0.875rem !important;
-    line-height: 1.45 !important;
+    grid-area: sub;
+    font-size: 0.8125rem !important;
+    line-height: 1.4 !important;
+    max-width: none !important;
+    margin-bottom: 4px !important;
   }
+  /* The neutrality pledge stays on mobile (trust is the product's promise);
+     the Score sentence is covered by the methodology link next to the CTA. */
   .home-hero-explainer {
+    grid-area: trust;
+    position: relative;
+    z-index: 1;
     font-size: 0.75rem !important;
     line-height: 1.4 !important;
-    margin-top: 8px !important;
+    max-width: none !important;
+    margin: 0 0 10px !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .home-hero-neutrality-short {
+    display: inline;
+  }
+  .home-hero-neutrality,
+  .home-hero-score-explainer,
+  .home-hero-stats,
+  .home-hero-pro {
+    display: none !important;
+  }
+  .home-hero-cta {
+    grid-area: cta;
+    justify-self: start;
+    align-self: center;
   }
   .home-hero-methodology {
-    margin-top: 8px !important;
-  }
-  .home-hero-stats {
-    width: 100%;
-    justify-content: flex-start;
-    gap: 28px !important;
-  }
-  .home-hero-stats > div {
-    text-align: left !important;
-  }
-  .home-hero-stats > div > div:first-child {
-    font-size: 1.375rem !important;
-  }
-  .home-hero-actions {
-    margin-top: 14px !important;
-    gap: 8px !important;
+    grid-area: link;
+    margin-top: 0 !important;
+    justify-self: start;
+    align-self: center;
+    /* The link keeps a 44px touch target; centre its text in it so it lines
+       up with the Sign-up button instead of hugging the top edge. */
+    display: inline-flex !important;
+    align-items: center;
   }
 
   /* B2C mobile leaderboard: keep the primary toolbar to one decision row. */
   .ranking-toolbar-row {
     flex-wrap: nowrap !important;
-    padding: 6px 8px !important;
+    padding: 4px 8px !important;
   }
   .ranking-toolbar-row > div:last-child {
     min-width: 0;

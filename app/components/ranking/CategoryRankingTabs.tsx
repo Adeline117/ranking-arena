@@ -142,7 +142,7 @@ export default function CategoryRankingTabs({
               justifyContent: 'center',
               gap: 4,
               padding: `6px 12px`,
-              minHeight: 36,
+              // min-height: .category-tabs .touch-target-sm in critical CSS (36px; 44px ≤639px)
               minWidth: 'fit-content',
               whiteSpace: 'nowrap',
               borderRadius: tokens.radius.lg,

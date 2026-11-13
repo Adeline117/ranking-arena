@@ -250,6 +250,7 @@ const ko = {
   history: '기록',
   na: 'N/A',
   score: '점수',
+  rankingMobileMetricLabel: '각 행에 표시할 두 번째 지표',
   // Group application related
   applyCreateGroup: '그룹 생성 신청',
   groupName: '그룹 이름',
@@ -3084,6 +3085,7 @@ const ko = {
     'Arena Score는 현재 운영 중인 모든 소스 보드의 트레이더를 같은 기준으로 순위화합니다.',
   heroNeutrality:
     '어떤 소스도 순위를 돈으로 살 수 없습니다 — 운영 중인 모든 보드에 같은 규칙을 적용합니다.',
+  heroNeutralityShort: '어떤 소스도 순위를 돈으로 살 수 없습니다.',
   heroHowRanked: '랭킹 산정 방식 →',
   heroCTABrowse: '순위 둘러보기',
   heroCTASignUp: '무료 가입',

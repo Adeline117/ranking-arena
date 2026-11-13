@@ -251,6 +251,7 @@ const en = {
   history: 'History',
   na: 'N/A',
   score: 'Score',
+  rankingMobileMetricLabel: 'Second metric shown in each row',
   // Group application related
   applyCreateGroup: 'Apply to Create Group',
   groupName: 'Group Name',
@@ -3202,6 +3203,7 @@ const en = {
   heroScoreExplainer:
     'Arena Score ranks traders across every live source board — see exactly where you stand.',
   heroNeutrality: 'No source can pay for placement — every live board follows the same rules.',
+  heroNeutralityShort: 'No source can pay for placement.',
   heroHowRanked: 'How ranking works →',
   heroCTABrowse: 'Browse Rankings',
   heroCTASignUp: 'Sign Up Free',

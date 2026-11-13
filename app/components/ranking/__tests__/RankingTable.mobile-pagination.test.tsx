@@ -16,8 +16,9 @@ jest.mock('../TraderRow', () => ({
   TraderRow: ({ trader }: { trader: Trader }) => <div data-testid="row">{trader.id}</div>,
 }))
 
-jest.mock('../TraderCard', () => ({
-  TraderCard: ({ trader }: { trader: Trader }) => <div data-testid="card">{trader.id}</div>,
+jest.mock('../MobileRankRows', () => ({
+  MobileRankHeader: () => null,
+  TraderMobileRow: ({ trader }: { trader: Trader }) => <div data-testid="card">{trader.id}</div>,
 }))
 
 jest.mock('../../ui/AvatarPreload', () => ({ AvatarPreload: () => null }))

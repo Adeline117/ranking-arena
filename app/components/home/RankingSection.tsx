@@ -154,18 +154,10 @@ export default function RankingSection({
 
   return (
     <section className="home-ranking-section contain-layout-style" style={{ minWidth: 0 }}>
-      {/* Period + Category tabs in one row */}
-      <div
-        className="ranking-controls-bar"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          marginBottom: 8,
-          minHeight: 48,
-          flexWrap: 'wrap',
-        }}
-      >
+      {/* Period + Category tabs in one row. Layout lives in critical CSS
+          (.ranking-controls-bar) so the mobile single-row variant and the SSR
+          shell's reserved height come from one place. */}
+      <div className="ranking-controls-bar">
         <TimeRangeSelector activeRange={activeTimeRange} onChange={onTimeRangeChange} />
         {isRefreshing && (
           <span
@@ -188,9 +180,7 @@ export default function RankingSection({
             <span className="sr-only">{t('refreshing')}</span>
           </span>
         )}
-        <div
-          style={{ width: 1, height: 24, background: 'var(--color-border-primary)', flexShrink: 0 }}
-        />
+        <div className="ranking-controls-divider" aria-hidden="true" />
         <CategoryRankingTabs
           currentCategory={category}
           onCategoryChange={handleCategoryChange}

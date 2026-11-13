@@ -189,7 +189,7 @@ export function TraderHeaderBadges({
             weight="black"
             style={{
               color: getScoreColor(arenaScore),
-              fontFamily: tokens.typography.fontFamily.mono.join(', '),
+              fontVariantNumeric: 'tabular-nums',
               letterSpacing: '-0.02em',
             }}
           >

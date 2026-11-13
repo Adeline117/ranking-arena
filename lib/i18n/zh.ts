@@ -245,6 +245,7 @@ const zh = {
   history: '历史',
   na: '暂无',
   score: '评分',
+  rankingMobileMetricLabel: '每行显示的第二指标',
   // 小组申请相关
   applyCreateGroup: '申请创办小组',
   groupName: '小组名称',
@@ -3098,6 +3099,7 @@ const zh = {
   heroSubtitle: '汇总 {boards} 个当前有排名数据的来源板，每 2 小时使用最新可用数据重新计算',
   heroScoreExplainer: 'Arena Score 按同一规则对所有当前来源板的交易员排名——一眼看清你的真实位置。',
   heroNeutrality: '任何来源都不能付费买排名——所有当前榜单使用同一套规则。',
+  heroNeutralityShort: '任何来源都不能付费买排名。',
   heroHowRanked: '排名是怎么算的 →',
   heroCTABrowse: '查看排行榜',
   heroCTASignUp: '免费注册',

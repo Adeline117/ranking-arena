@@ -290,6 +290,7 @@ export default function OverviewPerformanceCard({
           >
             {/* ROI & PnL - 主指标区 Hero Metrics */}
             <HeroMetrics
+              arenaScore={periodArenaScore}
               roi={roi}
               roiDisclosure={roiDisclosure}
               pnl={pnl}

@@ -255,18 +255,15 @@ export default async function Page({ searchParams }: { searchParams: Promise<Hom
           sticky containing block, so .top-nav-header (position:sticky; top:0)
           scrolled away with it and left a 56px dead band above the table's
           sticky column header (which assumes the nav is pinned at top:0). */}
-      <TopNav />
+      <TopNav container="home" />
 
       <main id="main-content" tabIndex={-1}>
         {/* WelcomeBanner moved to HomePageLoader Phase 2 (client-only) */}
 
         {/* SSR Hero — stays visible permanently. Outside #ssr-ranking-table so
-          Phase 2 hiding the table doesn't affect it. Constrained to center
-          column width via max-width + margin for alignment with three-col grid. */}
-        <div
-          id="ssr-hero-shell"
-          style={{ maxWidth: 1400, margin: '0 auto', padding: '12px 20px 0' }}
-        >
+          Phase 2 hiding the table doesn't affect it. Shares .home-container
+          with the nav, source strip and three-column grid (one left edge). */}
+        <div id="ssr-hero-shell" className="home-container home-hero-shell">
           <HomeHeroSSR sourceBoardCount={heroStats?.sourceBoardCount} />
         </div>
 

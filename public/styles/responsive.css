@@ -349,17 +349,7 @@
    Overview Performance Card 响应式
    ============================================ */
 
-.performance-main-grid {
-  grid-template-columns: 1fr !important;
-  gap: 12px !important;
-}
-
-@media (min-width: 480px) {
-  .performance-main-grid {
-    grid-template-columns: 1fr 1fr !important;
-    gap: 16px !important;
-  }
-}
+/* Hero metrics grid (Score / ROI / PnL): see .hero-metrics-grid in globals.css. */
 
 .performance-grid {
   grid-template-columns: repeat(2, 1fr) !important;
@@ -691,43 +681,11 @@
 }
 
 /* ============================================
-   排行榜列表移动端优化
+   排行榜列表移动端: 布局只在 lib/performance/critical-css.ts 的 .mrow 块
+   (<768px 不渲染表格;此文件异步加载,放这里会造成 CLS)
    ============================================ */
 
 @media (max-width: 639px) {
-  .ranking-row {
-    min-height: 56px !important;
-    padding: 12px !important;
-  }
-
-  .ranking-row .trader-avatar {
-    width: 32px !important;
-    height: 32px !important;
-  }
-
-  .ranking-row .roi-value {
-    font-size: 14px !important;
-  }
-
-  .ranking-row .pnl-value {
-    font-size: 12px !important;
-  }
-
-  /* Mobile ranking grid: 3 columns only (Rank | Trader | ROI) */
-  .ranking-table-grid {
-    grid-template-columns: 36px 1fr 80px !important;
-    gap: 6px !important;
-    padding-left: 12px !important;
-    padding-right: 12px !important;
-    min-height: 56px !important;
-  }
-
-  /* Header: prevent wrapping, readable size */
-  .ranking-table-header {
-    padding: 10px 12px !important;
-    gap: 6px !important;
-  }
-
   /* Make toolbar buttons meet 44px Apple HIG touch target */
   .touch-target-sm {
     min-width: 44px !important;
@@ -735,39 +693,9 @@
   }
 }
 
-/* ============================================
-   时间选择器移动端优化
-   ============================================ */
-
-@media (max-width: 639px) {
-  .time-range-selector {
-    margin-bottom: 16px !important;
-  }
-
-  .time-range-selector button {
-    font-size: 14px !important;
-    padding: 12px 16px !important;
-  }
-}
-
-/* ============================================
-   分类标签栏移动端优化
-   ============================================ */
-
-@media (max-width: 639px) {
-  .category-tabs {
-    margin: 0 -12px !important;
-    padding: 4px 12px !important;
-    border-radius: 0 !important;
-    border-left: none !important;
-    border-right: none !important;
-  }
-
-  .category-tabs button {
-    padding: 10px 16px !important;
-    font-size: 13px !important;
-  }
-}
+/* 时间选择器 / 分类标签栏的移动端布局已并入 lib/performance/critical-css.ts 的
+   移动排行块(.ranking-controls-bar):此文件异步加载,这里的 !important 会在
+   首屏之后再改尺寸,造成位移。 */
 
 /* ============================================
    触摸反馈动画
@@ -1423,9 +1351,9 @@
     padding: 12px !important;
   }
 
-  .three-col-layout {
-    padding: 0 6px !important;
-  }
+  /* (.three-col-layout padding removed: globals.css already zeroes it below
+     768px, and this async sheet re-adding 6px moved the content after first
+     paint. Ranking rows: see the .mrow block in critical-css.ts.) */
 
   /* Even tighter font sizes */
   .page-title {
@@ -1434,19 +1362,6 @@
 
   .hero-title {
     font-size: 28px !important;
-  }
-
-  /* Ranking row: tighter */
-  .ranking-table-grid {
-    padding-left: 8px !important;
-    padding-right: 8px !important;
-    gap: 4px !important;
-  }
-
-  /* Smaller avatars */
-  .ranking-row .trader-avatar {
-    width: 28px !important;
-    height: 28px !important;
   }
 
   /* Feed grid: single column on tiny screens */

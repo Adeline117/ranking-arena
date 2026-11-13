@@ -243,6 +243,7 @@ const ja = {
   history: '履歴',
   na: 'N/A',
   score: 'スコア',
+  rankingMobileMetricLabel: '各行に表示する2つ目の指標',
   applyCreateGroup: 'グループ作成を申請',
   groupName: 'グループ名',
   groupNameEn: 'グループ名（英語）',
@@ -2947,6 +2948,7 @@ const ja = {
     'Arena Score はすべての稼働中ソースボードのトレーダーを同じ基準で順位付けします。',
   heroNeutrality:
     '掲載順位を購入できるソースはありません——すべての稼働中ボードに同じルールを適用します。',
+  heroNeutralityShort: '掲載順位を購入できるソースはありません。',
   heroHowRanked: 'ランキングの仕組み →',
   heroCTABrowse: 'ランキングを見る',
   heroCTASignUp: '無料登録',
