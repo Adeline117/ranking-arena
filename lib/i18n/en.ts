@@ -251,6 +251,7 @@ const en = {
   history: 'History',
   na: 'N/A',
   score: 'Score',
+  rankingMobileMetricLabel: 'Second metric shown in each row',
   // Group application related
   applyCreateGroup: 'Apply to Create Group',
   groupName: 'Group Name',
@@ -2891,6 +2892,12 @@ const en = {
   newMemberJoined: 'New Member Joined',
   newMemberJoinedMsg: 'A new member joined your group',
   joinFailed: 'Failed to join',
+  groupJoinBanned: 'You are banned from this group',
+  groupJoinScoreTooLow: 'This group requires an Arena Score of {score}+',
+  groupJoinVerifiedOnly: 'This group is for verified traders only',
+  groupJoinApprovalRequired: 'This group requires approval to join',
+  groupJoinDissolved: 'This group has been dissolved',
+  inviteAlreadyUsed: 'You have already used this invite',
   leftGroup: 'Left group successfully',
   leaveFailed: 'Failed to leave',
   loadMembersFailed: 'Failed to load members',
@@ -3197,6 +3204,7 @@ const en = {
   heroScoreExplainer:
     'Arena Score ranks traders across every live source board — see exactly where you stand.',
   heroNeutrality: 'No source can pay for placement — every live board follows the same rules.',
+  heroNeutralityShort: 'No source can pay for placement.',
   heroHowRanked: 'How ranking works →',
   heroCTABrowse: 'Browse Rankings',
   heroCTASignUp: 'Sign Up Free',
@@ -6863,6 +6871,23 @@ const en = {
   historyVerificationDesc:
     'Charts and detailed statistics for this trader will appear once their historical data passes verification.',
   historyVerificationCurrentRanking: 'Current ranking ({period})',
+  rankingFilteredByExchange: 'Filtered by {exchange}',
+  rankingClearExchangeFilter: 'Clear exchange filter',
+  rankingSearchElsewhereTitle: 'No match on this page. Matching traders across Arena:',
+  rankingFiltersCurrentPageOnly:
+    'Filters apply to the 50 traders on this page only; other pages may have more matches.',
+  roiUnknown: 'ROI unknown',
+  timeRangeAria: 'Time range',
+  showRangeRankingsAria: 'Show {range} rankings',
+  arenaScoreAria: 'Arena Score: {score}',
+  arenaScoreOfHundredAria: 'Arena Score {score} of 100',
+  platformTypeAria: 'Platform type: {type}',
+  suspectedBotAria: 'Suspected bot',
+  tradingStyleAria: 'Trading style: {style}',
+  noRankHistoryAria: 'No rank history',
+  rankTrendAria: 'Rank trend: {from} → {to}',
+  traderActionsAria: '{name} actions',
+  allTime90dShort: 'All-time',
 } as const
 
 export default en

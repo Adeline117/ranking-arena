@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useEffect, useReducer, useMemo, startTransition } from 'react'
 import type { Trader } from '../../ranking/RankingTable'
+import { toUiTrader, type UiTraderInput } from '../../ranking/toUiTrader'
 import { useTraderDataSync, type TraderDataPayload } from '@/lib/hooks/useBroadcastSync'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { CategoryCounts } from '@/lib/getInitialTraders'
@@ -50,12 +51,6 @@ function normalizeCategoryCounts(value: unknown): CategoryCounts | null {
   return Object.values(normalized).every(isSafeNonNegativeCount)
     ? (normalized as CategoryCounts)
     : null
-}
-
-function finiteMetricOrNull(value: unknown): number | null {
-  const numeric =
-    typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN
-  return Number.isFinite(numeric) ? numeric : null
 }
 
 function isTimeRange(value: unknown): value is TimeRange {
@@ -643,6 +638,9 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
 
       const controller = new AbortController()
       abortControllers.set(cancelKey, controller)
+      // Distinguishes our own 8s deadline from a superseding/user cancel: a
+      // timeout is a failure (error + retry), never a silent "no data".
+      let timedOut = false
 
       if (!opts?.silent) dispatch({ type: 'LOAD_START' })
 
@@ -661,7 +659,10 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         }
 
         // 8s timeout prevents indefinite hang if API is slow
-        const timeoutId = setTimeout(() => controller.abort(), 8_000)
+        const timeoutId = setTimeout(() => {
+          timedOut = true
+          controller.abort()
+        }, 8_000)
         let response: Response
         try {
           response = await fetch(url, { signal: controller.signal })
@@ -676,37 +677,16 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         // A slower, aborted request can still resolve in some environments.
         // Never let it overwrite or broadcast a newer page/filter cohort.
         if (requestSequence !== requestSequenceRef.current) return false
-        const traders: Trader[] = (data.traders || []).map((t: Record<string, unknown>) => ({
-          id: t.id as string,
-          handle: (t.handle as string) || null,
-          roi: finiteMetricOrNull(t.roi),
-          pnl: finiteMetricOrNull(t.pnl),
-          win_rate: finiteMetricOrNull(t.win_rate),
-          max_drawdown: finiteMetricOrNull(t.max_drawdown),
-          trades_count: finiteMetricOrNull(t.trades_count),
-          followers: t.followers != null ? Number(t.followers) : null,
-          source: t.source as string,
-          avatar_url: t.avatar_url as string | null,
-          avatar_url_mirror: (t.avatar_url_mirror as string | null) ?? null,
-          arena_score: finiteMetricOrNull(t.arena_score),
-          rank: isSafeNonNegativeCount(t.rank) && t.rank > 0 ? t.rank : null,
-          profitability_score: finiteMetricOrNull(t.profitability_score),
-          risk_control_score: finiteMetricOrNull(t.risk_control_score),
-          execution_score: finiteMetricOrNull(t.execution_score),
-          score_completeness: t.score_completeness ?? null,
-          trading_style: t.trading_style ?? null,
-          avg_holding_hours: finiteMetricOrNull(t.avg_holding_hours),
-          style_confidence: t.style_confidence ?? null,
-          is_bot: t.is_bot ?? false,
-          // 认领徽章(P3-P3):API 已按 verified_traders 标记;此显式挑字段映射器
-          // 曾把它丢掉 → 徽章渲染器有、数据到 API、行上永不显示(2026-07-09 真点揪出)。
-          is_verified: t.is_verified === true,
-          trader_type: t.trader_type ?? null,
-          sharpe_ratio: finiteMetricOrNull(t.sharpe_ratio),
-          sortino_ratio: finiteMetricOrNull(t.sortino_ratio),
-          calmar_ratio: finiteMetricOrNull(t.calmar_ratio),
-          profit_factor: finiteMetricOrNull(t.profit_factor),
-        }))
+        // Same mapper as the SSR first paint (HomePageClient) — see toUiTrader.
+        const rawRows: unknown[] = Array.isArray(data.traders) ? data.traders : []
+        const traders: Trader[] = rawRows
+          .filter(
+            (row): row is UiTraderInput =>
+              typeof row === 'object' &&
+              row !== null &&
+              typeof (row as { id?: unknown }).id === 'string'
+          )
+          .map(toUiTrader)
 
         const responseLastUpdated = data.lastUpdated || data.as_of || null
         // Current /api/traders uses camelCase. Keep the legacy snake_case read
@@ -744,7 +724,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         // A superseded request has no UI authority. In particular it must not
         // clear the loading state owned by the newer request.
         if (requestSequence !== requestSequenceRef.current) return false
-        if (err instanceof Error && err.name === 'AbortError') {
+        if (err instanceof Error && err.name === 'AbortError' && !timedOut) {
           dispatch({ type: 'LOAD_ABORT' })
           if (commitTimeRange && pendingTimeRangeRef.current === timeRange) {
             pendingTimeRangeRef.current = null
@@ -757,7 +737,11 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
           }
           return false
         }
-        const errorMsg = err instanceof Error ? err.message : tRef.current('errorNetworkFailed')
+        const errorMsg = timedOut
+          ? tRef.current('errorTimeout')
+          : err instanceof Error
+            ? err.message
+            : tRef.current('errorNetworkFailed')
         dispatch({ type: 'LOAD_ERROR', error: errorMsg })
         if (commitTimeRange && pendingTimeRangeRef.current === timeRange) {
           pendingTimeRangeRef.current = null

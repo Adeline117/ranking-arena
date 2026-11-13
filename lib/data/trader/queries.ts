@@ -4,6 +4,11 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import {
+  applyPublicCohortFilters,
+  PUBLIC_COHORT_MAX_COMPUTED_AGE_MS,
+  PUBLIC_COHORT_MIN_ARENA_SCORE_EXCLUSIVE,
+} from '@/lib/rankings/public-cohort'
 import type {
   UnifiedTrader,
   TraderDetail,
@@ -35,8 +40,12 @@ import {
 // ungenerated relation name isolated here rather than hand-editing generated
 // Supabase types during the rolling migration deployment.
 const PUBLIC_RANKED_LEADERBOARD = 'public_ranked_leaderboard' as const
-/** Default freshness window shared by the homepage cache revalidator. */
-export const PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS = 6 * 60 * 60 * 1000
+/**
+ * Freshness window of the public cohort (= the sealed view's 48h serving
+ * window). Kept as an alias for existing importers; the authority is
+ * lib/rankings/public-cohort.ts.
+ */
+export const PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS = PUBLIC_COHORT_MAX_COMPUTED_AGE_MS
 
 /**
  * Ranking columns required to prove a search result belongs to the current
@@ -153,7 +162,10 @@ export async function getLeaderboard(
     allowedSources?: readonly string[]
     /** Optional source quarantine for ranking callers. */
     excludeSources?: readonly string[]
-    /** Allow data up to 24h old instead of 6h (graceful degradation) */
+    /**
+     * Deprecated no-op: the shared public cohort already uses the sealed
+     * view's full 48h window (lib/rankings/public-cohort.ts).
+     */
     allowStale?: boolean
     /** Share a caller-owned cancellation deadline across related Supabase queries. */
     signal?: AbortSignal
@@ -170,6 +182,11 @@ export async function getLeaderboard(
   totalCountIsExact: boolean
   /** Whether this SQL-filtered cohort has another row after this page. */
   hasMore: boolean
+  /**
+   * The limit+1 row that witnessed `hasMore`, mapped like the page rows.
+   * Callers that cache a page keep it so a cache hit can re-prove `hasMore`.
+   */
+  lookahead?: UnifiedTrader
   error?: string
 }> {
   const {
@@ -219,17 +236,12 @@ export async function getLeaderboard(
     query = query.eq(LR.source, platform)
   }
 
-  if (minScore != null) {
+  // One cohort for every public reader (score floor, ROI bound, 48h window).
+  query = applyPublicCohortFilters(query)
+  // A caller may narrow further, but never widen past the shared floor.
+  if (minScore != null && minScore > PUBLIC_COHORT_MIN_ARENA_SCORE_EXCLUSIVE) {
     query = query.gt('arena_score', minScore)
   }
-
-  // Graceful freshness: prefer data <6h old, but fall back to <24h rather than
-  // showing empty rankings. The UI should indicate staleness for >6h data.
-  const STALE_FALLBACK_HOURS = 24
-  const freshCutoff = new Date(Date.now() - PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS).toISOString()
-  const staleCutoff = new Date(Date.now() - STALE_FALLBACK_HOURS * 3600_000).toISOString()
-  const effectiveCutoff = params.allowStale ? staleCutoff : freshCutoff
-  query = query.gte('computed_at', effectiveCutoff)
 
   // Sorting
   const sortColumn =
@@ -279,7 +291,9 @@ export async function getLeaderboard(
   // future reader revision. Until then `hasMore` is the only paging contract.
   const totalCountIsExact = false
 
-  return { traders, totalCountIsExact, hasMore }
+  const lookahead = hasMore ? mapLeaderboardRow(cohortRows[limit]) : undefined
+
+  return { traders, totalCountIsExact, hasMore, lookahead }
 }
 
 /**
@@ -924,10 +938,14 @@ async function searchTradersInner(
 ): Promise<UnifiedTrader[]> {
   const { query, limit, platform } = params
 
-  const sanitizedQuery = query
+  // Callers pass the raw query. `textQuery` is compared against handles/ids in
+  // JS; `sanitizedQuery` is the LIKE-escaped form for SQL only. Comparing the
+  // escaped form in JS made every name containing `_`, `%` or `\` unfindable.
+  const textQuery = query
     .slice(0, 100)
-    .replace(/[\\%_]/g, (c) => `\\${c}`)
     .replace(/[.,()]/g, '')
+    .trim()
+  const sanitizedQuery = textQuery.replace(/[\\%_]/g, (c) => `\\${c}`)
 
   if (!sanitizedQuery) return []
 
@@ -947,7 +965,7 @@ async function searchTradersInner(
       platform_filter: platform || null,
     })
     if (!fuzzyErr && Array.isArray(fuzzyData) && fuzzyData.length > 0) {
-      const qLower = sanitizedQuery.toLowerCase()
+      const qLower = textQuery.toLowerCase()
       const filtered = (fuzzyData as FuzzyIdentityResult[]).filter((candidate) => {
         if (
           typeof candidate.source_trader_id !== 'string' ||
@@ -1020,7 +1038,7 @@ async function searchTradersInner(
 
   // Text matching is the only ordering input here. Never let an RPC/index
   // relevance score reorder or admit identity candidates before public proof.
-  const queryLower = sanitizedQuery.toLowerCase()
+  const queryLower = textQuery.toLowerCase()
   const sorted = filteredSources
     .map((candidate) => {
       const handleLower = (candidate.handle || '').toLowerCase()
@@ -1139,7 +1157,11 @@ export async function resolveTrader(
   }
 
   const platformFilter = params.platform
-  const sanitizedForFilter = decodedHandle.replace(/[,()\[\]\\%_]/g, '')
+  // Only characters that break PostgREST `.or()` syntax are removed. These
+  // filters are exact `.eq` matches, so `_`, `%`, `\`, `[`, `]` carry no LIKE
+  // meaning; stripping them turned "crypto_king" into "cryptoking" and the
+  // trader could never be resolved.
+  const sanitizedForFilter = decodedHandle.replace(/[,()"]/g, '')
 
   type ResolvedIdentity = {
     platform: string

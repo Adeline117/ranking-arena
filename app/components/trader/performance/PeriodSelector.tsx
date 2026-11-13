@@ -1,5 +1,6 @@
 'use client'
 
+import { ALLTIME_90D_SOURCES, isAllTime90dSource } from '@/lib/utils/all-time-90d'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens, alpha } from '@/lib/design-tokens'
@@ -20,7 +21,7 @@ export const CUMULATIVE_ROI_PLATFORMS = new Set([
 ])
 
 // Platforms where 90D data actually uses allTime window (API doesn't support 90D natively)
-export const ALLTIME_90D_PLATFORMS = new Set(['hyperliquid_perp'])
+export const ALLTIME_90D_PLATFORMS = ALLTIME_90D_SOURCES
 
 // Platforms where ROI is derived from PnL/Equity rather than native ROI API
 export const DERIVED_ROI_PLATFORMS = new Set(['dydx'])
@@ -159,7 +160,7 @@ export function PeriodSelector({
         )}
 
         {/* Hyperliquid 90D = allTime disclosure */}
-        {source && ALLTIME_90D_PLATFORMS.has(source.toLowerCase()) && period === '90D' && (
+        {isAllTime90dSource(source) && period === '90D' && (
           <Box
             style={{
               display: 'flex',

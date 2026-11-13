@@ -250,6 +250,7 @@ const ko = {
   history: '기록',
   na: 'N/A',
   score: '점수',
+  rankingMobileMetricLabel: '각 행에 표시할 두 번째 지표',
   // Group application related
   applyCreateGroup: '그룹 생성 신청',
   groupName: '그룹 이름',
@@ -2784,6 +2785,12 @@ const ko = {
   newMemberJoined: '새 멤버 가입',
   newMemberJoinedMsg: '새 멤버가 그룹에 가입했습니다',
   joinFailed: '가입 실패',
+  groupJoinBanned: '이 그룹에서 차단되었습니다',
+  groupJoinScoreTooLow: '이 그룹은 Arena Score {score} 이상이 필요합니다',
+  groupJoinVerifiedOnly: '이 그룹은 인증된 트레이더만 가입할 수 있습니다',
+  groupJoinApprovalRequired: '이 그룹은 가입 승인이 필요합니다',
+  groupJoinDissolved: '이 그룹은 해산되었습니다',
+  inviteAlreadyUsed: '이미 사용한 초대입니다',
   leftGroup: '그룹 탈퇴 완료',
   leaveFailed: '탈퇴 실패',
   loadMembersFailed: '멤버 로드 실패',
@@ -3079,6 +3086,7 @@ const ko = {
     'Arena Score는 현재 운영 중인 모든 소스 보드의 트레이더를 같은 기준으로 순위화합니다.',
   heroNeutrality:
     '어떤 소스도 순위를 돈으로 살 수 없습니다 — 운영 중인 모든 보드에 같은 규칙을 적용합니다.',
+  heroNeutralityShort: '어떤 소스도 순위를 돈으로 살 수 없습니다.',
   heroHowRanked: '랭킹 산정 방식 →',
   heroCTABrowse: '순위 둘러보기',
   heroCTASignUp: '무료 가입',
@@ -6732,6 +6740,24 @@ const ko = {
   historyVerificationDesc:
     '이 트레이더의 과거 데이터가 검증을 통과하면 차트와 상세 통계가 여기에 표시됩니다.',
   historyVerificationCurrentRanking: '현재 랭킹 ({period})',
+  rankingFilteredByExchange: '{exchange}(으)로 필터링됨',
+  rankingClearExchangeFilter: '거래소 필터 해제',
+  rankingSearchElsewhereTitle:
+    '이 페이지에 일치 항목이 없습니다. Arena 전체에서 일치하는 트레이더:',
+  rankingFiltersCurrentPageOnly:
+    '필터는 이 페이지의 트레이더 50명에게만 적용됩니다. 다른 페이지에도 해당 트레이더가 있을 수 있습니다.',
+  roiUnknown: 'ROI 알 수 없음',
+  timeRangeAria: '기간',
+  showRangeRankingsAria: '{range} 랭킹 보기',
+  arenaScoreAria: 'Arena 점수: {score}',
+  arenaScoreOfHundredAria: 'Arena 점수 {score}/100',
+  platformTypeAria: '플랫폼 유형: {type}',
+  suspectedBotAria: '봇 의심',
+  tradingStyleAria: '거래 스타일: {style}',
+  noRankHistoryAria: '순위 기록 없음',
+  rankTrendAria: '순위 추이: {from} → {to}',
+  traderActionsAria: '{name} 작업',
+  allTime90dShort: '전체 기간',
 } as const
 
 export default ko

@@ -318,7 +318,8 @@ test.describe('D. Login Page', () => {
 test.describe('E. API Endpoints', () => {
   test('E1: 健康检查 API', async ({ request }) => {
     const response = await request.get(`${BASE}/api/health`)
-    expect(response.status()).toBe(200)
+    // 200 healthy, 202 Redis-only degraded, 503 stale data / DB down — all with a body.
+    expect([200, 202, 503]).toContain(response.status())
     const data = await response.json()
     expect(data).toHaveProperty('status')
   })

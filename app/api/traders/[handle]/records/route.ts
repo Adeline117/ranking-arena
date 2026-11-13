@@ -27,6 +27,7 @@ import {
 import { requestTierC } from '@/lib/data/serving/tier-c'
 import { METRIC_AUTHORITY_NO_STORE_HEADERS } from '@/lib/data/serving/cache-policy'
 import type { RecordsPage, ServingTimeframe } from '@/lib/data/serving/types'
+import { decodeRouteParam } from '@/lib/utils/decode-route-param'
 
 const handleSchema = z.string().min(1).max(255)
 const kindSchema = z.enum(['positions', 'position_history', 'orders', 'transfers', 'copiers'])
@@ -44,7 +45,7 @@ export async function GET(
     async ({ supabase, request: req }) => {
       const parsedHandle = handleSchema.safeParse(rawHandle)
       if (!parsedHandle.success) throw ApiError.validation('Invalid handle parameter')
-      const decodedHandle = decodeURIComponent(parsedHandle.data)
+      const decodedHandle = decodeRouteParam(parsedHandle.data)
 
       const parsedKind = kindSchema.safeParse(req.nextUrl.searchParams.get('kind'))
       if (!parsedKind.success) throw ApiError.validation('Invalid kind parameter')

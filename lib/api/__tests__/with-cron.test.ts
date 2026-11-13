@@ -136,15 +136,16 @@ jest.mock('@/lib/services/pipeline-logger', () => {
 jest.mock('@/lib/cache/redis-client', () => {
   const set = jest.fn(async () => 'OK')
   const del = jest.fn(async () => 1)
-  const getSharedRedis = jest.fn(async () => ({ set, del }))
+  const evalFn = jest.fn(async () => 1)
+  const getSharedRedis = jest.fn(async () => ({ set, del, eval: evalFn }))
   return {
     getSharedRedis,
-    __mocks: { set, del, getSharedRedis },
+    __mocks: { set, del, eval: evalFn, getSharedRedis },
   }
 })
 
 import { NextRequest } from 'next/server'
-import { withCron } from '../with-cron'
+import { deriveSafetyTimeoutMs, withCron } from '../with-cron'
 
 // Pull out captured mock fns from the factory (see jest.mock calls above)
 const plogMocks = (
@@ -160,7 +161,7 @@ const plogMocks = (
 ).__mocks
 const redisMocks = (
   jest.requireMock('@/lib/cache/redis-client') as {
-    __mocks: { set: jest.Mock; del: jest.Mock; getSharedRedis: jest.Mock }
+    __mocks: { set: jest.Mock; del: jest.Mock; eval: jest.Mock; getSharedRedis: jest.Mock }
   }
 ).__mocks
 
@@ -170,6 +171,7 @@ const mockPlogError = plogMocks.error
 const mockPlogTimeout = plogMocks.timeout
 const mockRedisSet = redisMocks.set
 const mockRedisDel = redisMocks.del
+const mockRedisEval = redisMocks.eval
 const mockedGetSharedRedis = redisMocks.getSharedRedis
 
 function makeAuthedRequest(
@@ -185,9 +187,11 @@ beforeEach(() => {
   jest.clearAllMocks()
   mockRedisSet.mockResolvedValue('OK')
   mockRedisDel.mockResolvedValue(1)
+  mockRedisEval.mockResolvedValue(1)
   mockedGetSharedRedis.mockResolvedValue({
     set: mockRedisSet,
     del: mockRedisDel,
+    eval: mockRedisEval,
   })
 })
 
@@ -423,8 +427,12 @@ describe('withCron distributed lock (Redis NX)', () => {
     expect(opts).toMatchObject({ nx: true })
     expect(opts.ex).toBeGreaterThan(0)
 
-    // Lock released in finally block
-    expect(mockRedisDel).toHaveBeenCalledWith('cron:lock:lock-job')
+    // Lock released in finally block — compare-and-delete with OUR token only
+    const [script, keys, args] = mockRedisEval.mock.calls[0]
+    expect(script).toContain("redis.call('GET', KEYS[1]) == ARGV[1]")
+    expect(keys).toEqual(['cron:lock:lock-job'])
+    expect(args).toEqual([_val])
+    expect(mockRedisDel).not.toHaveBeenCalled()
   })
 
   it('releases lock on handler error', async () => {
@@ -434,7 +442,7 @@ describe('withCron distributed lock (Redis NX)', () => {
     await wrapped(makeAuthedRequest())
 
     expect(mockRedisSet).toHaveBeenCalledTimes(1)
-    expect(mockRedisDel).toHaveBeenCalledWith('cron:lock:lock-err-job')
+    expect(mockRedisEval.mock.calls[0][1]).toEqual(['cron:lock:lock-err-job'])
   })
 
   it('skips execution when lock is already held (concurrent run)', async () => {
@@ -453,6 +461,7 @@ describe('withCron distributed lock (Redis NX)', () => {
     expect(mockedPipelineStart).not.toHaveBeenCalled()
     // Must NOT delete a lock we never acquired
     expect(mockRedisDel).not.toHaveBeenCalled()
+    expect(mockRedisEval).not.toHaveBeenCalled()
   })
 
   it('proceeds without lock when Redis is unavailable (fail-open)', async () => {
@@ -479,5 +488,42 @@ describe('withCron distributed lock (Redis NX)', () => {
 
     expect(res.status).toBe(200)
     expect(handler).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('withCron timeout derived from the route maxDuration', () => {
+  it('derives the safety timeout below maxDuration', () => {
+    expect(deriveSafetyTimeoutMs(30)).toBe(25_000)
+    expect(deriveSafetyTimeoutMs(60)).toBe(54_000)
+    expect(deriveSafetyTimeoutMs(240)).toBe(216_000)
+  })
+
+  it('fires plog.timeout before a 30s route would be killed and sizes the lock to the route', async () => {
+    jest.useFakeTimers()
+    try {
+      let resolveHandler: (v: { count: number }) => void = () => {}
+      const handler = jest.fn(
+        () => new Promise<{ count: number }>((resolve) => (resolveHandler = resolve))
+      )
+      const wrapped = withCron('short-job', handler, { maxDurationSec: 30 })
+      const pending = wrapped(makeAuthedRequest())
+      await jest.advanceTimersByTimeAsync(25_000)
+      expect(mockPlogTimeout).toHaveBeenCalledWith(
+        expect.objectContaining({ reason: 'safety_timeout', safetyTimeoutMs: 25_000 })
+      )
+      resolveHandler({ count: 1 })
+      await pending
+      expect(mockRedisSet.mock.calls[0][2].ex).toBe(60)
+      expect(mockPlogSuccess).not.toHaveBeenCalled()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('uses a unique lock token per run', async () => {
+    const wrapped = withCron('token-job', jest.fn().mockResolvedValue({ count: 0 }))
+    await wrapped(makeAuthedRequest())
+    await wrapped(makeAuthedRequest())
+    expect(mockRedisSet.mock.calls[0][1]).not.toBe(mockRedisSet.mock.calls[1][1])
   })
 })

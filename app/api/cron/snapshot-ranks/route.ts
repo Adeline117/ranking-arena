@@ -22,80 +22,98 @@ const TOP_N = 500
 const RETAIN_DAYS = 30
 const UPSERT_BATCH = 500
 
-export const GET = withCron('snapshot-ranks', async (_request: NextRequest) => {
-  const supabase = getSupabaseAdmin()
-  const today = new Date().toISOString().split('T')[0]
-  let totalInserted = 0
+export const GET = withCron(
+  'snapshot-ranks',
+  async (_request: NextRequest) => {
+    const supabase = getSupabaseAdmin()
+    const today = new Date().toISOString().split('T')[0]
+    let totalInserted = 0
+    // Every DB error is collected and fails the run at the end (after the
+    // other periods had their chance) instead of being logged as success.
+    const failures: string[] = []
 
-  // Parallel fetch + upsert across all 3 periods (was serial)
-  const periodResults = await Promise.all(
-    PERIODS.map(async (period) => {
-      const { data: rows, error: fetchError } = await supabase
-        .from('leaderboard_ranks')
-        .select('source, source_trader_id, rank, arena_score')
-        .eq('season_id', period)
-        .not('rank', 'is', null)
-        .order('rank', { ascending: true })
-        .limit(TOP_N)
+    // Parallel fetch + upsert across all 3 periods (was serial)
+    const periodResults = await Promise.all(
+      PERIODS.map(async (period) => {
+        const { data: rows, error: fetchError } = await supabase
+          .from('leaderboard_ranks')
+          .select('source, source_trader_id, rank, arena_score')
+          .eq('season_id', period)
+          .not('rank', 'is', null)
+          .order('rank', { ascending: true })
+          .limit(TOP_N)
 
-      if (fetchError) {
-        log.error(`Failed to fetch leaderboard_ranks for ${period}`, { error: fetchError.message })
-        return 0
-      }
-      if (!rows || rows.length === 0) {
-        log.warn(`No rows found for period ${period}`)
-        return 0
-      }
-
-      // rank 在 leaderboard_ranks 可空,但 rank_history.rank 非空 —— 跳过空 rank
-      // 行(flatMap 在 else 分支收窄 row.rank 为 number)。查询已 .not('rank',is,null),
-      // 此处是类型安全 + 防御双保险。
-      const records = rows.flatMap((row) =>
-        row.rank == null
-          ? []
-          : [
-              {
-                platform: row.source,
-                trader_key: row.source_trader_id,
-                period,
-                rank: row.rank,
-                arena_score: row.arena_score,
-                snapshot_date: today,
-              },
-            ]
-      )
-
-      let inserted = 0
-      for (let i = 0; i < records.length; i += UPSERT_BATCH) {
-        const batch = records.slice(i, i + UPSERT_BATCH)
-        const { error: upsertError } = await supabase
-          .from('rank_history')
-          .upsert(batch, { onConflict: 'platform,trader_key,period,snapshot_date' })
-        if (upsertError) {
-          log.error(`Upsert error for ${period} batch ${i}`, { error: upsertError.message })
-        } else {
-          inserted += batch.length
+        if (fetchError) {
+          log.error(`Failed to fetch leaderboard_ranks for ${period}`, {
+            error: fetchError.message,
+          })
+          failures.push(`${period} fetch: ${fetchError.message}`)
+          return 0
         }
-      }
-      log.info(`Snapshotted ${records.length} traders for ${period}`)
-      return inserted
-    })
-  )
-  totalInserted = periodResults.reduce((sum, n) => sum + n, 0)
+        if (!rows || rows.length === 0) {
+          log.warn(`No rows found for period ${period}`)
+          return 0
+        }
 
-  // Cleanup old rows (>30 days)
-  const cutoff = new Date()
-  cutoff.setDate(cutoff.getDate() - RETAIN_DAYS)
-  const cutoffDate = cutoff.toISOString().split('T')[0]
+        // rank 在 leaderboard_ranks 可空,但 rank_history.rank 非空 —— 跳过空 rank
+        // 行(flatMap 在 else 分支收窄 row.rank 为 number)。查询已 .not('rank',is,null),
+        // 此处是类型安全 + 防御双保险。
+        const records = rows.flatMap((row) =>
+          row.rank == null
+            ? []
+            : [
+                {
+                  platform: row.source,
+                  trader_key: row.source_trader_id,
+                  period,
+                  rank: row.rank,
+                  arena_score: row.arena_score,
+                  snapshot_date: today,
+                },
+              ]
+        )
 
-  const { error: cleanupError } = await supabase
-    .from('rank_history')
-    .delete()
-    .lt('snapshot_date', cutoffDate)
+        let inserted = 0
+        for (let i = 0; i < records.length; i += UPSERT_BATCH) {
+          const batch = records.slice(i, i + UPSERT_BATCH)
+          const { error: upsertError } = await supabase
+            .from('rank_history')
+            .upsert(batch, { onConflict: 'platform,trader_key,period,snapshot_date' })
+          if (upsertError) {
+            log.error(`Upsert error for ${period} batch ${i}`, { error: upsertError.message })
+            failures.push(`${period} upsert batch ${i}: ${upsertError.message}`)
+          } else {
+            inserted += batch.length
+          }
+        }
+        log.info(`Snapshotted ${records.length} traders for ${period}`)
+        return inserted
+      })
+    )
+    totalInserted = periodResults.reduce((sum, n) => sum + n, 0)
 
-  if (cleanupError) {
-    log.warn('Cleanup error', { error: cleanupError.message })
-  }
+    // Cleanup old rows (>30 days)
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - RETAIN_DAYS)
+    const cutoffDate = cutoff.toISOString().split('T')[0]
 
-  return { count: totalInserted, date: today, periods: PERIODS.length }
-})
+    const { error: cleanupError } = await supabase
+      .from('rank_history')
+      .delete()
+      .lt('snapshot_date', cutoffDate)
+
+    if (cleanupError) {
+      log.error('Cleanup error', { error: cleanupError.message })
+      failures.push(`cleanup: ${cleanupError.message}`)
+    }
+
+    if (failures.length > 0) {
+      throw new Error(
+        `snapshot-ranks: ${failures.length} DB error(s), ${totalInserted} rows written — ${failures.join('; ')}`
+      )
+    }
+
+    return { count: totalInserted, date: today, periods: PERIODS.length }
+  },
+  { maxDurationSec: maxDuration }
+)

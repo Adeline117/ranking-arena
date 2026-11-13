@@ -10,7 +10,7 @@ import type { Period } from '@/lib/utils/arena-score'
 import type { ScoreConfidence } from '@/lib/utils/arena-score'
 import type { UnifiedTrader } from '@/lib/types/unified-trader'
 import { getLeaderboard } from '@/lib/data/unified'
-import { PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS } from '@/lib/data/trader/queries'
+import { isInPublicCohort } from '@/lib/rankings/public-cohort'
 import { attachAvatarMirrors } from '@/lib/data/avatar-mirrors'
 import { logger, fireAndForget } from '@/lib/logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
@@ -61,6 +61,23 @@ export interface InitialTrader {
   rank_change?: number | null
   /** First appearance on the board this run (NEW badge). */
   is_new?: boolean
+  /**
+   * Display-only fields /api/traders also returns. Carried on the SSR row so
+   * the first paint and the client refresh render the same badges/metrics
+   * (both go through app/components/ranking/toUiTrader.ts). Optional because
+   * Redis payloads written before these existed simply lack them (→ unknown).
+   */
+  copiers?: number | null
+  sharpe_ratio?: number | null
+  sortino_ratio?: number | null
+  calmar_ratio?: number | null
+  profit_factor?: number | null
+  profitability_score?: number | null
+  risk_control_score?: number | null
+  execution_score?: number | null
+  trading_style?: string | null
+  avg_holding_hours?: number | null
+  trader_type?: string | null
   /**
    * Cache-revalidation evidence copied from the verified cohort view. These
    * columns are public view fields, not derived UI state: retaining them lets
@@ -122,6 +139,17 @@ function mapUnifiedToInitial(t: UnifiedTrader): InitialTrader | null {
         : null,
     rank_change: t.rankChange ?? null,
     is_new: t.isNew === true,
+    copiers: t.copiers ?? null,
+    sharpe_ratio: t.sharpeRatio ?? null,
+    sortino_ratio: t.sortinoRatio ?? null,
+    calmar_ratio: t.calmarRatio ?? null,
+    profit_factor: t.profitFactor ?? null,
+    profitability_score: t.profitabilityScore ?? null,
+    risk_control_score: t.riskControlScore ?? null,
+    execution_score: t.executionScore ?? null,
+    trading_style: t.tradingStyle ?? null,
+    avg_holding_hours: t.avgHoldingHours ?? null,
+    trader_type: t.traderType ?? null,
     // getLeaderboard reads public_ranked_leaderboard, which fixes these
     // values as part of the database eligibility predicate. Preserve the
     // values actually observed at that boundary instead of manufacturing
@@ -163,6 +191,12 @@ export interface InitialTradersResult {
    * this internal proof list.
    */
   sourceFreshness: SourceFreshnessRow[]
+  /**
+   * Internal cache proof: the SQL limit+1 row that witnessed `hasMore`.
+   * Stored with the Redis entry so a cache hit can re-run the same row proof
+   * on it before claiming a next page. Never forwarded to the client.
+   */
+  lookaheadWitness?: InitialTrader | null
 }
 
 const UNKNOWN_CATEGORY_COUNTS: CategoryCounts = {
@@ -193,11 +227,36 @@ function hasPublishedInitialRank(value: unknown): value is InitialTrader {
 }
 
 function isCurrentHomepageCohortRow(value: InitialTrader, nowMs = Date.now()): boolean {
-  const computedAtMs = Date.parse(value.computed_at)
-  return (
-    Number.isFinite(computedAtMs) &&
-    computedAtMs >= nowMs - PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS
+  return isInPublicCohort(value, nowMs)
+}
+
+/**
+ * Re-prove a cached look-ahead witness with the same checks the visible rows
+ * pass: publication proof, upstream source
+ * watermark, the shared public-cohort predicate (lib/rankings/public-cohort:
+ * score > 0, |roi| ≤ 50 000, 48h), and ordering after the last visible row.
+ */
+function isValidCachedLookahead(
+  witness: unknown,
+  visible: readonly InitialTrader[],
+  sourceFreshness: readonly SourceFreshnessRow[],
+  timeRange: Period
+): boolean {
+  if (!hasPublishedInitialRank(witness)) return false
+  const checked = sanitizePublicRankingPayload(
+    { traders: [witness] },
+    { expectedPeriod: timeRange }
   )
+  if (!Array.isArray(checked.traders) || checked.traders.length !== 1) return false
+  // Shared public-cohort predicate (score > 0, |roi| ≤ 50 000, 48h) — the same
+  // rule the visible rows pass in sanitizeInitialTradersResult.
+  if (!isInPublicCohort(witness)) return false
+  const lastVisibleRank = visible.reduce((max, trader) => Math.max(max, trader.rank), 0)
+  if (!(witness.rank > lastVisibleRank)) return false
+  return !summarizeInitialTraderFreshness({
+    watermarkRows: sourceFreshness,
+    observedSources: [witness.source],
+  }).isStale
 }
 
 function sanitizeCachedFreshnessRows(value: unknown): SourceFreshnessRow[] {
@@ -249,8 +308,9 @@ function sanitizeInitialTradersResult(
     Number.isSafeInteger(sanitized.totalCount) &&
     sanitized.totalCount >= 0
 
+  const { lookaheadWitness: _unverifiedWitness, ...sanitizedRest } = sanitized
   return {
-    ...sanitized,
+    ...sanitizedRest,
     traders: filteredTraders,
     // A Redis entry retains only the visible page, not the SQL look-ahead row
     // that originally witnessed `hasMore`. Even when every visible row still
@@ -261,7 +321,27 @@ function sanitizeInitialTradersResult(
     // Fresh DB results retain their in-request, view-filtered look-ahead
     // witness. A future cache format may preserve and revalidate that witness
     // explicitly; until then cache hits fail closed for next-page navigation.
-    hasMore: options.fromCache ? false : removed ? false : sanitized.hasMore === true,
+    //
+    // Cache entries now carry that witness (`lookaheadWitness`) and a cache
+    // hit claims a next page only when it passes the same row proof again.
+    // Entries without a witness (older format) still fail closed.
+    hasMore:
+      removed || freshness.isStale
+        ? false
+        : options.fromCache
+          ? sanitized.hasMore === true &&
+            isValidCachedLookahead(
+              payload.lookaheadWitness,
+              filteredTraders,
+              sourceFreshness,
+              timeRange
+            )
+          : sanitized.hasMore === true,
+    // Keep the witness (when well-formed) so a fresh result can be cached
+    // with it; omitted otherwise. page.tsx never forwards it to the client.
+    lookaheadWitness: hasPublishedInitialRank(payload.lookaheadWitness)
+      ? payload.lookaheadWitness
+      : undefined,
     totalCount: totalCountIsExact ? sanitized.totalCount : null,
     totalCountIsExact,
     categoryCounts: UNKNOWN_CATEGORY_COUNTS,
@@ -336,7 +416,7 @@ export async function refreshHomeInitialTradersCache(
   const { cacheKey, fallbackKey } = homeInitialTradersCacheKeys(timeRange, 0, safeLimit)
   const writes = await Promise.all([
     cache.set(cacheKey, result, {
-      ttl: 7200,
+      ttl: PUBLIC_RANKING_PRIMARY_CACHE_TTL_SECONDS,
       tags: [PUBLIC_RANKING_REDIS_TAG, `season:${timeRange}`],
       skipMemory: true,
       writeFence,
@@ -353,6 +433,15 @@ export async function refreshHomeInitialTradersCache(
   }
   return result.traders.length
 }
+
+/**
+ * Upper bound on how long the homepage can keep showing rows that the database
+ * has since withdrawn WITHOUT a publication (source quarantine by migration,
+ * serving-head/season fence invalidation): those paths do not advance the
+ * shared write fence, so only cache age bounds them. Matches /api/traders'
+ * 300s cohort cache and the homepage ISR revalidate window.
+ */
+export const PUBLIC_RANKING_PRIMARY_CACHE_TTL_SECONDS = 300
 
 export async function getInitialTraders(
   timeRange: Period = '90D',
@@ -393,14 +482,15 @@ export async function getInitialTraders(
         if (safeCached && safeCached.traders.length > 0) return safeCached
         cached = safeCached
       }
-      // Primary cache miss — use fallback (longer TTL, may be stale but better than empty)
+      // Primary cache miss — keep the fallback for a DB failure only. Serving
+      // it before trying the DB let a DB-level withdrawal (source quarantine,
+      // season fence) stay on the homepage for the fallback's full TTL, since
+      // such withdrawals do not advance the publication write fence.
       fallbackCached = snapshot.entries[1] ?? null
       if (fallbackCached) {
         fallbackCached = sanitizeInitialTradersResult(fallbackCached, timeRange, {
           fromCache: true,
         })
-        const stale = staleCacheResult(fallbackCached)
-        if (stale) return stale
       }
     } catch (_err) {
       // Malformed cache payload — fall through to DB
@@ -424,14 +514,14 @@ export async function getInitialTraders(
       return staleCacheResult(cached, fallbackCached) ?? result
     }
 
-    // Cache successful result — TTL aligned with compute-leaderboard frequency (2h).
-    // warm-cache cron refreshes every 30 min, so data is always reasonably fresh.
-    // Fallback cache has 4h TTL as safety net for DB outages.
+    // Cache successful result. The primary TTL bounds how long a DB-level
+    // withdrawal can stay visible (see PUBLIC_RANKING_PRIMARY_CACHE_TTL_SECONDS).
+    // Fallback cache has 4h TTL as a safety net used ONLY when the DB fails.
     if (result.traders.length > 0) {
       fireAndForget(
         Promise.all([
           cache.set(cacheKey, result, {
-            ttl: 7200,
+            ttl: PUBLIC_RANKING_PRIMARY_CACHE_TTL_SECONDS,
             tags: [PUBLIC_RANKING_REDIS_TAG, `season:${timeRange}`],
             skipMemory: true,
             writeFence,
@@ -510,7 +600,12 @@ export async function fetchLeaderboardFromDB(
     // Prefer our own CDN mirror over the exchange-CDN proxy (no 429 cold-burst).
     // Missing mirrors do not change ranking eligibility, so this enrichment is
     // availability-only and leaves the verified cohort rows otherwise intact.
-    const observedSources = pageResult.traders.map((trader) => trader.source)
+    // Include the look-ahead witness's source so its watermark is cached
+    // alongside the page and a cache hit can re-check it.
+    const observedSources = [
+      ...pageResult.traders.map((trader) => trader.source),
+      ...(pageResult.lookahead ? [pageResult.lookahead.source] : []),
+    ]
     const [enrichedTraders, watermarkRows] = await Promise.all([
       attachAvatarMirrors(supabase, pageResult.traders, signal),
       fetchInitialFreshnessRows(supabase, timeRange, observedSources, signal),
@@ -534,6 +629,7 @@ export async function fetchLeaderboardFromDB(
           totalCount: null,
           totalCountIsExact: false,
           hasMore: pageResult.hasMore,
+          lookaheadWitness: pageResult.lookahead,
           categoryCounts: UNKNOWN_CATEGORY_COUNTS,
           categoryCountsAreExact: false,
           sourceFreshness: watermarkRows,
@@ -563,14 +659,15 @@ async function fetchInitialLeaderboardPage(
   limit: number,
   page: number,
   signal: AbortSignal
-): Promise<{ traders: InitialTrader[]; hasMore: boolean }> {
+): Promise<{ traders: InitialTrader[]; hasMore: boolean; lookahead: InitialTrader | null }> {
   const result = await getLeaderboard(supabase, {
     period: timeRange,
     limit,
     offset: page * limit,
-    // Preserve the homepage's established score threshold, but apply it to
-    // every page so pagination stays one coherent, SQL-filtered cohort.
-    minScore: 10,
+    // No page-specific score floor: getLeaderboard applies the shared public
+    // cohort predicate (lib/rankings/public-cohort.ts), identical to
+    // /api/traders, which takes over after hydration and serves every later
+    // page — so server page N and client page N are the same row range.
     sortBy: 'arena_score',
     signal,
   })
@@ -582,7 +679,11 @@ async function fetchInitialLeaderboardPage(
   if (traders.length !== result.traders.length) {
     throw new Error('public cohort response failed local proof revalidation')
   }
-  return { traders, hasMore: result.hasMore }
+  // The witness is kept only as cache proof; an unmappable witness simply
+  // means a later cache hit cannot re-prove `hasMore` (fails closed).
+  const lookahead =
+    result.hasMore && result.lookahead ? mapUnifiedToInitial(result.lookahead) : null
+  return { traders, hasMore: result.hasMore, lookahead }
 }
 
 async function fetchInitialFreshnessRows(

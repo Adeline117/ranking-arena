@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const root = process.cwd()
@@ -14,7 +14,6 @@ const browserMembershipSources = [
   'app/(app)/groups/[id]/page.tsx',
   'app/(app)/groups/[id]/manage/page.tsx',
   'app/(app)/groups/[id]/new/page.tsx',
-  'app/(app)/groups/[id]/hooks/useGroupData.ts',
 ].map((file) => ({ file, source: readFileSync(join(root, file), 'utf8') }))
 
 function viewDefinition(name: string, nextMarker: string): string {
@@ -130,11 +129,14 @@ describe('post-atomic-mute group-member read privacy', () => {
       )
     ).toBe(true)
 
-    const hook = browserMembershipSources.find(({ file }) =>
-      file.endsWith('useGroupData.ts')
-    )?.source
-    expect(hook).toContain('`/api/groups/${groupId}/membership`')
-    expect(hook).not.toMatch(/\.from\([^)]*\)\s*\.(?:insert|update|delete|upsert)\(/)
+    // The unused useGroupData hook was deleted; no browser source may write
+    // group membership rows directly.
+    expect(existsSync(join(root, 'app/(app)/groups/[id]/hooks/useGroupData.ts'))).toBe(false)
+    for (const { source } of browserMembershipSources) {
+      expect(source).not.toMatch(
+        /\.from\(['"]group_members['"]\)\s*\.(?:insert|update|delete|upsert)\(/
+      )
+    }
 
     // This injectable server helper intentionally preserves arbitrary-user
     // semantics and uses only the four safe base columns.

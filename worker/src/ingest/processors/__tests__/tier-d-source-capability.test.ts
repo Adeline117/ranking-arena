@@ -20,6 +20,11 @@ jest.mock('@/lib/ingest/db', () => ({
   getIngestPool: jest.fn(() => ({ query: (...args: unknown[]) => mockDbQuery(...args) })),
 }))
 jest.mock('@/lib/ingest/raw', () => ({ writeRawObject: jest.fn() }))
+const mockQueueAdd = jest.fn()
+jest.mock('../../queues', () => ({
+  getRegionQueue: jest.fn(() => ({ add: (...args: unknown[]) => mockQueueAdd(...args) })),
+  INGEST_JOB: { TIER_D: 'tier-d' },
+}))
 jest.mock('@/lib/ingest/serving/publish', () => ({ publishPositions: jest.fn() }))
 
 import { processTierD as processTierDInRegion } from '../tier-d-positions'

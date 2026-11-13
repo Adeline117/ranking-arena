@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { t as i18nTFn } from '@/lib/i18n'
 import { useToast } from '@/app/components/ui/Toast'
 import {
@@ -36,7 +36,34 @@ export function TraderRowSwipeActions({
     swiping: false,
   })
   const contentRef = useRef<HTMLDivElement>(null)
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [swipeOpen, setSwipeOpen] = useState(false)
+
+  // The action strip is visibility:hidden until a swipe starts (CSS keys off
+  // data-swipe). Toggled imperatively: touchmove fires per frame, so a React
+  // state round-trip here would re-render the row on every move.
+  const revealActions = useCallback(() => {
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current)
+      hideTimerRef.current = null
+    }
+    wrapperRef.current?.setAttribute('data-swipe', '')
+  }, [])
+  const concealActions = useCallback(() => {
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
+    // Wait for the content layer to slide back over the strip (260ms).
+    hideTimerRef.current = setTimeout(() => {
+      hideTimerRef.current = null
+      wrapperRef.current?.removeAttribute('data-swipe')
+    }, 300)
+  }, [])
+  useEffect(
+    () => () => {
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
+    },
+    []
+  )
 
   const closeSwipe = useCallback(() => {
     const el = contentRef.current
@@ -45,7 +72,8 @@ export function TraderRowSwipeActions({
       el.style.transform = 'translateX(0)'
     }
     setSwipeOpen(false)
-  }, [])
+    concealActions()
+  }, [concealActions])
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     const touch = e.touches[0]
@@ -65,6 +93,7 @@ export function TraderRowSwipeActions({
         // Horizontal movement > 10px AND dominates vertical — start swiping
         if (Math.abs(dx) > Math.abs(dy)) {
           swipeRef.current.swiping = true
+          revealActions()
         } else {
           return
         }
@@ -78,7 +107,7 @@ export function TraderRowSwipeActions({
       el.style.transform = `translateX(${clamped}px)`
       el.style.transition = 'none'
     },
-    [swipeOpen]
+    [swipeOpen, revealActions]
   )
 
   const handleTouchEnd = useCallback(() => {
@@ -94,8 +123,9 @@ export function TraderRowSwipeActions({
     } else {
       el.style.transform = 'translateX(0)'
       setSwipeOpen(false)
+      concealActions()
     }
-  }, [])
+  }, [concealActions])
 
   const handleShare = useCallback(
     (e: React.MouseEvent) => {
@@ -119,6 +149,7 @@ export function TraderRowSwipeActions({
 
   return (
     <div
+      ref={wrapperRef}
       className="swipe-row-wrapper"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}

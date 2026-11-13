@@ -126,6 +126,7 @@ export const GET = withAuth(
       .from('subscriptions')
       .select('tier')
       .eq('user_id', user.id)
+      .in('status', ['active', 'trialing'])
       .maybeSingle()
 
     const tier = subscription?.tier || 'free'

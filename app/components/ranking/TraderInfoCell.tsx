@@ -6,7 +6,7 @@ import { Box, Text } from '../base'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { t as i18nT, type TranslationKey } from '@/lib/i18n'
 import { TraderAvatar } from './shared/TraderDisplay'
-import { HighlightedName } from './RankingSearch'
+import { HighlightedName } from './HighlightedName'
 import { CopyButton } from './HeroSection'
 import { getScoreColor } from '@/lib/utils/score-colors'
 import type { Trader } from './RankingTable'
@@ -27,6 +27,15 @@ import {
   TRADING_STYLE_BASE_STYLE,
   ALSO_ON_STYLE,
 } from './TraderRowStyles'
+
+// snake_case → PascalCase(day_trader → DayTrader):旧写法只大写
+// 首字母,产出 tradingStyleDay_trader 这类不存在的 key 直出原文。
+function tradingStyleKey(style: string): TranslationKey {
+  return `tradingStyle${style
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join('')}` as TranslationKey
+}
 
 export interface TraderInfoCellProps {
   trader: Trader
@@ -87,7 +96,10 @@ export const TraderInfoCell = memo(function TraderInfoCell({
             <span
               className="mobile-score-badge"
               style={MOBILE_BADGE_STYLE}
-              aria-label={`Arena Score: ${Number(trader.arena_score).toFixed(0)}`}
+              aria-label={i18nT('arenaScoreAria').replace(
+                '{score}',
+                Number(trader.arena_score).toFixed(0)
+              )}
             >
               <span
                 aria-hidden="true"
@@ -106,7 +118,7 @@ export const TraderInfoCell = memo(function TraderInfoCell({
           <Box
             className="source-tag"
             role="img"
-            aria-label={`Platform type: ${sourceInfo.type}`}
+            aria-label={i18nT('platformTypeAria').replace('{type}', sourceInfo.type)}
             style={{
               background: alpha(sourceInfo.typeColor, 8),
               border: `1px solid ${alpha(sourceInfo.typeColor, 19)}`,
@@ -146,7 +158,7 @@ export const TraderInfoCell = memo(function TraderInfoCell({
           )}
           {/* Bot Badge — confirmed (contract/web3_bot) */}
           {(trader.trader_type === 'bot' || trader.source === 'web3_bot') && (
-            <span role="img" aria-label={`Bot: ${i18nT('botLabel')}`} style={BOT_BADGE_STYLE}>
+            <span role="img" aria-label={i18nT('botLabel')} style={BOT_BADGE_STYLE}>
               <span aria-hidden="true" style={BOT_EMOJI_STYLE}>
                 {'⚡'}
               </span>
@@ -157,7 +169,7 @@ export const TraderInfoCell = memo(function TraderInfoCell({
           {trader.trader_type === 'suspected_bot' && trader.source !== 'web3_bot' && (
             <span
               role="img"
-              aria-label="Suspected bot"
+              aria-label={i18nT('suspectedBotAria')}
               style={{ ...BOT_BADGE_STYLE, opacity: 0.7 }}
             >
               <span aria-hidden="true" style={BOT_EMOJI_STYLE}>
@@ -177,7 +189,10 @@ export const TraderInfoCell = memo(function TraderInfoCell({
           {tradingStyleInfo && (
             <span
               role="img"
-              aria-label={`Trading style: ${tradingStyleInfo.labelEn}`}
+              aria-label={i18nT('tradingStyleAria').replace(
+                '{style}',
+                i18nT(tradingStyleKey(tradingStyleInfo.style))
+              )}
               style={{
                 ...TRADING_STYLE_BASE_STYLE,
                 color: tradingStyleInfo.color,
@@ -185,14 +200,7 @@ export const TraderInfoCell = memo(function TraderInfoCell({
                 border: `1px solid ${tradingStyleInfo.borderColor}`,
               }}
             >
-              {i18nT(
-                // snake_case → PascalCase(day_trader → DayTrader):旧写法只大写
-                // 首字母,产出 tradingStyleDay_trader 这类不存在的 key 直出原文。
-                `tradingStyle${tradingStyleInfo.style
-                  .split('_')
-                  .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-                  .join('')}` as TranslationKey
-              )}
+              {i18nT(tradingStyleKey(tradingStyleInfo.style))}
             </span>
           )}
           {trader.also_on && trader.also_on.length > 0 && (

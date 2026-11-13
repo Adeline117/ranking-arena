@@ -48,10 +48,7 @@ function SidebarSkeleton({ rows, rowHeight }: { rows: number; rowHeight: number 
  */
 export default function HomeFirstPaintShell({ children }: { children: ReactNode }) {
   return (
-    <div
-      id="ssr-home-content-shell"
-      className="container-padding has-mobile-nav home-page-container"
-    >
+    <div id="ssr-home-content-shell" className="home-container has-mobile-nav home-page-container">
       {!PRO_FREE_PROMO && (
         <div
           className="skeleton contain-layout-style"

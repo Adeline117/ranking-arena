@@ -674,13 +674,16 @@ export const GET = withPublic(
     }
 
     // Sanitize
-    const sanitizedQuery = escapeLikePattern(
-      query
-        .slice(0, 100)
-        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\u200B-\u200F\u2028-\u202F\uFEFF]/g, '')
-        .replace(/<[^>]*>/g, ''),
-      100
-    )
+    const cleanedQuery = query
+      .slice(0, 100)
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\u200B-\u200F\u2028-\u202F\uFEFF]/g, '')
+      .replace(/<[^>]*>/g, '')
+    // LIKE-escaped form for this route's own .ilike()/.or() filters.
+    const sanitizedQuery = escapeLikePattern(cleanedQuery, 100)
+    // Unescaped form for trader identity search: Meilisearch takes raw text and
+    // searchTraders escapes for SQL itself. Passing the escaped form double-
+    // escaped `_`/`%` and made names like "john_doe" unfindable.
+    const traderQuery = cleanedQuery.replace(/[.,()]/g, '').trim()
 
     if (!sanitizedQuery) {
       return success({
@@ -753,8 +756,8 @@ export const GET = withPublic(
     let meliFacetDistribution: Record<string, Record<string, number>> | undefined
     let meiliDegraded = false
     const meiliTraderSearch =
-      isMeilisearchAvailable() && sanitizedQuery.length >= 2
-        ? searchTradersMeili(sanitizedQuery, {
+      isMeilisearchAvailable() && traderQuery.length >= 2
+        ? searchTradersMeili(traderQuery, {
             limit: effectiveLimit,
             platform: effectivePlatform || undefined,
             season: '90D',
@@ -788,7 +791,7 @@ export const GET = withPublic(
         isMeilisearchAvailable()
           ? Promise.resolve([])
           : unifiedSearchTraders(supabase, {
-              query: matchedExchange && !platformFilter ? '' : sanitizedQuery,
+              query: matchedExchange && !platformFilter ? '' : traderQuery,
               limit: effectiveLimit,
               platform: effectivePlatform,
             }).catch((err) => {
@@ -844,7 +847,7 @@ export const GET = withPublic(
     if (meiliDegraded && supabaseTraders.length === 0) {
       try {
         supabaseTraders = await unifiedSearchTraders(supabase, {
-          query: matchedExchange && !platformFilter ? '' : sanitizedQuery,
+          query: matchedExchange && !platformFilter ? '' : traderQuery,
           limit: effectiveLimit,
           platform: effectivePlatform,
         })
@@ -903,7 +906,7 @@ export const GET = withPublic(
         ? currentTraders
             .map((trader) => {
               const handle = (trader.handle || trader.traderKey).toLowerCase()
-              const q = sanitizedQuery.toLowerCase()
+              const q = traderQuery.toLowerCase()
               let relevance =
                 nominationRelevance.get(
                   publicSearchNominationKey(trader.platform, trader.traderKey)

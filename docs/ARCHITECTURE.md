@@ -9,8 +9,10 @@
 > `V1_CRON_EXECUTION_PUBLISHED=false` and
 > `V1_RANKING_COMMAND_CHAIN_PUBLISHED=false` are narrow, checked-in source guards;
 > they do not stop or prove the state of an external worker or schedule.
-> The former also applies only to the explicitly listed direct service-auth cron
-> ingress handlers below; it is not a blanket classification of other cron routes.
+> The former is called directly by 19 route handlers listed below **and** as the
+> first statement of `withCron` (`lib/api/with-cron.ts`), so every one of the 25
+> `withCron` routes also answers auth-first `401`/`410` (2026-11 correction: an
+> earlier wording said it was not a blanket classification of other cron routes).
 > `V1_INGEST_EXECUTION_PUBLISHED=false` is a third, separate source guard for the
 > checked-in native ingest command path; it is neither a live-host assertion nor a
 > blanket classification of legacy queue, proxy, or import paths. The separate legacy
@@ -168,8 +170,16 @@ direct service-auth cron ingress handler：`GET /api/cron/batch-5min`、`GET
 valid service secret 固定返回 `410 CRON_EXECUTION_NOT_PUBLISHED`。两条路径均带
 `Cache-Control`、`CDN-Cache-Control`、`Vercel-CDN-Cache-Control` 三层 `no-store`，且在
 query/body 解析、lock、`PipelineLogger`、database、cache、provider 或 network 工作前结束。
-这只是上述十个入口的 source-only boundary，不概括其他 cron，也不能停止、检查或证明已部署的
-scheduler、host、queue 或 worker。
+这只是 source-only boundary，不能停止、检查或证明已部署的 scheduler、host、queue 或 worker。
+
+**2026-11 纠偏（数量）**：上文"十个入口""不概括其他 cron"不完整。同一 gate 还是
+`withCron`（`lib/api/with-cron.ts`）的第一条语句，因此 25 个 `withCron` 路由在有效密钥下同样
+固定 `410`；直接调用 gate 的路由共 19 个（含上述十个、ranking-command chain 四个、
+`batch-discover`、`backfill-avatars`、`/api/hooks/post-deploy`、`/api/health/heartbeat`、
+`/api/health/evaluate-report`）。另有若干自定义 `401`/`410` 墓碑（如 `compute-derived-metrics`、
+`retry-dead-letters`、`ensure-partitions`）。`vercel.json` 没有 `crons`，所以即使把该常量改为
+true，这些路由也没有任何调度者；恢复计划必须同时定义调度来源。唯一独立于该 gate 运行的监控是
+`.github/workflows/public-freshness-probe.yml`（只读公开 `/api/health`）。
 
 独立的 `V1_INGEST_EXECUTION_PUBLISHED=false` 让已登记的 native ingest worker entry 在
 dotenv/runtime dependency 初始化前退出，scheduler/connection 在 DB、ioredis 或 BullMQ

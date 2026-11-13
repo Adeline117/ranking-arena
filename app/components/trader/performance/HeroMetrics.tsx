@@ -7,12 +7,17 @@ import { Sparkline } from '@/app/components/ui/Sparkline'
 import Metric from '@/app/components/ui/Metric'
 import InfoTooltip from '../../ui/InfoTooltip'
 import PnlContractNotice from '../serving/PnlContractNotice'
+import { isValidScore } from './ScoreBar'
+import { getScoreColor } from '@/lib/utils/score-colors'
+import { NULL_DISPLAY } from '@/lib/utils/format'
 import type {
   GmxMaxCapitalRoiDisclosure,
   GmxRealizedNetDisclosure,
 } from '@/lib/data/serving/pnl-contract'
 
 export interface HeroMetricsProps {
+  /** Period Arena Score — the primary hero figure. Invalid/absent → em-dash. */
+  arenaScore?: number | null
   roi: number | undefined
   roiDisclosure?: GmxMaxCapitalRoiDisclosure
   pnl: number | undefined
@@ -22,6 +27,7 @@ export interface HeroMetricsProps {
 }
 
 export function HeroMetrics({
+  arenaScore,
   roi,
   roiDisclosure,
   pnl,
@@ -38,21 +44,93 @@ export function HeroMetrics({
     transition: `opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1) ${delayMs}ms, transform 0.5s cubic-bezier(0.4, 0, 0.2, 1) ${delayMs}ms`,
   })
 
+  const finiteScore = isValidScore(arenaScore, 100) ? arenaScore : null
+
   return (
     <Box
-      className="performance-main-grid"
+      className="hero-metrics-grid"
       style={{
+        // Columns/areas live in globals.css (.hero-metrics-grid): Score | ROI |
+        // PnL on wide cards; Score full-width above ROI | PnL on narrow ones.
         display: 'grid',
-        // ROI is the single dominant hero → give it the wider column. Collapses
-        // to a single column ≤768px (see .performance-main-grid in globals.css),
-        // so the hero never gets cramped on narrow / 320px viewports.
-        gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)',
         gap: tokens.spacing[4],
         marginBottom: tokens.spacing[5],
       }}
     >
+      {/* Arena Score — the primary hero figure (owner 2026-11-13): larger
+          than ROI, neutral color, tier shown only by a 1px ring border. */}
+      <Box
+        className="hero-metrics-score"
+        data-testid="hero-arena-score"
+        style={{
+          padding: tokens.spacing[4],
+          borderRadius: tokens.radius.lg,
+          border: `1px solid ${finiteScore != null ? getScoreColor(finiteScore) : tokens.colors.border.primary}`,
+        }}
+      >
+        <Box style={{ minWidth: 0 }}>
+          <Text
+            size="xs"
+            style={{
+              color: tokens.colors.text.tertiary,
+              marginBottom: tokens.spacing[1],
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              fontSize: tokens.typography.fontSize.xs,
+              fontWeight: tokens.typography.fontWeight.medium,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            {t('arenaScore')}
+            <InfoTooltip text={t('arenaScoreHeaderTooltip')} size={11} />
+          </Text>
+          <span
+            className="hero-score-value"
+            role="img"
+            aria-label={
+              finiteScore != null ? `Arena Score ${finiteScore.toFixed(0)}` : 'Arena Score unknown'
+            }
+            style={{
+              display: 'inline-flex',
+              alignItems: 'baseline',
+              gap: tokens.spacing[1],
+              ...enterStyle(50),
+            }}
+          >
+            <span
+              aria-hidden="true"
+              style={{
+                fontSize: tokens.typography.fontSize['4xl'],
+                fontWeight: tokens.typography.fontWeight.bold,
+                color: tokens.colors.text.primary,
+                lineHeight: 1,
+                letterSpacing: '-0.03em',
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              {finiteScore != null ? finiteScore.toFixed(0) : NULL_DISPLAY}
+            </span>
+            {finiteScore != null && (
+              <span
+                aria-hidden="true"
+                style={{
+                  fontSize: tokens.typography.fontSize.sm,
+                  color: tokens.colors.text.tertiary,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                / 100
+              </span>
+            )}
+          </span>
+        </Box>
+      </Box>
+
       {/* ROI 卡片 */}
       <Box
+        className="hero-metrics-roi"
         style={{
           padding: tokens.spacing[4],
           background:
@@ -92,16 +170,23 @@ export function HeroMetrics({
             size={11}
           />
         </Text>
-        <Box style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+        <Box
+          style={{
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'space-between',
+            // Half-width ROI card on phones: the sparkline wraps below the figure
+            // instead of being clipped by the card's overflow:hidden.
+            flexWrap: 'wrap',
+            gap: tokens.spacing[2],
+          }}
+        >
           <Metric
             className="hero-metric-value"
             value={roi}
             format="roi"
             size="hero"
-            style={{
-              fontFamily: tokens.typography.fontFamily.mono.join(', '),
-              ...enterStyle(100),
-            }}
+            style={enterStyle(100)}
           />
           {(sparklineData.length > 2 || roi != null) && (
             <Sparkline
@@ -119,6 +204,7 @@ export function HeroMetrics({
 
       {/* PnL 卡片 */}
       <Box
+        className="hero-metrics-pnl"
         style={{
           padding: tokens.spacing[4],
           background:
@@ -152,15 +238,7 @@ export function HeroMetrics({
           />
         </Text>
         {/* Secondary supporting figure — demoted below the ROI hero. */}
-        <Metric
-          value={pnl}
-          format="pnl"
-          size="lg"
-          style={{
-            fontFamily: tokens.typography.fontFamily.mono.join(', '),
-            ...enterStyle(200),
-          }}
-        />
+        <Metric value={pnl} format="pnl" size="lg" style={enterStyle(200)} />
         {pnlDisclosure && <PnlContractNotice disclosure={pnlDisclosure} compact />}
       </Box>
     </Box>

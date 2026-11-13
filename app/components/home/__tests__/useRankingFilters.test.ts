@@ -190,12 +190,18 @@ describe('URL / localStorage 状态恢复', () => {
     expect(result.current.filteredTraders).toHaveLength(FIXTURES.length)
   })
 
-  it('preset 无任何匹配时自动清除（防陈旧 preset 让榜单看似空）', () => {
-    // 只有 futures trader，却带 onchain_dex preset → effect 清除并删 localStorage
+  it('preset 无匹配时如实为空（不静默放行全部），并标记为当前页筛选', () => {
     window.history.replaceState(null, '', '/?preset=onchain_dex')
-    window.localStorage.setItem('ranking-preset', 'onchain_dex')
     const { result } = setup([trader('fut-only', { source: 'binance_futures' })])
-    expect(result.current.filteredTraders).toHaveLength(1)
+    expect(result.current.filteredTraders).toHaveLength(0)
+    expect(result.current.hasClientPageFilters).toBe(true)
+  })
+
+  it('旧 UI 存下的 preset 偏好被忽略并清理（无可见入口时不得隐形筛选）', () => {
+    window.localStorage.setItem('ranking-preset', 'cex_spot')
+    const { result } = setup()
+    expect(result.current.filteredTraders).toHaveLength(FIXTURES.length)
+    expect(result.current.hasClientPageFilters).toBe(false)
     expect(window.localStorage.getItem('ranking-preset')).toBeNull()
   })
 
@@ -222,6 +228,27 @@ describe('URL / localStorage 状态恢复', () => {
     })
   })
 
+  it('高级筛选的多选交易所写入 fex，不占用服务端 exchange 参数，并能从 fex 恢复', async () => {
+    const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+    act(() => result.current.handleFilterChange({ exchange: ['bybit', 'hyperliquid'] }))
+    act(() => {
+      jest.advanceTimersByTime(400)
+    })
+    const params = new URLSearchParams(window.location.search)
+    expect(params.get('fex')).toBe('bybit,hyperliquid')
+    expect(params.get('exchange')).toBeNull()
+    expect(params.get('ex')).toBeNull()
+
+    mockFetchPage.mockClear()
+    window.localStorage.clear()
+    const reloaded = setup(FIXTURES, { fetchPage: mockFetchPage })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(reloaded.result.current.filterConfig.exchange).toEqual(['bybit', 'hyperliquid'])
+    expect(reloaded.result.current.selectedExchange).toBeNull()
+  })
+
   it('URL 为空时从 localStorage 恢复 filterConfig（用户偏好跨会话保留）', () => {
     window.localStorage.setItem('ranking-filter-config', JSON.stringify({ min_pnl: 5000 }))
     const { result } = setup()
@@ -230,28 +257,17 @@ describe('URL / localStorage 状态恢复', () => {
     expect(result.current.filteredTraders.map((t) => t.id)).toEqual(['fut-1', 'web3-1'])
   })
 
-  it('a persisted exchange is an initial server cohort, never a cosmetic label on SSR all rows', async () => {
+  it('ignores and clears the legacy persisted exchange (no invisible exchange scope)', async () => {
     window.localStorage.setItem('ranking-exchange', 'binance-futures')
-    const settled = jest.fn()
-    const { result } = setup(FIXTURES, {
-      fetchPage: mockFetchPage,
-      initialPageIndex: 0,
-      requiresInitialCohortFetch: true,
-      onInitialCohortSettled: settled,
-    })
+    const { result } = setup(FIXTURES, { fetchPage: mockFetchPage, initialPageIndex: 0 })
 
     await act(async () => {
       await Promise.resolve()
     })
 
-    expect(result.current.selectedExchange).toBe('binance_futures')
-    expect(mockFetchPage).toHaveBeenLastCalledWith(0, {
-      category: undefined,
-      sortBy: 'arena_score',
-      sortDir: 'desc',
-      exchange: 'binance_futures',
-    })
-    expect(settled).toHaveBeenLastCalledWith(true)
+    expect(result.current.selectedExchange).toBeNull()
+    expect(mockFetchPage).not.toHaveBeenCalled()
+    expect(window.localStorage.getItem('ranking-exchange')).toBeNull()
   })
 
   it('does not layer a persisted exchange over a range/page deep link', async () => {
@@ -292,7 +308,7 @@ describe('分类过滤（filterByCategory 真实实现）', () => {
       result.current.setCategory('web3')
       await Promise.resolve()
     })
-    expect(mockFetchPage).toHaveBeenCalledWith(0, { category: 'onchain' })
+    expect(mockFetchPage).toHaveBeenCalledWith(0, { category: 'onchain', exchange: undefined })
     expect(result.current.currentPage).toBe(1)
     expect(new URLSearchParams(window.location.search).get('category')).toBe('onchain')
     // API 已按分类过滤，客户端跳过 — 否则双重过滤会把返回页过滤成空
@@ -534,6 +550,31 @@ describe('排序 / 分页 / 搜索', () => {
     expect(renderedPages[renderCountBeforeRangeCommit]).toBe(1)
   })
 
+  it('server search fallback goes to searchMatchesElsewhere, never into the ranked rows', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        results: {
+          traders: [{ id: 'bybit:far-away', title: '@FarAway', meta: { platform: 'bybit' } }],
+        },
+      }),
+    })
+    const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+    act(() => result.current.handleSearchChange('faraway'))
+    await act(async () => {
+      jest.advanceTimersByTime(500)
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/search?q=faraway'),
+      expect.anything()
+    )
+    expect(result.current.searchMatchesElsewhere.map((t) => t.id)).toEqual(['far-away'])
+    expect(result.current.filteredTraders.map((t) => t.id)).not.toContain('far-away')
+  })
+
   it('handleSearchChange 设置 query 并重置页码（新搜索不该停留在旧页）', () => {
     const { result } = setup()
     act(() => result.current.handlePageChange(5))
@@ -698,9 +739,77 @@ describe('重置与外部事件', () => {
       await Promise.resolve()
     })
     expect(result.current.selectedExchange).toBe('bybit')
-    expect(mockFetchPage).toHaveBeenCalledWith(0, { exchange: 'bybit' })
+    expect(mockFetchPage).toHaveBeenCalledWith(0, { exchange: 'bybit', category: undefined })
     expect(new URLSearchParams(window.location.search).get('ex')).toBe('bybit')
     expect(new URLSearchParams(window.location.search).get('page')).toBeNull()
+  })
+
+  it('switching category leaves the exchange scope so the tab label matches the rows', async () => {
+    const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+    await act(async () => {
+      window.dispatchEvent(
+        new CustomEvent('arena:filter-exchange', { detail: { exchange: 'bybit' } })
+      )
+      await Promise.resolve()
+    })
+    expect(result.current.selectedExchange).toBe('bybit')
+    await act(async () => {
+      result.current.setCategory('spot')
+      await Promise.resolve()
+    })
+    expect(mockFetchPage).toHaveBeenLastCalledWith(0, { category: 'spot', exchange: undefined })
+    expect(result.current.category).toBe('spot')
+    expect(result.current.selectedExchange).toBeNull()
+    const params = new URLSearchParams(window.location.search)
+    expect(params.get('ex')).toBeNull()
+    expect(params.get('category')).toBe('spot')
+  })
+
+  it('picking an exchange resets the category tab to all (API ignores category for exchange)', async () => {
+    const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+    await act(async () => {
+      result.current.setCategory('spot')
+      await Promise.resolve()
+    })
+    await act(async () => {
+      window.dispatchEvent(
+        new CustomEvent('arena:filter-exchange', { detail: { exchange: 'bybit' } })
+      )
+      await Promise.resolve()
+    })
+    expect(result.current.category).toBe('all')
+    expect(new URLSearchParams(window.location.search).get('category')).toBeNull()
+  })
+
+  it('?ex= with ?category= keeps the exchange cohort and labels it all-category', async () => {
+    window.history.replaceState(null, '', '/?ex=bybit&category=spot')
+    const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(result.current.category).toBe('all')
+    expect(mockFetchPage).toHaveBeenCalledWith(0, {
+      category: undefined,
+      sortBy: 'arena_score',
+      sortDir: 'desc',
+      exchange: 'bybit',
+    })
+  })
+
+  it('clearExchange drops only the exchange scope after the unscoped page lands', async () => {
+    window.history.replaceState(null, '', '/?ex=bybit')
+    const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(result.current.selectedExchange).toBe('bybit')
+    await act(async () => {
+      result.current.clearExchange()
+      await Promise.resolve()
+    })
+    expect(mockFetchPage).toHaveBeenLastCalledWith(0, { exchange: undefined, category: undefined })
+    expect(result.current.selectedExchange).toBeNull()
+    expect(new URLSearchParams(window.location.search).get('ex')).toBeNull()
   })
 
   it('an exchange marquee failure leaves the existing URL and displayed cohort untouched', async () => {

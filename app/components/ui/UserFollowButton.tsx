@@ -196,8 +196,10 @@ export default function UserFollowButton({
 
         if (response.ok && result.success !== false) {
           setFollowing(result.following)
-          if (result.mutual !== undefined) {
-            setFollowedBy(result.mutual)
+          // `mutual` is following && followedBy, so after an unfollow it is
+          // false even when the other user still follows you. Use followedBy.
+          if (typeof result.followedBy === 'boolean') {
+            setFollowedBy(result.followedBy)
           }
           onFollowChange?.(result.following, result.mutual ?? false)
           broadcast('FOLLOW_CHANGED', {

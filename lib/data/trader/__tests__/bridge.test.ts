@@ -80,6 +80,31 @@ describe('overall_score 70/25/5 综合', () => {
   })
 })
 
+describe('90D fields never borrow the primary (30D/7D) period', () => {
+  it('30D-only trader: roi_90d / arena_score_90d / overall_score are null', () => {
+    const d = detail({
+      trader: { roi: 42, arenaScore: 77 },
+      periods: { '90D': null, '30D': { roi: 42, arenaScore: 77 }, '7D': null },
+    })
+    const p = perf(d)
+    expect(p.roi_90d).toBeNull()
+    expect(p.arena_score_90d).toBeNull()
+    expect(p.overall_score).toBeNull()
+    // 30D values remain on their own labels
+    expect(p.roi_30d).toBe(42)
+    expect(p.arena_score_30d).toBe(77)
+  })
+
+  it('uses the 90D period values when present', () => {
+    const d = detail({
+      trader: { roi: 10, arenaScore: 50 },
+      periods: { '90D': { roi: 120, arenaScore: 88 }, '30D': null, '7D': null },
+    })
+    expect(perf(d).roi_90d).toBe(120)
+    expect(perf(d).arena_score_90d).toBe(88)
+  })
+})
+
 describe('score confidence provenance', () => {
   it('keeps missing confidence unknown instead of inventing full', () => {
     expect(perf(detail({ trader: { scoreConfidence: null } })).score_confidence).toBeNull()
@@ -297,5 +322,30 @@ describe('集合映射', () => {
     })
     const st = toTraderPageData(d).similarTraders as Array<Record<string, unknown>>
     expect(st[0]).toMatchObject({ handle: 'sk1', id: 'sk1', followers: undefined, source: 'okx' })
+  })
+})
+
+describe('rank placement (read by the trader page header)', () => {
+  it('exposes rank at the top level, not inside performance', () => {
+    const page = toTraderPageData(detail({ trader: { rank: 42 } }))
+    expect(page.rank).toBe(42)
+    expect(perf(detail({ trader: { rank: 42 } }))).not.toHaveProperty('rank')
+  })
+
+  it('the trader page reads the top-level rank', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { readFileSync } = require('node:fs') as typeof import('node:fs')
+    const page = readFileSync('app/(app)/trader/[handle]/page.tsx', 'utf8')
+    expect(page).toContain('rank: (serverTraderData.rank as number | null | undefined) ?? null')
+    expect(page).not.toMatch(/performance as Record<string, unknown>\)\.rank\b/)
+  })
+})
+
+describe('has_period_90d', () => {
+  it('flags a trader without a 90D period row so the 90D tab is not filled from 30D', () => {
+    expect(perf(detail({ periods: { '30D': { roi: 12 }, '90D': null } })).has_period_90d).toBe(
+      false
+    )
+    expect(perf(detail({ periods: { '90D': { roi: 50 } } })).has_period_90d).toBe(true)
   })
 })

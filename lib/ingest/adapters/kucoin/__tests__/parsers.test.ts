@@ -258,8 +258,11 @@ describe('parseKucoinProfile', () => {
 })
 
 describe('parseKucoinPositions', () => {
-  it('always returns empty (positions are visibility-gated)', () => {
-    expect(parseKucoinPositions(fixture('position-history-null.json'), ctx)).toEqual([])
+  it('always throws (positions are visibility-gated, never an empty book)', () => {
+    // visibility-gated: never parse a payload as "flat"
+    expect(() => parseKucoinPositions(fixture('position-history-null.json'), ctx)).toThrow(
+      /not publicly exposed/
+    )
   })
 })
 

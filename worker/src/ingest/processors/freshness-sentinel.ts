@@ -18,7 +18,9 @@ interface StaleSurface {
   max_age_hours: number
 }
 
-export async function processFreshness(_job: Job): Promise<{ stale: number }> {
+export async function processFreshness(
+  _job: Job
+): Promise<{ stale: number; pendingShifts: number }> {
   const redis = getConnection()
   const { rows } = await getIngestPool().query<StaleSurface>(
     `WITH expected AS (
