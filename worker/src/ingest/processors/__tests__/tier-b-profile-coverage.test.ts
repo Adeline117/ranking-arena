@@ -91,7 +91,10 @@ jest.mock('../../queues', () => ({
 
 import { processTierB as processTierBInRegion } from '../tier-b-profiles'
 import { UpstreamGoneError } from '@/lib/ingest/fetch/capture'
-import { HistoryPageCapReachedError } from '@/lib/ingest/core/history-page-cap'
+import {
+  CopierPageCapReachedError,
+  HistoryPageCapReachedError,
+} from '@/lib/ingest/core/history-page-cap'
 import { createConsumedRegionContext } from '../../consumed-region-context'
 
 const processTierB = (job: Parameters<typeof processTierBInRegion>[0]) =>
@@ -638,6 +641,30 @@ describe('Tier-B profile coverage accounting', () => {
       errors: 0,
     })
     expect(mockGetHistory).not.toHaveBeenCalled()
+  })
+
+  it('never publishes a page-budget-cut copier capture as a Tier-B snapshot, but records the cut', async () => {
+    configureCopierHistory()
+    mockGetHistory.mockImplementation(async function* () {
+      yield* positionHistoryStream()
+      throw new CopierPageCapReachedError('gtrade', 30)
+    })
+    mockParseHistory.mockReturnValue([copierRow])
+
+    await expect(processTierB(job)).resolves.toMatchObject({ errors: 0 })
+
+    expect(mockWriteCopierSnapshotRawArtifact).not.toHaveBeenCalled()
+    expect(mockPublishCopierSnapshot).not.toHaveBeenCalled()
+    expect(mockWriteRawObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobType: 'history:copiers',
+        meta: expect.objectContaining({ capture_rejected: 'caller_page_budget', page_cap: 30 }),
+      })
+    )
+    const marker = mockDbQuery.mock.calls.find(([sql]) =>
+      String(sql).includes("'copiers_truncated'")
+    )
+    expect(marker?.[1]).toEqual([42, 30, 1])
   })
 
   it('commits a complete copier snapshot before marking the whole trader fresh', async () => {

@@ -17,3 +17,26 @@ export class HistoryPageCapReachedError extends Error {
     this.name = 'HistoryPageCapReachedError'
   }
 }
+
+/**
+ * Hard ceiling for copier pagination when the source reports its own page
+ * count: the crawl may extend its configured budget up to the reported total,
+ * but never past this many pages.
+ */
+export const COPIER_PAGE_CEILING = 100
+
+/**
+ * Raised by a copier getHistory when its page budget ends while the source
+ * still has more copiers. A Tier-B copier snapshot must be unbounded
+ * (`copier_snapshot_tier_b_not_caller_limited`), so a cut capture can never be
+ * published as a snapshot; the caller records the truncation instead.
+ */
+export class CopierPageCapReachedError extends Error {
+  constructor(
+    readonly sourceSlug: string,
+    readonly pageCap: number
+  ) {
+    super(`[${sourceSlug}] copiers reached page cap ${pageCap} before the source's last page`)
+    this.name = 'CopierPageCapReachedError'
+  }
+}

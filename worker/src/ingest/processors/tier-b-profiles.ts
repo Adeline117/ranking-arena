@@ -27,7 +27,10 @@ import type {
 import type { FetchSession } from '@/lib/ingest/fetch/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { UpstreamGoneError } from '@/lib/ingest/fetch/capture'
-import { HistoryPageCapReachedError } from '@/lib/ingest/core/history-page-cap'
+import {
+  CopierPageCapReachedError,
+  HistoryPageCapReachedError,
+} from '@/lib/ingest/core/history-page-cap'
 import { captureHistoryAcquisition } from '@/lib/ingest/history-acquisition'
 import { buildPositionHistoryAcquisitionArtifactV2 } from '@/lib/ingest/position-history-acquisition-v2'
 import {
@@ -135,6 +138,23 @@ async function recordHistoryTruncation(
         )
       WHERE id = $1`,
     [traderId, kind, pageCap, oldest]
+  )
+}
+
+/** Durable marker: the latest copier capture was cut by the page budget. */
+async function recordCopierTruncation(
+  traderId: number,
+  pageCap: number,
+  pagesCaptured: number
+): Promise<void> {
+  await getIngestPool().query(
+    `UPDATE arena.traders
+        SET meta = meta || jsonb_build_object(
+          'copiers_truncated',
+          jsonb_build_object('detected_at', now(), 'page_cap', $2::int, 'pages_captured', $3::int)
+        )
+      WHERE id = $1`,
+    [traderId, pageCap, pagesCaptured]
   )
 }
 
@@ -306,6 +326,35 @@ async function crawlTraderHistories(
     }
 
     if (kind === 'copiers') {
+      if (fetchError instanceof CopierPageCapReachedError) {
+        // Contract: a Tier-B copier snapshot is never caller-limited
+        // (copier_snapshot_tier_b_not_caller_limited). A capture cut by the
+        // page budget is therefore kept as RAW diagnostics only — no snapshot
+        // is published (the last complete one stays) — and the cut is recorded
+        // durably. Not rethrown: retrying every continuation hop would burn
+        // the same budget and hit the same cap.
+        await writeRawObject({
+          sourceId: src.id,
+          sourceSlug: src.slug,
+          jobType: 'history:copiers',
+          traderId: trader.id,
+          timeframe: null,
+          payload: rawPages,
+          meta: {
+            surface: 'copiers',
+            lane: 'tier_b',
+            fetch_failed: false,
+            capture_rejected: 'caller_page_budget',
+            page_cap: fetchError.pageCap,
+          },
+        })
+        await recordCopierTruncation(trader.id, fetchError.pageCap, rawPages.length)
+        logger.warn(
+          `[tier-b] ${src.slug} trader ${trader.exchange_trader_id} copiers: page cap ` +
+            `${fetchError.pageCap} reached — snapshot not published (recorded as truncated)`
+        )
+        continue
+      }
       if (fetchError !== null || rawPages.length === 0) {
         // Failed or evidence-free captures are useful diagnostics, but cannot
         // satisfy the page-bearing snapshot contract or mark this trader fresh.

@@ -1,5 +1,6 @@
 import type { ParseCtx, RawPage, SourceRow } from '../../../core/types'
 import type { FetchSession, ReplayRequestTemplate } from '../../../fetch/types'
+import { COPIER_PAGE_CEILING, CopierPageCapReachedError } from '../../../core/history-page-cap'
 import { mexcAdapter } from '../index'
 import { parseMexcHistory } from '../parsers'
 
@@ -137,5 +138,40 @@ describe('MEXC copier pagination', () => {
     await expect(copiers(fetchSession)).rejects.toThrow(
       'empty copier page still claims continuation'
     )
+  })
+
+  it('extends the configured page budget to the reported totalPage', async () => {
+    // copier_max_pages=3, but the source reports 5 pages: crawl all of them.
+    const pages = Array.from({ length: 5 }, (_, i) => payload(i === 4 ? 3 : 10, 5))
+    const { fetchSession, requests } = session(pages)
+
+    expect(await copiers(fetchSession)).toHaveLength(5)
+    expect(requests).toHaveBeenCalledTimes(5)
+  })
+
+  it('throws a typed cap error instead of ending silently when pages remain past the ceiling', async () => {
+    const totalPage = COPIER_PAGE_CEILING + 5
+    const pages = Array.from({ length: COPIER_PAGE_CEILING }, () => payload(10, totalPage))
+    const { fetchSession, requests } = session(pages)
+
+    const error = await copiers(fetchSession).then(
+      () => null,
+      (cause: unknown) => cause
+    )
+    expect(error).toBeInstanceOf(CopierPageCapReachedError)
+    expect(error).toMatchObject({ pageCap: COPIER_PAGE_CEILING })
+    expect(requests).toHaveBeenCalledTimes(COPIER_PAGE_CEILING)
+  })
+
+  it('throws a typed cap error when full pages without totalPage exhaust the budget', async () => {
+    const pages = Array.from({ length: 3 }, () => ({
+      success: true,
+      code: 0,
+      message: '',
+      data: { content: Array.from({ length: 10 }, (_, i) => ({ followerUid: `f-${i}` })) },
+    }))
+    const { fetchSession } = session(pages)
+
+    await expect(copiers(fetchSession)).rejects.toBeInstanceOf(CopierPageCapReachedError)
   })
 })
