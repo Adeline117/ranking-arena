@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import {
@@ -187,9 +187,11 @@ describe('useViewerProfileHandle viewer ownership', () => {
   it('binds both navigation surfaces to the shared scoped hook and removes the global cache', () => {
     const root = process.cwd()
     const mobile = readFileSync(join(root, 'app/components/layout/MobileBottomNav.tsx'), 'utf8')
-    const desktop = readFileSync(join(root, 'app/components/layout/DesktopSidebar.tsx'), 'utf8')
+    // DesktopSidebar had no render site and was deleted, so it can no longer
+    // reintroduce an unscoped handle cache.
+    expect(existsSync(join(root, 'app/components/layout/DesktopSidebar.tsx'))).toBe(false)
 
-    for (const source of [mobile, desktop]) {
+    for (const source of [mobile]) {
       expect(source).toContain('useViewerProfileHandle()')
       expect(source).not.toContain('.auth.getSession()')
       expect(source).not.toContain('.auth.onAuthStateChange(')
