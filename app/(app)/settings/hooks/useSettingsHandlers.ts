@@ -9,6 +9,7 @@ import { authedFetch, getCsrfHeaders } from '@/lib/api/client'
 import { validateHandle } from '../validation'
 import { isHapticsEnabled } from '@/lib/utils/haptics'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
+import { signOutAndForgetAccounts } from '@/lib/hooks/useMultiAccount'
 import {
   buildAccountRecoveryLoginPath,
   persistAccountRecoveryToken,
@@ -1661,7 +1662,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
       } catch {
         /* ignore */
       }
-      await auth.signOut()
+      await signOutAndForgetAccounts(auth.signOut)
       router.push('/')
     } catch {
       if (viewerIsCurrent(scope)) showToast(t('logoutFailed'), 'error')

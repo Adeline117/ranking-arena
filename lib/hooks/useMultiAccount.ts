@@ -39,6 +39,37 @@ function ownsAccountOperation(ticket: { sequence: number; userIds: string[] }): 
 }
 
 /**
+ * Sign out and forget every stored account on this device. Every logout path
+ * must use this (not a bare signOut): the persisted multi-account store holds
+ * other users' emails and refresh tokens, so a plain sign-out on a shared
+ * browser would hand them to the next person who logs in.
+ */
+export function signOutAndForgetAccounts(signOut: () => Promise<unknown>): Promise<void> {
+  return runAccountOperation(async () => {
+    const liveAccounts = useMultiAccountStore.getState().accounts
+    const operationTicket = beginAccountOperation(liveAccounts.map((account) => account.userId))
+    const activeUserId = getViewerScope().userId
+    // Revoke every stored refresh token before clearing local state, so any
+    // token that may have been exfiltrated via XSS / device compromise is
+    // actually invalidated on the Supabase side.
+    for (const account of liveAccounts) {
+      if (account.refreshToken && account.userId !== activeUserId) {
+        // Serial is fine here — this path is rarely hit and we want to avoid
+        // racing session swaps inside invalidateStoredRefreshToken.
+        await invalidateStoredRefreshToken(account.refreshToken)
+      }
+    }
+    try {
+      localStorage.removeItem('arena_adding_account')
+    } catch {
+      /* storage unavailable */
+    }
+    await signOut()
+    if (ownsAccountOperation(operationTicket)) useMultiAccountStore.getState().clear()
+  })
+}
+
+/**
  * Invalidate a stored refresh token server-side by exchanging it once.
  * Supabase rotates refresh tokens on every successful refresh, so the
  * original token becomes unusable after this call — which means if it
@@ -284,27 +315,7 @@ export function useMultiAccount() {
     [signOut]
   )
 
-  const signOutAll = useCallback(
-    () =>
-      runAccountOperation(async () => {
-        const liveAccounts = useMultiAccountStore.getState().accounts
-        const operationTicket = beginAccountOperation(liveAccounts.map((account) => account.userId))
-        const activeUserId = getViewerScope().userId
-        // Revoke every stored refresh token before clearing local state, so any
-        // token that may have been exfiltrated via XSS / device compromise is
-        // actually invalidated on the Supabase side.
-        for (const account of liveAccounts) {
-          if (account.refreshToken && account.userId !== activeUserId) {
-            // Serial is fine here — this path is rarely hit and we want to avoid
-            // racing session swaps inside invalidateStoredRefreshToken.
-            await invalidateStoredRefreshToken(account.refreshToken)
-          }
-        }
-        await signOut()
-        if (ownsAccountOperation(operationTicket)) useMultiAccountStore.getState().clear()
-      }),
-    [signOut]
-  )
+  const signOutAll = useCallback(() => signOutAndForgetAccounts(signOut), [signOut])
 
   return {
     accounts,

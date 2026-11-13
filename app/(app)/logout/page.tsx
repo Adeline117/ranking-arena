@@ -4,10 +4,13 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useRef } from 'react'
 import { logger } from '@/lib/logger'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { signOutAndForgetAccounts } from '@/lib/hooks/useMultiAccount'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export default function LogoutPage() {
   const router = useRouter()
   const { signOut } = useAuthSession()
+  const { t } = useLanguage()
   const mountedRef = useRef(true)
 
   useEffect(() => {
@@ -33,7 +36,7 @@ export default function LogoutPage() {
           /* ignore */
         }
 
-        await signOut()
+        await signOutAndForgetAccounts(signOut)
       } catch (err) {
         logger.error('Logout error:', err)
       } finally {
@@ -61,7 +64,7 @@ export default function LogoutPage() {
         color: 'var(--color-text-secondary)',
       }}
     >
-      Logging out...
+      {t('signingOut')}
     </div>
   )
 }
