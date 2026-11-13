@@ -33,6 +33,7 @@ import type {
   SourceRow,
   Timeframe,
 } from '../../core/types'
+import { HistoryPageCapReachedError } from '../../core/history-page-cap'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
@@ -360,6 +361,18 @@ const gateAdapter: SourceAdapter = {
           .filter((t) => Number.isFinite(t) && t > 0)
         // Overlap reached: this page already dips into stored history.
         if (closeTimes.length > 0 && Math.min(...closeTimes) <= cursorMs) break
+      }
+      if ((kind === 'orders' || kind === 'transfers') && Number.isFinite(cursorMs)) {
+        // orders: create_time, transfers: time (epoch seconds, fixtures).
+        const tsKey = kind === 'orders' ? 'create_time' : 'time'
+        const times = rows
+          .map((r) => Number(r[tsKey]) * 1000)
+          .filter((t) => Number.isFinite(t) && t > 0)
+        if (times.length > 0 && Math.min(...times) <= cursorMs) break
+      }
+      if (pageNo === maxPages && (kind === 'orders' || kind === 'transfers')) {
+        // Full last page, no overlap: older rows exist beyond the budget.
+        throw new HistoryPageCapReachedError(src.slug, kind, maxPages)
       }
     }
   },

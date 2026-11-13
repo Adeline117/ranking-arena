@@ -32,6 +32,7 @@ import type {
   SourceRow,
   Timeframe,
 } from '../../core/types'
+import { HistoryPageCapReachedError } from '../../core/history-page-cap'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
@@ -214,7 +215,8 @@ const kucoinAdapter: SourceAdapter = {
           }
         }
       }
-      return
+      // Every page full, no overlap: the stream was cut by the page budget.
+      throw new HistoryPageCapReachedError(src.slug, 'orders', maxPages)
     }
 
     // copiers

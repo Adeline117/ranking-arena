@@ -27,6 +27,7 @@ import type {
 import type { FetchSession } from '@/lib/ingest/fetch/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { UpstreamGoneError } from '@/lib/ingest/fetch/capture'
+import { HistoryPageCapReachedError } from '@/lib/ingest/core/history-page-cap'
 import { captureHistoryAcquisition } from '@/lib/ingest/history-acquisition'
 import { buildPositionHistoryAcquisitionArtifactV2 } from '@/lib/ingest/position-history-acquisition-v2'
 import {
@@ -104,6 +105,36 @@ async function markProfileAttempted(traderId: number): Promise<void> {
      ON CONFLICT (trader_id, kind)
      DO UPDATE SET cursor_value = EXCLUDED.cursor_value, updated_at = now()`,
     [traderId, PROFILED_CURSOR_KIND, new Date().toISOString()]
+  )
+}
+
+/**
+ * Durable truncation marker for orders/transfers history cut by a page budget.
+ * traders.meta merges on every board publish (`meta || EXCLUDED.meta`), so the
+ * marker survives; the oldest captured event time says where coverage ends.
+ */
+async function recordHistoryTruncation(
+  traderId: number,
+  kind: HistoryKind,
+  pageCap: number,
+  rows: ParsedHistoryRow[]
+): Promise<void> {
+  let oldest: string | null = null
+  for (const row of rows) {
+    const ts = row.kind === 'position_history' ? row.closedAt : row.ts
+    if (ts !== null && (oldest === null || ts < oldest)) oldest = ts
+  }
+  await getIngestPool().query(
+    `UPDATE arena.traders
+        SET meta = meta || jsonb_build_object(
+          'history_truncated',
+          COALESCE(meta->'history_truncated', '{}'::jsonb) || jsonb_build_object(
+            $2::text,
+            jsonb_build_object('detected_at', now(), 'page_cap', $3::int, 'oldest_captured_at', $4::text)
+          )
+        )
+      WHERE id = $1`,
+    [traderId, kind, pageCap, oldest]
   )
 }
 
@@ -321,6 +352,12 @@ async function crawlTraderHistories(
       continue
     }
 
+    // A page-budget cut is not a failed fetch: the yielded newest pages are
+    // valid. Publish them, but record the truncation durably (RAW meta +
+    // traders.meta.history_truncated) so the gap in older history is visible
+    // instead of silently looking complete once the cursor jumps to newest.
+    const pageCapCut =
+      fetchError instanceof HistoryPageCapReachedError && rawPages.length > 0 ? fetchError : null
     if (rawPages.length > 0 || fetchError !== null) {
       await writeRawObject({
         sourceId: src.id,
@@ -329,10 +366,14 @@ async function crawlTraderHistories(
         traderId: trader.id,
         timeframe: null,
         payload: rawPages,
-        meta: { fetch_failed: fetchError !== null },
+        meta: {
+          fetch_failed: fetchError !== null && pageCapCut === null,
+          caller_limited: pageCapCut !== null,
+          ...(pageCapCut !== null ? { page_cap: pageCapCut.pageCap } : {}),
+        },
       })
     }
-    if (fetchError !== null) throw fetchError
+    if (fetchError !== null && pageCapCut === null) throw fetchError
     if (rawPages.length === 0) {
       if (requireResponseForEveryKind) {
         throw new Error(`[tier-b] ${src.slug} ${kind} returned no upstream response page`)
@@ -346,6 +387,13 @@ async function crawlTraderHistories(
     )
 
     written += await publishHistoryRows(src, trader.id, kind, rows, nextHistoryCursor(rows, cursor))
+    if (pageCapCut !== null) {
+      await recordHistoryTruncation(trader.id, kind, pageCapCut.pageCap, rows)
+      logger.warn(
+        `[tier-b] ${src.slug} trader ${trader.exchange_trader_id} ${kind}: page cap ` +
+          `${pageCapCut.pageCap} reached — older history not captured (recorded as truncated)`
+      )
+    }
   }
   return written
 }
