@@ -3,7 +3,10 @@
  * Related account data is retained until the hard-delete cron runs.
  */
 
-import { PENDING_DELETION_BAN_DURATION } from '@/lib/auth/deletion-ban'
+import {
+  PENDING_DELETION_BAN_DURATION,
+  RENEWABLE_SUBSCRIPTION_STATUSES,
+} from '@/lib/auth/deletion-ban'
 import { createHash, randomBytes } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -62,7 +65,7 @@ export const POST = withAuth(
         .from('subscriptions')
         .select('stripe_subscription_id, status, plan')
         .eq('user_id', user.id)
-        .in('status', ['active', 'trialing', 'past_due'])
+        .in('status', [...RENEWABLE_SUBSCRIPTION_STATUSES])
         .limit(1)
         .maybeSingle()
       if (subscriptionError) throw subscriptionError

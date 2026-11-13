@@ -8,3 +8,10 @@
  * the purge job deletes the auth user, so neither depends on expiry.
  */
 export const PENDING_DELETION_BAN_DURATION = '876000h'
+
+/**
+ * Subscription statuses whose renewal deletion stops and recovery resumes.
+ * Both routes must use the same set, or a past_due subscription stays set to
+ * cancel after the account is recovered.
+ */
+export const RENEWABLE_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due'] as const

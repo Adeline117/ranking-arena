@@ -1,6 +1,9 @@
 /** Recover an account during its 30-day deletion grace period. */
 
-import { PENDING_DELETION_BAN_DURATION } from '@/lib/auth/deletion-ban'
+import {
+  PENDING_DELETION_BAN_DURATION,
+  RENEWABLE_SUBSCRIPTION_STATUSES,
+} from '@/lib/auth/deletion-ban'
 import { createHash } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -83,7 +86,7 @@ async function resumeSubscription(userId: string): Promise<boolean> {
       .from('subscriptions')
       .select('stripe_subscription_id, status, plan, cancel_at_period_end')
       .eq('user_id', userId)
-      .in('status', ['active', 'trialing'])
+      .in('status', [...RENEWABLE_SUBSCRIPTION_STATUSES])
       .limit(1)
       .maybeSingle()
     if (error) throw error

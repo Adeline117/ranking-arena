@@ -57,9 +57,17 @@ const mockFrom = jest.fn((table: string) => {
     return {
       select: jest.fn(() => ({
         eq: jest.fn(() => ({
-          in: jest.fn(() => ({
+          in: jest.fn((_column: string, statuses: string[]) => ({
             limit: jest.fn(() => ({
-              maybeSingle: jest.fn().mockImplementation(async () => subscriptionResult),
+              maybeSingle: jest
+                .fn()
+                .mockImplementation(async () =>
+                  statuses.includes(
+                    (subscriptionResult.data as { status?: string } | null)?.status ?? ''
+                  )
+                    ? subscriptionResult
+                    : { data: null, error: null }
+                ),
             })),
           })),
         })),
@@ -136,6 +144,15 @@ describe('account recovery', () => {
     mockCheckRateLimit.mockResolvedValue(null)
     rebanStateResult = { data: { deleted_at: '2026-10-01T00:00:00Z' }, error: null }
     mockStripeUpdate.mockResolvedValue({ status: 'active' })
+  })
+
+  it('resumes renewal for a past_due subscription the deletion stopped', async () => {
+    ;(subscriptionResult.data as { status: string }).status = 'past_due'
+
+    const response = await POST(request({ recovery_token: RECOVERY_TOKEN }))
+
+    expect(response.status).toBe(200)
+    expect(mockStripeUpdate).toHaveBeenCalledWith('sub_123', { cancel_at_period_end: false })
   })
 
   it('restores a passwordless account with its one-time token and resumes renewal', async () => {
