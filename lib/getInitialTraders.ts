@@ -10,7 +10,7 @@ import type { Period } from '@/lib/utils/arena-score'
 import type { ScoreConfidence } from '@/lib/utils/arena-score'
 import type { UnifiedTrader } from '@/lib/types/unified-trader'
 import { getLeaderboard } from '@/lib/data/unified'
-import { PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS } from '@/lib/data/trader/queries'
+import { isInPublicCohort } from '@/lib/rankings/public-cohort'
 import { attachAvatarMirrors } from '@/lib/data/avatar-mirrors'
 import { logger, fireAndForget } from '@/lib/logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
@@ -193,11 +193,7 @@ function hasPublishedInitialRank(value: unknown): value is InitialTrader {
 }
 
 function isCurrentHomepageCohortRow(value: InitialTrader, nowMs = Date.now()): boolean {
-  const computedAtMs = Date.parse(value.computed_at)
-  return (
-    Number.isFinite(computedAtMs) &&
-    computedAtMs >= nowMs - PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS
-  )
+  return isInPublicCohort(value, nowMs)
 }
 
 function sanitizeCachedFreshnessRows(value: unknown): SourceFreshnessRow[] {
@@ -336,7 +332,7 @@ export async function refreshHomeInitialTradersCache(
   const { cacheKey, fallbackKey } = homeInitialTradersCacheKeys(timeRange, 0, safeLimit)
   const writes = await Promise.all([
     cache.set(cacheKey, result, {
-      ttl: 7200,
+      ttl: PUBLIC_RANKING_PRIMARY_CACHE_TTL_SECONDS,
       tags: [PUBLIC_RANKING_REDIS_TAG, `season:${timeRange}`],
       skipMemory: true,
       writeFence,
@@ -353,6 +349,15 @@ export async function refreshHomeInitialTradersCache(
   }
   return result.traders.length
 }
+
+/**
+ * Upper bound on how long the homepage can keep showing rows that the database
+ * has since withdrawn WITHOUT a publication (source quarantine by migration,
+ * serving-head/season fence invalidation): those paths do not advance the
+ * shared write fence, so only cache age bounds them. Matches /api/traders'
+ * 300s cohort cache and the homepage ISR revalidate window.
+ */
+export const PUBLIC_RANKING_PRIMARY_CACHE_TTL_SECONDS = 300
 
 export async function getInitialTraders(
   timeRange: Period = '90D',
@@ -393,14 +398,15 @@ export async function getInitialTraders(
         if (safeCached && safeCached.traders.length > 0) return safeCached
         cached = safeCached
       }
-      // Primary cache miss — use fallback (longer TTL, may be stale but better than empty)
+      // Primary cache miss — keep the fallback for a DB failure only. Serving
+      // it before trying the DB let a DB-level withdrawal (source quarantine,
+      // season fence) stay on the homepage for the fallback's full TTL, since
+      // such withdrawals do not advance the publication write fence.
       fallbackCached = snapshot.entries[1] ?? null
       if (fallbackCached) {
         fallbackCached = sanitizeInitialTradersResult(fallbackCached, timeRange, {
           fromCache: true,
         })
-        const stale = staleCacheResult(fallbackCached)
-        if (stale) return stale
       }
     } catch (_err) {
       // Malformed cache payload — fall through to DB
@@ -424,14 +430,14 @@ export async function getInitialTraders(
       return staleCacheResult(cached, fallbackCached) ?? result
     }
 
-    // Cache successful result — TTL aligned with compute-leaderboard frequency (2h).
-    // warm-cache cron refreshes every 30 min, so data is always reasonably fresh.
-    // Fallback cache has 4h TTL as safety net for DB outages.
+    // Cache successful result. The primary TTL bounds how long a DB-level
+    // withdrawal can stay visible (see PUBLIC_RANKING_PRIMARY_CACHE_TTL_SECONDS).
+    // Fallback cache has 4h TTL as a safety net used ONLY when the DB fails.
     if (result.traders.length > 0) {
       fireAndForget(
         Promise.all([
           cache.set(cacheKey, result, {
-            ttl: 7200,
+            ttl: PUBLIC_RANKING_PRIMARY_CACHE_TTL_SECONDS,
             tags: [PUBLIC_RANKING_REDIS_TAG, `season:${timeRange}`],
             skipMemory: true,
             writeFence,
@@ -568,9 +574,10 @@ async function fetchInitialLeaderboardPage(
     period: timeRange,
     limit,
     offset: page * limit,
-    // No extra score floor: /api/traders (which takes over after hydration and
-    // serves every later page) applies none, so a floor here made the
-    // server-rendered page N a different row range than the client's page N.
+    // No page-specific score floor: getLeaderboard applies the shared public
+    // cohort predicate (lib/rankings/public-cohort.ts), identical to
+    // /api/traders, which takes over after hydration and serves every later
+    // page — so server page N and client page N are the same row range.
     sortBy: 'arena_score',
     signal,
   })

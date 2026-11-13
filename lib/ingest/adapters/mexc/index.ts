@@ -32,6 +32,7 @@ import type {
   SourceRow,
   Timeframe,
 } from '../../core/types'
+import { COPIER_PAGE_CEILING, CopierPageCapReachedError } from '../../core/history-page-cap'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
@@ -319,7 +320,9 @@ const mexcAdapter: SourceAdapter = {
     const url = endpoint(src, 'copiers', `${BASE}/trader/followers/v2`)
     const limit = 10 // verified server page size; larger limits unverified
     const maxPages = Number(src.meta.copier_max_pages) || 30
-    for (let pageIndex = 1; pageIndex <= maxPages; pageIndex++) {
+    // The source reports totalPage: extend the budget to cover it (bounded).
+    let pageBudget = maxPages
+    for (let pageIndex = 1; pageIndex <= pageBudget; pageIndex++) {
       const payload = await replayJson(session, fetcher, {
         url: `${url}?limit=${limit}&page=${pageIndex}&uid=${encodeURIComponent(exchangeTraderId)}`,
         method: 'GET',
@@ -338,6 +341,9 @@ const mexcAdapter: SourceAdapter = {
         }
         return
       }
+      if (Number.isSafeInteger(totalPage) && totalPage > pageBudget) {
+        pageBudget = Math.min(totalPage, Math.max(maxPages, COPIER_PAGE_CEILING))
+      }
       yield { pageIndex, payload, url, fetchedAt: new Date().toISOString() }
       if (Number.isSafeInteger(totalPage) && totalPage > 0) {
         if (pageIndex >= totalPage) return
@@ -345,6 +351,9 @@ const mexcAdapter: SourceAdapter = {
       }
       if (candidateCount < limit) return
     }
+    // Budget exhausted while the source still had pages: never let a cut
+    // capture pass as a complete (unbounded) Tier-B copier snapshot.
+    throw new CopierPageCapReachedError(src.slug, pageBudget)
   },
 
   parseLeaderboard: parseMexcLeaderboardPage,
