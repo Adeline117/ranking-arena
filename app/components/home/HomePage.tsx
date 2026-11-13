@@ -86,7 +86,7 @@ export default function HomePage({
   return (
     <>
       <div id="homepage-interactive" suppressHydrationWarning className="home-page-root">
-        <div className="container-padding has-mobile-nav home-page-container">
+        <div className="home-container has-mobile-nav home-page-container">
           {/* Phase 2 hero REMOVED — SSR hero stays visible permanently as LCP element.
             Rendering a Phase 2 hero would paint a new large element at ~10s on slow 4G,
             resetting LCP from 1.2s to 10s. SSR hero is identical visual content. */}
