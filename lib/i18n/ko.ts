@@ -6748,6 +6748,7 @@ const ko = {
   noRankHistoryAria: '순위 기록 없음',
   rankTrendAria: '순위 추이: {from} → {to}',
   traderActionsAria: '{name} 작업',
+  allTime90dShort: '전체 기간',
 } as const
 
 export default ko

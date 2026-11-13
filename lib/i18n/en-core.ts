@@ -455,6 +455,9 @@ const enCore = {
   rankTrendAria: 'Rank trend: {from} → {to}',
   traderActionsAria: '{name} actions',
   botLabel: 'Bot',
+  allTime90dShort: 'All-time',
+  allTime90dTooltip:
+    'This exchange does not provide a native 90-day window. The 90D data shown is actually all-time (lifetime) performance data.',
 } as const
 
 export default enCore

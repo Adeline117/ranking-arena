@@ -6688,6 +6688,7 @@ const zh = {
   noRankHistoryAria: '暂无排名历史',
   rankTrendAria: '排名走势：{from} → {to}',
   traderActionsAria: '{name} 的操作',
+  allTime90dShort: '全周期',
 } as const
 
 export default zh

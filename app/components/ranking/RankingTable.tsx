@@ -33,6 +33,7 @@ import { SortIndicator } from './Icons'
 import { getPnLTooltip, parseSourceInfo as parseSourceInfoUtil, getMedalGlowClass } from './utils'
 import { classifyStyle, type TradingStyle } from '@/lib/utils/trading-style'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
+import { RankingPeriodContext } from './RankingPeriodContext'
 
 // CSS animations loaded async to avoid render-blocking (medal glow, hover effects, pagination)
 // Critical layout styles (grid, responsive columns) are already in critical-css.ts and responsive.css
@@ -805,7 +806,7 @@ function RankingTableInner(props: {
   })
 
   return (
-    <>
+    <RankingPeriodContext.Provider value={seriesPeriod}>
       {/* Preload top-3 trader avatars for faster LCP. Card view on mobile
         only shows top-3 medals above the fold, and table view uses
         loading="lazy" on rows 4+. Previously preloaded 10 which opened
@@ -1530,7 +1531,7 @@ function RankingTableInner(props: {
           </Box>
         </div>
       </Box>
-    </>
+    </RankingPeriodContext.Provider>
   )
 }
 

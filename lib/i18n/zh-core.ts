@@ -391,6 +391,9 @@ const zhCore = {
   rankTrendAria: '排名走势：{from} → {to}',
   traderActionsAria: '{name} 的操作',
   botLabel: '机器人',
+  allTime90dShort: '全周期',
+  allTime90dTooltip:
+    '该交易所不提供原生 90 天窗口数据。显示的 90D 数据实际上是全部时间（历史）的表现数据。',
 } as const
 
 export default zhCore

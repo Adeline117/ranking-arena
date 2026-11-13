@@ -1,4 +1,7 @@
 import React, { memo, useCallback, useState } from 'react'
+import { isAllTime90dSource } from '@/lib/utils/all-time-90d'
+import { useRankingPeriod } from './RankingPeriodContext'
+import { AllTime90dBadge } from './AllTime90dBadge'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import Link from 'next/link'
 import { tokens, alpha } from '@/lib/design-tokens'
@@ -63,6 +66,7 @@ export const TraderCard = memo(
     const displayName =
       trader.display_name || formatDisplayName(traderHandle, trader.source || source)
     const traderSource = trader.source || source || ''
+    const rankingPeriod = useRankingPeriod()
     const sourceInfo = parseSourceInfo(traderSource)
     const compareAccount: CompareAccountRef = { id: trader.id, source: traderSource }
     const parsedDrawdown = trader.max_drawdown == null ? null : Number(trader.max_drawdown)
@@ -334,6 +338,7 @@ export const TraderCard = memo(
               showArrow
               style={{ marginLeft: 'auto', flexShrink: 0 }}
             />
+            {rankingPeriod === '90D' && isAllTime90dSource(traderSource) && <AllTime90dBadge />}
           </Box>
 
           {/* Stats row */}

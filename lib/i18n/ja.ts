@@ -6519,6 +6519,7 @@ const ja = {
   noRankHistoryAria: '順位履歴なし',
   rankTrendAria: '順位推移：{from} → {to}',
   traderActionsAria: '{name} の操作',
+  allTime90dShort: '全期間',
 } as const
 
 export default ja

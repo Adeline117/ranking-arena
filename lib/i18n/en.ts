@@ -6878,6 +6878,7 @@ const en = {
   noRankHistoryAria: 'No rank history',
   rankTrendAria: 'Rank trend: {from} → {to}',
   traderActionsAria: '{name} actions',
+  allTime90dShort: 'All-time',
 } as const
 
 export default en
