@@ -81,6 +81,10 @@ jest.mock('@/lib/ingest/sources', () => ({
   ]),
 }))
 
+const mockAlert = jest.fn().mockResolvedValue(undefined)
+jest.mock('@/lib/ingest/alerting', () => ({ alert: (...args: unknown[]) => mockAlert(...args) }))
+jest.mock('../../connection', () => ({ getConnection: () => ({ set: jest.fn() }) }))
+
 import { reconcileSchedulers } from '../scheduler'
 import { getActiveSources } from '@/lib/ingest/sources'
 
@@ -466,5 +470,54 @@ describe('reconcileSchedulers cleanup/revival', () => {
     expect(malformedB.remove).not.toHaveBeenCalled()
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('kept 2 unscoped pending jobs'))
     warn.mockRestore()
+  })
+})
+
+describe('reconcileSchedulers per-source isolation', () => {
+  const src = (slug: string) => ({
+    slug,
+    phase: 1,
+    fetch_region: 'local',
+    cadence_tier_a_seconds: 3600,
+    cadence_tier_b_seconds: 7200,
+    cadence_tier_d_seconds: 1800,
+    deep_profile_topn: 300,
+    timeframes_derived: [],
+    meta: {},
+  })
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockQueue.getJobSchedulers.mockResolvedValue([])
+    mockQueue.getJob.mockResolvedValue(null)
+    mockQueue.getJobs.mockResolvedValue([])
+  })
+
+  it('keeps registering later sources, spares the failed source, and alerts', async () => {
+    ;(getActiveSources as jest.Mock).mockResolvedValueOnce([src('bad'), src('good')])
+    mockQueue.upsertJobScheduler.mockImplementation(async (key: string) => {
+      if (key === 'tierb:bad') throw new Error('every must be > 0')
+    })
+    // An existing scheduler of the failed source must not be treated as stale.
+    mockQueue.getJobSchedulers.mockResolvedValue([
+      {
+        key: 'tierd:bad',
+        name: 'tierd:positions',
+        next: Date.now() + HOUR,
+        every: HOUR,
+        template: { data: { sourceSlug: 'bad' } },
+      },
+    ])
+
+    await reconcileSchedulers()
+
+    const keys = mockQueue.upsertJobScheduler.mock.calls.map((c) => c[0])
+    expect(keys).toEqual(expect.arrayContaining(['tierb:good', 'tierd:good']))
+    expect(mockQueue.removeJobScheduler).not.toHaveBeenCalledWith('tierd:bad')
+    expect(mockAlert).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ sourceSlug: 'bad', tier: 'maint' })
+    )
+    mockQueue.upsertJobScheduler.mockReset().mockResolvedValue(undefined)
   })
 })

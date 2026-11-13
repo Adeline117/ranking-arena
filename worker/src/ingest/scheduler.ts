@@ -139,6 +139,82 @@ function comparePendingJobs(a: PendingJobIdentity, b: PendingJobIdentity): numbe
   return (a.id ?? '').localeCompare(b.id ?? '')
 }
 
+/** Register every scheduler one source owns; throws on the first failure
+ *  (the caller isolates it). Keys are added to `wanted` BEFORE their await. */
+async function registerSourceSchedulers(
+  src: ActiveSources[number],
+  wanted: Map<string, string>
+): Promise<void> {
+  const data = { sourceSlug: src.slug }
+  // Bulk tiers run on the source's fetch_region queue so a worker
+  // co-located with that region picks them up (remote-WS chain gone).
+  const queue = getRegionQueue(src.fetch_region)
+  const bulkName = regionQueueName(src.fetch_region)
+
+  // ── Tier-A lane split (2026-06-13 slot-starvation root fix) ──
+  // BullMQ priority alone can't fix this: priority picks which job grabs a
+  // FREED slot, but never preempts a running one — so a giant multi-hour
+  // crawl (bybit_mt5 ≈29k traders/2-3h) holds a slot for hours and the small
+  // user-facing leaderboards behind it sit 14-24h stale. Light Tier-A
+  // (board ≤ FAST_TIER_A_MAX_COUNT) is siphoned to a SEPARATE fast-lane queue
+  // + worker pool that the giants can never touch; heavy Tier-A + all
+  // Tier-B/D/series/derive stay on the bulk queue. Priority 1 still applies
+  // within the fast lane.
+  const onFast = fastLaneEnabled() && isFastTierA(src.expected_count)
+  const tierAQueue = onFast ? getFastQueue(src.fetch_region) : queue
+  const tierAName = onFast ? regionFastQueueName(src.fetch_region) : bulkName
+  const tierA = `tiera:${src.slug}`
+  wanted.set(tierA, tierAName)
+  await tierAQueue.upsertJobScheduler(
+    tierA,
+    { every: src.cadence_tier_a_seconds * 1000 },
+    { name: INGEST_JOB.TIER_A, data, opts: { priority: 1 } }
+  )
+
+  const tierB = `tierb:${src.slug}`
+  wanted.set(tierB, bulkName)
+  await queue.upsertJobScheduler(
+    tierB,
+    { every: src.cadence_tier_b_seconds * 1000 },
+    { name: INGEST_JOB.TIER_B, data, opts: { priority: 6 } }
+  )
+
+  const tierD = `tierd:${src.slug}`
+  wanted.set(tierD, bulkName)
+  await queue.upsertJobScheduler(
+    tierD,
+    { every: src.cadence_tier_d_seconds * 1000 },
+    { name: INGEST_JOB.TIER_D, data, opts: { priority: 3 } }
+  )
+
+  // Series backfill (spec §13.1): slow sweep of ranked traders beyond
+  // deep_profile_topn — only for sources that opt in via
+  // meta.series_backfill_topn. Default 30-min cadence drips a bounded batch
+  // so long-tail chart coverage grows over days within the rate budget.
+  const backfillTopN = Number(src.meta?.series_backfill_topn ?? 0)
+  if (backfillTopN > src.deep_profile_topn) {
+    const cadenceSec = Number(src.meta?.series_backfill_cadence_seconds ?? 1800)
+    const seriesBackfill = `tierbs:${src.slug}`
+    wanted.set(seriesBackfill, bulkName)
+    await queue.upsertJobScheduler(
+      seriesBackfill,
+      { every: Math.max(60, cadenceSec) * 1000 },
+      { name: INGEST_JOB.TIER_B_SERIES, data, opts: { priority: 9 } }
+    )
+  }
+
+  // Derived boards (MEXC/BTCC): synthesize after each Tier-A cadence.
+  if (src.timeframes_derived.length > 0) {
+    const derive = `derive:${src.slug}`
+    wanted.set(derive, bulkName)
+    await queue.upsertJobScheduler(
+      derive,
+      { every: src.cadence_tier_a_seconds * 1000 },
+      { name: INGEST_JOB.DERIVE_BOARDS, data, opts: { priority: 2 } }
+    )
+  }
+}
+
 export async function reconcileSchedulers(): Promise<void> {
   // Do not read the database, resolve BullMQ queues, or mutate persisted
   // schedulers while this V1 ingest path is unpublished.
@@ -155,77 +231,24 @@ export async function reconcileSchedulers(): Promise<void> {
   // tiera:<slug> from the OLD queue — but the key is still "wanted", just on a
   // different queue. So cleanup keys off (key, queueName), not key alone.
   const wanted = new Map<string, string>()
+  // Per-source isolation (2026-11 audit P2-2): one source's registration
+  // error (Redis blip, cadence 0/NULL → `every: 0` rejected, bad region)
+  // used to abort the whole reconcile — every later source, stale cleanup,
+  // revive, serving mirror and expected_metrics sync were skipped. Failed
+  // sources are recorded, alerted, and protected from the destructive
+  // cleanup pass below (their existing schedulers are left untouched).
+  const failedSources: Array<{ slug: string; phase: number; error: string }> = []
 
   for (const src of sources) {
-    const data = { sourceSlug: src.slug }
-    // Bulk tiers run on the source's fetch_region queue so a worker
-    // co-located with that region picks them up (remote-WS chain gone).
-    const queue = getRegionQueue(src.fetch_region)
-    const bulkName = regionQueueName(src.fetch_region)
-
-    // ── Tier-A lane split (2026-06-13 slot-starvation root fix) ──
-    // BullMQ priority alone can't fix this: priority picks which job grabs a
-    // FREED slot, but never preempts a running one — so a giant multi-hour
-    // crawl (bybit_mt5 ≈29k traders/2-3h) holds a slot for hours and the small
-    // user-facing leaderboards behind it sit 14-24h stale. Light Tier-A
-    // (board ≤ FAST_TIER_A_MAX_COUNT) is siphoned to a SEPARATE fast-lane queue
-    // + worker pool that the giants can never touch; heavy Tier-A + all
-    // Tier-B/D/series/derive stay on the bulk queue. Priority 1 still applies
-    // within the fast lane.
-    const onFast = fastLaneEnabled() && isFastTierA(src.expected_count)
-    const tierAQueue = onFast ? getFastQueue(src.fetch_region) : queue
-    const tierAName = onFast ? regionFastQueueName(src.fetch_region) : bulkName
-    const tierA = `tiera:${src.slug}`
-    wanted.set(tierA, tierAName)
-    await tierAQueue.upsertJobScheduler(
-      tierA,
-      { every: src.cadence_tier_a_seconds * 1000 },
-      { name: INGEST_JOB.TIER_A, data, opts: { priority: 1 } }
-    )
-
-    const tierB = `tierb:${src.slug}`
-    wanted.set(tierB, bulkName)
-    await queue.upsertJobScheduler(
-      tierB,
-      { every: src.cadence_tier_b_seconds * 1000 },
-      { name: INGEST_JOB.TIER_B, data, opts: { priority: 6 } }
-    )
-
-    const tierD = `tierd:${src.slug}`
-    wanted.set(tierD, bulkName)
-    await queue.upsertJobScheduler(
-      tierD,
-      { every: src.cadence_tier_d_seconds * 1000 },
-      { name: INGEST_JOB.TIER_D, data, opts: { priority: 3 } }
-    )
-
-    // Series backfill (spec §13.1): slow sweep of ranked traders beyond
-    // deep_profile_topn — only for sources that opt in via
-    // meta.series_backfill_topn. Default 30-min cadence drips a bounded batch
-    // so long-tail chart coverage grows over days within the rate budget.
-    const backfillTopN = Number(src.meta?.series_backfill_topn ?? 0)
-    if (backfillTopN > src.deep_profile_topn) {
-      const cadenceSec = Number(src.meta?.series_backfill_cadence_seconds ?? 1800)
-      const seriesBackfill = `tierbs:${src.slug}`
-      wanted.set(seriesBackfill, bulkName)
-      await queue.upsertJobScheduler(
-        seriesBackfill,
-        { every: Math.max(60, cadenceSec) * 1000 },
-        { name: INGEST_JOB.TIER_B_SERIES, data, opts: { priority: 9 } }
-      )
-    }
-
-    // Derived boards (MEXC/BTCC): synthesize after each Tier-A cadence.
-    if (src.timeframes_derived.length > 0) {
-      const derive = `derive:${src.slug}`
-      wanted.set(derive, bulkName)
-      await queue.upsertJobScheduler(
-        derive,
-        { every: src.cadence_tier_a_seconds * 1000 },
-        { name: INGEST_JOB.DERIVE_BOARDS, data, opts: { priority: 2 } }
-      )
+    try {
+      await registerSourceSchedulers(src, wanted)
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err)
+      failedSources.push({ slug: src.slug, phase: src.phase, error })
+      console.error(`[ingest-scheduler] scheduler registration failed for ${src.slug}: ${error}`)
     }
   }
+  const failedSlugs = new Set(failedSources.map((f) => f.slug))
 
   // Framework maintenance always runs on the primary (local) node.
   const localQueue = getIngestQueue()
@@ -268,6 +291,9 @@ export async function reconcileSchedulers(): Promise<void> {
     for (const scheduler of existing) {
       const key = scheduler.key
       if (!key) continue
+      // A source whose registration failed this pass keeps its existing
+      // schedulers untouched: no stale-removal, no revive.
+      if (failedSlugs.has(key.slice(key.indexOf(':') + 1))) continue
       if (wanted.get(key) !== queueName) {
         await q.removeJobScheduler(key)
         console.log(`[ingest-scheduler] removed stale scheduler ${key} (${queueName})`)
@@ -445,8 +471,40 @@ export async function reconcileSchedulers(): Promise<void> {
       `${deduped ? `, deduped ${deduped} orphans` : ''}`
   )
 
+  if (failedSources.length > 0) {
+    console.error(
+      `[ingest-scheduler] ${failedSources.length}/${sources.length} source(s) failed registration: ` +
+        failedSources.map((f) => f.slug).join(', ')
+    )
+    await alertFailedRegistrations(failedSources)
+  }
+
   await reconcileServingSources()
   await syncExpectedMetrics(sources)
+}
+
+/** Best-effort: one digest entry per failed source. Alerting must never
+ *  abort the reconcile it reports on. */
+async function alertFailedRegistrations(
+  failed: Array<{ slug: string; phase: number; error: string }>
+): Promise<void> {
+  try {
+    const { alert } = await import('@/lib/ingest/alerting')
+    const redis = getConnection()
+    for (const f of failed) {
+      await alert(redis, {
+        sourceSlug: f.slug,
+        phase: f.phase,
+        tier: 'maint',
+        message: `scheduler registration failed (existing schedulers left untouched): ${f.error.slice(0, 200)}`,
+      })
+    }
+  } catch (err) {
+    console.error(
+      '[ingest-scheduler] could not alert failed registrations:',
+      err instanceof Error ? err.message : err
+    )
+  }
 }
 
 /**
