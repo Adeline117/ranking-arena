@@ -129,6 +129,13 @@ describe('token ranking generation barrier', () => {
       '20260804052000_fail_closed_unbound_copier_aggregates.sql',
       '20260804053000_copier_snapshot_publication_substrate.sql',
       '20260804054000_publish_copier_snapshot_atomically.sql',
+      // Season publication follow-ups (PR #419) stay after the containment chain.
+      '20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql',
+      '20261113011058_leaderboard_publication_source_isolation.sql',
+      '20261113012028_public_snapshot_readers_sealed_freshness.sql',
+      '20261113105605_retention_preserves_metric_trust_evidence.sql',
+      '20261113110021_leaderboard_snapshot_retention.sql',
+      '20261113110430_rank_publication_source_evidence_binding.sql',
     ])
     expect(generatedTypes).toContain('get_token_ranking_publication_head: {')
     expect(generatedTypes).toContain('window_through_date: string | null')
