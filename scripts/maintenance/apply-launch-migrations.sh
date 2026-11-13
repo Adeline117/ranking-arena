@@ -151,8 +151,16 @@ PREDEPLOY_MIGRATIONS=(
   20260804052000_fail_closed_unbound_copier_aggregates.sql
   20260804053000_copier_snapshot_publication_substrate.sql
   20260804054000_publish_copier_snapshot_atomically.sql
+  20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql
+  20261113011058_leaderboard_publication_source_isolation.sql
+  20261113012028_public_snapshot_readers_sealed_freshness.sql
 )
 readonly -a PREDEPLOY_MIGRATIONS
+# The final three (season publication follow-ups, PR #419) must stay LAST: they
+# need the public serving authority (20260816184500), and 20261113011058
+# rewrites the freshness authority after the Bitget-bot quarantine
+# (20261111134416, which replaces 20260728124000 in its slot). When merged with
+# #415's reordered manifest they stay after its final entry.
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
 # accepts it only when its exact reviewed ledger and complete object contract
