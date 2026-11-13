@@ -475,6 +475,21 @@ jobs:
       - name: Core path coverage floor
         run: node scripts/qa/core-coverage-floor.mjs coverage/coverage-summary.json
 
+      # The season publication proof drives the TypeScript orchestrator, so it
+      # runs here (node_modules installed) rather than in the SQL-only pre-checks.
+      - name: Install isolated PostgreSQL 17 server binaries
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-17
+          /usr/lib/postgresql/17/bin/initdb --version
+
+      - name: Prove one complete public ranking season publication
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:public-ranking-season-publication-pg17
+
       - name: Upload coverage artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
