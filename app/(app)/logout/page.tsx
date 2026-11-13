@@ -2,7 +2,6 @@
 
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef } from 'react'
-import { clearProStatusCache } from '@/lib/hooks/useProStatus'
 import { logger } from '@/lib/logger'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
@@ -17,8 +16,6 @@ export default function LogoutPage() {
     const performLogout = async () => {
       try {
         // Clear all local state before signing out
-        clearProStatusCache()
-
         // Clear app-specific localStorage keys (preserve onboarding/theme/language preferences)
         const keysToRemove = ['supabase.auth.token', 'sb-auth-token', 'guest-signup-dismissed']
         keysToRemove.forEach((key) => {
