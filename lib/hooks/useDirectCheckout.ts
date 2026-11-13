@@ -16,6 +16,7 @@ import { useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { getCsrfHeaders } from '@/lib/api/csrf'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
+import { redirectTo } from '@/lib/utils/redirect'
 import {
   buildPricingCheckoutLoginHref,
   type PricingCheckoutIntent,
@@ -87,9 +88,13 @@ export function useDirectCheckout() {
           return
         }
 
-        if (data.url) {
-          window.location.href = data.url
+        if (typeof data.url === 'string' && data.url) {
+          redirectTo(data.url)
+          return
         }
+        // A 2xx without a checkout URL used to do nothing at all: the button
+        // re-enabled and the user got no feedback.
+        setError(data.error || 'Checkout failed')
       } catch {
         setError('Network error. Please try again.')
       } finally {

@@ -18,6 +18,11 @@ jest.mock('@/lib/stripe', () => ({
 
 jest.mock('@/lib/data/notifications', () => ({ sendNotification: jest.fn() }))
 
+jest.mock('../subscription', () => ({
+  getProPlanFromPriceId: (priceId: string | undefined) =>
+    priceId === 'price_pro_monthly' ? 'monthly' : null,
+}))
+
 import { handlePaymentFailed, handlePaymentSucceeded } from '../invoice'
 
 type DbError = { message: string }
@@ -68,11 +73,15 @@ function invoice(overrides: Partial<Stripe.Invoice> = {}): Stripe.Invoice {
   } as Stripe.Invoice
 }
 
+function proSubscription(priceId = 'price_pro_monthly') {
+  return { id: 'sub_current', status: 'active', items: { data: [{ price: { id: priceId } }] } }
+}
+
 describe('invoice webhook persistence', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockFrom.mockReset()
-    mockRetrieveSubscription.mockResolvedValue({ id: 'sub_current', status: 'active' })
+    mockRetrieveSubscription.mockResolvedValue(proSubscription())
   })
 
   it('keeps a successful payment retryable when its history row cannot be written', async () => {
@@ -107,6 +116,19 @@ describe('invoice webhook persistence', () => {
     expect(subscriptionMutation.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'active' })
     )
+  })
+
+  it('does not grant Pro for a paid B2B API-tier (non-Pro price) invoice', async () => {
+    mockRetrieveSubscription.mockResolvedValue(proSubscription('price_api_starter'))
+    const historyWrite = mutationQuery()
+    mockFrom
+      .mockImplementationOnce(() => lookupQuery({ id: 'user-1', subscription_tier: 'free' }))
+      .mockImplementationOnce(() => historyWrite)
+
+    await expect(handlePaymentSucceeded(invoice())).resolves.toBeUndefined()
+    expect(historyWrite.upsert).toHaveBeenCalled()
+    // Only the owner lookup and the payment-history write touched the DB.
+    expect(mockFrom).toHaveBeenCalledTimes(2)
   })
 
   it('keeps an active-subscription reconciliation failure retryable', async () => {

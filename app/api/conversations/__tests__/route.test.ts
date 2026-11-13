@@ -117,4 +117,68 @@ describe('GET /api/conversations', () => {
       await expect(response.json()).resolves.toEqual({ error: 'Failed to fetch conversations' })
     }
   )
+
+  it('hides conversations cleared since their last message and only counts newer unread', async () => {
+    const me = '11111111-1111-4111-8111-111111111111'
+    const conv = (id: string, last: string) => ({
+      id,
+      user1_id: me,
+      user2_id: '22222222-2222-4222-8222-222222222222',
+      last_message_at: last,
+      last_message_preview: id,
+      created_at: '2026-07-01T00:00:00.000Z',
+    })
+    const results: Record<string, { data: unknown; error: unknown }> = {
+      conversations: {
+        data: [
+          conv('deleted', '2026-07-10T00:00:00.000Z'),
+          conv('revived', '2026-07-20T00:00:00.000Z'),
+          conv('plain', '2026-07-05T00:00:00.000Z'),
+        ],
+        error: null,
+      },
+      user_profiles: { data: [], error: null },
+      direct_messages: {
+        data: [
+          { conversation_id: 'deleted', created_at: '2026-07-09T00:00:00.000Z' },
+          { conversation_id: 'revived', created_at: '2026-07-11T00:00:00.000Z' },
+          { conversation_id: 'revived', created_at: '2026-07-20T00:00:00.000Z' },
+          { conversation_id: 'plain', created_at: '2026-07-05T00:00:00.000Z' },
+        ],
+        error: null,
+      },
+      conversation_members: {
+        data: [
+          {
+            conversation_id: 'deleted',
+            remark: null,
+            is_muted: false,
+            is_pinned: false,
+            is_blocked: false,
+            cleared_before: '2026-07-15T00:00:00.000Z',
+          },
+          {
+            conversation_id: 'revived',
+            remark: null,
+            is_muted: false,
+            is_pinned: false,
+            is_blocked: false,
+            cleared_before: '2026-07-15T00:00:00.000Z',
+          },
+        ],
+        error: null,
+      },
+    }
+    mockFrom.mockImplementation((table: string) => queryResult(results[table]))
+
+    const response = await GET({} as never)
+    const body = (await response.json()) as {
+      conversations: Array<{ id: string; unread_count: number }>
+    }
+
+    expect(body.conversations.map((c) => [c.id, c.unread_count])).toEqual([
+      ['revived', 1],
+      ['plain', 1],
+    ])
+  })
 })

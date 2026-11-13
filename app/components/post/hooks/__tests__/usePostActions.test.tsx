@@ -160,6 +160,41 @@ describe('usePostActions aliased detail state', () => {
     expect(mockSetOpenPost).not.toHaveBeenCalled()
   })
 
+  it('rolls a failed bookmark back by its delta, keeping a count refreshed mid-flight', async () => {
+    let resolveFetch: ((response: Response) => void) | undefined
+    ;(global.fetch as jest.Mock).mockReturnValue(
+      new Promise<Response>((resolve) => {
+        resolveFetch = resolve
+      })
+    )
+    const { result } = renderHook(() => useAliasedPostActions())
+    act(() => {
+      result.current.actions.setBookmarkCounts({ 'post-1': 3 })
+    })
+
+    let bookmarkRequest: Promise<void>
+    act(() => {
+      bookmarkRequest = result.current.actions.handleBookmark('post-1')
+    })
+    expect(result.current.actions.bookmarkCounts['post-1']).toBe(4)
+
+    // A status refresh lands while the request is in flight (others bookmarked).
+    act(() => {
+      result.current.actions.setBookmarkCounts((prev) => ({
+        ...prev,
+        'post-1': (prev['post-1'] ?? 0) + 5,
+      }))
+    })
+
+    await act(async () => {
+      resolveFetch?.(jsonResponse({ success: false, error: 'rejected' }, false))
+      await bookmarkRequest!
+    })
+
+    expect(result.current.actions.bookmarkCounts['post-1']).toBe(8)
+    expect(result.current.actions.userBookmarks['post-1']).toBe(false)
+  })
+
   it('reverses one optimistic reaction delta when the server rejects the request', async () => {
     ;(global.fetch as jest.Mock).mockResolvedValue(
       jsonResponse({ success: false, error: 'rejected' }, false)

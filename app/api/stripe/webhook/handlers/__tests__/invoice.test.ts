@@ -35,6 +35,12 @@ jest.mock('@/lib/alerts/send-alert', () => ({
   sendRateLimitedAlert: (...args: unknown[]) => mockSendRateLimitedAlert(...args),
 }))
 
+// invoice.ts reuses the subscription handler's price → plan mapping; mock it so
+// this suite does not load the full subscription handler and its env.
+jest.mock('../subscription', () => ({
+  getProPlanFromPriceId: () => null,
+}))
+
 function invoice(overrides: Partial<Stripe.Invoice> = {}): Stripe.Invoice {
   return {
     id: 'in_test',
