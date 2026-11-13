@@ -25,7 +25,7 @@ import { PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS } from '@/lib/data/trader/quer
 import { validateTradersResponse } from '@/lib/api/traders-response-schema'
 import { attachAvatarMirrors } from '@/lib/data/avatar-mirrors'
 import { claimedTraderBadgeKey, getClaimedTraderBadgeKeys } from '@/lib/data/claimed-trader-badges'
-import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import { SOURCE_TYPE_MAP, parsePublicActiveRankingSource } from '@/lib/constants/exchanges'
 import {
   sourceFreshnessStatusMap,
   summarizeSourceFreshness,
@@ -59,6 +59,8 @@ const PUBLIC_TRADERS_SORT_BY = [
 type PublicTradersSortBy = (typeof PUBLIC_TRADERS_SORT_BY)[number]
 
 // ── Input validation schema ──────────────────────────────────────────────────
+/** Upper bound for a rank cursor / legacy page offset (rows). */
+const MAX_PUBLIC_RANK = 50_000
 const tradersQuerySchema = z.object({
   // Omission has a safe default; an explicit malformed value is a client
   // error. Silently changing a shared URL's period/order changes the cohort
@@ -77,11 +79,13 @@ const tradersQuerySchema = z.object({
   // (or any other requested metric).
   sortBy: z.enum(PUBLIC_TRADERS_SORT_BY).optional().default('arena_score'),
   order: z.enum(['asc', 'desc']).optional().default('desc'),
-  cursor: z.coerce.number().int().min(0).optional(),
-  limit: z.coerce.number().int().min(1).max(500).optional().default(50),
-  // Keep the PostgREST inclusive range bounded even for legacy page URLs.
-  // At the maximum public limit this caps the offset at 20,000,000 rows.
-  page: z.coerce.number().int().min(0).max(40_000).optional(),
+  // Every accepted value becomes part of the Redis cache key, so each bound
+  // below also bounds cache-key cardinality (one DB read + one ≤limit+1-row
+  // Redis value per distinct key). Bounds sit well above the real cohort:
+  // the whole public board is ~34k traders.
+  cursor: z.coerce.number().int().min(0).max(MAX_PUBLIC_RANK).optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional().default(50),
+  page: z.coerce.number().int().min(0).max(1_000).optional(),
 })
 
 // Select only the response fields plus row-level publication proof required to
@@ -306,6 +310,22 @@ export const GET = withPublic(
     // the returned cursor false.
     if (cursor !== null && (sortBy !== 'arena_score' || order !== 'desc')) {
       return badRequest('Cursor pagination requires arena_score descending order')
+    }
+
+    if (useLegacyPaging && legacyPage * limit > MAX_PUBLIC_RANK) {
+      return badRequest('Invalid parameters')
+    }
+
+    // Exact canonical source ids only (same parser as /api/rankings). An
+    // arbitrary string would otherwise mint a fresh cache key + DB read per
+    // value. Quarantined sources stay accepted: they return an explicit empty
+    // response below without touching cache or DB.
+    if (
+      exchangeFilter !== undefined &&
+      parsePublicActiveRankingSource(exchangeFilter) === null &&
+      !isPublicRankingSourceQuarantined(exchangeFilter)
+    ) {
+      return badRequest('Invalid exchange')
     }
 
     if (isPublicRankingSourceQuarantined(exchangeFilter)) {
