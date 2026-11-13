@@ -109,6 +109,19 @@ test.describe('degraded data', () => {
     await expect(main).not.toContainText(METRIC_FIGURE)
   })
 
+  test('a missing trader is not-found in the server HTML, not only after hydration', async ({
+    request,
+  }) => {
+    const html = await (await request.get('/trader/e2e-no-such-trader')).text()
+    expect(html).toContain('Trader Not Found')
+    expect(html).toMatch(/<title>Trader Not Found \| Arena<\/title>/)
+    expect(html).toContain('name="robots" content="noindex, nofollow"')
+    expect(html).not.toContain('content="index, follow"')
+    // A notFound() thrown after the shell streamed leaves only this digest for
+    // the browser to act on (React error #419).
+    expect(html).not.toContain('NEXT_HTTP_ERROR_FALLBACK')
+  })
+
   test('a metric the source did not publish shows as unavailable, not as zero', async ({
     page,
   }) => {
