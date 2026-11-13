@@ -15,6 +15,7 @@ import type { ParseCtx } from '@/lib/ingest/core/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { writeRawObject } from '@/lib/ingest/raw'
 import { publishPositions } from '@/lib/ingest/serving/publish'
+import { parsePositionSnapshot } from '@/lib/ingest/core/position-snapshot'
 import type { TierJobData } from '../queues'
 import {
   assertSourceMatchesConsumedRegion,
@@ -122,7 +123,13 @@ export async function processTierD(
           scrapedAt: scrapedAt.toISOString(),
           meta: src.meta,
         }
-        const positions = bundle.pages.flatMap((page) => adapter.parsePositions(page.payload, ctx))
+        // Fail closed: a failed/blocked/malformed capture throws here and the
+        // trader's previous snapshot stays (publishPositions DELETEs first).
+        const positions = parsePositionSnapshot(
+          (raw, parseCtx) => adapter.parsePositions(raw, parseCtx),
+          bundle.pages,
+          ctx
+        )
 
         // Source-disclosed staleness (spec §5.7): Bitget −1h.
         const asOf = new Date(scrapedAt.getTime() - delayHours * 3_600_000).toISOString()
