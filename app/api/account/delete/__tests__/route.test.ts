@@ -68,7 +68,7 @@ import { POST } from '../route'
 function request(body: Record<string, unknown>): Request {
   return new Request('https://www.arenafi.org/api/account/delete', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', authorization: 'Bearer access-token-1' },
     body: JSON.stringify(body),
   })
 }
@@ -111,7 +111,7 @@ describe('account deletion scheduling', () => {
     expect(mockStripeUpdate).toHaveBeenCalledWith('sub_123', { cancel_at_period_end: true })
     expect(mockLocalSubscriptionUpdate).toHaveBeenCalledWith({ cancel_at_period_end: true })
     expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: '876000h' })
-    expect(mockAdminSignOut).toHaveBeenCalledWith('user-1', 'global')
+    expect(mockAdminSignOut).toHaveBeenCalledWith('access-token-1', 'global')
     expect(mockFrom).toHaveBeenCalledTimes(2)
   })
 

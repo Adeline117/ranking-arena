@@ -146,7 +146,13 @@ export const POST = withAuth(
     const { error: banError } = await adminSupabase.auth.admin.updateUserById(user.id, {
       ban_duration: PENDING_DELETION_BAN_DURATION,
     })
-    const { error: signOutError } = await adminSupabase.auth.admin.signOut(user.id, 'global')
+    // admin.signOut takes the user's access token (not their id): passing the
+    // id fails as an invalid JWT and leaves every session alive.
+    const authorization = request.headers.get('authorization')
+    const accessToken = authorization?.startsWith('Bearer ') ? authorization.slice(7) : null
+    const signOutError = accessToken
+      ? (await adminSupabase.auth.admin.signOut(accessToken, 'global')).error
+      : { message: 'no bearer token available to revoke sessions' }
     if (banError || signOutError) {
       // `deleted_at` is independently enforced by server auth, so access stays
       // blocked even if Supabase session invalidation is temporarily degraded.
