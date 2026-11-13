@@ -10,7 +10,7 @@ import type { Period } from '@/lib/utils/arena-score'
 import type { ScoreConfidence } from '@/lib/utils/arena-score'
 import type { UnifiedTrader } from '@/lib/types/unified-trader'
 import { getLeaderboard } from '@/lib/data/unified'
-import { PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS } from '@/lib/data/trader/queries'
+import { isInPublicCohort } from '@/lib/rankings/public-cohort'
 import { attachAvatarMirrors } from '@/lib/data/avatar-mirrors'
 import { logger, fireAndForget } from '@/lib/logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
@@ -193,11 +193,7 @@ function hasPublishedInitialRank(value: unknown): value is InitialTrader {
 }
 
 function isCurrentHomepageCohortRow(value: InitialTrader, nowMs = Date.now()): boolean {
-  const computedAtMs = Date.parse(value.computed_at)
-  return (
-    Number.isFinite(computedAtMs) &&
-    computedAtMs >= nowMs - PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS
-  )
+  return isInPublicCohort(value, nowMs)
 }
 
 function sanitizeCachedFreshnessRows(value: unknown): SourceFreshnessRow[] {
@@ -568,9 +564,8 @@ async function fetchInitialLeaderboardPage(
     period: timeRange,
     limit,
     offset: page * limit,
-    // Preserve the homepage's established score threshold, but apply it to
-    // every page so pagination stays one coherent, SQL-filtered cohort.
-    minScore: 10,
+    // No page-specific score floor: getLeaderboard applies the shared public
+    // cohort predicate, identical to /api/traders (the client's later pages).
     sortBy: 'arena_score',
     signal,
   })

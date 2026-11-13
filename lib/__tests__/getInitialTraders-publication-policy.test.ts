@@ -308,13 +308,13 @@ describe('SSR public ranking cohort', () => {
     expect(mockFrom).not.toHaveBeenCalled()
   })
 
-  it('rechecks cached rows against the homepage six-hour cohort window and source watermarks', async () => {
+  it('rechecks cached rows against the shared 48-hour cohort window and source watermarks', async () => {
     const staleByHomepageWindow = {
-      ...validCachedResult('six-hours-old'),
+      ...validCachedResult('beyond-48-hours'),
       traders: [
         {
-          ...cachedTrader('six-hours-old'),
-          computed_at: '2026-07-24T05:59:59.999Z',
+          ...cachedTrader('beyond-48-hours'),
+          computed_at: '2026-07-22T11:59:59.999Z',
         },
       ],
     }

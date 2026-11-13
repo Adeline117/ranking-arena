@@ -286,7 +286,12 @@ describe('GET /api/traders public ranked cohort', () => {
       'leaderboard_source_freshness',
     ])
     expect(rankingQuery.select).toHaveBeenCalledWith(expect.stringContaining('metrics_estimated'))
-    expect(rankingQuery.gte).toHaveBeenCalledWith('computed_at', '2026-07-18T06:00:00.000Z')
+    // Shared public cohort predicate (lib/rankings/public-cohort.ts): same
+    // score floor, ROI bound and 48h window as SSR and /api/rankings.
+    expect(rankingQuery.gt).toHaveBeenCalledWith('arena_score', 0)
+    expect(rankingQuery.gte).toHaveBeenCalledWith('roi', -50_000)
+    expect(rankingQuery.lte).toHaveBeenCalledWith('roi', 50_000)
+    expect(rankingQuery.gte).toHaveBeenCalledWith('computed_at', '2026-07-16T12:00:00.000Z')
     expect(rankingQuery.limit).toHaveBeenCalledWith(51)
   })
 
@@ -535,13 +540,13 @@ describe('GET /api/traders public ranked cohort', () => {
     expect(body.totalCountIsExact).toBe(false)
   })
 
-  it('rejects a 6-to-48-hour raw cache row even when its complete publication proof remains valid', async () => {
+  it('rejects a raw cache row older than the shared 48-hour cohort window', async () => {
     mockGetOrSetWithLock.mockResolvedValue({
       scope: publicRankedCohortScope({ limit: 2 }),
       rows: [
         publicRankedRow({
           source_trader_id: 'served-too-old',
-          computed_at: '2026-07-18T05:59:00.000Z',
+          computed_at: '2026-07-16T11:59:00.000Z',
         }),
       ],
     })

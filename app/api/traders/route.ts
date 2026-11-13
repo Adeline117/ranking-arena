@@ -21,7 +21,7 @@ import { createLogger } from '@/lib/utils/logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { computeAntiGamingFlags } from '@/lib/scoring/anti-gaming'
 import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
-import { PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS } from '@/lib/data/trader/queries'
+import { applyPublicCohortFilters, isInPublicCohort } from '@/lib/rankings/public-cohort'
 import { validateTradersResponse } from '@/lib/api/traders-response-schema'
 import { attachAvatarMirrors } from '@/lib/data/avatar-mirrors'
 import { claimedTraderBadgeKey, getClaimedTraderBadgeKeys } from '@/lib/data/claimed-trader-badges'
@@ -191,8 +191,9 @@ interface PublicRankedLeaderboardQueryResult {
 type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
   select(columns: string): PublicRankedLeaderboardQuery
   eq(column: string, value: string): PublicRankedLeaderboardQuery
-  gte(column: string, value: string): PublicRankedLeaderboardQuery
+  gte(column: string, value: number | string): PublicRankedLeaderboardQuery
   gt(column: string, value: number): PublicRankedLeaderboardQuery
+  lte(column: string, value: number): PublicRankedLeaderboardQuery
   order(
     column: string,
     options: { ascending: boolean; nullsFirst: boolean }
@@ -236,12 +237,10 @@ function isWithinPublicServingFreshness(
   row: PublicRankedLeaderboardRow,
   nowMs = Date.now()
 ): boolean {
-  const computedAt = row.computed_at
-  if (typeof computedAt !== 'string') return false
-  const computedAtMs = Date.parse(computedAt)
-  return (
-    Number.isFinite(computedAtMs) &&
-    computedAtMs >= nowMs - PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS
+  // Same predicate the SQL applied (shared with SSR and /api/rankings).
+  return isInPublicCohort(
+    { arena_score: row.arena_score, roi: row.roi, computed_at: row.computed_at },
+    nowMs
   )
 }
 
@@ -487,12 +486,14 @@ async function fetchPublicRankedCohort(
 
   // The security-barrier view is the only public cohort authority. Do not
   // reproduce its proof predicates here or read the wider raw rank table.
-  const freshCutoff = new Date(Date.now() - PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS).toISOString()
-  let query = publicRankedLeaderboardClient(supabase)
-    .from('public_ranked_leaderboard')
-    .select(PUBLIC_RANKED_LEADERBOARD_COLUMNS)
-    .eq('season_id', timeRange)
-    .gte('computed_at', freshCutoff)
+  // Shared public cohort predicate (score floor, ROI bound, 48h window) —
+  // identical to the homepage SSR page and /api/rankings.
+  let query = applyPublicCohortFilters(
+    publicRankedLeaderboardClient(supabase)
+      .from('public_ranked_leaderboard')
+      .select(PUBLIC_RANKED_LEADERBOARD_COLUMNS)
+      .eq('season_id', timeRange)
+  )
 
   if (exchangeFilter) {
     query = query.eq('source', exchangeFilter)
