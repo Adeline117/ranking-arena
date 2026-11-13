@@ -8,6 +8,7 @@
  */
 
 import type { TradingPeriod } from './types'
+import { logger } from '@/lib/logger'
 import {
   isPublicRankingSourceAllowed,
   sanitizePublicRankingPayload,
@@ -211,6 +212,12 @@ export async function fetchPublicProfileRankingRows(
     if (signal) query = query.abortSignal(signal)
     const { data, error } = await query
     if (error) {
+      // Never swallow DB errors silently (CLAUDE.md schema-grounding rule 4):
+      // a missing view or column would otherwise just look like "no rank".
+      logger.warn('[public-profile-ranking] public cohort read failed', {
+        source: scope.source,
+        message: error.message,
+      })
       return {
         rows: [],
         rankingVisibility: 'unknown',
@@ -218,7 +225,11 @@ export async function fetchPublicProfileRankingRows(
       }
     }
     return sanitizePublicProfileRankingRows(data ?? [], { ...scope, periods })
-  } catch {
+  } catch (err) {
+    logger.warn('[public-profile-ranking] public cohort read threw', {
+      source: scope.source,
+      error: err instanceof Error ? err.message : String(err),
+    })
     return {
       rows: [],
       rankingVisibility: 'unknown',

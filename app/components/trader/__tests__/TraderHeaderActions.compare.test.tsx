@@ -102,7 +102,11 @@ jest.mock('../WatchlistToggleButton', () => ({
   default: (props: unknown) => mockWatchlistToggleButton(props),
 }))
 jest.mock('../AlertBellButton', () => () => null)
-jest.mock('../TraderShareActions', () => () => null)
+const mockTraderShareActions = jest.fn((_props: Record<string, unknown>) => null)
+jest.mock('../TraderShareActions', () => ({
+  __esModule: true,
+  default: (props: Record<string, unknown>) => mockTraderShareActions(props),
+}))
 
 import { TraderHeaderActions } from '../TraderHeaderActions'
 
@@ -370,5 +374,34 @@ describe('TraderHeaderActions', () => {
       source: 'binance',
       selected: true,
     })
+  })
+})
+
+describe('TraderHeaderActions share card window', () => {
+  beforeEach(() => mockTraderShareActions.mockClear())
+
+  it('labels a non-90D serving headline with its real board window', () => {
+    render(
+      <TraderHeaderActions
+        traderId="trader-1"
+        handle="Trader One"
+        source="binance"
+        isOwnProfile={false}
+        userId={null}
+        rank={12}
+        roi90d={42.5}
+        headlineWindow="30d"
+      />
+    )
+    expect(mockTraderShareActions).toHaveBeenCalledWith(
+      expect.objectContaining({ rank: 12, roi: 42.5, window: '30d' })
+    )
+  })
+
+  it('leaves the window unset (90D default) when no headline window is known', () => {
+    renderActions()
+    expect(mockTraderShareActions).toHaveBeenCalledWith(
+      expect.objectContaining({ window: undefined })
+    )
   })
 })
