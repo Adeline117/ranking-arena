@@ -44,7 +44,7 @@ import {
 
 function chainableQuery(response: { data?: Record<string, unknown>[]; error?: unknown } = {}) {
   const query: Record<string, jest.Mock> = {}
-  for (const method of ['select', 'eq', 'in', 'not', 'or', 'gt', 'gte', 'order', 'range']) {
+  for (const method of ['select', 'eq', 'in', 'not', 'or', 'gt', 'gte', 'lte', 'order', 'range']) {
     query[method] = jest.fn(() => query)
   }
   query.abortSignal = jest.fn().mockResolvedValue({
@@ -520,6 +520,11 @@ describe('getLeaderboard public cohort view', () => {
     )
     expect(leaderboardQuery.in).toHaveBeenCalledWith('source', ['binance_futures'])
     expect(leaderboardQuery.eq).toHaveBeenCalledWith('source', 'binance_futures')
+    // shared public cohort predicate, then the caller's narrower floor
+    expect(leaderboardQuery.gt).toHaveBeenCalledWith('arena_score', 0)
+    expect(leaderboardQuery.gte).toHaveBeenCalledWith('roi', -50_000)
+    expect(leaderboardQuery.lte).toHaveBeenCalledWith('roi', 50_000)
+    expect(leaderboardQuery.gte).toHaveBeenCalledWith('computed_at', expect.any(String))
     expect(leaderboardQuery.gt).toHaveBeenCalledWith('arena_score', 50)
     expect(leaderboardQuery.range).toHaveBeenCalledWith(0, 20)
     expect(leaderboardQuery.abortSignal).toHaveBeenCalledWith(signal)
@@ -534,6 +539,7 @@ describe('getLeaderboard public cohort view', () => {
       ...leaderboardQuery.not.mock.invocationCallOrder,
       ...leaderboardQuery.gt.mock.invocationCallOrder,
       ...leaderboardQuery.gte.mock.invocationCallOrder,
+      ...leaderboardQuery.lte.mock.invocationCallOrder,
     ]
     expect(Math.max(...filterCallOrders)).toBeLessThan(
       leaderboardQuery.range.mock.invocationCallOrder[0]

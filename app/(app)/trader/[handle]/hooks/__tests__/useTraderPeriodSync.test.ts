@@ -1,8 +1,9 @@
 import { act, renderHook } from '@testing-library/react'
 
+let mockPathname = '/trader/alice'
 let mockSearch = ''
 jest.mock('next/navigation', () => ({
-  usePathname: () => '/trader/alice',
+  usePathname: () => mockPathname,
   useSearchParams: () => new URLSearchParams(mockSearch),
 }))
 const mockReplaceUrlShallow = jest.fn()
@@ -16,6 +17,8 @@ import { useTraderPeriodSync } from '../useTraderPeriodSync'
 describe('useTraderPeriodSync', () => {
   beforeEach(() => {
     mockReplaceUrlShallow.mockClear()
+    mockPathname = '/trader/alice'
+    mockSearch = ''
     act(() => usePeriodStore.getState().setPeriod('90D'))
   })
 
@@ -51,5 +54,18 @@ describe('useTraderPeriodSync', () => {
     act(() => usePeriodStore.getState().setPeriod('7D'))
 
     expect(mockReplaceUrlShallow).toHaveBeenLastCalledWith('/trader/alice?period=7D')
+  })
+
+  it('re-syncs from the URL when the trader (pathname) changes on a mounted page', () => {
+    mockPathname = '/trader/d'
+    mockSearch = 'period=7D'
+    const { result, rerender } = renderHook(() => useTraderPeriodSync())
+    expect(result.current).toBe('7D')
+
+    mockPathname = '/trader/e'
+    mockSearch = ''
+    rerender()
+
+    expect(result.current).toBe('90D')
   })
 })

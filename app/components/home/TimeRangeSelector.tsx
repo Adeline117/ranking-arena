@@ -71,7 +71,7 @@ export default function TimeRangeSelector({
       ref={containerRef}
       className="time-range-selector"
       role="group"
-      aria-label="Time range"
+      aria-label={t('timeRangeAria')}
       style={{
         display: 'inline-flex',
         gap: tokens.spacing[0],
@@ -113,7 +113,7 @@ export default function TimeRangeSelector({
             onClick={() => !disabled && onChange(range)}
             disabled={disabled}
             aria-pressed={isActive}
-            aria-label={`Show ${range} rankings`}
+            aria-label={t('showRangeRankingsAria').replace('{range}', range)}
             className="touch-target time-range-btn"
             style={{
               // padding + min-height: .time-range-btn in critical CSS

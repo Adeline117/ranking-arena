@@ -79,6 +79,14 @@ export const EXPECTED_REPOSITORY_WORKFLOWS = Object.freeze([
     path: '.github/workflows/post-deploy-evaluate.yml',
   },
   {
+    // V1 owner-approved sole exception (2026-11): read-only GET of the public
+    // /api/health, no repository secret, job token limited to issues:write —
+    // the only dead-man's switch independent of every V1 kill switch.
+    allowedStates: Object.freeze(['active', 'disabled_manually']),
+    name: 'Public Data Freshness Probe',
+    path: '.github/workflows/public-freshness-probe.yml',
+  },
+  {
     name: 'Post-Deploy Smoke Test',
     path: '.github/workflows/post-deploy-smoke.yml',
   },
@@ -87,6 +95,13 @@ export const EXPECTED_REPOSITORY_WORKFLOWS = Object.freeze([
     path: '.github/workflows/vercel-release-control.yml',
   },
 ])
+
+/** Names of repository workflows whose policy allows the `active` state. */
+const ACTIVE_ALLOWED_WORKFLOW_NAMES = new Set(
+  EXPECTED_REPOSITORY_WORKFLOWS.filter((workflow) =>
+    workflow.allowedStates?.includes('active')
+  ).map((workflow) => workflow.name)
+)
 
 export const EXPECTED_DYNAMIC_WORKFLOWS = Object.freeze([
   {
@@ -305,11 +320,12 @@ export function analyzeWorkflowControlPlane({
         path: expected.path,
       })
     }
-    if (actual.state !== REQUIRED_REPOSITORY_STATE) {
+    const allowedStates = expected.allowedStates ?? [REQUIRED_REPOSITORY_STATE]
+    if (!allowedStates.includes(actual.state)) {
       violations.push({
         actual: actual.state,
         code: 'repository_workflow_state_mismatch',
-        expected: REQUIRED_REPOSITORY_STATE,
+        expected: allowedStates.join('|'),
         path: expected.path,
       })
     }
@@ -370,8 +386,14 @@ export function analyzeWorkflowControlPlane({
   const nonCompletedRuns = normalizedRuns
     .filter((run) => run.status !== 'completed')
     .sort((left, right) => left.databaseId - right.databaseId)
+  // Runs of a workflow explicitly allowed to be active are expected; every
+  // other non-completed run remains a violation.
+  const isExemptRun = (run) =>
+    ACTIVE_ALLOWED_WORKFLOW_NAMES.has(run.workflowName) &&
+    NON_COMPLETED_RUN_STATUSES.includes(run.status)
 
   for (const run of nonCompletedRuns) {
+    if (isExemptRun(run)) continue
     violations.push({
       code: NON_COMPLETED_RUN_STATUSES.includes(run.status)
         ? 'non_completed_run'
@@ -385,7 +407,10 @@ export function analyzeWorkflowControlPlane({
   if (normalizedMaxObservedRunStatusTotals) {
     for (const status of NON_COMPLETED_RUN_STATUSES) {
       const maximumObservedTotalCount = normalizedMaxObservedRunStatusTotals[status]
-      if (maximumObservedTotalCount > 0) {
+      const exemptRetainedCount = nonCompletedRuns.filter(
+        (run) => run.status === status && isExemptRun(run)
+      ).length
+      if (maximumObservedTotalCount > exemptRetainedCount) {
         violations.push({
           code: 'non_completed_run_status_present',
           maximumObservedTotalCount,
@@ -417,6 +442,9 @@ export function analyzeWorkflowControlPlane({
         path: workflow.path,
       })),
       expectedRepositoryWorkflowCount: EXPECTED_REPOSITORY_WORKFLOWS.length,
+      repositoryStateExceptions: EXPECTED_REPOSITORY_WORKFLOWS.filter(
+        (workflow) => workflow.allowedStates
+      ).map((workflow) => ({ allowedStates: [...workflow.allowedStates], path: workflow.path })),
       prohibitedRunStatuses: [...NON_COMPLETED_RUN_STATUSES],
       requiredRepositoryState: REQUIRED_REPOSITORY_STATE,
     },

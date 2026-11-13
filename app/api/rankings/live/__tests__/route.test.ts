@@ -92,6 +92,13 @@ function row(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function freshQuery(sourceAsOf: string | null = new Date(Date.now() - 60_000).toISOString()) {
+  return query({
+    data: sourceAsOf === null ? [] : [{ source: 'binance_futures', source_as_of: sourceAsOf }],
+    error: null,
+  })
+}
+
 import type { NextRequest } from 'next/server'
 import { GET } from '../route'
 
@@ -114,12 +121,16 @@ describe('GET /api/rankings/live public cohort', () => {
       ],
       error: null,
     })
-    mockFrom.mockReturnValue(rankingQuery)
+    mockFrom.mockImplementation((relation: string) =>
+      relation === 'leaderboard_source_freshness' ? freshQuery() : rankingQuery
+    )
 
     const response = await GET(request())
     const body = await response.json()
 
     expect(response.status).toBe(200)
+    expect(body.is_stale).toBe(false)
+    expect(body.as_of).not.toBeNull()
     expect(mockFrom).toHaveBeenCalledWith('public_ranked_leaderboard')
     expect(mockFrom).not.toHaveBeenCalledWith('leaderboard_ranks')
     expect(rankingQuery.eq).toHaveBeenCalledWith('season_id', '90D')
@@ -180,6 +191,26 @@ describe('GET /api/rankings/live public cohort', () => {
         hasMore: false,
         ranking_visibility: 'partial',
         ranking_visibility_reason: 'publication_policy_filtered',
+      })
+    )
+  })
+
+  it('fails closed when a displayed source has no trustworthy watermark (no hard-coded fresh)', async () => {
+    const rankingQuery = query({ data: [row()], error: null })
+    mockFrom.mockImplementation((relation: string) =>
+      relation === 'leaderboard_source_freshness' ? freshQuery(null) : rankingQuery
+    )
+
+    const response = await GET(request())
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body).toEqual(
+      expect.objectContaining({
+        traders: [],
+        is_stale: true,
+        hasMore: false,
+        ranking_visibility_reason: 'source_freshness_unverified',
       })
     )
   })

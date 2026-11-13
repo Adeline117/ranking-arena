@@ -321,7 +321,22 @@ async function checkFreshness(deadline: RequestDeadline): Promise<{
   }
 }
 
-export async function GET() {
+interface HealthResult {
+  httpStatus: number
+  body: Record<string, unknown>
+}
+
+/**
+ * HTTP status contract (2026-11 audit P1-2): generic uptime monitors judge by
+ * status code (or HEAD), not by JSON. A stale/unproven public leaderboard is
+ * the outage users actually see, so it must be non-2xx:
+ *   - all pass                          → 200 healthy
+ *   - database fail                     → 503 unhealthy
+ *   - freshness/publication proof fail  → 503 degraded (`stale: true`)
+ *   - Redis-only fail                   → 202 degraded (serving still works)
+ * The body is returned for every status so readers keep the details.
+ */
+async function computeHealth(): Promise<HealthResult> {
   const t0 = Date.now()
   const deadline = createRequestDeadline()
 
@@ -343,25 +358,24 @@ export async function GET() {
 
     const checks = { api, database, redis, freshness }
 
-    // Determine overall status:
-    // - All pass → healthy (200)
-    // - DB fail → unhealthy (503)
-    // - Redis or freshness fail → degraded (202)
     let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy'
     if (database.status === 'fail') {
       status = 'unhealthy'
     } else if (redis.status === 'fail' || freshness.status === 'fail') {
       status = 'degraded'
     }
+    const stale = freshness.status === 'fail'
 
-    const httpStatus = status === 'unhealthy' ? 503 : status === 'degraded' ? 202 : 200
+    const httpStatus = status === 'unhealthy' || stale ? 503 : status === 'degraded' ? 202 : 200
 
     // Use deploy time for more stable uptime calculation
     const uptimeSeconds = Math.max(1, Math.round((Date.now() - deployTime) / 1000))
 
-    return NextResponse.json(
-      {
+    return {
+      httpStatus,
+      body: {
         status,
+        stale,
         timestamp: new Date().toISOString(),
         version,
         commit,
@@ -370,16 +384,22 @@ export async function GET() {
         checks,
         _detail: '/api/health/detailed',
       },
-      {
-        status: httpStatus,
-        headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
-      }
-    )
+    }
   } finally {
     deadline.close()
   }
 }
 
+export async function GET() {
+  const { httpStatus, body } = await computeHealth()
+  return NextResponse.json(body, {
+    status: httpStatus,
+    headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
+  })
+}
+
+/** HEAD runs the same checks so HEAD-based monitors see the same verdict. */
 export async function HEAD() {
-  return new NextResponse(null, { status: 200, headers: { 'Cache-Control': 'no-store' } })
+  const { httpStatus } = await computeHealth()
+  return new NextResponse(null, { status: httpStatus, headers: { 'Cache-Control': 'no-store' } })
 }

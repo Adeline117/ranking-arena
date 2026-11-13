@@ -32,6 +32,7 @@ import type {
   SourceRow,
   Timeframe,
 } from '../../core/types'
+import { HistoryPageCapReachedError } from '../../core/history-page-cap'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import {
@@ -555,6 +556,11 @@ const binanceAdapter: SourceAdapter = {
             }
           }
         }
+      }
+      if (kind === 'orders' || kind === 'transfers') {
+        // Typed so Tier-B publishes the captured newest pages and records the
+        // truncation instead of failing the whole trader every cycle.
+        throw new HistoryPageCapReachedError(src.slug, kind, opts.pages)
       }
       throw new Error(
         `[binance] ${kind} ${opts.sort ?? 'default'} reached page cap ${opts.pages} without terminal proof`

@@ -188,6 +188,10 @@ jest.mock('@/lib/ingest/serving/metric-trust-publish', () => ({
   hasRegisteredLeaderboardMetricTrust: (...args: unknown[]) =>
     mockHasRegisteredLeaderboardMetricTrust(...args),
 }))
+const mockNoteTierAPublished = jest.fn()
+jest.mock('@/worker/src/ingest/progress', () => ({
+  noteTierAPublished: () => mockNoteTierAPublished(),
+}))
 jest.mock('@/worker/src/ingest/heartbeat', () => ({
   resolveDeployedSha: () => mockResolveDeployedSha(),
 }))
@@ -874,6 +878,8 @@ describe('Tier-A board-series publication guard', () => {
     inventory.resolve()
     await expect(run).resolves.toHaveLength(1)
     expect(mockSessionClose).toHaveBeenCalledTimes(1)
+    // A PASSED publication records the node's Tier-A output watermark.
+    expect(mockNoteTierAPublished).toHaveBeenCalled()
   })
 
   it('swallows only an inventory query failure after reasserting execution authority', async () => {

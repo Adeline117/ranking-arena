@@ -18,6 +18,9 @@
 import React, { memo, useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { isAllTime90dSource } from '@/lib/utils/all-time-90d'
+import { useRankingPeriod } from './RankingPeriodContext'
+import { AllTime90dBadge } from './AllTime90dBadge'
 import Metric from '../ui/Metric'
 import { HighlightedName } from './HighlightedName'
 import { TraderAvatar, ScoreConfidenceIndicator, areTraderPropsEqual } from './shared/TraderDisplay'
@@ -129,6 +132,7 @@ export const TraderMobileRow = memo(
     parseSourceInfo,
   }: TraderMobileRowProps) {
     const { t } = useLanguage()
+    const rankingPeriod = useRankingPeriod()
     const traderHandle = trader.handle || trader.id
     const traderSource = trader.source || source || ''
     const href = `/trader/${encodeURIComponent(trader.id)}${trader.source ? `?platform=${encodeURIComponent(trader.source)}` : ''}`
@@ -168,7 +172,7 @@ export const TraderMobileRow = memo(
     }
 
     const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}${href}` : href
-    const roiAria = roi != null ? `ROI ${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%` : 'ROI unknown'
+    const roiAria = roi != null ? `ROI ${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%` : t('roiUnknown')
     const scoreAria = score != null ? `Arena Score ${score.toFixed(0)}` : 'Arena Score unknown'
 
     return (
@@ -199,7 +203,15 @@ export const TraderMobileRow = memo(
               <span className="mrow-name">
                 <HighlightedName text={displayName} query={searchQuery} />
               </span>
-              <span className="mrow-tag">{sourceInfo.type}</span>
+              <span className="mrow-tag">
+                {sourceInfo.type}
+                {rankingPeriod === '90D' && isAllTime90dSource(traderSource) && (
+                  <>
+                    {' '}
+                    <AllTime90dBadge />
+                  </>
+                )}
+              </span>
             </span>
           </span>
 

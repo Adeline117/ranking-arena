@@ -141,6 +141,20 @@ describe('parseLbankPositions', () => {
   })
 })
 
+describe('parseLbankPositions fail-closed envelopes', () => {
+  it('throws on business errors / malformed envelopes instead of reporting a flat book', () => {
+    expect(() => parseLbankPositions(null, ctx)).toThrow(/non-success/)
+    expect(() => parseLbankPositions({ code: 500, data: null }, ctx)).toThrow(/non-success/)
+    expect(() =>
+      parseLbankPositions({ ...{ code: 200, message: '成功!', data: [] }, data: null }, ctx)
+    ).toThrow(/malformed/)
+  })
+
+  it('accepts a genuine empty book from a success envelope', () => {
+    expect(parseLbankPositions({ code: 200, message: '成功!', data: [] }, ctx)).toEqual([])
+  })
+})
+
 describe('parseLbankHistory', () => {
   it('parses Order History closed positions (SECONDS epochs, positionID hash)', () => {
     const rows = parseLbankHistory(fixture('position-history-p1.json'), 'position_history', ctx)

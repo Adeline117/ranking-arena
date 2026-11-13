@@ -20,17 +20,21 @@ export const maxDuration = 60
 export const RANKING_ACTIVITY_EVIDENCE_UNAVAILABLE =
   'historical_ranking_activity_evidence_unavailable'
 
-export const GET = withCron('generate-activities', async (_request: NextRequest) => {
-  const supabase = getSupabaseAdmin()
+export const GET = withCron(
+  'generate-activities',
+  async (_request: NextRequest) => {
+    const supabase = getSupabaseAdmin()
 
-  // Keep the existing retention job for explicitly non-ranking events. It also
-  // bounds old private ranking rows while a future event-level publication
-  // substrate is designed; no raw leaderboard row is read or written here.
-  await supabase
-    .from('trader_activities')
-    .delete()
-    .lt('occurred_at', new Date(Date.now() - 30 * 86400000).toISOString())
+    // Keep the existing retention job for explicitly non-ranking events. It also
+    // bounds old private ranking rows while a future event-level publication
+    // substrate is designed; no raw leaderboard row is read or written here.
+    await supabase
+      .from('trader_activities')
+      .delete()
+      .lt('occurred_at', new Date(Date.now() - 30 * 86400000).toISOString())
 
-  log.info('Skipped ranking activity generation: event-time evidence unavailable')
-  return { count: 0, reason: RANKING_ACTIVITY_EVIDENCE_UNAVAILABLE }
-})
+    log.info('Skipped ranking activity generation: event-time evidence unavailable')
+    return { count: 0, reason: RANKING_ACTIVITY_EVIDENCE_UNAVAILABLE }
+  },
+  { maxDurationSec: maxDuration }
+)

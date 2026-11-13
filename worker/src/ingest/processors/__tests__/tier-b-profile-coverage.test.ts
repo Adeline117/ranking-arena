@@ -90,6 +90,11 @@ jest.mock('../../queues', () => ({
 }))
 
 import { processTierB as processTierBInRegion } from '../tier-b-profiles'
+import { UpstreamGoneError } from '@/lib/ingest/fetch/capture'
+import {
+  CopierPageCapReachedError,
+  HistoryPageCapReachedError,
+} from '@/lib/ingest/core/history-page-cap'
 import { createConsumedRegionContext } from '../../consumed-region-context'
 
 const processTierB = (job: Parameters<typeof processTierBInRegion>[0]) =>
@@ -638,6 +643,30 @@ describe('Tier-B profile coverage accounting', () => {
     expect(mockGetHistory).not.toHaveBeenCalled()
   })
 
+  it('never publishes a page-budget-cut copier capture as a Tier-B snapshot, but records the cut', async () => {
+    configureCopierHistory()
+    mockGetHistory.mockImplementation(async function* () {
+      yield* positionHistoryStream()
+      throw new CopierPageCapReachedError('gtrade', 30)
+    })
+    mockParseHistory.mockReturnValue([copierRow])
+
+    await expect(processTierB(job)).resolves.toMatchObject({ errors: 0 })
+
+    expect(mockWriteCopierSnapshotRawArtifact).not.toHaveBeenCalled()
+    expect(mockPublishCopierSnapshot).not.toHaveBeenCalled()
+    expect(mockWriteRawObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobType: 'history:copiers',
+        meta: expect.objectContaining({ capture_rejected: 'caller_page_budget', page_cap: 30 }),
+      })
+    )
+    const marker = mockDbQuery.mock.calls.find(([sql]) =>
+      String(sql).includes("'copiers_truncated'")
+    )
+    expect(marker?.[1]).toEqual([42, 30, 1])
+  })
+
   it('commits a complete copier snapshot before marking the whole trader fresh', async () => {
     configureCopierHistory()
     mockGetHistory.mockImplementation(() => positionHistoryStream())
@@ -1114,6 +1143,84 @@ describe('Tier-B profile coverage accounting', () => {
     )
   })
 
+  it('publishes a page-cap-cut orders crawl and records the truncation (not silent)', async () => {
+    mockProfileTimeframes.mockReturnValue([30])
+    mockParseProfile.mockReturnValue(profile(30, true))
+    mockGetHistoryCursor.mockResolvedValue(null)
+    mockGetHistory.mockImplementation(async function* () {
+      yield* orderHistoryStream()
+      throw new HistoryPageCapReachedError('gtrade', 'orders', 25)
+    })
+    mockParseHistory.mockReturnValue([orderRow])
+    mockNextHistoryCursor.mockReturnValue('2026-07-15T11:00:00.000Z')
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: true,
+        positionHistory: false,
+        orders: true,
+        transfers: false,
+        copiers: false,
+      },
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      parseHistory: mockParseHistory,
+      validateProfile: mockValidateProfile,
+    })
+
+    await expect(processTierB(job)).resolves.toMatchObject({
+      tradersCrawled: 1,
+      historyRowsWritten: 1,
+      errors: 0,
+    })
+    expect(mockPublishHistoryRows).toHaveBeenCalledWith(
+      src,
+      42,
+      'orders',
+      [orderRow],
+      '2026-07-15T11:00:00.000Z'
+    )
+    expect(mockWriteRawObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobType: 'history:orders',
+        meta: expect.objectContaining({ caller_limited: true, page_cap: 25, fetch_failed: false }),
+      })
+    )
+    const truncation = mockDbQuery.mock.calls.find(([sql]) =>
+      String(sql).includes("'history_truncated'")
+    )
+    expect(truncation).toBeDefined()
+    expect(truncation?.[1]).toEqual([42, 'orders', 25, expect.anything()])
+  })
+
+  it('still fails a history crawl on a non-cap fetch error', async () => {
+    mockProfileTimeframes.mockReturnValue([30])
+    mockParseProfile.mockReturnValue(profile(30, true))
+    mockGetHistoryCursor.mockResolvedValue(null)
+    mockGetHistory.mockImplementation(async function* () {
+      yield* orderHistoryStream()
+      throw new Error('upstream 500')
+    })
+    mockParseHistory.mockReturnValue([orderRow])
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: true,
+        positionHistory: false,
+        orders: true,
+        transfers: false,
+        copiers: false,
+      },
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      parseHistory: mockParseHistory,
+      validateProfile: mockValidateProfile,
+    })
+
+    await expect(processTierB(job)).resolves.toMatchObject({ tradersCrawled: 0, errors: 1 })
+    expect(mockPublishHistoryRows).not.toHaveBeenCalled()
+  })
+
   it('keeps unverified history as RAW-only audit evidence', async () => {
     mockProfileTimeframes.mockReturnValue([30])
     mockParseProfile.mockReturnValue(profile(30, true))
@@ -1430,6 +1537,34 @@ describe('Tier-B profile coverage accounting', () => {
     })
     expect(mockRecordStagingRejects).toHaveBeenCalledTimes(1)
     expect(mockPublishProfile).not.toHaveBeenCalled()
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) =>
+        String(sql).includes('INSERT INTO arena.ingest_cursors')
+      )
+    ).toBe(false)
+  })
+
+  it('backs off a trader whose every failing timeframe is upstream 404/410', async () => {
+    mockGetProfile.mockImplementation(async (_session, _source, _trader, timeframe) => {
+      throw new UpstreamGoneError(timeframe === 7 ? 404 : 410, 'https://gtrade.test/profile')
+    })
+
+    await expect(processTierB(job)).resolves.toMatchObject({ tradersCrawled: 0, errors: 2 })
+    expect(mockPublishProfile).not.toHaveBeenCalled()
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) =>
+        String(sql).includes('INSERT INTO arena.ingest_cursors')
+      )
+    ).toBe(true)
+  })
+
+  it('keeps a trader retryable when any failure is not a 404/410', async () => {
+    mockGetProfile.mockImplementation(async (_session, _source, _trader, timeframe) => {
+      if (timeframe === 7) throw new UpstreamGoneError(404, 'https://gtrade.test/profile')
+      throw new Error('upstream unavailable')
+    })
+
+    await expect(processTierB(job)).resolves.toMatchObject({ tradersCrawled: 0, errors: 2 })
     expect(
       mockDbQuery.mock.calls.some(([sql]) =>
         String(sql).includes('INSERT INTO arena.ingest_cursors')

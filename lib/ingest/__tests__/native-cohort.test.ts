@@ -77,7 +77,8 @@ describe('latest PASSED native top-N cohort', () => {
     expect(String(snapshotSql)).toContain('AND count_check_passed')
     expect(String(snapshotSql)).toContain('AND NOT is_derived')
     expect(String(snapshotSql)).toContain('ORDER BY timeframe, scraped_at DESC, id DESC')
-    expect(snapshotParams).toEqual([hyperliquid.id, [7, 30]])
+    expect(String(snapshotSql)).toContain('AND scraped_at > now() - make_interval(secs => $3::int)')
+    expect(snapshotParams).toEqual([hyperliquid.id, [7, 30], 72 * 3600])
 
     const [membershipSql, membershipParams] = mockQuery.mock.calls[1]
     expect(String(membershipSql)).toContain('e.snapshot_id = ANY($1::bigint[])')

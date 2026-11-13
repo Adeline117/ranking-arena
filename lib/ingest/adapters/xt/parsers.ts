@@ -17,7 +17,8 @@
  *            placeholders.
  *
  * The board row is PER-TF (days=7|30|90) and rich: income (P&L), incomeRate
- * (ROI, decimal), winRate (decimal), maxRetraction (MDD, already percent),
+ * (ROI, decimal), winRate (decimal), maxRetraction (MDD, decimal — same unit
+ * as the leader-stats Performance block),
  * followerProfit (copier PnL), followerCount, maxFollowerSize, label (style
  * tags), levelName (Lvl badge → traderMeta), and a cumulative-income `chart`
  * series kept verbatim in raw. leader-detail-v2 adds identity/overview
@@ -92,8 +93,8 @@ function isPlaceholderRow(item: Dict): boolean {
 }
 
 /**
- * leader-list page → per-TF rows. maxRetraction is ALREADY a percent
- * (1.4925 = 1.49%) unlike the decimal income/win rates. The cumulative
+ * leader-list page → per-TF rows. maxRetraction is a DECIMAL like the
+ * income/win rates (see headlineMdd below for the evidence). The cumulative
  * `chart` series and the full row are preserved in raw (spec §3).
  * v3 (futures) exposes result.total; v2 (spot) does not. Spot all-zero
  * placeholder rows are dropped so they never reach serving.
@@ -138,13 +139,18 @@ export function parseXtLeaderboardPage(payload: unknown, ctx: ParseCtx): ParsedL
       headlineRoi: pct(item.incomeRate),
       headlinePnl: num(item.income),
       headlineWinRate: pct(item.winRate),
-      // XT's board JSON carries the per-TF MDD as `maxRetraction` (already a
-      // percent — 1.4925 = 1.49%; a value >1 can't be a decimal fraction since
-      // MDD <= 100%), even though the UI listing hides it. Drop it onto headlineMdd
-      // (the board is authoritative for XT) so the publish path writes it to
-      // trader_stats.mdd — matching blofin/bingx (which capture MDD at 90%+). Was
-      // previously unread, leaving XT at 0% MDD capture.
-      headlineMdd: num(item.maxRetraction),
+      // XT's board JSON carries the per-TF MDD as `maxRetraction`, even though
+      // the UI listing hides it. Unit = DECIMAL, identical to the leader-stats
+      // Performance block (screenshot-calibrated 2026-07-01: 0.130089 → page
+      // shows 13%). Evidence on the board itself: the row's cumulative-ROI
+      // `chart` (decimal) peak-to-trough drop equals maxRetraction exactly
+      // (fixture Tom汤师爷 30D: chart drop 0.1611 = maxRetraction 0.1611).
+      // The earlier "already a percent" reading came from values >1 (1.4925),
+      // which are ROI-point drawdowns >100pp — boundPct rejects those at
+      // staging rather than us rescaling them. Both paths MUST use pct(): the
+      // board writes COALESCE(mdd) and the profile overwrites mdd, so a unit
+      // mismatch made XT MDD flip 100× depending on which tier wrote last.
+      headlineMdd: pct(item.maxRetraction),
       // 跟单人数 on every board row — publish writes it to trader_stats.copier_count,
       // so even board-tier traders (never deep-crawled) show a copier count. Was
       // previously left in raw only. Phase A.

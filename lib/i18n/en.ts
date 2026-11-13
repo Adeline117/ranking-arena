@@ -6870,6 +6870,23 @@ const en = {
   historyVerificationDesc:
     'Charts and detailed statistics for this trader will appear once their historical data passes verification.',
   historyVerificationCurrentRanking: 'Current ranking ({period})',
+  rankingFilteredByExchange: 'Filtered by {exchange}',
+  rankingClearExchangeFilter: 'Clear exchange filter',
+  rankingSearchElsewhereTitle: 'No match on this page. Matching traders across Arena:',
+  rankingFiltersCurrentPageOnly:
+    'Filters apply to the 50 traders on this page only; other pages may have more matches.',
+  roiUnknown: 'ROI unknown',
+  timeRangeAria: 'Time range',
+  showRangeRankingsAria: 'Show {range} rankings',
+  arenaScoreAria: 'Arena Score: {score}',
+  arenaScoreOfHundredAria: 'Arena Score {score} of 100',
+  platformTypeAria: 'Platform type: {type}',
+  suspectedBotAria: 'Suspected bot',
+  tradingStyleAria: 'Trading style: {style}',
+  noRankHistoryAria: 'No rank history',
+  rankTrendAria: 'Rank trend: {from} → {to}',
+  traderActionsAria: '{name} actions',
+  allTime90dShort: 'All-time',
 } as const
 
 export default en

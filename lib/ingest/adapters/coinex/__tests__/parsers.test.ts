@@ -143,6 +143,20 @@ describe('parseCoinexPositions', () => {
   })
 })
 
+describe('parseCoinexPositions fail-closed envelopes', () => {
+  it('throws on business errors / malformed envelopes instead of reporting a flat book', () => {
+    expect(() => parseCoinexPositions(null, ctx)).toThrow(/non-success/)
+    expect(() => parseCoinexPositions({ code: 4001, data: null }, ctx)).toThrow(/non-success/)
+    expect(() =>
+      parseCoinexPositions({ ...{ code: 0, message: 'Success', data: [] }, data: null }, ctx)
+    ).toThrow(/malformed/)
+  })
+
+  it('accepts a genuine empty book from a success envelope', () => {
+    expect(parseCoinexPositions({ code: 0, message: 'Success', data: [] }, ctx)).toEqual([])
+  })
+})
+
 describe('parseCoinexHistory', () => {
   it('parses Lead History rows with position_id dedupe', () => {
     const rows = parseCoinexHistory(fixture('finished-position-p1.json'), 'position_history', ctx)

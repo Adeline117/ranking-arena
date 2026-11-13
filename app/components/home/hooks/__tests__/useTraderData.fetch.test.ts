@@ -215,6 +215,36 @@ describe('错误降级', () => {
     expect(result.current.lastRefreshFailed).toBe(true)
   })
 
+  it('8s 超时按失败处理：无旧数据时暴露 errorTimeout（可重试），不落成“暂无数据”', async () => {
+    jest.useFakeTimers()
+    try {
+      // fetch 只在 signal abort 时以 AbortError 结束，模拟一直挂起的慢接口
+      mockFetch.mockImplementationOnce(
+        (_url: string, init: { signal: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            init.signal.addEventListener('abort', () => {
+              const err = new Error('aborted')
+              err.name = 'AbortError'
+              reject(err)
+            })
+          })
+      )
+      const { result } = setup()
+      await act(async () => {
+        jest.advanceTimersByTime(8_000)
+        await Promise.resolve()
+      })
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(result.current.loading).toBe(false)
+      expect(result.current.error).toBe('errorTimeout')
+      expect(result.current.traders).toHaveLength(0)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   it('API 的 source freshness 标记进入独立 isStale 状态', async () => {
     const { result } = setup({ initialTraders: [ssrTrader], initialTotalCount: 1 })
     mockPayloadOnce({ traders: [apiTrader('t-stale')], isStale: true })

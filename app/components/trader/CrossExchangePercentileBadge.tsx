@@ -67,7 +67,12 @@ export default function CrossExchangePercentileBadge({ rank }: CrossExchangePerc
 
   if (!rank || rank <= 0) return null
 
-  const total = heroStats?.traderCount
+  // A default/fallback hero payload (DB failure, empty board) carries a
+  // placeholder traderCount. A percentile over a placeholder denominator is a
+  // fabricated claim — render nothing until the count is real.
+  if (!heroStats || heroStats.isDefault === true) return null
+
+  const total = heroStats.traderCount
   // Guard: need a valid denominator, and rank must sit inside the population
   // (rank is drawn from all leaderboard_ranks rows; total excludes outliers, so
   // a handful of ranks can exceed total — skip those rather than show garbage).

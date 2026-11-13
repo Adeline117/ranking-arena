@@ -80,7 +80,7 @@ function TopTraderCard({ trader, rank }: { trader: Trader; rank: number }) {
       : roi >= 0
         ? tokens.colors.accent.success
         : tokens.colors.accent.error
-  const roiAria = roi != null ? `ROI ${formatROI(roi)}` : 'ROI unknown'
+  const roiAria = roi != null ? `ROI ${formatROI(roi)}` : t('roiUnknown')
   const href = `/trader/${encodeURIComponent(trader.id)}${trader.source ? `?platform=${encodeURIComponent(trader.source)}` : ''}`
   const medalColor = MEDAL_COLORS[rank - 1] || tokens.colors.text.tertiary
 

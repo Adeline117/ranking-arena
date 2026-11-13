@@ -4,6 +4,9 @@ import React, { memo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { t as i18nT } from '@/lib/i18n'
+import { isAllTime90dSource } from '@/lib/utils/all-time-90d'
+import { useRankingPeriod } from './RankingPeriodContext'
+import { AllTime90dBadge } from './AllTime90dBadge'
 import { getPlatformNote } from '@/lib/constants/platform-metrics'
 import { useCountUp } from '@/lib/hooks/useCountUp'
 import { formatROI } from './utils'
@@ -75,7 +78,7 @@ function AnimatedROI({
       weight="bold"
       className="roi-value"
       style={{ ...ROI_TEXT_BASE_STYLE, color: roiColor }}
-      title={roi != null ? `${roi >= 0 ? '+' : ''}${Number(roi).toFixed(2)}%` : 'ROI unknown'}
+      title={roi != null ? `${roi >= 0 ? '+' : ''}${Number(roi).toFixed(2)}%` : i18nT('roiUnknown')}
     >
       {arrowGlyph && (
         <span aria-hidden="true" style={{ marginRight: '0.25em', fontSize: '0.8em' }}>
@@ -125,6 +128,7 @@ export const TraderMetricCells = memo(function TraderMetricCells({
   const drawdownDisplay = formatDrawdown(parsedDrawdown)
   const hasDrawdown = drawdownDisplay !== NULL_DISPLAY
   const copierCount = safeNonNegativeCount(trader.copiers ?? trader.followers)
+  const rankingPeriod = useRankingPeriod()
   const tradesCount = safeNonNegativeCount(trader.trades_count)
 
   return (
@@ -132,6 +136,9 @@ export const TraderMetricCells = memo(function TraderMetricCells({
       {/* ROI — current published scalar only; historical trajectories are quarantined. */}
       <Box className="roi-cell" style={ROI_CELL_STYLE}>
         <AnimatedROI roi={roi} roiColor={roiColor} animate={rank <= 3} />
+        {rankingPeriod === '90D' && isAllTime90dSource(trader.source || source) && (
+          <AllTime90dBadge />
+        )}
       </Box>
 
       {/* PnL — shared Metric with colorblind-safe arrow (audit 1.2) */}

@@ -249,8 +249,16 @@ export function parseCoinexProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
 
 /** Current lead orders (GET current-position?trader_id=, plain array). */
 export function parseCoinexPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
+  // Fail closed: Tier-D replaces the whole book. Success = code 0 (all
+  // captured coinex fixtures); anything else, or non-array data, throws.
+  const code = (raw as Dict | null)?.code
+  if (code !== 0 && code !== '0') {
+    throw new Error(`[coinex] positions returned a non-success API envelope (code=${String(code)})`)
+  }
   const list = data(raw)
-  if (!Array.isArray(list)) return []
+  if (!Array.isArray(list)) {
+    throw new Error('[coinex] positions returned a malformed envelope (data is not an array)')
+  }
   const out: ParsedPosition[] = []
   for (const item of list as Dict[]) {
     if (!item.market) continue

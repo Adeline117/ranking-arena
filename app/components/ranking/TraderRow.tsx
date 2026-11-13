@@ -223,7 +223,7 @@ export const TraderRow = memo(
     const roiAria =
       trader.roi != null && Number.isFinite(trader.roi)
         ? `ROI ${trader.roi >= 0 ? '+' : ''}${trader.roi.toFixed(2)}%`
-        : 'ROI unknown'
+        : t('roiUnknown')
 
     return (
       <>
@@ -341,7 +341,15 @@ export const TraderRow = memo(
                     <ScoreBreakdownTooltip trader={presentationTrader} language={language} />
                   </div>
                   {presentationScore != null && (
-                    <ScoreMiniBar score={presentationScore} width={44} height={4} />
+                    <ScoreMiniBar
+                      score={presentationScore}
+                      width={44}
+                      height={4}
+                      ariaLabel={t('arenaScoreOfHundredAria').replace(
+                        '{score}',
+                        String(Math.round(presentationScore))
+                      )}
+                    />
                   )}
                 </div>
               </Box>

@@ -16,18 +16,22 @@ export const preferredRegion = 'sfo1'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-export const GET = withCron('recount-follow-counts', async (_request: NextRequest) => {
-  const supabase = getSupabaseAdmin()
+export const GET = withCron(
+  'recount-follow-counts',
+  async (_request: NextRequest) => {
+    const supabase = getSupabaseAdmin()
 
-  const { data, error } = await supabase.rpc('recount_all_follow_counts')
+    const { data, error } = await supabase.rpc('recount_all_follow_counts')
 
-  if (error) {
-    logger.error('[recount-follow-counts] RPC error:', error)
-    throw error
-  }
+    if (error) {
+      logger.error('[recount-follow-counts] RPC error:', error)
+      throw error
+    }
 
-  const updatedCount = data?.[0]?.updated_count ?? 0
-  logger.info(`[recount-follow-counts] Fixed ${updatedCount} user profiles`)
+    const updatedCount = data?.[0]?.updated_count ?? 0
+    logger.info(`[recount-follow-counts] Fixed ${updatedCount} user profiles`)
 
-  return { count: Number(updatedCount) }
-})
+    return { count: Number(updatedCount) }
+  },
+  { maxDurationSec: maxDuration }
+)

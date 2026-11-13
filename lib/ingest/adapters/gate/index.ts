@@ -33,6 +33,7 @@ import type {
   SourceRow,
   Timeframe,
 } from '../../core/types'
+import { HistoryPageCapReachedError } from '../../core/history-page-cap'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
@@ -274,11 +275,29 @@ const gateAdapter: SourceAdapter = {
     }
     await warmSession(session, src)
     const fetcher = pageFetcher(session)
-    const url =
-      endpoint(src, 'positions', `${B}/apiw/v2/copy/leader/position`) +
-      `?sub_website_id=0&leader_id=${exchangeTraderId}&market=&page=1&page_size=50`
-    const payload = await replayJson(session, fetcher, { url, method: 'GET', headers: HEADERS })
-    return { pages: [{ pageIndex: 1, payload, url, fetchedAt }], fetchedAt }
+    // Tier-D replaces the trader's whole open-position set, so every page must
+    // be captured: page through using the envelope's top-level pagecount
+    // (fixture positions-fut.json: page/pagesize/pagecount/totalcount). A book
+    // larger than the page budget fails closed instead of publishing a cut set.
+    const pageSize = 50
+    const maxPages = Number(src.meta.positions_max_pages ?? 20) || 20
+    const pages: RawPage[] = []
+    for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
+      const url =
+        endpoint(src, 'positions', `${B}/apiw/v2/copy/leader/position`) +
+        `?sub_website_id=0&leader_id=${exchangeTraderId}&market=&page=${pageNo}&page_size=${pageSize}`
+      const payload = await replayJson(session, fetcher, { url, method: 'GET', headers: HEADERS })
+      pages.push({ pageIndex: pageNo, payload, url, fetchedAt: new Date().toISOString() })
+      const envelope = payload as Record<string, unknown> | null
+      const rows = Array.isArray(envelope?.data) ? envelope.data.length : 0
+      const pageCount = Number(envelope?.pagecount)
+      if (Number.isSafeInteger(pageCount) && pageCount >= 0) {
+        if (pageNo >= pageCount) return { pages, fetchedAt }
+        continue
+      }
+      if (rows < pageSize) return { pages, fetchedAt }
+    }
+    throw new Error(`[gate] open positions exceed ${maxPages} pages — refusing a partial book`)
   },
 
   /**
@@ -360,6 +379,18 @@ const gateAdapter: SourceAdapter = {
           .filter((t) => Number.isFinite(t) && t > 0)
         // Overlap reached: this page already dips into stored history.
         if (closeTimes.length > 0 && Math.min(...closeTimes) <= cursorMs) break
+      }
+      if ((kind === 'orders' || kind === 'transfers') && Number.isFinite(cursorMs)) {
+        // orders: create_time, transfers: time (epoch seconds, fixtures).
+        const tsKey = kind === 'orders' ? 'create_time' : 'time'
+        const times = rows
+          .map((r) => Number(r[tsKey]) * 1000)
+          .filter((t) => Number.isFinite(t) && t > 0)
+        if (times.length > 0 && Math.min(...times) <= cursorMs) break
+      }
+      if (pageNo === maxPages && (kind === 'orders' || kind === 'transfers')) {
+        // Full last page, no overlap: older rows exist beyond the budget.
+        throw new HistoryPageCapReachedError(src.slug, kind, maxPages)
       }
     }
   },

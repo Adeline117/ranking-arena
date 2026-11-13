@@ -7,7 +7,7 @@
  */
 
 import { Queue } from 'bullmq'
-import { getConnection } from './connection'
+import { getRankingCommandChainConnection } from './connection'
 
 export const QUEUE_NAME = 'arena-pipeline'
 
@@ -16,7 +16,8 @@ let queue: Queue | null = null
 export function getQueue(): Queue {
   if (queue) return queue
   queue = new Queue(QUEUE_NAME, {
-    connection: getConnection(),
+    // Ranking command-chain queue: gated by the ranking constant, not ingest.
+    connection: getRankingCommandChainConnection(),
     defaultJobOptions: {
       attempts: 3,
       backoff: { type: 'exponential', delay: 10_000 },

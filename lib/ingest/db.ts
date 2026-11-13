@@ -11,6 +11,8 @@
  * the Supabase client; ESLint guard enforces the boundary).
  */
 
+import { readFileSync } from 'fs'
+import type { ConnectionOptions } from 'tls'
 import { Pool, types, type PoolClient, type QueryResult, type QueryResultRow } from 'pg'
 
 /**
@@ -46,6 +48,46 @@ export const INGEST_DB_QUERY_TIMEOUT_MS = 5 * 60_000
 export const INGEST_DB_LOCK_TIMEOUT_MS = 60_000
 export const INGEST_DB_KEEPALIVE_INITIAL_DELAY_MS = 10_000
 
+/**
+ * TLS for the ingest pool (service-level write credentials over Supavisor).
+ *
+ *   - local URLs (127.0.0.1/localhost): no TLS.
+ *   - INGEST_DATABASE_CA_CERT=/path/to/ca.pem (e.g. Supabase's downloadable
+ *     "SSL certificate"): verify the server against that CA.
+ *   - INGEST_DATABASE_TLS_VERIFY=true without a CA: verify against the
+ *     Node/system trust store.
+ *   - otherwise: LEGACY encrypted-but-unverified TLS (rejectUnauthorized:false),
+ *     kept as the default so existing Mac/SG deployments do not lose their DB
+ *     connection on upgrade (the Supabase pooler cert is not chained to a public
+ *     root). It is a MITM exposure: set INGEST_DATABASE_CA_CERT in deployment.
+ *     INGEST_DATABASE_TLS_VERIFY=false explicitly opts into the legacy mode and
+ *     silences the warning.
+ */
+export type IngestTlsMode = 'none' | 'verify-ca' | 'verify-system' | 'unverified'
+
+export function resolveIngestSsl(
+  url: string,
+  env: NodeJS.ProcessEnv = process.env,
+  readCa: (path: string) => string = (path) => readFileSync(path, 'utf8')
+): { mode: IngestTlsMode; ssl: ConnectionOptions | undefined } {
+  if (url.includes('127.0.0.1') || url.includes('localhost')) {
+    return { mode: 'none', ssl: undefined }
+  }
+  const caPath = env.INGEST_DATABASE_CA_CERT?.trim()
+  const verify = env.INGEST_DATABASE_TLS_VERIFY?.trim().toLowerCase()
+  if (caPath) {
+    if (verify === 'false') {
+      throw new Error(
+        '[ingest] INGEST_DATABASE_CA_CERT is set but INGEST_DATABASE_TLS_VERIFY=false — refusing an ambiguous TLS config'
+      )
+    }
+    // Throws (fail closed) when the configured CA file is missing/unreadable.
+    return { mode: 'verify-ca', ssl: { ca: readCa(caPath), rejectUnauthorized: true } }
+  }
+  if (verify === 'true') return { mode: 'verify-system', ssl: { rejectUnauthorized: true } }
+  return { mode: 'unverified', ssl: { rejectUnauthorized: false } }
+}
+
 export function getIngestPool(): Pool {
   if (pool) return pool
 
@@ -71,6 +113,17 @@ export function getIngestPool(): Pool {
       '[ingest] ⚠️ INGEST_DATABASE_URL points at the TRANSACTION pooler (:6543). ' +
         'A persistent worker MUST use the SESSION pooler (:5432) — the transaction ' +
         'pooler will starve under its node-pg pool (ECHECKOUTTIMEOUT). Switch the port to 5432.'
+    )
+  }
+
+  const tls = resolveIngestSsl(url)
+  if (
+    tls.mode === 'unverified' &&
+    process.env.INGEST_DATABASE_TLS_VERIFY?.trim().toLowerCase() !== 'false'
+  ) {
+    console.warn(
+      '[ingest] DB TLS certificate is NOT verified (legacy default). Set ' +
+        'INGEST_DATABASE_CA_CERT=/path/to/supabase-ca.pem to verify the pooler certificate.'
     )
   }
 
@@ -102,10 +155,8 @@ export function getIngestPool(): Pool {
     keepAlive: true,
     keepAliveInitialDelayMillis: INGEST_DB_KEEPALIVE_INITIAL_DELAY_MS,
     // Supabase pooler requires TLS; local dev (127.0.0.1) does not.
-    ssl:
-      url.includes('127.0.0.1') || url.includes('localhost')
-        ? undefined
-        : { rejectUnauthorized: false },
+    // Verification policy: see resolveIngestSsl.
+    ssl: tls.ssl,
   })
 
   // Catches errors on IDLE clients sitting in the pool. It does NOT cover a

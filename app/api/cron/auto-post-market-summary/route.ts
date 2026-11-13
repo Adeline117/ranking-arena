@@ -13,15 +13,19 @@ export const maxDuration = 60
 
 const PUBLICATION_EVIDENCE_UNAVAILABLE = 'arena_bot_publication_evidence_unavailable'
 
-const handler = withCron('auto-post-market-summary', async (_request: NextRequest) => {
-  // Fail closed before any source read, system-user provisioning, or post write.
-  return {
-    count: 0,
-    skipped: true,
-    reason: PUBLICATION_EVIDENCE_UNAVAILABLE,
-    ranking_visibility: 'unknown',
-  }
-})
+const handler = withCron(
+  'auto-post-market-summary',
+  async (_request: NextRequest) => {
+    // Fail closed before any source read, system-user provisioning, or post write.
+    return {
+      count: 0,
+      skipped: true,
+      reason: PUBLICATION_EVIDENCE_UNAVAILABLE,
+      ranking_visibility: 'unknown',
+    }
+  },
+  { maxDurationSec: maxDuration }
+)
 
 export const GET = handler
 
