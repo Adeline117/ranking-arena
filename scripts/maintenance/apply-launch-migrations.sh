@@ -177,6 +177,8 @@ PREDEPLOY_MIGRATIONS=(
   20261111132450_legacy_raw_metric_publication_isolation_hosted_role_graph.sql
   20260817134214_quarantine_legacy_platform_stats_rpc.sql
   20261013094743_retire_v2_partition_cron_extend_arena_partitions.sql
+  20261113014105_arena_score_unknown_trades_confidence.sql
+  20261113104533_trader_follows_hard_cap_lock.sql
   20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql
   20261113011058_leaderboard_publication_source_isolation.sql
   20261113012028_public_snapshot_readers_sealed_freshness.sql
@@ -190,6 +192,21 @@ readonly -a PREDEPLOY_MIGRATIONS
 # rewrites the freshness authority after the Bitget-bot quarantine
 # (20261111134416, which replaces 20260728124000 in its slot). They follow
 # #415's reordered manifest (2026-11-11 whole-database rehearsal order).
+#
+# 20261113014105 (unknown-trade-count sample confidence, issue #435) is
+# predeploy and must follow every migration whose pre/postflight pins the old
+# v4/v5 scorer or manifest-encoder prosrc digests (latest: 20260729071000),
+# otherwise those preflights abort. Public publication (protocol plan A,
+# docs/RANK_PUBLICATION_PROTOCOL.md) scores in TypeScript and never calls the
+# PG17 scorer, so neither deploy order breaks it; predeploy guarantees the
+# manifest substrate created earlier in this same run never seals a manifest
+# under the old definition digest, and a failure stops the release before the
+# new scorer ships instead of leaving TS and PG17 diverged after it.
+# 20261113104533 (trader-follow hard-cap trigger) is predeploy because the
+# follow route from before 896ebfec3 stays correct under it: that route already
+# rejects at >= 100, and a raced insert surfaces as a 500 (no extra row)
+# instead of the new route's 429. Both sit before the final six, which do not
+# depend on them.
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
 # accepts it only when its exact reviewed ledger and complete object contract
