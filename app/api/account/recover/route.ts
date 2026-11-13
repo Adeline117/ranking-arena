@@ -166,10 +166,23 @@ export const POST = withPublic(
       )
       if (emailLimited) return emailLimited
 
+      // ILIKE wildcards: `_` is escaped; `%`, `\` and PostgREST's `*` alias
+      // have no place in a recoverable address and must never widen the match.
+      const normalizedEmail = email.trim()
+      if (/[*%\\]/.test(normalizedEmail)) {
+        return NextResponse.json(
+          { success: false, error: INVALID_PASSWORD_RECOVERY },
+          { status: 401 }
+        )
+      }
+      const emailPattern = normalizedEmail.replace(/_/g, '\\_')
+
       const { data: profile, error } = await admin
         .from('user_profiles')
         .select('id, deletion_scheduled_at')
-        .eq('email', email)
+        // GoTrue matches sign-in emails case-insensitively, so the lookup must
+        // too; an exact match answered 401 to anyone who typed a different case.
+        .ilike('email', emailPattern)
         .not('deleted_at', 'is', null)
         .maybeSingle()
 

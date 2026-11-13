@@ -30,6 +30,7 @@ jest.mock('@/lib/env', () => ({
   env: { NEXT_PUBLIC_SUPABASE_URL: 'https://supabase.test', NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon' },
 }))
 
+const mockEmailLookup = jest.fn()
 const mockFrom = jest.fn((table: string) => {
   if (table === 'account_recovery_tokens') {
     return {
@@ -43,10 +44,15 @@ const mockFrom = jest.fn((table: string) => {
   if (table === 'user_profiles') {
     return {
       select: jest.fn(() => ({
+        ilike: jest.fn((column: string, pattern: string) => {
+          mockEmailLookup(column, pattern)
+          return {
+            not: jest.fn(() => ({
+              maybeSingle: jest.fn().mockImplementation(async () => profileResult),
+            })),
+          }
+        }),
         eq: jest.fn(() => ({
-          not: jest.fn(() => ({
-            maybeSingle: jest.fn().mockImplementation(async () => profileResult),
-          })),
           // rebanIfStillPending: select('deleted_at').eq('id', ...).maybeSingle()
           maybeSingle: jest.fn().mockImplementation(async () => rebanStateResult),
         })),
@@ -238,6 +244,20 @@ describe('account recovery', () => {
     expect(await expired.json()).toEqual(await unknown.json())
     expect(mockAdminUpdateUser).not.toHaveBeenCalled()
     expect(mockPasswordSignIn).not.toHaveBeenCalled()
+  })
+
+  it('looks the pending account up case-insensitively, with LIKE wildcards escaped', async () => {
+    await POST(request({ email: ' User_Name@Example.com ', password: 'correct-password' }))
+
+    expect(mockEmailLookup).toHaveBeenCalledWith('email', 'User\\_Name@Example.com')
+  })
+
+  it('never lets a wildcard widen the pending-account lookup', async () => {
+    const response = await POST(request({ email: '*@example.com', password: 'x' }))
+
+    expect(response.status).toBe(401)
+    expect(mockEmailLookup).not.toHaveBeenCalled()
+    expect(mockAdminUpdateUser).not.toHaveBeenCalled()
   })
 
   it('enforces a per-email rate limit before touching the account', async () => {
