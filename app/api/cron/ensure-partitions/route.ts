@@ -1,33 +1,35 @@
 /**
- * Cron: Ensure future partitions for trader_snapshots_v2
- * Schedule: Weekly (Sundays at 03:00 UTC)
+ * Retired Vercel partition cron (2026-11 audit P2-5).
  *
- * Calls the ensure_future_partitions(4) DB function to pre-create monthly
- * partitions for the next 4 months. Prevents INSERT failures when reaching
- * the end of pre-created partitions.
- *
- * Root cause fix: partitions were manually created up to 2026-08, but no
- * automated mechanism to create more as data grows.
+ * It called `ensure_future_partitions()`, whose only target is
+ * `trader_snapshots_v2_partitioned` (20260331c) — a table dropped in June
+ * 2026; migration 20261013094743 already retired the matching pg_cron job as
+ * "can only fail". The live partition pre-creation for the arena.* tables is
+ * the ingest worker's `maint:housekeeping` step (`ensurePartitions()` in
+ * lib/ingest/serving/series.ts), registered on the local node with an SG
+ * standby. Keeping a second, wrong implementation here only produced either
+ * failures or a false "partitions ensured" success.
  */
 
-import { withCron } from '@/lib/api/with-cron'
+import { NextRequest, NextResponse } from 'next/server'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
 
-export const GET = withCron(
-  'ensure-partitions',
-  async (_request, { supabase }) => {
-    const { data, error } = await supabase.rpc('ensure_future_partitions', { p_months_ahead: 4 })
+function retiredResponse(request: NextRequest): NextResponse {
+  if (!verifyCronSecret(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
-    if (error) {
-      throw new Error(`ensure_future_partitions failed: ${error.message}`)
-    }
+  return NextResponse.json(
+    {
+      error: 'Retired cron route',
+      reason: 'ensure_future_partitions targets the dropped trader_snapshots_v2 table',
+      replacement: 'ingest worker maint:housekeeping → ensurePartitions() (arena.* tables)',
+    },
+    { status: 410 }
+  )
+}
 
-    return {
-      count: 1,
-      partitions_created: data,
-    }
-  },
-  { maxDurationSec: maxDuration }
-)
+export const GET = retiredResponse
+export const POST = retiredResponse
