@@ -54,6 +54,12 @@ export interface TraderProfile {
 
 /** @deprecated Use UnifiedTrader from lib/types/unified-trader.ts */
 export interface TraderPerformance {
+  /**
+   * False when the trader has no 90D period row. The unsuffixed headline fields
+   * (pnl/win_rate/max_drawdown, roi_90d fallback) then come from a shorter
+   * period and must not be shown under a 90D label. Absent = present.
+   */
+  has_period_90d?: boolean
   roi_7d?: number
   roi_30d?: number
   roi_90d?: number
