@@ -8,6 +8,7 @@
  */
 
 import { getIngestPool, ingestClientConnect } from '../db'
+import { METRIC_TRUST_EVIDENCE_PRESENT_SQL } from '../raw'
 
 export interface DownsampleResult {
   weeklyUpserted: number
@@ -105,9 +106,19 @@ export async function ensurePartitions(): Promise<number> {
  * day's last passed crawl) and delete the rest — ~80% of entries volume
  * at 4-5 crawls/day.
  */
-export async function downsampleSnapshotEntries(keepAllDays = 7): Promise<number> {
-  const result = await getIngestPool().query(
-    `WITH keep AS (
+export function snapshotEntryDownsampleSql(trustEvidencePresent: boolean): string {
+  // Entries carrying metric-trust observations are evidence: deleting them
+  // used to CASCADE the observations away (now RESTRICT, 20261113*).
+  const pinned = trustEvidencePresent
+    ? `
+        AND NOT EXISTS (
+          SELECT 1 FROM arena.metric_trust_observations AS observation
+           WHERE observation.snapshot_id = e.snapshot_id
+             AND observation.trader_id = e.trader_id
+             AND observation.snapshot_scraped_at = e.scraped_at
+        )`
+    : ''
+  return `WITH keep AS (
        SELECT DISTINCT ON (source_id, timeframe, scraped_at::date) id
          FROM arena.leaderboard_snapshots
         WHERE count_check_passed
@@ -115,9 +126,15 @@ export async function downsampleSnapshotEntries(keepAllDays = 7): Promise<number
      )
      DELETE FROM arena.leaderboard_entries e
       WHERE e.scraped_at < now() - ($1 || ' days')::interval
-        AND e.snapshot_id NOT IN (SELECT id FROM keep)`,
-    [keepAllDays]
-  )
+        AND e.snapshot_id NOT IN (SELECT id FROM keep)${pinned}`
+}
+
+export async function downsampleSnapshotEntries(keepAllDays = 7): Promise<number> {
+  const pool = getIngestPool()
+  const { rows } = await pool.query<{ present: boolean }>(METRIC_TRUST_EVIDENCE_PRESENT_SQL)
+  const result = await pool.query(snapshotEntryDownsampleSql(rows[0]?.present === true), [
+    keepAllDays,
+  ])
   return result.rowCount ?? 0
 }
 

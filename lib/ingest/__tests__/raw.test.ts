@@ -511,6 +511,8 @@ describe('cleanupRawObjects fail-closed garbage collection', () => {
     mockClientQuery.mockImplementation(async (sqlInput: unknown) => {
       const sql = String(sqlInput)
       if (sql.includes('pg_try_advisory_lock')) return { rows: [{ acquired }] }
+      if (sql.includes("to_regclass('arena.metric_trust_runs')"))
+        return { rows: [{ present: true }] }
       if (sql.includes('pg_advisory_unlock')) {
         if (unlockError) throw unlockError
         return { rows: [{ unlocked: true }] }
@@ -561,8 +563,11 @@ describe('cleanupRawObjects fail-closed garbage collection', () => {
     const retireSql = String(mockClientQuery.mock.calls[retireIndex][0])
     expect(retireSql).toContain('INSERT INTO arena.raw_object_gc_queue')
     expect(retireSql).toContain('DELETE FROM arena.raw_objects AS raw')
-    expect(retireSql).toContain('FOR UPDATE SKIP LOCKED')
-    expect(retireSql).toContain('ORDER BY fetched_at, id')
+    expect(retireSql).toContain('FOR UPDATE OF raw_candidate SKIP LOCKED')
+    expect(retireSql).toContain('ORDER BY raw_candidate.fetched_at, raw_candidate.id')
+    // Metric-trust evidence pins its RAW objects (no cascade loss after 30 days).
+    expect(retireSql).toContain('FROM arena.metric_trust_runs AS run')
+    expect(retireSql).toContain('FROM arena.metric_trust_artifacts AS artifact')
     expect(retireSql).toContain('LIMIT 500')
     expect(mockClientQuery.mock.calls[retireIndex][1]).toEqual([30])
     expect(mockClientQuery.mock.invocationCallOrder[retireIndex]).toBeLessThan(
