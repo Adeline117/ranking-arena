@@ -34,6 +34,10 @@ import type {
   Timeframe,
 } from '../../core/types'
 import { HistoryPageCapReachedError } from '../../core/history-page-cap'
+import type {
+  HistoryContinuationCapability,
+  HistoryFetchOptions,
+} from '../../core/history-continuation'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
@@ -310,16 +314,26 @@ const gateAdapter: SourceAdapter = {
     src: SourceRow,
     exchangeTraderId: string,
     kind: HistoryKind,
-    cursor: string | null
+    cursor: string | null,
+    _traderMeta?: Record<string, unknown> | null,
+    options?: HistoryFetchOptions
   ): AsyncIterable<RawPage> {
     const board = boardKey(src)
     // CFD: orders + transfers are auth-gated — yield nothing (caller skips).
     if (board === 'cfd' && (kind === 'orders' || kind === 'transfers')) return
+    const continuation = options?.continuation
+    if (
+      continuation !== undefined &&
+      ((kind !== 'orders' && kind !== 'transfers') || continuation.mode !== 'page_offset')
+    ) {
+      throw new Error(`[gate] ${kind} continuation mode ${continuation.mode} not supported`)
+    }
     await warmSession(session, src)
     const fetcher = pageFetcher(session)
     const pageSize = 10
     const maxPages = Number(src.meta.history_max_pages ?? 25) || 25
-    const cursorMs = cursor ? Date.parse(cursor) : NaN
+    // A backward continuation never cursor-stops: it walks below the cut.
+    const cursorMs = cursor && continuation === undefined ? Date.parse(cursor) : NaN
 
     const urlFor = (pageNo: number): string => {
       if (board === 'cfd') {
@@ -356,7 +370,10 @@ const gateAdapter: SourceAdapter = {
       }
     }
 
-    for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
+    // Backward continuation (#440): same budget, starting below the cut.
+    const startPage = continuation?.startPage ?? 1
+    const lastPage = startPage + maxPages - 1
+    for (let pageNo = startPage; pageNo <= lastPage; pageNo++) {
       const url = urlFor(pageNo)
       const payload = await replayJson(session, fetcher, { url, method: 'GET', headers: HEADERS })
       const data = (payload as Record<string, unknown>)?.data
@@ -388,9 +405,9 @@ const gateAdapter: SourceAdapter = {
           .filter((t) => Number.isFinite(t) && t > 0)
         if (times.length > 0 && Math.min(...times) <= cursorMs) break
       }
-      if (pageNo === maxPages && (kind === 'orders' || kind === 'transfers')) {
+      if (pageNo === lastPage && (kind === 'orders' || kind === 'transfers')) {
         // Full last page, no overlap: older rows exist beyond the budget.
-        throw new HistoryPageCapReachedError(src.slug, kind, maxPages)
+        throw new HistoryPageCapReachedError(src.slug, kind, maxPages, lastPage + 1)
       }
     }
   },
@@ -399,6 +416,13 @@ const gateAdapter: SourceAdapter = {
   parseProfile: parseGateProfile,
   parsePositions: parseGatePositions,
   parseHistory: parseGateHistory,
+
+  /** Futures orders/transfers page by number; CFD ones are auth-gated. */
+  historyContinuation(src: SourceRow): HistoryContinuationCapability {
+    return boardKey(src) === 'cfd'
+      ? { supported: false, reason: 'surface_auth_gated' }
+      : { supported: true, mode: 'page_offset' }
+  },
 }
 
 registerAdapter(gateAdapter)

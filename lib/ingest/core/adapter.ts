@@ -34,6 +34,11 @@ import type { AnyLeaderboardCapture } from '../fetch/capture'
 import type { AttemptBoundLeaderboardAcquisitionContract } from '../acquisition-attempts'
 import type { ProfileQualityReject } from './profile-quality'
 import type { SelectedHistoryTerminalVerifier } from '../history-acquisition'
+import type {
+  ContinuableHistoryKind,
+  HistoryContinuationCapability,
+  HistoryFetchOptions,
+} from './history-continuation'
 
 /** Lets expensive adapters defer deep enrichment off interactive/series paths. */
 export type ProfileFetchIntent = 'scheduled_full' | 'series_only' | 'interactive_deferred'
@@ -116,15 +121,26 @@ export interface SourceAdapter {
   ): Promise<RawBundle>
 
   /** Append-only histories: yield newest→older pages; the caller stops
-   *  consuming once rows overlap the stored cursor (spec §2.3). */
+   *  consuming once rows overlap the stored cursor (spec §2.3).
+   *  `options.continuation` (issue #440) asks for a bounded backward run that
+   *  starts below a page-cap truncation instead of at the newest page; only
+   *  adapters whose `historyContinuation` reports support receive it. */
   getHistory(
     session: FetchSession,
     src: SourceRow,
     exchangeTraderId: string,
     kind: HistoryKind,
     cursor: string | null,
-    traderMeta?: Record<string, unknown> | null
+    traderMeta?: Record<string, unknown> | null,
+    options?: HistoryFetchOptions
   ): AsyncIterable<RawPage>
+
+  /**
+   * Whether a page-cap-truncated orders/transfers stream can be continued
+   * backward on later runs, and how. Absent = not wired (recorded explicitly
+   * as unsupported on the truncation marker, never silently assumed).
+   */
+  historyContinuation?(src: SourceRow, kind: ContinuableHistoryKind): HistoryContinuationCapability
 
   /**
    * Reviewed, versioned verifier selected for one concrete history surface.

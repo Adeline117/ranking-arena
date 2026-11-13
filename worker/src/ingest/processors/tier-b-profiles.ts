@@ -54,6 +54,8 @@ import {
   type ConsumedRegionContext,
 } from '../consumed-region-context'
 import { runHistoryTransaction } from '../history-transaction'
+import { isContinuableHistoryKind } from '@/lib/ingest/core/history-continuation'
+import { continueTruncatedHistory, recordHistoryTruncation } from './tier-b-history-continuation'
 
 /**
  * Staleness filter (deadline-chunking, 2026-07-03): only traders NOT
@@ -110,36 +112,6 @@ async function markProfileAttempted(traderId: number): Promise<void> {
      ON CONFLICT (trader_id, kind)
      DO UPDATE SET cursor_value = EXCLUDED.cursor_value, updated_at = now()`,
     [traderId, PROFILED_CURSOR_KIND, new Date().toISOString()]
-  )
-}
-
-/**
- * Durable truncation marker for orders/transfers history cut by a page budget.
- * traders.meta merges on every board publish (`meta || EXCLUDED.meta`), so the
- * marker survives; the oldest captured event time says where coverage ends.
- */
-async function recordHistoryTruncation(
-  traderId: number,
-  kind: HistoryKind,
-  pageCap: number,
-  rows: ParsedHistoryRow[]
-): Promise<void> {
-  let oldest: string | null = null
-  for (const row of rows) {
-    const ts = row.kind === 'position_history' ? row.closedAt : row.ts
-    if (ts !== null && (oldest === null || ts < oldest)) oldest = ts
-  }
-  await getIngestPool().query(
-    `UPDATE arena.traders
-        SET meta = meta || jsonb_build_object(
-          'history_truncated',
-          COALESCE(meta->'history_truncated', '{}'::jsonb) || jsonb_build_object(
-            $2::text,
-            jsonb_build_object('detected_at', now(), 'page_cap', $3::int, 'oldest_captured_at', $4::text)
-          )
-        )
-      WHERE id = $1`,
-    [traderId, kind, pageCap, oldest]
   )
 }
 
@@ -429,6 +401,10 @@ async function crawlTraderHistories(
       if (requireResponseForEveryKind) {
         throw new Error(`[tier-b] ${src.slug} ${kind} returned no upstream response page`)
       }
+      if (isContinuableHistoryKind(kind)) {
+        written += (await continueTruncatedHistory(session, adapter, src, trader, kind, ctx))
+          .rowsWritten
+      }
       continue
     }
 
@@ -438,12 +414,28 @@ async function crawlTraderHistories(
     )
 
     written += await publishHistoryRows(src, trader.id, kind, rows, nextHistoryCursor(rows, cursor))
-    if (pageCapCut !== null) {
-      await recordHistoryTruncation(trader.id, kind, pageCapCut.pageCap, rows)
+    if (pageCapCut !== null && isContinuableHistoryKind(kind)) {
+      const continuation = await recordHistoryTruncation(
+        adapter,
+        src,
+        trader.id,
+        kind,
+        pageCapCut,
+        rows
+      )
       logger.warn(
         `[tier-b] ${src.slug} trader ${trader.exchange_trader_id} ${kind}: page cap ` +
-          `${pageCapCut.pageCap} reached — older history not captured (recorded as truncated)`
+          `${pageCapCut.pageCap} reached — older history not captured yet (recorded as ` +
+          `truncated; continuation ${continuation.state})`
       )
+      // This run already spent its budget on the newest pages: the backward
+      // continuation resumes on the next run, keeping each run bounded.
+      continue
+    }
+    if (isContinuableHistoryKind(kind)) {
+      // Bounded backward continuation of an earlier truncation (#440).
+      written += (await continueTruncatedHistory(session, adapter, src, trader, kind, ctx))
+        .rowsWritten
     }
   }
   return written

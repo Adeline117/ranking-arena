@@ -37,6 +37,10 @@ import {
   type ProfileFetchOptions,
   type SourceAdapter,
 } from '../../core/adapter'
+import type {
+  ContinuableHistoryKind,
+  HistoryContinuationCapability,
+} from '../../core/history-continuation'
 import type { FetchSession } from '../../fetch/types'
 import { BlockedUpstreamError, isBlockedStatus } from '../../fetch/rate-limiter'
 import {
@@ -363,6 +367,21 @@ const gtradeAdapter: SourceAdapter = {
   parseProfile: parseGtradeProfile,
   parsePositions: parseGtradePositions,
   parseHistory: parseGtradeHistory,
+
+  /**
+   * Orders come from one frozen 90-day trades-table snapshot shared with the
+   * profile and position-history paths (trades-fetch.ts). Its id cursor is
+   * scoped to that snapshot and its cap is reported as snapshot metadata,
+   * not as a resumable HistoryPageCapReachedError. Transfers do not exist.
+   */
+  historyContinuation(
+    _src: SourceRow,
+    kind: ContinuableHistoryKind
+  ): HistoryContinuationCapability {
+    return kind === 'orders'
+      ? { supported: false, reason: 'frozen_horizon_snapshot' }
+      : { supported: false, reason: 'surface_not_exposed' }
+  },
 }
 
 registerAdapter(gtradeAdapter)

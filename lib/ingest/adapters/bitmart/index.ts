@@ -41,6 +41,10 @@ import type {
   Timeframe,
 } from '../../core/types'
 import { HistoryPageCapReachedError } from '../../core/history-page-cap'
+import type {
+  HistoryContinuationCapability,
+  HistoryFetchOptions,
+} from '../../core/history-continuation'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { apiFetcher, replayJson, type JsonFetcher } from '../../fetch/capture'
@@ -284,11 +288,20 @@ const bitmartAdapter: SourceAdapter = {
     src: SourceRow,
     exchangeTraderId: string,
     kind: HistoryKind,
-    cursor: string | null
+    cursor: string | null,
+    _traderMeta?: Record<string, unknown> | null,
+    options?: HistoryFetchOptions
   ): AsyncIterable<RawPage> {
     if (kind === 'copiers') {
       throw new Error(`[bitmart] history surface ${kind} not supported (auth-only)`)
     }
+    const continuation = options?.continuation
+    if (continuation !== undefined && continuation.mode !== 'page_offset') {
+      throw new Error(`[bitmart] ${kind} continuation mode ${continuation.mode} not supported`)
+    }
+    // A backward continuation (#440) starts below a page-cap truncation and
+    // spends the same per-run budget from there; it never cursor-stops.
+    const startPage = continuation?.startPage ?? 1
     const fetcher = await bitmartFetcher(session)
     const ctx = dummyCtx(src)
     const uuid = encodeURIComponent(exchangeTraderId)
@@ -301,7 +314,8 @@ const bitmartAdapter: SourceAdapter = {
     const url = urls[kind]
     const maxPages = Number(src.meta.history_max_pages) || 20
 
-    for (let pageIndex = 1; pageIndex <= maxPages; pageIndex++) {
+    const lastPage = startPage + maxPages - 1
+    for (let pageIndex = startPage; pageIndex <= lastPage; pageIndex++) {
       const payload = await replayJson(session, fetcher, {
         url: `${url}?uuid=${uuid}&page=${pageIndex}&size=${limit}`,
         method: 'GET',
@@ -311,7 +325,7 @@ const bitmartAdapter: SourceAdapter = {
       if (rows.length === 0) return
       yield { pageIndex, payload, url, fetchedAt: new Date().toISOString() }
       if (rows.length < limit) return // last (short) page
-      if (cursor !== null) {
+      if (cursor !== null && continuation === undefined) {
         const oldest = rows[rows.length - 1]
         const oldestTs =
           oldest.kind === 'position_history' ? oldest.closedAt : 'ts' in oldest ? oldest.ts : null
@@ -321,8 +335,13 @@ const bitmartAdapter: SourceAdapter = {
     // Every page was full and no overlap was reached: older rows exist beyond
     // the budget. Never let a cut orders/transfers stream look complete.
     if (kind === 'orders' || kind === 'transfers') {
-      throw new HistoryPageCapReachedError(src.slug, kind, maxPages)
+      throw new HistoryPageCapReachedError(src.slug, kind, maxPages, lastPage + 1)
     }
+  },
+
+  /** Numeric newest-first pages: a cut stream resumes by page number. */
+  historyContinuation(): HistoryContinuationCapability {
+    return { supported: true, mode: 'page_offset' }
   },
 
   parseLeaderboard: parseBitmartLeaderboardPage,
