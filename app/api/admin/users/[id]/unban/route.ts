@@ -22,7 +22,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       // Check if user exists
       const { data: targetUser, error: userError } = await supabase
         .from('user_profiles')
-        .select('id, handle, banned_at')
+        .select('id, handle, banned_at, deleted_at')
         .eq('id', userId)
         .maybeSingle()
 
@@ -32,6 +32,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
       if (!targetUser.banned_at) {
         throw ApiError.validation('User is not banned')
+      }
+
+      // Lift the auth-level ban first (so a failure leaves the user still
+      // banned and the request retryable), unless the account is also pending
+      // deletion: that ban belongs to the deletion flow and only recovery may
+      // lift it.
+      if (!targetUser.deleted_at) {
+        const { error: authUnbanError } = await supabase.auth.admin.updateUserById(userId, {
+          ban_duration: 'none',
+        })
+        if (authUnbanError) {
+          logger.error('Auth-level ban could not be lifted; user left banned', {
+            userId,
+            adminId: admin.id,
+            error: authUnbanError.message,
+          })
+          throw ApiError.database('Failed to lift the sign-in ban; please retry')
+        }
       }
 
       // Unban the user

@@ -15,3 +15,10 @@ export const PENDING_DELETION_BAN_DURATION = '876000h'
  * cancel after the account is recovered.
  */
 export const RENEWABLE_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due'] as const
+
+/**
+ * GoTrue ban for an admin-banned user. `user_profiles.banned_at` already makes
+ * server routes answer 401, but without an auth-level ban the user can still
+ * sign in and reach anything exposed to their JWT through RLS.
+ */
+export const ADMIN_BAN_DURATION = PENDING_DELETION_BAN_DURATION
