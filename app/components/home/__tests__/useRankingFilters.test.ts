@@ -228,6 +228,27 @@ describe('URL / localStorage 状态恢复', () => {
     })
   })
 
+  it('高级筛选的多选交易所写入 fex，不占用服务端 exchange 参数，并能从 fex 恢复', async () => {
+    const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+    act(() => result.current.handleFilterChange({ exchange: ['bybit', 'hyperliquid'] }))
+    act(() => {
+      jest.advanceTimersByTime(400)
+    })
+    const params = new URLSearchParams(window.location.search)
+    expect(params.get('fex')).toBe('bybit,hyperliquid')
+    expect(params.get('exchange')).toBeNull()
+    expect(params.get('ex')).toBeNull()
+
+    mockFetchPage.mockClear()
+    window.localStorage.clear()
+    const reloaded = setup(FIXTURES, { fetchPage: mockFetchPage })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(reloaded.result.current.filterConfig.exchange).toEqual(['bybit', 'hyperliquid'])
+    expect(reloaded.result.current.selectedExchange).toBeNull()
+  })
+
   it('URL 为空时从 localStorage 恢复 filterConfig（用户偏好跨会话保留）', () => {
     window.localStorage.setItem('ranking-filter-config', JSON.stringify({ min_pnl: 5000 }))
     const { result } = setup()

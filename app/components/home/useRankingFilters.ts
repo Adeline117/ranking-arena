@@ -364,6 +364,7 @@ export function useRankingFilters({
     const minScore = searchParams.get('min_score')
     const minWr = searchParams.get('min_wr')
     const fcat = searchParams.get('fcat')
+    const fex = searchParams.get('fex')
     const urlSortRaw = searchParams.get('sort')
     const urlOrderRaw = searchParams.get('order')
     const urlPage = searchParams.get('page')
@@ -389,6 +390,7 @@ export function useRankingFilters({
     if (minScore) config.min_score = Number(minScore)
     if (minWr) config.min_win_rate = Number(minWr)
     if (fcat) config.category = fcat.split(',')
+    if (fex) config.exchange = fex.split(',').filter(Boolean)
 
     const storedPrefs = getStoredPreferences()
     // A persisted exchange is a real server cohort, not a cosmetic filter.
@@ -546,6 +548,7 @@ export function useRankingFilters({
           'exchange',
           'category',
           'fcat',
+          'fex',
           'sort',
           'order',
           'page',
@@ -561,7 +564,10 @@ export function useRankingFilters({
         if (config.min_pnl != null) params.set('min_pnl', String(config.min_pnl))
         if (config.min_score != null) params.set('min_score', String(config.min_score))
         if (config.min_win_rate != null) params.set('min_wr', String(config.min_win_rate))
-        if (config.exchange?.length) params.set('exchange', config.exchange.join(','))
+        // Advanced-filter exchanges are a client-side multi-select over the
+        // loaded page. They get their own key: `exchange`/`ex` mean a single
+        // server exchange cohort and would be re-read with that meaning.
+        if (config.exchange?.length) params.set('fex', config.exchange.join(','))
         if (config.category?.length) params.set('fcat', config.category.join(','))
 
         const urlCategory = overrides.category !== undefined ? overrides.category : s.category

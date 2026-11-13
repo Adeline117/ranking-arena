@@ -92,6 +92,7 @@ const COHORT_QUERY_KEYS: ReadonlySet<string> = new Set([
   'q',
   'preset',
   'fcat',
+  'fex',
   'roi_min',
   'roi_max',
   'dd_min',
