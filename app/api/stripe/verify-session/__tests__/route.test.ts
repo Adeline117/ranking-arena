@@ -107,9 +107,29 @@ function activeSubscription(priceId = 'price_monthly', status = 'active') {
   }
 }
 
+const PRICE_ENV_KEYS = [
+  'STRIPE_PRO_MONTHLY_PRICE_ID',
+  'STRIPE_PRICE_MONTHLY_ID',
+  'STRIPE_PRO_YEARLY_PRICE_ID',
+  'STRIPE_PRICE_YEARLY_ID',
+  'STRIPE_ELITE_PRICE_ID',
+  'STRIPE_PRO_PRICE_ID',
+] as const
+const savedPriceEnv = Object.fromEntries(PRICE_ENV_KEYS.map((k) => [k, process.env[k]]))
+
 describe('POST /api/stripe/verify-session', () => {
+  afterAll(() => {
+    for (const k of PRICE_ENV_KEYS) {
+      if (savedPriceEnv[k] === undefined) delete process.env[k]
+      else process.env[k] = savedPriceEnv[k]
+    }
+  })
+
   beforeEach(() => {
     jest.clearAllMocks()
+    for (const k of PRICE_ENV_KEYS) delete process.env[k]
+    process.env.STRIPE_PRO_MONTHLY_PRICE_ID = 'price_monthly'
+    process.env.STRIPE_PRO_YEARLY_PRICE_ID = 'price_yearly'
     mockGetAuthUser.mockResolvedValue({ id: 'user-123' })
     mockSessionRetrieve.mockResolvedValue(baseSession())
     mockSubscriptionRetrieve.mockResolvedValue(activeSubscription())
@@ -215,6 +235,24 @@ describe('POST /api/stripe/verify-session', () => {
 
     expect(response.status).toBe(500)
     expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['STRIPE_PRICE_MONTHLY_ID', 'monthly'],
+    ['STRIPE_PRICE_YEARLY_ID', 'yearly'],
+    ['STRIPE_ELITE_PRICE_ID', 'yearly'],
+  ])('accepts a price configured only through the %s alias', async (key, plan) => {
+    for (const k of PRICE_ENV_KEYS) delete process.env[k]
+    process.env[key] = 'price_alias_only'
+    mockSubscriptionRetrieve.mockResolvedValue(activeSubscription('price_alias_only'))
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(200)
+    expect(mockRpc).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ p_plan: plan })
+    )
   })
 
   it('reports failure when the atomic entitlement sync fails', async () => {

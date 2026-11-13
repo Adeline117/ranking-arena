@@ -12,6 +12,7 @@ import { ApiError } from '@/lib/api/errors'
 import { success as apiSuccess, withCache } from '@/lib/api/response'
 import { resolveServingTrader } from '@/lib/data/serving/resolve'
 import { getBotHeader, type BotHeader } from '@/lib/data/serving/bot-header'
+import { decodeRouteParam } from '@/lib/utils/decode-route-param'
 
 const handleSchema = z.string().min(1).max(255)
 
@@ -24,7 +25,7 @@ export async function GET(
   const handler = withPublic(async ({ supabase, request: req }) => {
     const parsedHandle = handleSchema.safeParse(rawHandle)
     if (!parsedHandle.success) throw ApiError.validation('Invalid handle parameter')
-    const decodedHandle = decodeURIComponent(parsedHandle.data)
+    const decodedHandle = decodeRouteParam(parsedHandle.data)
     const source = req.nextUrl.searchParams.get('source') || undefined
 
     const resolved = await resolveServingTrader(supabase, { handle: decodedHandle, source })

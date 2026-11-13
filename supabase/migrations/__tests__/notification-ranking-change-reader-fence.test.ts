@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 function read(relativePath: string): string {
@@ -12,7 +12,6 @@ const proof = read('supabase/migrations/__tests__/notification-ranking-change-re
 const notificationData = read('lib/data/notifications.ts')
 const notificationRoute = read('app/api/notifications/route.ts')
 const accountExportRoute = read('app/api/settings/export/route.ts')
-const notificationHook = read('lib/hooks/useSWR.ts')
 const notificationList = read('app/components/inbox/NotificationsList.tsx')
 const readerPolicy = read('lib/notifications/ranking-change-fence.ts')
 const broadcastEventsRoute = read('app/api/cron/broadcast-trader-events/route.ts')
@@ -152,7 +151,9 @@ describe('notification ranking-change reader fence migration', () => {
     expect(accountExportRoute).toContain(
       "completedDataset('notifications', normalizedNotifications.length)"
     )
-    expect(notificationHook).toContain("['notifications', NOTIFICATION_READER_CACHE_EPOCH, userId]")
+    // The legacy useSWR notification reader (which carried the epoch cache key)
+    // had no callers and was deleted, so no un-fenced client cache remains.
+    expect(existsSync(join(process.cwd(), 'lib/hooks/useSWR.ts'))).toBe(false)
     expect(notificationList).toContain('NOTIFICATION_READER_CACHE_EPOCH')
     expect(notificationList).toContain('isVisibleNotificationType(notification.type)')
     expect(read('app/components/layout/useTopNavState.ts')).toContain(

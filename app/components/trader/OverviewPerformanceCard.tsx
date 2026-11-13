@@ -143,8 +143,8 @@ export default function OverviewPerformanceCard({
           avgHoldingTimeHours: performance.avg_holding_time_hours_30d,
         }
       case '90D':
-      default:
-        return {
+      default: {
+        const data90 = {
           roi: performance.roi_90d,
           roiDisclosure: performance.roiDisclosures?.['90D'],
           pnl: performance.pnl,
@@ -173,6 +173,16 @@ export default function OverviewPerformanceCard({
           tradesCount: performance.trades_count,
           avgHoldingTimeHours: performance.avg_holding_time_hours,
         }
+        // No 90D row: the headline fields above come from a shorter period
+        // (the reader falls back 90D→30D→7D). Show an empty 90D tab, like an
+        // empty 7D/30D tab, instead of 30D numbers under a 90D label.
+        if (performance.has_period_90d === false) {
+          return Object.fromEntries(
+            Object.keys(data90).map((key) => [key, undefined])
+          ) as unknown as typeof data90
+        }
+        return data90
+      }
     }
   }
 
