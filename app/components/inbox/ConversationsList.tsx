@@ -435,6 +435,19 @@ export default function ConversationsList({
             return updated
           })
           showToast(t('conversationDeleted'), 'success')
+          // Best effort: mark the deleted conversation read so the nav badge
+          // (which counts every unread DM) stops including it after a reload.
+          void authedFetch(
+            '/api/messages/read',
+            'POST',
+            operation.accessToken,
+            { conversationId },
+            15_000,
+            {
+              expectedUserId: operation.userId,
+              expectedSessionGeneration: operation.sessionGeneration,
+            }
+          ).catch(() => undefined)
         } else {
           showToast(t('unexpectedError'), 'error')
         }
