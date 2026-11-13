@@ -28,6 +28,13 @@ PRODUCTION_PROJECT_REF='iknktzifjdyujdccyhsv'
 ORDERED_PREDEPLOY_RELEASE_SHA=''
 ORDERED_PREDEPLOY_SNAPSHOT_DIR=''
 
+# Order follows the 2026-11-11 whole-database rehearsal: 20261111* forward
+# replacements take the slot of the original they supersede, and three inserts
+# run where the rehearsal ran them (191927/191928 bracket 20260722053000;
+# 140053 precedes 20260725016500). The record-provenance chain (20260803*) and
+# the GMX source-contract chain (20260715231500/232500) stay outside this
+# manifest, so their replacements 20261111134937 and 20261111194845 remain in
+# scripts/qa/launch-inventory-gap.json pending an owner ordering decision.
 PREDEPLOY_MIGRATIONS=(
   20260716111600_atomic_group_application_review.sql
   20260716111700_group_application_read_write_boundary.sql
@@ -100,7 +107,9 @@ PREDEPLOY_MIGRATIONS=(
   20260722050000_metric_trust_attempt_outcome_authority.sql
   20260722051000_leaderboard_score_input_manifest_contract.sql
   20260722052000_leaderboard_score_input_manifest_rank_eligible_pnl.sql
+  20261111191927_binance_spot_contract_registration_serving_hold.sql
   20260722053000_binance_spot_metric_source_contract.sql
+  20261111191928_binance_spot_contract_registration_serving_restore.sql
   20260722055000_metric_trust_source_page_lineage_forward_repair.sql
   20260724010000_shadow_unverified_okx_web3_ranks.sql
   20260724232500_allow_pipeline_logs_partial_success.sql
@@ -114,13 +123,14 @@ PREDEPLOY_MIGRATIONS=(
   20260725015000_leaderboard_rank_generation_claim.sql
   20260725015500_bound_leaderboard_rank_generation_batches.sql
   20260725016000_leaderboard_rank_generation_receipt_substrate.sql
+  20261111140053_leaderboard_ranks_codec_layout_rebuild.sql
   20260725016500_leaderboard_rank_persisted_codec.sql
   20260725017000_leaderboard_rank_typed_batch_contract.sql
-  20260725017250_normalize_leaderboard_rank_max_drawdown.sql
+  20261111185914_normalize_leaderboard_rank_max_drawdown_prod_constraint.sql
   20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql
-  20260728122000_bitget_bots_canonical_timeframe.sql
+  20261111134210_bitget_bots_canonical_timeframe_partial_seed.sql
   20260728123000_arena_bot_header_canonical_snapshot.sql
-  20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql
+  20261111134416_quarantine_bitget_bot_cumulative_rank_authority_prod_reader.sql
   20260729010000_api_keys_server_authority.sql
   20260729011000_leaderboard_rank_manifest_attestation_substrate.sql
   20260729012000_partitioned_bot_acquisition_manifest_v4.sql
@@ -142,15 +152,31 @@ PREDEPLOY_MIGRATIONS=(
   20260729223000_rerank_public_eligible_rows_only.sql
   20260729224000_rank_eligible_leaderboard_count_cache.sql
   20260729225000_token_trader_rank_authority.sql
-  20260729230000_token_ranking_generation_barrier.sql
-  20260804043000_retire_legacy_token_rankings.sql
-  20260804044000_freeze_legacy_position_history_relations.sql
-  20260804045000_quarantine_bingx_rank_authority.sql
+  20261111133259_token_ranking_generation_barrier_cron_api.sql
+  20261111133300_retire_legacy_token_rankings_cron_api.sql
+  20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
+  20261111135302_quarantine_bingx_rank_authority_blocked_spot.sql
   20260804050000_harden_serving_trader_resolver.sql
   20260804051000_harden_serving_source_capabilities.sql
   20260804052000_fail_closed_unbound_copier_aggregates.sql
   20260804053000_copier_snapshot_publication_substrate.sql
   20260804054000_publish_copier_snapshot_atomically.sql
+  20260808010000_copier_snapshot_trust_raw_role.sql
+  20260808020000_copier_snapshot_trust_publication_substrate.sql
+  20260808021000_publish_copier_snapshot_trust_v2.sql
+  20260808090000_quarantine_legacy_trader_daily_snapshots.sql
+  20260816130000_quarantine_v1_trader_alert_browser_mutations.sql
+  20260816151614_public_ranked_leaderboard.sql
+  20260816184500_public_ranked_leaderboard_source_freshness_gate.sql
+  20260817000000_finalize_trader_alert_delivery_epoch_fence.sql
+  20261111132444_rank_history_service_only_acl_hosted_role_graph.sql
+  20261111132445_trader_activities_publication_fence_hosted_role_graph.sql
+  20261111132446_notification_ranking_change_reader_fence_hosted_role_graph.sql
+  20261111132447_arena_bot_legacy_publication_isolation_hosted_role_graph.sql
+  20261111132448_trader_series_publication_isolation_hosted_role_graph.sql
+  20261111132450_legacy_raw_metric_publication_isolation_hosted_role_graph.sql
+  20260817134214_quarantine_legacy_platform_stats_rpc.sql
+  20261013094743_retire_v2_partition_cron_extend_arena_partitions.sql
 )
 readonly -a PREDEPLOY_MIGRATIONS
 
@@ -175,7 +201,7 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 POSTDEPLOY_MIGRATIONS=(
   20260716192000_social_edge_write_contract.sql
   20260717120000_trader_follows_composite_identity.sql
-  20260729061000_tier_a_execution_claim_enforcement.sql
+  20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
 
@@ -253,13 +279,60 @@ RECOVERY_MIGRATIONS=(
 )
 readonly -a RECOVERY_MIGRATIONS
 
-# Do not replay this older collection boundary. The separately applied
-# 20260717230000 migration replaces its policies with current-owner/current-
-# resource audience checks and atomic service-only writes.
+# Never replay these. Each one names, in superseder_version, the ledger version
+# whose presence makes it unnecessary:
+# - 20260716104500: the separately applied 20260717230000 migration replaces its
+#   policies with current-owner/current-resource audience checks and atomic
+#   service-only writes.
+# - 20260808001418: production already applied this body under ledger version
+#   20260808071456 (docs/LAUNCH_REHEARSAL_2026-11-11.md).
+# - The rest fail on production state and were replaced by 20261111* forward
+#   migrations that run in the original's ordered slot (PR #400/#401; the
+#   whole-database rehearsal passed 113/113 with these replacements).
 SUPERSEDED_MIGRATIONS=(
   20260716104500_collection_read_write_boundaries.sql
+  20260725017250_normalize_leaderboard_rank_max_drawdown.sql
+  20260728122000_bitget_bots_canonical_timeframe.sql
+  20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql
+  20260729061000_tier_a_execution_claim_enforcement.sql
+  20260729230000_token_ranking_generation_barrier.sql
+  20260804043000_retire_legacy_token_rankings.sql
+  20260804044000_freeze_legacy_position_history_relations.sql
+  20260804045000_quarantine_bingx_rank_authority.sql
+  20260808001418_atomic_group_channel_settings_update.sql
+  20260817020000_rank_history_service_only_acl.sql
+  20260817030000_trader_activities_publication_fence.sql
+  20260817040000_notification_ranking_change_reader_fence.sql
+  20260817050000_arena_bot_legacy_publication_isolation.sql
+  20260817060000_trader_series_publication_isolation.sql
+  20260817061000_legacy_raw_metric_publication_isolation.sql
 )
 readonly -a SUPERSEDED_MIGRATIONS
+
+superseder_version() {
+  case "$1" in
+    20260716104500_collection_read_write_boundaries.sql) printf '%s' 20260717230000 ;;
+    20260725017250_normalize_leaderboard_rank_max_drawdown.sql) printf '%s' 20261111185914 ;;
+    20260728122000_bitget_bots_canonical_timeframe.sql) printf '%s' 20261111134210 ;;
+    20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql) printf '%s' 20261111134416 ;;
+    20260729061000_tier_a_execution_claim_enforcement.sql) printf '%s' 20261111192134 ;;
+    20260729230000_token_ranking_generation_barrier.sql) printf '%s' 20261111133259 ;;
+    20260804043000_retire_legacy_token_rankings.sql) printf '%s' 20261111133300 ;;
+    20260804044000_freeze_legacy_position_history_relations.sql) printf '%s' 20261111135144 ;;
+    20260804045000_quarantine_bingx_rank_authority.sql) printf '%s' 20261111135302 ;;
+    20260808001418_atomic_group_channel_settings_update.sql) printf '%s' 20260808071456 ;;
+    20260817020000_rank_history_service_only_acl.sql) printf '%s' 20261111132444 ;;
+    20260817030000_trader_activities_publication_fence.sql) printf '%s' 20261111132445 ;;
+    20260817040000_notification_ranking_change_reader_fence.sql) printf '%s' 20261111132446 ;;
+    20260817050000_arena_bot_legacy_publication_isolation.sql) printf '%s' 20261111132447 ;;
+    20260817060000_trader_series_publication_isolation.sql) printf '%s' 20261111132448 ;;
+    20260817061000_legacy_raw_metric_publication_isolation.sql) printf '%s' 20261111132450 ;;
+    *)
+      echo "superseded migration has no superseder: $1" >&2
+      exit 1
+      ;;
+  esac
+}
 
 require_environment() {
   if [[ -z "${DATABASE_URL:-}" ]]; then
@@ -945,7 +1018,7 @@ status() {
   local phase
   {
     printf '%s\n' \
-      'WITH target(version, phase, ordinal, expected_name, expected_hash) AS (VALUES'
+      'WITH target(version, phase, ordinal, expected_name, expected_hash, superseder) AS (VALUES'
     local ordinal=0
     local separator=''
     for phase in predeploy postdeploy concurrent-recovery recovery quarantined superseded; do
@@ -968,11 +1041,16 @@ status() {
         local version
         local name
         local hash
+        local superseder='NULL'
         version="$(migration_version "$migration")"
         name="$(migration_name "$migration")"
         hash="$(migration_body_sha256 "$migration")"
-        printf "%s  ('%s', '%s', %d, '%s', '%s')" \
-          "$separator" "$version" "$phase" "$ordinal" "$name" "$hash"
+        if [[ "$phase" == "superseded" ]]; then
+          superseder="$(superseder_version "$migration")"
+          superseder="'$superseder'"
+        fi
+        printf "%s  ('%s', '%s', %d, '%s', '%s', %s)" \
+          "$separator" "$version" "$phase" "$ordinal" "$name" "$hash" "$superseder"
         separator=$',\n'
       done
     done
@@ -982,8 +1060,8 @@ status() {
       "  CASE" \
       "    WHEN target.phase = 'superseded' AND EXISTS (" \
       "      SELECT 1 FROM supabase_migrations.schema_migrations AS replacement" \
-      "      WHERE replacement.version = '20260717230000'" \
-      "    ) THEN 'superseded-by-20260717230000'" \
+      "      WHERE replacement.version = target.superseder" \
+      "    ) THEN 'superseded-by-' || target.superseder" \
       "    WHEN target.phase = 'superseded' THEN 'missing-superseder'" \
       "    WHEN target.phase = 'quarantined' AND NOT EXISTS (" \
       "      SELECT 1 FROM supabase_migrations.schema_migrations AS candidate" \

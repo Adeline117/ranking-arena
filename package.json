@@ -107,6 +107,7 @@
     "qa:github-workflow-control-plane": "node scripts/qa/github-workflow-control-plane.mjs",
     "qa:github-workflow-control-plane:test": "node --test scripts/qa/github-workflow-control-plane.test.mjs",
     "qa:launch-migration-runner": "node --test scripts/maintenance/apply-launch-migrations.test.mjs",
+    "qa:launch-migration-runner-pg17": "bash scripts/maintenance/apply-launch-migrations.pg17.sh",
     "qa:launch-migration-inventory": "node scripts/qa/launch-migration-inventory.mjs",
     "qa:launch-migration-inventory-contract": "node --test scripts/qa/launch-migration-inventory.test.mjs",
     "qa:source-launch-ledger": "node scripts/qa/source-launch-ledger-reconciliation.mjs",
