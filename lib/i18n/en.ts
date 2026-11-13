@@ -6865,6 +6865,8 @@ const en = {
   rankingFilteredByExchange: 'Filtered by {exchange}',
   rankingClearExchangeFilter: 'Clear exchange filter',
   rankingSearchElsewhereTitle: 'No match on this page. Matching traders across Arena:',
+  rankingFiltersCurrentPageOnly:
+    'Filters apply to the 50 traders on this page only; other pages may have more matches.',
 } as const
 
 export default en

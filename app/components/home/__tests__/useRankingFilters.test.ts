@@ -190,12 +190,18 @@ describe('URL / localStorage 状态恢复', () => {
     expect(result.current.filteredTraders).toHaveLength(FIXTURES.length)
   })
 
-  it('preset 无任何匹配时自动清除（防陈旧 preset 让榜单看似空）', () => {
-    // 只有 futures trader，却带 onchain_dex preset → effect 清除并删 localStorage
+  it('preset 无匹配时如实为空（不静默放行全部），并标记为当前页筛选', () => {
     window.history.replaceState(null, '', '/?preset=onchain_dex')
-    window.localStorage.setItem('ranking-preset', 'onchain_dex')
     const { result } = setup([trader('fut-only', { source: 'binance_futures' })])
-    expect(result.current.filteredTraders).toHaveLength(1)
+    expect(result.current.filteredTraders).toHaveLength(0)
+    expect(result.current.hasClientPageFilters).toBe(true)
+  })
+
+  it('旧 UI 存下的 preset 偏好被忽略并清理（无可见入口时不得隐形筛选）', () => {
+    window.localStorage.setItem('ranking-preset', 'cex_spot')
+    const { result } = setup()
+    expect(result.current.filteredTraders).toHaveLength(FIXTURES.length)
+    expect(result.current.hasClientPageFilters).toBe(false)
     expect(window.localStorage.getItem('ranking-preset')).toBeNull()
   })
 

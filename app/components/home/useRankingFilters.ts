@@ -135,7 +135,6 @@ function getStoredPreferences() {
       }
     }
     return {
-      preset: localStorage.getItem(LS_KEY_PRESET) as PresetId | null,
       exchange: localStorage.getItem(LS_KEY_EXCHANGE),
       filterConfig,
     }
@@ -439,10 +438,14 @@ export function useRankingFilters({
       )
     }
 
-    if (urlPreset && isValidPresetId(urlPreset)) {
-      setActivePreset(urlPreset)
-    } else if (isValidPresetId(storedPrefs.preset)) {
-      setActivePreset(storedPrefs.preset)
+    // Presets have no on-page picker any more, so a value persisted by an
+    // older UI would filter the board invisibly. Honour only an explicit
+    // `?preset=` link and drop the legacy stored preference.
+    if (urlPreset && isValidPresetId(urlPreset)) setActivePreset(urlPreset)
+    try {
+      localStorage.removeItem(LS_KEY_PRESET)
+    } catch {
+      /* ignore */
     }
 
     if (resolvedExchange) setSelectedExchange(resolvedExchange)
@@ -786,6 +789,11 @@ export function useRankingFilters({
     [filterConfig]
   )
 
+  // Client-side filters that only see the loaded server page (50 rows):
+  // advanced filters and URL presets. Drives the "current page only" hint
+  // and the filtered empty state.
+  const hasClientPageFilters = hasActiveFilters || (!!activePreset && activePreset !== 'all')
+
   const source = useMemo(() => (traders.length > 0 ? traders[0].source : 'all'), [traders])
 
   // Format last updated time
@@ -863,27 +871,10 @@ export function useRankingFilters({
     // consistent/top_scorers 四个 metric 预设拿到 undefined 全部 false →
     // 空结果回退放行全部 + 下方 effect 自动清除预设 = 4/8 预设彻底失效。
     // Trader 与 FilterableTrader 字段同名(pnl/win_rate/max_drawdown/arena_score/source)。
-    const raw = exchangeFiltered.filter((trader) => presetConfig.filter(trader))
-    return raw.length === 0 && exchangeFiltered.length > 0 ? exchangeFiltered : raw
-  }, [activePreset, exchangeFiltered])
-
-  // Auto-clear preset filter when no traders match
-  // NOTE: syncStateToUrl intentionally excluded from deps to prevent infinite loop
-  useEffect(() => {
-    if (activePreset && activePreset !== 'all' && exchangeFiltered.length > 0) {
-      const presetConfig = PRESETS.find((p) => p.id === activePreset)
-      if (presetConfig) {
-        const hasMatch = exchangeFiltered.some((trader) => presetConfig.filter(trader))
-        if (!hasMatch) {
-          setActivePreset(null)
-          try {
-            localStorage.removeItem(LS_KEY_PRESET)
-          } catch {
-            /* ignore */
-          }
-        }
-      }
-    }
+    // No silent "show everything" fallback: a preset with zero matches on
+    // this page renders the honest empty state (with a reset action) instead
+    // of pretending the preset applied. It only ever filters the loaded page.
+    return exchangeFiltered.filter((trader) => presetConfig.filter(trader))
   }, [activePreset, exchangeFiltered])
 
   const advancedFiltered = useMemo(
@@ -1077,6 +1068,7 @@ export function useRankingFilters({
     filterConfig,
     savedFilters,
     hasActiveFilters,
+    hasClientPageFilters,
     selectedExchange,
     clearExchange,
     // Sort/page/search

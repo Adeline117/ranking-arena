@@ -6735,6 +6735,8 @@ const ko = {
   rankingClearExchangeFilter: '거래소 필터 해제',
   rankingSearchElsewhereTitle:
     '이 페이지에 일치 항목이 없습니다. Arena 전체에서 일치하는 트레이더:',
+  rankingFiltersCurrentPageOnly:
+    '필터는 이 페이지의 트레이더 50명에게만 적용됩니다. 다른 페이지에도 해당 트레이더가 있을 수 있습니다.',
 } as const
 
 export default ko

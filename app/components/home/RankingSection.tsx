@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import { tokens } from '@/lib/design-tokens'
 import dynamic from 'next/dynamic'
 import type { Trader } from '../ranking/RankingTableTypes'
 import type { TimeRange } from './hooks/useTraderData'
@@ -101,6 +102,7 @@ export default function RankingSection({
     filterConfig,
     savedFilters,
     hasActiveFilters,
+    hasClientPageFilters,
     selectedExchange,
     clearExchange,
     sortColumn,
@@ -244,6 +246,22 @@ export default function RankingSection({
 
       <SearchElsewhereMatches traders={searchMatchesElsewhere} />
 
+      {hasClientPageFilters && (
+        // Advanced filters / presets run client-side over the loaded server
+        // page only. Say so instead of implying a whole-board search.
+        <p
+          role="note"
+          data-testid="filters-current-page-only"
+          style={{
+            margin: `0 0 ${tokens.spacing[2]}`,
+            fontSize: tokens.typography.fontSize.xs,
+            color: tokens.colors.text.tertiary,
+          }}
+        >
+          {t('rankingFiltersCurrentPageOnly')}
+        </p>
+      )}
+
       {/* Error + empty states are rendered once, by RankingTable (it was
           previously duplicated here, producing two messages / two retry
           buttons and contradictory stale copy). */}
@@ -259,7 +277,7 @@ export default function RankingSection({
         onCategoryChange={handleCategoryChange}
         onProRequired={onProRequired}
         onFilterToggle={handleFilterToggle}
-        hasActiveFilters={hasActiveFilters}
+        hasActiveFilters={hasClientPageFilters}
         error={error}
         onRetry={onRetry}
         controlledSortColumn={sortColumn}

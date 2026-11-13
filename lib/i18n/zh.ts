@@ -6675,6 +6675,8 @@ const zh = {
   rankingFilteredByExchange: '已按 {exchange} 筛选',
   rankingClearExchangeFilter: '清除交易所筛选',
   rankingSearchElsewhereTitle: '当前页没有匹配，以下是全站匹配的交易员：',
+  rankingFiltersCurrentPageOnly:
+    '筛选仅作用于当前页的 50 名交易员，其他页可能还有符合条件的交易员。',
 } as const
 
 export default zh
