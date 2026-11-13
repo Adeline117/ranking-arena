@@ -28,7 +28,11 @@ test('worker entry checks the gate before dotenv, BullMQ, DB, Redis, or HTTP dep
 
   assert.ok(gateCheck >= 0)
   assert.ok(firstDeferredImport > gateCheck)
-  assert.doesNotMatch(workerEntry, /^import\s+(?!\{ isV1RankingCommandChainPublished \})/m)
+  // Type-only imports are erased at runtime and load nothing.
+  assert.doesNotMatch(
+    workerEntry,
+    /^import\s+(?!type\s)(?!\{ isV1RankingCommandChainPublished \})/m
+  )
   assert.doesNotMatch(
     workerEntry.slice(0, gateCheck),
     /config\(|new Worker\(|fetch\(|getConnection\(|getQueue\(/
@@ -72,4 +76,31 @@ test('downstream refresh returns before Redis import or background fetch work', 
     triggerChain.slice(gateCheck, backgroundLaunch),
     /refresh was not triggered\.|return/
   )
+})
+
+test('worker entry only calls Redis getters it imported, all on the ranking-chain gate', () => {
+  // worker/src/index.ts is outside every tsc program (tsconfig.json excludes
+  // worker/, tsconfig.ingest-worker.json lists only ingest files), so an
+  // undeclared getter is a runtime ReferenceError, not a compile error. The
+  // ingest getter (getConnection) is also gated by the ingest constant and
+  // would throw while only the ranking chain is published.
+  const called = new Set(
+    [...workerEntry.matchAll(/\b((?:get|close)\w*Connection)\(/g)].map((match) => match[1])
+  )
+  const deferred = workerEntry.match(/const \[([\s\S]*?)\] = await Promise\.all\(\[/g) ?? []
+  const imported = new Set(
+    deferred.flatMap((block) =>
+      [...block.matchAll(/\{([^{}]*)\}/g)].flatMap((group) =>
+        group[1]
+          .split(',')
+          .map((name) => name.trim().split(':').pop().trim())
+          .filter(Boolean)
+      )
+    )
+  )
+  assert.ok(called.size > 0)
+  for (const name of called) {
+    assert.ok(imported.has(name), `${name} is called but never imported`)
+  }
+  assert.ok(!called.has('getConnection'), 'scoring must use getRankingCommandChainConnection')
 })

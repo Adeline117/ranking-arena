@@ -62,8 +62,8 @@ test('exports a deterministic, hash-attested read-only launch inventory', () => 
   assert.match(first.inventorySha256, /^[a-f0-9]{64}$/u)
   const predeploy = first.phases.find((phase) => phase.name === 'predeploy')
   const postdeploy = first.phases.find((phase) => phase.name === 'postdeploy')
-  assert.equal(predeploy.count, 147)
-  assert.equal(postdeploy.count, 3)
+  assert.equal(predeploy.count, 149)
+  assert.equal(postdeploy.count, 4)
   const firstMigration = predeploy.migrations[0]
   assert.equal(firstMigration.sha256, sha256(readFileSync(resolve(ROOT, firstMigration.path))))
   assert.equal(
@@ -300,7 +300,7 @@ test('canonical runner contract also requires TIP checkout versions to be exactl
       resolve(setup.repoRoot, 'scripts/maintenance/apply-launch-migrations.sh'),
       canonicalFixtureRunner('readonly -a TIP_CHECKOUT_CUTOVER_VERSIONS\n')
     )
-    assert.equal(buildLaunchMigrationInventory({ repoRoot: setup.repoRoot }).phases.length, 7)
+    assert.equal(buildLaunchMigrationInventory({ repoRoot: setup.repoRoot }).phases.length, 8)
   } finally {
     rmSync(setup.repoRoot, { force: true, recursive: true })
   }

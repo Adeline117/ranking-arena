@@ -64,7 +64,23 @@ describe('derived formal win-rate cleanup (#441)', () => {
     expect(pg17).toContain('preflight failure still wrote rows')
   })
 
-  it('is generated only, not scheduled by the launch runner', () => {
-    expect(runner).not.toContain('20261113150757_clean_derived_formal_win_rate.sql')
+  it('is classified postdeploy only, after the writers that re-dirty it are replaced', () => {
+    // Old writers (pre-60f4cc288 BTCC parser, pre-bf3fa8a4d on-chain enrich)
+    // rewrite the cleaned values, so it never runs before the deploy.
+    const array = (name: string) => {
+      const start = runner.indexOf(`${name}=(\n`)
+      return runner
+        .slice(start, runner.indexOf('\n)', start))
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => /^\d{14}_.+\.sql$/.test(line))
+    }
+    const file = '20261113150757_clean_derived_formal_win_rate.sql'
+    const postdeploy = array('POSTDEPLOY_MIGRATIONS')
+    expect(array('PREDEPLOY_MIGRATIONS')).not.toContain(file)
+    expect(postdeploy).toContain(file)
+    expect(postdeploy.indexOf(file)).toBeLessThan(
+      postdeploy.indexOf('20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql')
+    )
   })
 })

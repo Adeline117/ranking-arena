@@ -135,8 +135,10 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   const recovery = migrationArray('RECOVERY_MIGRATIONS')
   const quarantined = migrationArray('QUARANTINED_PREDEPLOY_MIGRATIONS')
   const superseded = migrationArray('SUPERSEDED_MIGRATIONS')
+  const singleFile = migrationArray('ADR023_SINGLE_FILE_MIGRATIONS')
   const all = [
     ...predeploy,
+    ...singleFile,
     ...postdeploy,
     ...concurrentRecovery,
     ...recovery,
@@ -144,7 +146,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     ...superseded,
   ]
 
-  assert.equal(predeploy.length, 147)
+  assert.equal(predeploy.length, 149)
   // Season publication follow-ups stay last; 011058 must follow the Bitget-bot
   // freshness-authority rewrite slot (20261111134416, #415's replacement for 20260728124000).
   assert.deepEqual(predeploy.slice(-6), [
@@ -164,7 +166,14 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
+    '20261113150757_clean_derived_formal_win_rate.sql',
     '20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql',
+  ])
+  // Classified, never emitted: applied one file at a time via ADR-023 at the
+  // positions docs/LAUNCH_CHECKLIST.md fixes.
+  assert.deepEqual(singleFile, [
+    '20261111194845_fix_gmx_source_contract_current_population.sql',
+    '20261111134937_record_provenance_clocks_prod_reader.sql',
   ])
   assert.equal(recoveryPrerequisites.length, 41)
   // Recovery repairs the frozen 41-migration cutover: every predeploy migration
@@ -195,12 +204,14 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
   assert.deepEqual(superseded, [
+    '20260715231500_fix_gmx_source_contract.sql',
     '20260716104500_collection_read_write_boundaries.sql',
     '20260725017250_normalize_leaderboard_rank_max_drawdown.sql',
     '20260728122000_bitget_bots_canonical_timeframe.sql',
     '20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql',
     '20260729061000_tier_a_execution_claim_enforcement.sql',
     '20260729230000_token_ranking_generation_barrier.sql',
+    '20260803090000_record_provenance_clocks.sql',
     '20260804043000_retire_legacy_token_rankings.sql',
     '20260804044000_freeze_legacy_position_history_relations.sql',
     '20260804045000_quarantine_bingx_rank_authority.sql',
@@ -212,9 +223,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260817060000_trader_series_publication_isolation.sql',
     '20260817061000_legacy_raw_metric_publication_isolation.sql',
   ])
-  assert.equal(new Set(all).size, 175)
+  assert.equal(new Set(all).size, 182)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-106), [
+  assert.deepEqual(predeploy.slice(-108), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -315,6 +326,8 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20261111132450_legacy_raw_metric_publication_isolation_hosted_role_graph.sql',
     '20260817134214_quarantine_legacy_platform_stats_rpc.sql',
     '20261013094743_retire_v2_partition_cron_extend_arena_partitions.sql',
+    '20261113014105_arena_score_unknown_trades_confidence.sql',
+    '20261113104533_trader_follows_hard_cap_lock.sql',
     '20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql',
     '20261113011058_leaderboard_publication_source_isolation.sql',
     '20261113012028_public_snapshot_readers_sealed_freshness.sql',
@@ -410,7 +423,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes('20260729070500_leaderboard_score_input_manifest_v2.sql'))
   assert.ok(predeploy.includes('20260729071000_leaderboard_metric_trust_projection_v2.sql'))
   assert.ok(predeploy.includes('20260729071500_tier_a_one_phase_commit_guard.sql'))
-  assert.deepEqual(predeploy.slice(-34, -6), [
+  assert.deepEqual(predeploy.slice(-36, -6), [
     '20260729223000_rerank_public_eligible_rows_only.sql',
     '20260729224000_rank_eligible_leaderboard_count_cache.sql',
     '20260729225000_token_trader_rank_authority.sql',
@@ -439,6 +452,8 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20261111132450_legacy_raw_metric_publication_isolation_hosted_role_graph.sql',
     '20260817134214_quarantine_legacy_platform_stats_rpc.sql',
     '20261013094743_retire_v2_partition_cron_extend_arena_partitions.sql',
+    '20261113014105_arena_score_unknown_trades_confidence.sql',
+    '20261113104533_trader_follows_hard_cap_lock.sql',
   ])
   assert.ok(!recoveryPrerequisites.includes('20260729223000_rerank_public_eligible_rows_only.sql'))
   assert.ok(
@@ -1185,7 +1200,7 @@ test('recovery emitters remain internal while every public recovery path is disa
 test('status makes intentionally quarantined and superseded migrations explicit', () => {
   assert.match(
     source,
-    /phase in predeploy postdeploy concurrent-recovery recovery quarantined superseded/
+    /phase in predeploy single-file postdeploy concurrent-recovery recovery quarantined superseded/
   )
   assert.match(source, /quarantined-unapplied/)
   assert.match(source, /quarantined-exact-forward-repair-required/)
@@ -1201,7 +1216,8 @@ test('every superseded migration names a superseder and forward replacements tak
   const predeploy = migrationArray('PREDEPLOY_MIGRATIONS')
   const postdeploy = migrationArray('POSTDEPLOY_MIGRATIONS')
   const superseded = migrationArray('SUPERSEDED_MIGRATIONS')
-  const ordered = [...predeploy, ...postdeploy]
+  const singleFile = migrationArray('ADR023_SINGLE_FILE_MIGRATIONS')
+  const ordered = [...predeploy, ...postdeploy, ...singleFile]
   // Superseders that are not ordered launch files: a separately applied repo
   // migration, and the production ledger version that already holds 001418.
   const external = new Map([
@@ -1266,9 +1282,86 @@ test('every superseded migration names a superseder and forward replacements tak
     '20261111132450_legacy_raw_metric_publication_isolation_hosted_role_graph.sql',
     '20260817134214_quarantine_legacy_platform_stats_rpc.sql'
   )
+  // 014105 rewrites the v4/v5 scorers and manifest encoders; every migration
+  // whose pre/postflight pins their old prosrc digests must run before it.
+  for (const pinned of [
+    '20260722041000_pure_arena_score_v4_scorer.sql',
+    '20260722051000_leaderboard_score_input_manifest_contract.sql',
+    '20260722052000_leaderboard_score_input_manifest_rank_eligible_pnl.sql',
+    '20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql',
+    '20260729015000_leaderboard_rank_generation_attested_batch_writer.sql',
+    '20260729061533_leaderboard_rank_generation_staging_only_writer.sql',
+    '20260729070000_pure_arena_score_v5_zero_metric_scorer.sql',
+    '20260729070500_leaderboard_score_input_manifest_v2.sql',
+    '20260729071000_leaderboard_metric_trust_projection_v2.sql',
+  ]) {
+    before(pinned, '20261113014105_arena_score_unknown_trades_confidence.sql')
+  }
+  // The scoring-definition change and the follow cap are predeploy, never
+  // postdeploy: the pre-change application stays correct under both.
+  assert.ok(!postdeploy.includes('20261113014105_arena_score_unknown_trades_confidence.sql'))
+  assert.ok(!postdeploy.includes('20261113104533_trader_follows_hard_cap_lock.sql'))
   // 192134 allowlists raw-object guards that later predeploy files install.
   assert.equal(
     postdeploy.at(-1),
     '20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql'
   )
+})
+
+test('ADR-023 single-file migrations are classified, never emitted, and their slots are documented', () => {
+  const singleFile = migrationArray('ADR023_SINGLE_FILE_MIGRATIONS')
+  const predeploy = migrationArray('PREDEPLOY_MIGRATIONS')
+  const emitted = [
+    ...predeploy,
+    ...migrationArray('POSTDEPLOY_MIGRATIONS'),
+    ...migrationArray('CONCURRENT_RECOVERY_MIGRATIONS'),
+    ...migrationArray('RECOVERY_MIGRATIONS'),
+  ]
+  for (const migration of singleFile) {
+    assert.ok(!emitted.includes(migration), `${migration} must not be in an emitted phase`)
+    const rendered = spawnSync(
+      'bash',
+      [
+        resolve(ROOT, 'scripts/maintenance/apply-launch-migrations.sh'),
+        'render-predeploy-one',
+        migration,
+      ],
+      { cwd: ROOT, encoding: 'utf8' }
+    )
+    assert.equal(rendered.status, 2, rendered.stderr)
+    assert.match(rendered.stderr, /not in the ordered candidate manifest/)
+  }
+  // 052000 (predeploy) only accepts the copier aggregate body 134937 installs,
+  // so the single-file slot sits between token retirement and 052000.
+  assert.ok(
+    readFileSync(
+      resolve(ROOT, 'supabase/migrations/20261111134937_record_provenance_clocks_prod_reader.sql'),
+      'utf8'
+    ).includes('32879cff833594969c2cf3c09b7fdea921a624338b03b2c9c4f717f8bfbf7cf4') &&
+      readFileSync(
+        resolve(
+          ROOT,
+          'supabase/migrations/20260804052000_fail_closed_unbound_copier_aggregates.sql'
+        ),
+        'utf8'
+      ).includes('32879cff833594969c2cf3c09b7fdea921a624338b03b2c9c4f717f8bfbf7cf4')
+  )
+  assert.ok(
+    predeploy.indexOf('20261111133300_retire_legacy_token_rankings_cron_api.sql') <
+      predeploy.indexOf('20260804052000_fail_closed_unbound_copier_aggregates.sql')
+  )
+  const checklist = readFileSync(resolve(ROOT, 'docs/LAUNCH_CHECKLIST.md'), 'utf8')
+  for (const anchor of [
+    '`20261111194845_fix_gmx_source_contract_current_population.sql`',
+    '`20260715232500_quarantine_gmx_mixed_pnl.sql`',
+    '`20261111134937_record_provenance_clocks_prod_reader.sql`',
+    '`20260803100000_record_surface_publication_substrate.sql`',
+    '`20260803101000_verified_position_history_publication_writer.sql`',
+    '`20261111133300_retire_legacy_token_rankings_cron_api.sql`',
+    '`20260804052000_fail_closed_unbound_copier_aggregates.sql`',
+    '`20261113150757_clean_derived_formal_win_rate.sql`',
+  ]) {
+    assert.ok(checklist.includes(anchor), `LAUNCH_CHECKLIST.md must place ${anchor}`)
+  }
+  assert.doesNotMatch(checklist, /17 个迁移都不在清单里/)
 })
