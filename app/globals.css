@@ -2043,12 +2043,18 @@ button:focus-visible,
     transform: translateY(0);
   }
 }
+/* --row-index is the in-page position (TraderRow rowIndex), capped at 7 so the
+   whole stagger is ≤ 140ms + 260ms. It plays once: RankingTable sets
+   data-rows-entered after the first mount, so page / sort / period swaps
+   (which re-mount rows) render instantly. */
 .ranking-row-link {
-  animation: row-enter 0.3s cubic-bezier(0.4, 0, 0.2, 1) backwards;
-  animation-delay: calc(var(--row-index, 0) * 20ms);
+  animation: row-enter var(--motion-slow, 260ms) var(--ease-out, ease-out) backwards;
+  animation-delay: calc(min(var(--row-index, 0), 7) * 20ms);
 }
-/* Disable animation after initial load (perf) */
-.ranking-row-link.loaded {
+.ranking-table-rows[data-rows-entered] .ranking-row-link,
+/* Homepage: the server shell already painted these rows; replaying an
+   entrance from opacity 0 after the SSR→client swap reads as a blink. */
+html:has(#ssr-home-content-shell) .ranking-row-link {
   animation: none;
 }
 
@@ -2915,7 +2921,11 @@ input[type='search']::-webkit-search-cancel-button:hover {
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+    /* A 0.01ms animation still waits out its delay with backwards fill —
+       staggered rows would sit invisible for the full delay. */
+    animation-delay: 0s !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
     scroll-behavior: auto !important;
   }
 

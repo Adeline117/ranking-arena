@@ -65,11 +65,21 @@ const SCORE_CELL_ROW_STYLE: React.CSSProperties = {
   gap: 4,
 }
 
+/** A view change (period/sort/page) swallows the next value change within this window. */
+const VIEW_SWAP_WINDOW_MS = 15_000
+
 // ── Props ──────────────────────────────────────────────────────────────────
 
 export interface TraderRowProps {
   trader: Trader
   rank: number
+  /** Position within the current page (0-based) — drives the entrance stagger. */
+  rowIndex?: number
+  /**
+   * Identity of the user-chosen view (period / sort / page / filters). When it
+   * changes, value changes are a view swap, not a live update: no flash.
+   */
+  flashContextKey?: string
   source?: string
   language: string
   searchQuery?: string
@@ -86,6 +96,8 @@ export const TraderRow = memo(
   function TraderRow({
     trader,
     rank,
+    rowIndex = 0,
+    flashContextKey = '',
     source,
     language,
     searchQuery = '',
@@ -159,26 +171,43 @@ export const TraderRow = memo(
       })
     }
 
-    // Flash animation when ROI or rank changes
+    // Flash when ROI or rank changes from a LIVE update within the same view.
+    // A period / sort / page / filter change re-labels every row at once; a
+    // whole-table red/green flash there is noise, so it is skipped. The new
+    // view's data may land in the same render as the key change or a moment
+    // later (server fetch), so a key change also swallows the first value
+    // change that follows it within VIEW_SWAP_WINDOW_MS.
     const prevRoiRef = useRef(trader.roi)
     const prevRankRef = useRef(rank)
+    const prevContextRef = useRef(flashContextKey)
+    const viewSwapPendingSinceRef = useRef<number | null>(null)
     const [flashClass, setFlashClass] = useState('')
     useEffect(() => {
       const prevRoi = prevRoiRef.current
       const prevRank = prevRankRef.current
-      prevRoiRef.current = trader.roi
+      const roi = trader.roi
+      const contextChanged = prevContextRef.current !== flashContextKey
+      prevRoiRef.current = roi
       prevRankRef.current = rank
-      if (prevRoi != null && trader.roi != null && prevRoi !== trader.roi) {
-        setFlashClass(trader.roi > prevRoi ? 'flash-green' : 'flash-red')
-        const timer = setTimeout(() => setFlashClass(''), 1000)
-        return () => clearTimeout(timer)
+      prevContextRef.current = flashContextKey
+
+      const roiChanged = prevRoi != null && roi != null && prevRoi !== roi
+      const rankChanged = prevRank !== rank && prevRank !== 0
+      if (!roiChanged && !rankChanged) {
+        if (contextChanged) viewSwapPendingSinceRef.current = Date.now()
+        return
       }
-      if (prevRank !== rank && prevRank !== 0) {
-        setFlashClass(rank < prevRank ? 'flash-green' : 'flash-red')
-        const timer = setTimeout(() => setFlashClass(''), 1000)
-        return () => clearTimeout(timer)
-      }
-    }, [trader.roi, rank])
+      const pendingSince = viewSwapPendingSinceRef.current
+      viewSwapPendingSinceRef.current = null
+      if (contextChanged) return
+      if (pendingSince != null && Date.now() - pendingSince < VIEW_SWAP_WINDOW_MS) return
+
+      const improved =
+        roiChanged && prevRoi != null && roi != null ? roi > prevRoi : rank < prevRank
+      setFlashClass(improved ? 'flash-green' : 'flash-red')
+      const timer = setTimeout(() => setFlashClass(''), 1000)
+      return () => clearTimeout(timer)
+    }, [trader.roi, rank, flashContextKey])
 
     const rankClass = rank <= 3 ? ` rank-${rank}` : ''
     const heroStyle =
@@ -257,7 +286,7 @@ export const TraderRow = memo(
             href={href}
             prefetch={false}
             className="ranking-row-link"
-            style={{ ...LINK_BASE_STYLE, '--row-index': rank } as React.CSSProperties}
+            style={{ ...LINK_BASE_STYLE, '--row-index': rowIndex } as React.CSSProperties}
             aria-label={`#${rank} ${displayName}, ${roiAria}`}
             tabIndex={0}
             onKeyDown={(e) => {
@@ -381,5 +410,6 @@ export const TraderRow = memo(
   (prev, next) =>
     areTraderPropsEqual(prev, next) &&
     prev.source === next.source &&
-    prev.isExpanded === next.isExpanded
+    prev.isExpanded === next.isExpanded &&
+    prev.flashContextKey === next.flashContextKey
 )

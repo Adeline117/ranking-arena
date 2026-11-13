@@ -668,6 +668,23 @@ function RankingTableInner(props: {
     if (tableScrollRef.current) tableScrollRef.current.scrollTop = 0
   }, [resetKey])
 
+  // Row value flashes (TraderRow) are for live updates only. Any user-driven
+  // change of period / sort / page / filter / category swaps the row values
+  // wholesale, so TraderRow skips the flash whenever this key changes.
+  const flashContextKey = `${timeRange}|${category}|${source ?? ''}|${resetKey}`
+
+  // Staggered row entrance plays once, on the first mount of rows. After it
+  // finishes, data-rows-entered disables it so page / sort / period changes
+  // (which re-key and re-mount rows) render instantly instead of re-staggering.
+  const hasRows = paginatedTraders.length > 0
+  const [rowsEntered, setRowsEntered] = useState(false)
+  useEffect(() => {
+    if (rowsEntered || !hasRows) return
+    // Longest entrance = 7 × 20ms stagger + 260ms duration ≈ 400ms.
+    const timer = setTimeout(() => setRowsEntered(true), 450)
+    return () => clearTimeout(timer)
+  }, [rowsEntered, hasRows])
+
   // Detect horizontal overflow on the desktop table wrapper and toggle
   // data-hscroll (mirrored onto the header, which sits outside the wrapper).
   // The frozen-column CSS (sticky cells + backgrounds + divider shadow) is
@@ -1378,6 +1395,7 @@ function RankingTableInner(props: {
               <>
                 <Box
                   className="content-appear ranking-table-rows"
+                  data-rows-entered={rowsEntered ? 'true' : undefined}
                   style={{
                     display: 'flex',
                     flexDirection: 'column',
@@ -1404,6 +1422,8 @@ function RankingTableInner(props: {
                           <TraderRow
                             trader={presentationTrader}
                             rank={rank}
+                            rowIndex={idx}
+                            flashContextKey={flashContextKey}
                             source={source}
                             language={language}
                             searchQuery={debouncedSearch}
