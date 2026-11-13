@@ -568,9 +568,9 @@ async function fetchInitialLeaderboardPage(
     period: timeRange,
     limit,
     offset: page * limit,
-    // Preserve the homepage's established score threshold, but apply it to
-    // every page so pagination stays one coherent, SQL-filtered cohort.
-    minScore: 10,
+    // No extra score floor: /api/traders (which takes over after hydration and
+    // serves every later page) applies none, so a floor here made the
+    // server-rendered page N a different row range than the client's page N.
     sortBy: 'arena_score',
     signal,
   })

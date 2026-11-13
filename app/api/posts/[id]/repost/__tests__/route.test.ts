@@ -135,6 +135,12 @@ describe('POST /api/posts/[id]/repost', () => {
       })
     )
     expect(mockSendNotification).toHaveBeenCalledTimes(1)
+    // Keyed on the repost itself so it cannot dedupe against a comment
+    // notification for the same root post (both use type 'comment').
+    expect(mockSendNotification.mock.calls[0][1]).toMatchObject({
+      reference_id: 'new-repost',
+      link: '/post/new-repost',
+    })
   })
 
   it('rejects reposting the canonical root author own post', async () => {

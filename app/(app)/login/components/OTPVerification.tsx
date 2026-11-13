@@ -74,7 +74,13 @@ export default function OTPVerification({
   }
 
   const handleChange = (index: number, raw: string) => {
-    const digits = raw.replace(/\D/g, '')
+    let digits = raw.replace(/\D/g, '')
+    // Typing over an already-filled first box yields "old+new" (or "new+old");
+    // treat that as replacing the digit rather than a two-digit paste.
+    const existing = boxes[index]
+    if (digits.length === 2 && existing && digits.includes(existing)) {
+      digits = digits.replace(existing, '')
+    }
     if (digits.length > 1) {
       // Paste / autofill landing inside a box — spread across segments.
       distribute(digits, index)
@@ -149,8 +155,12 @@ export default function OTPVerification({
               }}
               inputMode="numeric"
               pattern="[0-9]*"
-              autoComplete="one-time-code"
-              maxLength={1}
+              // Only the first box receives SMS/password-manager autofill. It must
+              // accept the whole code: with maxLength=1 the browser truncated the
+              // autofilled code to its first digit before handleChange could
+              // spread it across the boxes.
+              autoComplete={i === 0 ? 'one-time-code' : 'off'}
+              maxLength={i === 0 ? OTP_LENGTH : 1}
               value={digit}
               onChange={(e) => handleChange(i, e.target.value)}
               onKeyDown={(e) => handleKeyDown(i, e)}

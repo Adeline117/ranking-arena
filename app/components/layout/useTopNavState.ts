@@ -12,6 +12,7 @@ import {
   isInboxViewerCurrent,
 } from '@/lib/inbox/viewer-scope'
 import { isViewerScopeCurrent } from '@/lib/auth/viewer-scope'
+import { addToHistory } from '@/lib/services/search-history'
 import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
 import { logger } from '@/lib/logger'
 import {
@@ -365,22 +366,9 @@ export function useTopNavState() {
     e.preventDefault()
     const trimmedQuery = searchQuery.trim()
     if (trimmedQuery) {
-      if (typeof window !== 'undefined') {
-        try {
-          const stored = localStorage.getItem('arena_search_history')
-          const history: string[] = stored ? JSON.parse(stored) : []
-          const filtered = history.filter((item) => item !== trimmedQuery)
-          const updated = [trimmedQuery, ...filtered].slice(0, 10)
-          localStorage.setItem('arena_search_history', JSON.stringify(updated))
-        } catch (_error) {
-          try {
-            localStorage.removeItem('arena_search_history')
-            localStorage.setItem('arena_search_history', JSON.stringify([trimmedQuery]))
-          } catch {
-            // Intentionally swallowed: localStorage unavailable (private mode), search history is optional
-          }
-        }
-      }
+      // Shared history service: same storage key, plus server sync for
+      // logged-in users (the hand-rolled localStorage copy skipped the sync).
+      void addToHistory(trimmedQuery, auth.userId ?? undefined)
       trackEvent('search', { query: trimmedQuery })
       router.push(`/search?q=${encodeURIComponent(trimmedQuery)}`)
     }

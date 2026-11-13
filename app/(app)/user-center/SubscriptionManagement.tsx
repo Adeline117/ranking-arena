@@ -166,6 +166,7 @@ export default function SubscriptionManagement({
                     },
                     body: JSON.stringify({
                       returnUrl: `${window.location.origin}/user-center?tab=membership`,
+                      flow_data: { type: 'subscription_cancel' },
                     }),
                   })
                   if (res.ok) {

@@ -28,6 +28,7 @@ import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { quarantineLegacyPositionHistory } from '@/lib/data/trader/history-quarantine'
 import { unavailablePublicRankHistoryProvenance } from '@/lib/rankings/public-rank-history'
 import type { TraderDetailResponseData } from '@/lib/contracts/trader-detail'
+import { decodeRouteParam } from '@/lib/utils/decode-route-param'
 
 // 输入验证 schema（支持字母、数字、下划线、连字符、点、中文、0x 地址）
 const handleSchema = z.string().min(1).max(255)
@@ -169,7 +170,7 @@ export async function GET(
       }
       const handle = parsed.data
 
-      const decodedHandle = decodeURIComponent(handle)
+      const decodedHandle = decodeRouteParam(handle)
 
       // E2E test fixture short-circuit (only when explicitly requested via
       // query param). Returns deterministic mock data so Playwright tests

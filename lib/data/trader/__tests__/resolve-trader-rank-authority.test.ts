@@ -174,6 +174,30 @@ describe('resolveTrader public identity authority', () => {
     )
   })
 
+  it('preserves underscores and percent signs in an exact identity filter', async () => {
+    const { supabase, sourceQuery } = resolverSupabase({
+      sourceRows: [
+        {
+          source: 'bybit',
+          source_trader_id: 'crypto_king',
+          handle: 'crypto_king',
+          avatar_url: null,
+        },
+      ],
+    })
+
+    await expect(resolveTrader(supabase as never, { handle: 'crypto_king' })).resolves.toEqual({
+      platform: 'bybit',
+      traderKey: 'crypto_king',
+      handle: 'crypto_king',
+      avatarUrl: null,
+    })
+
+    expect(sourceQuery.or).toHaveBeenCalledWith(
+      'handle.eq.crypto_king,source_trader_id.eq.crypto_king'
+    )
+  })
+
   it('recovers a legacy identity only from a sanitized sealed public row', async () => {
     const { supabase, from, publicQuery } = resolverSupabase({
       publicRows: [publishedRow()],

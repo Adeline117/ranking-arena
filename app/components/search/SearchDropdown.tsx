@@ -53,6 +53,7 @@ export default function SearchDropdown({
     searchData,
     searching,
     isOffline,
+    searchFailed,
     selectedIndex,
     setSelectedIndex,
     translatedTitles,
@@ -236,6 +237,12 @@ export default function SearchDropdown({
         <Box>
           {searching ? (
             <SearchSkeleton />
+          ) : searchFailed ? (
+            <Box role="alert" style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+              <Text size="sm" color="tertiary">
+                {t('searchFailed')}
+              </Text>
+            </Box>
           ) : searchData && searchData.total === 0 ? (
             <SearchEmptyState suggestions={searchData.suggestions} onClose={onClose} t={t} />
           ) : !searchData && !searching ? (

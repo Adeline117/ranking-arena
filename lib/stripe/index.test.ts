@@ -572,6 +572,40 @@ describe('createCheckoutSession', () => {
   })
 })
 
+describe('createCheckoutSession idempotency key', () => {
+  const base = {
+    customerId: 'cus_idem',
+    priceId: 'price_monthly_idem',
+    successUrl: 'https://example.test/s',
+    cancelUrl: 'https://example.test/c',
+  }
+
+  async function keyFor(extra: Record<string, unknown>) {
+    const create = jest.fn().mockResolvedValue({ id: 'cs_idem' })
+    stripe.checkout.sessions.create = create
+    await createCheckoutSession({ ...base, ...extra })
+    return (create.mock.calls[0][1] as { idempotencyKey: string }).idempotencyKey
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-11-12T10:00:10Z'))
+  })
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  it('keeps the same key for an identical retry in the same minute', async () => {
+    expect(await keyFor({ trialDays: 7 })).toBe(await keyFor({ trialDays: 7 }))
+  })
+
+  it('uses a new key when the trial or promotion code changes', async () => {
+    const plain = await keyFor({})
+    expect(await keyFor({ trialDays: 7 })).not.toBe(plain)
+    expect(await keyFor({ promotionCode: 'promo_1' })).not.toBe(plain)
+    expect(plain).toMatch(/^checkout_cus_idem_price_monthly_idem_\d+_[0-9a-f]{16}$/)
+  })
+})
+
 describe('createOneTimePaymentSession', () => {
   test('freezes dashboard-controlled price mutation for exact one-time payments', async () => {
     process.env.VERCEL_ENV = 'preview'

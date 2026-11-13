@@ -482,7 +482,37 @@ export default function NewGroupPostPage(): React.ReactElement {
         }
       }
 
-      let pollId = null
+      // Create the post first: the polls INSERT policy only admits a poll whose
+      // post_id is a post authored by the caller, so a poll inserted before its
+      // post (with no post_id) is always rejected. Same order as the profile
+      // composer (u/[handle]/new).
+      const { data: postData, error } = await supabase
+        .from('posts')
+        .insert({
+          title,
+          content: finalContent,
+          author_handle: userHandle || email?.split('@')[0] || 'user',
+          group_id: groupId,
+          author_id: userId,
+          images: images.map((img) => img.url),
+          poll_enabled: pollEnabled,
+          visibility: 'group',
+          is_sensitive: isSensitive,
+          content_warning: isSensitive && contentWarning ? contentWarning : null,
+        })
+        .select('id')
+        .single()
+
+      if (error || !postData) {
+        logger.error('Post creation error:', error)
+        const errorMsg =
+          error?.code === '42501' ? t('permissionDeniedJoinGroup') : t('createPostFailed')
+        showToast(errorMsg, 'error')
+        setLoading(false)
+        submitRef.current = false
+        return
+      }
+
       if (pollEnabled) {
         const validOptions = pollOptions.filter((opt) => opt.text.trim())
         const endAt = new Date(Date.now() + pollDuration * 60 * 60 * 1000)
@@ -490,6 +520,7 @@ export default function NewGroupPostPage(): React.ReactElement {
         const { data: pollData, error: pollError } = await supabase
           .from('polls')
           .insert({
+            post_id: postData.id,
             question: title,
             options: validOptions.map((opt, index) => ({
               text: opt.text.trim(),
@@ -502,45 +533,24 @@ export default function NewGroupPostPage(): React.ReactElement {
           .select('id')
           .single()
 
-        if (pollError) {
-          const errorMsg = pollError.message || t('createPollFailed')
-          showToast(errorMsg, 'error')
+        if (pollError || !pollData) {
+          logger.error('Poll creation error:', pollError)
+          // Do not leave a "poll" post without its poll.
+          await supabase.from('posts').delete().eq('id', postData.id)
+          showToast(pollError?.message || t('createPollFailed'), 'error')
           setLoading(false)
           submitRef.current = false
           return
         }
-        pollId = pollData.id
+
+        const { error: linkError } = await supabase
+          .from('posts')
+          .update({ poll_id: pollData.id })
+          .eq('id', postData.id)
+        if (linkError) {
+          logger.error('Poll link error:', linkError)
+        }
       }
-
-      const { data: postData, error } = await supabase
-        .from('posts')
-        .insert({
-          title,
-          content: finalContent,
-          author_handle: userHandle || email?.split('@')[0] || 'user',
-          group_id: groupId,
-          author_id: userId,
-          images: images.map((img) => img.url),
-          poll_enabled: pollEnabled,
-          poll_id: pollId,
-          visibility: 'group',
-          is_sensitive: isSensitive,
-          content_warning: isSensitive && contentWarning ? contentWarning : null,
-        })
-        .select('id')
-        .single()
-
-      if (error) {
-        logger.error('Post creation error:', error)
-        const errorMsg =
-          error.code === '42501' ? t('permissionDeniedJoinGroup') : t('createPostFailed')
-        showToast(errorMsg, 'error')
-        setLoading(false)
-        submitRef.current = false
-        return
-      }
-
-      logger.warn('Post created successfully:', postData?.id)
 
       clearDraft()
       if (typeof window !== 'undefined') {

@@ -39,7 +39,14 @@ export const GET = withAuth(
 
     const subscription = subResult.data
     if (subResult.error) {
-      logger.warn('Query error', { error: subResult.error, userId: user.id })
+      // Do not answer "free" on a read failure: that silently downgrades a
+      // paying user. Every client caller falls back to its own direct read on
+      // a non-OK response, and no tier cookie is written.
+      logger.error('Subscription query failed', { error: subResult.error, userId: user.id })
+      return NextResponse.json(
+        { error: 'Subscription status temporarily unavailable' },
+        { status: 503, headers: { 'Cache-Control': 'private, no-store' } }
+      )
     }
 
     const currentFollows = followsResult.count || 0
@@ -75,7 +82,9 @@ export const GET = withAuth(
     if (!subscription) {
       const defaultSubscription: UserSubscription = {
         userId: user.id,
-        tier: 'free',
+        // Same tier as the cookie: a profile-only Pro grant (NFT/admin) used to
+        // come back as tier 'free' here while the cookie said 'pro'.
+        tier,
         status: 'active',
         startDate: new Date().toISOString(),
         endDate: null,
