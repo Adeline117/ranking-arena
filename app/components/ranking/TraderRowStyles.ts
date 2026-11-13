@@ -225,15 +225,16 @@ export const ROI_TEXT_BASE_STYLE: React.CSSProperties = {
 }
 
 // Expand button style
-// 36x36 touch target: meets WCAG 2.2 AA (24×24) comfortably while staying
-// small enough to fit between the right-edge of the row and the sort chevron
-// area. Was 28×28 — too small for thumbs in the dense ranking list.
+// 24×36 target: still meets WCAG 2.2 AA (24×24). Width trimmed from 36 so it
+// sits inside the row's 20px right padding — flush right, the 10px chevron
+// (x 7–17px from the edge) no longer overlaps the right-aligned last value
+// (e.g. MDD "%"), which it did at 36px/right:2.
 export const EXPAND_BTN_STYLE: React.CSSProperties = {
   position: 'absolute',
-  right: 2,
+  right: 0,
   top: '50%',
   transform: 'translateY(-50%)',
-  width: 36,
+  width: 24,
   height: 36,
   display: 'flex',
   alignItems: 'center',
