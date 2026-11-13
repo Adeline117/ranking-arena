@@ -209,7 +209,6 @@ const eslintConfig = defineConfig([
       'app/components/auth/LoginModal.tsx',
       'app/components/market/LiveTradesFeed.tsx',
       'app/components/market/TokenSidePanel.tsx',
-      'app/components/portfolio/PortfolioAnalytics.tsx',
       'app/components/post/PostDetailModal.tsx',
       'app/components/profile/MobileProfileMenu.tsx',
       'app/components/ranking/RankingFilters.tsx',
