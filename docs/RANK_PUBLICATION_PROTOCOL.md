@@ -7,6 +7,7 @@
 公开榜单只读 `public.public_ranked_leaderboard`。这个视图只返回"当前 serving head 指向的那个 cohort"的行；
 serving head 只能由 `public.seal_leaderboard_rank_publication` 在**同一事务里**写 `leaderboard_source_freshness`
 时由触发器生成，而且封存必须覆盖该季**全部** expected source、每个来源都要在 48 小时内有新数据。
+不新鲜的少数来源由编排器在同一事务里从 expected 集合中隔离（见第 2 步），其余来源照常发布。
 所以一次发布 = 读输入 → 算分 → claim → 带 cohort 写行 → cleanup → rerank → seal，缺一步或换顺序都会被数据库拒绝。
 
 编排实现：`lib/rankings/publication/publish-season.ts` 的 `publishLeaderboardSeason(season, deps)`。
@@ -54,11 +55,25 @@ fence / claim / seal 相关 RPC 只对 owner 和 `service_role` 开放。
   （评分行条数必须等于该板 rank-limited 条目数、`board_as_of` 必须等于板水位等）。
 - 参数：`p_per_platform_limit = 1000`，`p_max_age_hours = 48`，`now` 取数据库 `clock_timestamp()`。
 
-### 2. 全有或全无的新鲜度门
+### 2. 新鲜度门：单源隔离，过多则整季拒发
 
-- 编排器要求**每个** expected source 都是 `fresh`，否则抛 `expected_source_not_fresh`（列出来源和原因），
-  此时还没有任何写入。
-- 数据库端同样强制：见第 8 步的触发器和第 9 步的读取函数。编排器提前拒绝只是为了不做无用的写入和回滚。
+- 迁移 `20261113011058_leaderboard_publication_source_isolation.sql`（只生成未应用）新增
+  `arena.leaderboard_publication_source_isolations`（每季×来源一行）和只追加的
+  `arena.leaderboard_publication_source_isolation_events`，并给 `arena_freshness_expected_sources()`
+  加一条"排除本季已隔离来源"的条件（标记 `leaderboard-publication-source-isolation@1`）。
+- 编排器在事务开头先删掉本季所有隔离行，再读 expected 集合和板证据；不新鲜（stale / missing /
+  latest_attempt_failed / count-check 未过等）的来源**写回隔离行 + 事件**，其余来源照常整季发布。
+  之后再读一次 expected 集合，必须恰好等于"新鲜子集"，否则 `isolation_not_applied` 回滚。
+  因为 cleanup / rerank / seal / 服务触发器 / 读取时校验都读同一个函数，隔离与封存在同一事务里原子生效；
+  被隔离来源的旧行被 rerank 置为 `rank = NULL`、没有 serving witness，不会被公开。
+- 已恢复新鲜的来源在同一事务里自动回到集合（事件 `restored`），`first_isolated_at` 在连续隔离期间保留。
+- 安全阈值（任一满足即整季拒发、不写任何东西、旧 head 继续服务）：
+  不新鲜来源数 > expected 的 50%；或该季 expected 中的核心来源
+  （`binance_futures / bybit / okx_futures / bitget_futures / hyperliquid`）全部不新鲜；
+  或隔离迁移未安装（回退为旧的全有或全无）。
+- 告警：隔离（`sources_isolated`）与拒发（`season_publication_refused`）都走 `deps.alert`，
+  worker 接 `lib/ingest/alerting` 的 Tier-A 实时通道（6 小时冷却）；结果里带
+  `isolatedSources / restoredSources`。
 - 不在 expected 集合里的新鲜来源（例如被隔离的 serving 来源）一律不写、不封存（封存会拒绝集合外来源，
   `20260724235000_leaderboard_publication_mutation_fence.sql:714-726`）。
 
@@ -147,7 +162,8 @@ p_expected_rank_count, p_expected_batch_count, p_computed_at, p_lease_seconds)`�
 - 任何来源的任意一行被改动（含旧式直接写入）→ 季 fence 前移 → 整季下线，直到下一次成功封存。
   因此旧写入函数 `upsertLeaderboard / zeroOutExcluded / atomicPlatformCleanup / cleanupStaleRows / rerankAllRows /
 persistLeaderboardRanks` 必须保持没有生产调用方（`scripts/qa/public-ranking-seal-wiring.test.mjs` 守卫）。
-- expected 集合变化（新增 serving 来源、隔离一个来源）→ 整季下线，直到按新集合重新封存。
+- expected 集合变化（新增 serving 来源、在发布事务之外改动隔离行）→ 整季下线，直到按新集合重新封存。
+  发布事务内的隔离与封存同时生效，不会造成空窗。
 - 任何来源水位超过 48 小时、或 `computed_at` 超过 48 小时 → 整季下线。
 
 ## 迁移回放顺序（20261111140053 的文件名陷阱）

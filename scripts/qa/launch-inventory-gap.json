@@ -36,6 +36,7 @@
     "20261111191928_binance_spot_contract_registration_serving_restore.sql",
     "20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql",
     "20261111194845_fix_gmx_source_contract_current_population.sql",
-    "20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql"
+    "20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql",
+    "20261113011058_leaderboard_publication_source_isolation.sql"
   ]
 }

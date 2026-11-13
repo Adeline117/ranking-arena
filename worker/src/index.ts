@@ -78,13 +78,16 @@ async function main() {
   const rankPublicationDatabase = pgRankPublicationDatabase(connectPublicationClient)
   const scoreCohort = createDefaultCohortScorer()
   // Publication alerts go through the shared ingest alert interface: a refused
-  // or degraded season pages (Tier-A, phase 0); exclusion warnings go to the
-  // digest. The orchestrator logs and swallows delivery failures itself.
+  // season or an isolated source pages (Tier-A, phase 0); exclusion warnings go
+  // to the digest. The orchestrator logs and swallows delivery failures itself.
   const rankPublicationAlert: RankPublicationAlertSink = (publicationAlert) =>
     ingestAlert(getRankingCommandChainConnection(), {
       sourceSlug: `rank-publication:${publicationAlert.season}`,
       phase: 0,
-      tier: publicationAlert.severity === 'critical' ? 'A' : 'B',
+      tier:
+        publicationAlert.severity === 'critical' || publicationAlert.code === 'sources_isolated'
+          ? 'A'
+          : 'B',
       message: `[${publicationAlert.code}] ${publicationAlert.message}`,
     })
 

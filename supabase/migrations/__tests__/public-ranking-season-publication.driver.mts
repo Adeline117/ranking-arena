@@ -29,8 +29,11 @@ const pool = new Pool({
   max: 2,
 })
 
+const alerts: Array<{ severity: string; code: string }> = []
+
 try {
   const result = await publishLeaderboardSeason(season, {
+    alert: (alert) => void alerts.push({ severity: alert.severity, code: alert.code }),
     database: pgRankPublicationDatabase(async () => {
       const client = await pool.connect()
       return {
@@ -41,7 +44,7 @@ try {
     }),
     scoreCohort: createDefaultCohortScorer(),
   })
-  process.stdout.write(`RESULT ${JSON.stringify({ ok: true, result })}\n`)
+  process.stdout.write(`RESULT ${JSON.stringify({ ok: true, result, alerts })}\n`)
 } catch (error) {
   const code =
     error instanceof RankPublicationError
@@ -50,7 +53,7 @@ try {
         ? error.name
         : 'unknown'
   const message = error instanceof Error ? error.message : String(error)
-  process.stdout.write(`RESULT ${JSON.stringify({ ok: false, code, message })}\n`)
+  process.stdout.write(`RESULT ${JSON.stringify({ ok: false, code, message, alerts })}\n`)
 } finally {
   await pool.end()
 }

@@ -20,6 +20,7 @@
 #   20260816151614 public_ranked_leaderboard
 #   20260816184500 public_ranked_leaderboard_source_freshness_gate
 #   20261113010326 release_leaderboard_rank_generation_lease_after_seal
+#   20261113011058 leaderboard_publication_source_isolation
 # leaderboard_ranks itself is created in the reviewed codec layout of
 # 20261111140053 (the forward repair that rebuilds it in production).
 
@@ -42,6 +43,7 @@ CHAIN=(
   20260816151614_public_ranked_leaderboard.sql
   20260816184500_public_ranked_leaderboard_source_freshness_gate.sql
   20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql
+  20261113011058_leaderboard_publication_source_isolation.sql
 )
 
 for executable in initdb pg_ctl psql; do
@@ -357,23 +359,36 @@ anon_view() {
 }
 
 # ---------------------------------------------------------------------------
-# Negative 1: one expected source (bybit) is stale -> nothing is written.
+# Isolation: one of three expected sources (bybit) is stale -> bybit is
+# isolated and the other two publish as one sealed season.
 # ---------------------------------------------------------------------------
 OUT="$(publish 90D)"
-assert_equal "stale source is refused" "false" "$(json_field "$OUT" ok)"
-assert_equal "stale source refusal code" "expected_source_not_fresh" "$(json_field "$OUT" code)"
-[[ "$(json_field "$OUT" message)" == *"bybit(stale)"* ]] || {
-  echo "stale refusal does not name bybit: $OUT" >&2
+assert_equal "stale minority source is isolated, not refused" "true" "$(json_field "$OUT" ok)"
+[[ "$(json_field "$OUT" result.isolatedSources)" == '[{"source":"bybit","reasons":["stale"],'* ]] || {
+  echo "isolated source is not reported: $OUT" >&2
   exit 1
 }
-assert_equal "view stays empty after stale refusal" "0" "$(view_count)"
-assert_equal "no rank row, claim, or receipt survives a refusal" "0|0|0" "$(psql_db -Atqc "
-  SELECT (SELECT pg_catalog.count(*) FROM public.leaderboard_ranks) || '|' ||
-         (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_claims) || '|' ||
-         (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_publications)")"
+assert_equal "isolated publication serves the other sources" "5" "$(view_count)"
+assert_equal "bybit is not served while isolated" "0" "$(psql_db -Atqc "
+  SELECT pg_catalog.count(*) FROM public.public_ranked_leaderboard WHERE source = 'bybit'")"
+assert_equal "isolation row and event are recorded" "bybit:{stale}|1" "$(psql_db -Atqc "
+  SELECT (SELECT pg_catalog.string_agg(filter_source || ':' || reasons::text, ',')
+            FROM arena.leaderboard_publication_source_isolations WHERE season_id = '90D') || '|' ||
+         (SELECT pg_catalog.count(*) FROM arena.leaderboard_publication_source_isolation_events
+           WHERE filter_source = 'bybit' AND action = 'isolated')")"
+assert_equal "serving head covers exactly the non-isolated sources" "binance_futures,hyperliquid" \
+  "$(psql_db -Atqc "SELECT pg_catalog.string_agg(source, ',' ORDER BY source)
+     FROM arena.public_ranked_leaderboard_serving_sources WHERE season_id = '90D'")"
+[[ "$(json_field "$OUT" alerts)" == *'"code":"sources_isolated"'* ]] || {
+  echo "isolation did not alert: $OUT" >&2
+  exit 1
+}
+assert_equal "isolation events are append-only" "rejected" "$(psql_db -Atqc "
+  DELETE FROM arena.leaderboard_publication_source_isolation_events" >/dev/null 2>&1 \
+  && echo deleted || echo rejected)"
 
 # ---------------------------------------------------------------------------
-# Positive: bybit publishes a fresh board -> the whole season is served.
+# Positive: bybit publishes a fresh board -> it rejoins; the whole season is served.
 # ---------------------------------------------------------------------------
 psql_db -q <<'SQL'
 INSERT INTO arena.leaderboard_snapshots VALUES
@@ -389,6 +404,13 @@ assert_equal "fresh season publishes" "true" "$(json_field "$OUT" ok)"
 COHORT_ONE="$(json_field "$OUT" result.scoreCohortId)"
 assert_equal "published rank count (partial by-flux excluded)" "7" \
   "$(json_field "$OUT" result.publishedRankCount)"
+assert_equal "bybit is reported restored" '["bybit"]' "$(json_field "$OUT" result.restoredSources)"
+assert_equal "exclusion reasons are reported" '{"filtered_by_scorer":1}' \
+  "$(json_field "$OUT" result.exclusions.byReason)"
+assert_equal "isolation rows cleared, restore event recorded" "0|1" "$(psql_db -Atqc "
+  SELECT (SELECT pg_catalog.count(*) FROM arena.leaderboard_publication_source_isolations) || '|' ||
+         (SELECT pg_catalog.count(*) FROM arena.leaderboard_publication_source_isolation_events
+           WHERE filter_source = 'bybit' AND action = 'restored')")"
 assert_equal "public view row count" "7" "$(view_count)"
 
 # Ranks are 1..N, follow arena_score DESC, and every row carries the cohort.
@@ -435,25 +457,42 @@ assert_equal "serving head is valid for ~48h" "t" "$(psql_db -Atqc "
 FIRST_VIEW="$(anon_view)"
 
 # ---------------------------------------------------------------------------
-# Negative 2: a new expected source without any board -> refusal; the view
-# keeps serving the previous cohort byte-for-byte.
+# Negative 2: four new expected sources without any board (4/7 > half) ->
+# refusal; nothing is written and the previous cohort is kept.
 # ---------------------------------------------------------------------------
-psql_db -qc "UPDATE arena.sources SET serving_mode = 'serving' WHERE slug = 'okx_futures'"
+psql_db -q <<'SQL'
+INSERT INTO arena.exchanges (id, name) VALUES (5, 'Gate'), (6, 'MEXC'), (7, 'KuCoin'), (8, 'HTX');
+INSERT INTO arena.sources (id, slug, exchange_id, status, serving_mode, timeframes_native) VALUES
+  (5, 'gate_futures', 5, 'active', 'serving', '{90}'),
+  (6, 'mexc_futures', 6, 'active', 'serving', '{90}'),
+  (7, 'kucoin_futures', 7, 'active', 'serving', '{90}'),
+  (8, 'htx_futures', 8, 'active', 'serving', '{90}');
+SQL
+COUNTS_BEFORE="$(psql_db -Atqc "
+  SELECT (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_claims) || '|' ||
+         (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_publications) || '|' ||
+         (SELECT pg_catalog.count(*) FROM arena.leaderboard_publication_source_isolation_events)")"
 OUT="$(publish 90D)"
-assert_equal "missing source is refused" "false" "$(json_field "$OUT" ok)"
-assert_equal "missing source refusal code" "expected_source_not_fresh" "$(json_field "$OUT" code)"
-[[ "$(json_field "$OUT" message)" == *"okx_futures(missing)"* ]] || {
-  echo "missing refusal does not name okx_futures: $OUT" >&2
+assert_equal "majority-missing season is refused" "false" "$(json_field "$OUT" ok)"
+assert_equal "majority refusal code" "expected_source_not_fresh" "$(json_field "$OUT" code)"
+[[ "$(json_field "$OUT" message)" == *"more than 50%"*"gate_futures(missing)"* ]] || {
+  echo "majority refusal has an unexpected message: $OUT" >&2
   exit 1
 }
-# The registry change alone invalidates the old head (expected set changed),
-# which is the database's own all-or-nothing rule; restoring it re-serves the
-# unchanged previous cohort because the refusal wrote nothing.
-psql_db -qc "UPDATE arena.sources SET serving_mode = 'shadow' WHERE slug = 'okx_futures'"
-assert_equal "previous cohort still served after refusal" "$FIRST_VIEW" "$(anon_view)"
-assert_equal "refusal left one claim and one receipt" "1|1" "$(psql_db -Atqc "
+[[ "$(json_field "$OUT" alerts)" == *'"severity":"critical","code":"season_publication_refused"'* ]] || {
+  echo "refusal did not alert: $OUT" >&2
+  exit 1
+}
+assert_equal "refusal wrote no claim, receipt, isolation or event" "$COUNTS_BEFORE|0" "$(psql_db -Atqc "
   SELECT (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_claims) || '|' ||
-         (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_publications)")"
+         (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_publications) || '|' ||
+         (SELECT pg_catalog.count(*) FROM arena.leaderboard_publication_source_isolation_events) || '|' ||
+         (SELECT pg_catalog.count(*) FROM arena.leaderboard_publication_source_isolations)")"
+# The registry change alone invalidates the old head (expected set changed),
+# which is the database's own rule; restoring it re-serves the unchanged
+# previous cohort because the refusal wrote nothing.
+psql_db -qc "UPDATE arena.sources SET serving_mode = 'shadow' WHERE id IN (5, 6, 7, 8)"
+assert_equal "previous cohort still served after refusal" "$FIRST_VIEW" "$(anon_view)"
 
 # ---------------------------------------------------------------------------
 # Negative 3 (database side): even if a caller skipped the orchestrator's gate,
@@ -537,7 +576,7 @@ assert_equal "view serves only the new cohort" "7|0|1" "$(psql_db -Atqc "
 assert_equal "every served row is the new cohort" "7" "$(psql_db -Atqc "
   SELECT pg_catalog.count(*) FROM public.leaderboard_ranks
   WHERE season_id = '90D' AND rank_publication_id = '$COHORT_TWO'")"
-assert_equal "generation sequence advanced past the foreign claim" "3" \
+assert_equal "generation sequence advanced past the foreign claim" "4" \
   "$(json_field "$OUT" result.generationSeq)"
 assert_equal "second cycle released its lease" "true" "$(json_field "$OUT" result.leaseReleased)"
 
@@ -547,7 +586,7 @@ assert_equal "second cycle released its lease" "true" "$(json_field "$OUT" resul
 # ---------------------------------------------------------------------------
 OUT="$(publish 90D)"
 assert_equal "immediate re-publication succeeds" "true" "$(json_field "$OUT" ok)"
-assert_equal "immediate re-publication is generation 4" "4" "$(json_field "$OUT" result.generationSeq)"
+assert_equal "immediate re-publication is generation 5" "5" "$(json_field "$OUT" result.generationSeq)"
 assert_equal "view still serves 7 rows" "7" "$(view_count)"
 
 echo "public ranking season publication PostgreSQL 17 proof passed"

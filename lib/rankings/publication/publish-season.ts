@@ -3,8 +3,12 @@
  *
  * Database protocol (see docs/RANK_PUBLICATION_PROTOCOL.md for line numbers):
  *
+ *   0. clear the season's source-isolation rows (20261113011058)
  *   1. read the score-input publish bundle + the season's expected sources
- *   2. refuse unless EVERY expected source has fresh (<48h) PASSED evidence
+ *   2. isolate every expected source without fresh (<48h) PASSED evidence from
+ *      this cohort (isolation row + event, same transaction); refuse the whole
+ *      season if more than half of the sources, or every core source, would be
+ *      isolated (or isolation is not installed). Refusals and isolations alert.
  *   3. score the fresh rows and keep only rows the DB eligibility policy admits
  *   4. claim one fenced generation (claim_leaderboard_rank_generation)
  *   5. upsert every row with rank_publication_id = score cohort
@@ -72,6 +76,7 @@ export type RankPublicationErrorCode =
   | 'duplicate_identity'
   | 'write_incomplete'
   | 'not_serving_after_seal'
+  | 'isolation_not_applied'
 
 export class RankPublicationError extends Error {
   constructor(
@@ -155,6 +160,32 @@ export interface RankPublicationAlert {
 
 export type RankPublicationAlertSink = (alert: RankPublicationAlert) => Promise<void> | void
 
+/**
+ * Sources whose loss alone refuses the season even below the isolation
+ * ratio: if every one of them that the season expects lacks fresh evidence,
+ * the remaining cohort is not a credible public leaderboard.
+ */
+export const RANK_PUBLICATION_CORE_SOURCES: readonly string[] = [
+  'binance_futures',
+  'bybit',
+  'okx_futures',
+  'bitget_futures',
+  'hyperliquid',
+]
+
+/**
+ * Isolation bound: more than this share of the expected sources lacking fresh
+ * evidence refuses the whole season instead of isolating them.
+ */
+export const RANK_PUBLICATION_MAX_ISOLATED_RATIO = 0.5
+
+export interface IsolatedSourceSummary {
+  source: string
+  reasons: string[]
+  /** When this source was first isolated in the current unbroken run. */
+  firstIsolatedAt: string
+}
+
 export interface PublishLeaderboardSeasonDependencies {
   database: RankPublicationDatabase
   /** Must return the publishable cohort (scoreTraders' `scoredFiltered`). */
@@ -163,11 +194,14 @@ export interface PublishLeaderboardSeasonDependencies {
   log?: (message: string) => void
   /** Operator alert channel (worker: lib/ingest/alerting). Optional. */
   alert?: RankPublicationAlertSink
+  /** Override RANK_PUBLICATION_CORE_SOURCES (tests). */
+  coreSources?: readonly string[]
 }
 
 /** Why a scored trader did not become a published row. */
 export type RankRowExclusionReason =
   | 'source_not_expected'
+  | 'filtered_by_scorer'
   | 'invalid_identity'
   | 'incomplete_or_estimated'
   | 'outlier'
@@ -180,7 +214,7 @@ export type RankRowExclusionReason =
   | 'max_drawdown_negative'
 
 export interface RankRowExclusionSummary {
-  /** Scored traders considered (expected + unexpected sources). */
+  /** Score-input rows of the expected sources handed to the scorer. */
   scored: number
   excluded: number
   byReason: Partial<Record<RankRowExclusionReason, number>>
@@ -217,6 +251,10 @@ export interface PublishLeaderboardSeasonResult {
   exclusions: RankRowExclusionSummary
   /** True when the claim lease was released inside the publishing transaction. */
   leaseReleased: boolean
+  /** Expected sources left out of this cohort (not fresh / count-check failed). */
+  isolatedSources: IsolatedSourceSummary[]
+  /** Previously isolated sources that rejoined with this cohort. */
+  restoredSources: string[]
 }
 
 interface PublishableRow {
@@ -530,6 +568,61 @@ export async function publishLeaderboardSeason(
   const log = deps.log ?? (() => undefined)
   const scoreCohortId = (deps.newScoreCohortId ?? randomUUID)().toLowerCase()
 
+  try {
+    return await publishInTransaction(season, deps, log, scoreCohortId)
+  } catch (error) {
+    // Any failure means the season was not (re)published; the previous
+    // serving head keeps serving until it expires. Never silent.
+    const code = error instanceof RankPublicationError ? error.code : 'database_error'
+    await deliverAlert(deps, log, {
+      season,
+      severity: 'critical',
+      code: 'season_publication_refused',
+      message: `${code}: ${error instanceof Error ? error.message : String(error)}`,
+      details: {
+        code,
+        ...(error instanceof RankPublicationError ? error.details : {}),
+      },
+    })
+    throw error
+  }
+}
+
+async function readExpectedSources(
+  tx: RankPublicationSqlExecutor,
+  season: PublicationWindow
+): Promise<string[]> {
+  const authority = await tx.query<{ source: string }>(
+    `SELECT DISTINCT expected.filter_source AS source
+       FROM public.arena_freshness_expected_sources() AS expected
+      WHERE expected.season_id = $1`,
+    [season]
+  )
+  return authority.rows.map((row) => row.source).sort(compareText)
+}
+
+/** Isolation needs both the table and the rewritten freshness authority. */
+async function probeSourceIsolation(tx: RankPublicationSqlExecutor): Promise<boolean> {
+  const probe = await tx.query<{ supported: boolean }>(
+    `SELECT pg_catalog.to_regclass('arena.leaderboard_publication_source_isolations') IS NOT NULL
+        AND pg_catalog.to_regclass('arena.leaderboard_publication_source_isolation_events') IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM pg_catalog.pg_proc AS function_row
+           WHERE function_row.oid =
+                 pg_catalog.to_regprocedure('public.arena_freshness_expected_sources()')
+             AND pg_catalog.strpos(function_row.prosrc,
+                   'leaderboard-publication-source-isolation@1') > 0
+        ) AS supported`
+  )
+  return probe.rows[0]?.supported === true
+}
+
+async function publishInTransaction(
+  season: PublicationWindow,
+  deps: PublishLeaderboardSeasonDependencies,
+  log: (message: string) => void,
+  scoreCohortId: string
+): Promise<PublishLeaderboardSeasonResult> {
   return deps.database.transaction(async (tx) => {
     const rpc = createPgRpcClient(tx)
     await tx.query(`SET LOCAL statement_timeout = '${RANK_PUBLICATION_STEP_STATEMENT_TIMEOUT}'`)
@@ -540,40 +633,141 @@ export async function publishLeaderboardSeason(
     )
     const computedAt = clock.rows[0].now
 
+    // 0. Source isolation: clear this season's isolation rows; every source
+    // that is still not fresh is re-isolated below in this same transaction.
+    const isolationSupported = await probeSourceIsolation(tx)
+    const previouslyIsolated = new Map<string, { reasons: string[]; first_isolated_at: string }>()
+    if (isolationSupported) {
+      const cleared = await tx.query<{
+        filter_source: string
+        reasons: string[]
+        first_isolated_at: string
+      }>(
+        `DELETE FROM arena.leaderboard_publication_source_isolations AS isolation
+          WHERE isolation.season_id = $1
+          RETURNING isolation.filter_source, isolation.reasons,
+                    pg_catalog.to_char(isolation.first_isolated_at AT TIME ZONE 'UTC',
+                      'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS first_isolated_at`,
+        [season]
+      )
+      for (const row of cleared.rows) previouslyIsolated.set(row.filter_source, row)
+    }
+
     // 1. Season authority and score-input evidence.
-    const authority = await tx.query<{ source: string }>(
-      `SELECT DISTINCT expected.filter_source AS source
-         FROM public.arena_freshness_expected_sources() AS expected
-        WHERE expected.season_id = $1`,
-      [season]
-    )
-    const expectedSources = authority.rows.map((row) => row.source).sort(compareText)
-    if (expectedSources.length === 0) {
+    const allExpectedSources = await readExpectedSources(tx, season)
+    if (allExpectedSources.length === 0) {
       throw new RankPublicationError(
         'season_authority_empty',
         `[${season}] no active serving source declares this season`
       )
     }
-    const expected = new Set(expectedSources)
     const bundle = await readSourcePublicationBundle(rpc, season, { now: new Date(computedAt) })
 
-    // 2. All-or-nothing freshness gate: a season is never published partially.
+    // 2. Freshness gate. A source without fresh PASSED evidence is isolated
+    // from this cohort (and from the season's expected set, atomically with
+    // the seal) unless too many / all core sources are affected, in which case
+    // the whole season is refused and the previous serving head keeps serving.
     const freshSources = new Set(bundle.evidence.freshAliases.map((alias) => alias.source))
-    const notFresh = expectedSources
+    const notFresh = allExpectedSources
       .filter((source) => !freshSources.has(source))
       .map((source) => {
         const retained = bundle.evidence.retainedAliases.find((alias) => alias.source === source)
-        return { source, reasons: retained ? retained.denial_reasons : ['missing'] }
+        return { source, reasons: retained ? [...retained.denial_reasons] : ['missing'] }
       })
+    const describeNotFresh = () =>
+      notFresh.map((entry) => `${entry.source}(${entry.reasons.join('+')})`).join(', ')
+    const isolatedSources: IsolatedSourceSummary[] = []
     if (notFresh.length > 0) {
-      throw new RankPublicationError(
-        'expected_source_not_fresh',
-        `[${season}] ${notFresh.length}/${expectedSources.length} expected source(s) lack fresh evidence: ${notFresh
-          .map((entry) => `${entry.source}(${entry.reasons.join('+')})`)
-          .join(', ')}`,
-        { notFresh }
+      const notFreshSet = new Set(notFresh.map((entry) => entry.source))
+      const coreSources = new Set(deps.coreSources ?? RANK_PUBLICATION_CORE_SOURCES)
+      const coreExpected = allExpectedSources.filter((source) => coreSources.has(source))
+      const allCoreDown =
+        coreExpected.length > 0 && coreExpected.every((source) => notFreshSet.has(source))
+      const tooMany =
+        notFresh.length > allExpectedSources.length * RANK_PUBLICATION_MAX_ISOLATED_RATIO
+      if (!isolationSupported || tooMany || allCoreDown) {
+        const why = !isolationSupported
+          ? 'source isolation is not installed'
+          : tooMany
+            ? `more than ${RANK_PUBLICATION_MAX_ISOLATED_RATIO * 100}% of expected sources`
+            : `every core source (${coreExpected.join(', ')})`
+        throw new RankPublicationError(
+          'expected_source_not_fresh',
+          `[${season}] ${notFresh.length}/${allExpectedSources.length} expected source(s) lack fresh evidence (${why}): ${describeNotFresh()}`,
+          { notFresh, tooMany, allCoreDown, isolationSupported }
+        )
+      }
+      for (const entry of notFresh) {
+        isolatedSources.push({
+          source: entry.source,
+          reasons: entry.reasons.length > 0 ? entry.reasons.slice(0, 32) : ['not_fresh'],
+          firstIsolatedAt: previouslyIsolated.get(entry.source)?.first_isolated_at ?? computedAt,
+        })
+      }
+      await tx.query(
+        `INSERT INTO arena.leaderboard_publication_source_isolations (
+           season_id, filter_source, reasons, first_isolated_at, isolated_at, score_cohort_id
+         )
+         SELECT $1, input.source, input.reasons, input.first_isolated_at, $3::timestamptz, $4::uuid
+           FROM pg_catalog.jsonb_to_recordset($2::jsonb)
+             AS input(source text, reasons text[], first_isolated_at timestamptz)`,
+        [
+          season,
+          JSON.stringify(
+            isolatedSources.map((entry) => ({
+              source: entry.source,
+              reasons: entry.reasons,
+              first_isolated_at: entry.firstIsolatedAt,
+            }))
+          ),
+          computedAt,
+          scoreCohortId,
+        ]
       )
     }
+    const isolatedSet = new Set(isolatedSources.map((entry) => entry.source))
+    const restoredSources = [...previouslyIsolated.keys()]
+      .filter((source) => allExpectedSources.includes(source) && !isolatedSet.has(source))
+      .sort(compareText)
+    if (isolationSupported && (isolatedSources.length > 0 || restoredSources.length > 0)) {
+      await tx.query(
+        `INSERT INTO arena.leaderboard_publication_source_isolation_events (
+           season_id, filter_source, action, reasons, score_cohort_id
+         )
+         SELECT $1, input.source, input.action, input.reasons, $3::uuid
+           FROM pg_catalog.jsonb_to_recordset($2::jsonb)
+             AS input(source text, action text, reasons text[])`,
+        [
+          season,
+          JSON.stringify([
+            ...isolatedSources.map((entry) => ({
+              source: entry.source,
+              action: 'isolated',
+              reasons: entry.reasons,
+            })),
+            ...restoredSources.map((source) => ({ source, action: 'restored', reasons: [] })),
+          ]),
+          scoreCohortId,
+        ]
+      )
+    }
+
+    // The database authority must now be exactly the fresh subset; every
+    // later step (cleanup, rerank, seal, serving trigger) reads it again.
+    const expectedSources = await readExpectedSources(tx, season)
+    const intendedSources = allExpectedSources.filter((source) => !isolatedSet.has(source))
+    if (expectedSources.join('\u0000') !== intendedSources.join('\u0000')) {
+      throw new RankPublicationError(
+        'isolation_not_applied',
+        `[${season}] expected set after isolation is [${expectedSources.join(', ')}], intended [${intendedSources.join(', ')}]`
+      )
+    }
+    if (isolatedSources.length > 0) {
+      log(
+        `[${season}] isolated ${isolatedSources.length}/${allExpectedSources.length} source(s): ${describeNotFresh()}`
+      )
+    }
+    const expected = new Set(expectedSources)
     const evidence = restrictEvidence(bundle.evidence, expected)
 
     // 3. Score the fresh authority rows; keep only DB-sealable rows.
@@ -590,19 +784,25 @@ export async function publishLeaderboardSeason(
     const identities = new Map<string, string[]>(expectedSources.map((source) => [source, []]))
     const seen = new Set<string>()
     const exclusions: RankRowExclusionSummary = {
-      scored: scored.length,
+      scored: traderRows.length,
       excluded: 0,
       byReason: {},
       bySource: {},
     }
+    // Denominator per source = score-input rows; rows the scorer itself drops
+    // (partial / estimated / outlier basis) are counted as filtered_by_scorer.
     const scoredBySource = new Map<string, number>()
+    for (const row of traderRows) {
+      scoredBySource.set(row.source, (scoredBySource.get(row.source) ?? 0) + 1)
+    }
+    const returnedBySource = new Map<string, number>()
     for (const trader of scored) {
       if (!expected.has(trader.source)) {
         exclusions.excluded += 1
         bump(exclusions.byReason, 'source_not_expected')
         continue
       }
-      scoredBySource.set(trader.source, (scoredBySource.get(trader.source) ?? 0) + 1)
+      returnedBySource.set(trader.source, (returnedBySource.get(trader.source) ?? 0) + 1)
       const verdict = classifyPublishableRow(trader)
       if ('reason' in verdict) {
         exclusions.excluded += 1
@@ -622,6 +822,15 @@ export async function publishLeaderboardSeason(
       seen.add(key)
       rows.push(row)
       identities.get(row.source)?.push(row.source_trader_id)
+    }
+    for (const [source, inputCount] of scoredBySource) {
+      const dropped = inputCount - (returnedBySource.get(source) ?? 0)
+      if (dropped <= 0) continue
+      exclusions.excluded += dropped
+      exclusions.byReason.filtered_by_scorer =
+        (exclusions.byReason.filtered_by_scorer ?? 0) + dropped
+      exclusions.bySource[source] ??= {}
+      exclusions.bySource[source].filtered_by_scorer = dropped
     }
     if (rows.length === 0) {
       throw new RankPublicationError(
@@ -737,6 +946,26 @@ export async function publishLeaderboardSeason(
       )
     }
 
+    if (isolatedSources.length > 0 || restoredSources.length > 0) {
+      await deliverAlert(deps, log, {
+        season,
+        severity: 'warning',
+        code: 'sources_isolated',
+        message:
+          isolatedSources.length > 0
+            ? `published without ${isolatedSources.length}/${allExpectedSources.length} source(s): ${isolatedSources
+                .map(
+                  (entry) =>
+                    `${entry.source}(${entry.reasons.join('+')}, since ${entry.firstIsolatedAt})`
+                )
+                .join(
+                  ', '
+                )}${restoredSources.length > 0 ? `; restored: ${restoredSources.join(', ')}` : ''}`
+            : `restored: ${restoredSources.join(', ')}`,
+        details: { isolatedSources, restoredSources },
+      })
+    }
+
     if (exclusionAlert) {
       // Raised inside the transaction only after the season is confirmed
       // served; a later COMMIT failure still surfaces as the job error.
@@ -772,6 +1001,8 @@ export async function publishLeaderboardSeason(
       })),
       exclusions,
       leaseReleased,
+      isolatedSources,
+      restoredSources,
     }
   })
 }

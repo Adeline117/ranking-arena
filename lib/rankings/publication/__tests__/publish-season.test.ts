@@ -243,18 +243,31 @@ describe('publishLeaderboardSeason gate', () => {
     }
   }
 
-  function harness(boards: unknown[]) {
+  function harness(
+    boards: unknown[],
+    options: { sources?: string[]; isolationSupported?: boolean } = {}
+  ) {
     const statements: string[] = []
+    const sources = options.sources ?? ['binance_futures', 'bybit']
     const executor: RankPublicationSqlExecutor = {
       async query(text) {
         statements.push(text)
+        if (text.includes('leaderboard-publication-source-isolation@1')) {
+          return {
+            rows: [{ supported: options.isolationSupported === true }] as never[],
+            rowCount: 1,
+          }
+        }
+        if (text.includes('DELETE FROM arena.leaderboard_publication_source_isolations')) {
+          return { rows: [], rowCount: 0 }
+        }
         if (text.includes('clock_timestamp()')) {
           return { rows: [{ now: iso(now) }] as never[], rowCount: 1 }
         }
         if (text.includes('arena_freshness_expected_sources')) {
           return {
-            rows: [{ source: 'binance_futures' }, { source: 'bybit' }] as never[],
-            rowCount: 2,
+            rows: sources.map((source) => ({ source })) as never[],
+            rowCount: sources.length,
           }
         }
         if (text.includes('arena_score_inputs_publish_bundle_json')) {
@@ -298,6 +311,65 @@ describe('publishLeaderboardSeason gate', () => {
     expect(statements.some((text) => /INSERT INTO public\.leaderboard_ranks/.test(text))).toBe(
       false
     )
+  })
+
+  it('refuses (and alerts) when more than half of the expected sources would be isolated', async () => {
+    const { statements, database } = harness(
+      [passedBoard('binance_futures', 1), missingBoard('bybit'), missingBoard('hyperliquid')],
+      { sources: ['binance_futures', 'bybit', 'hyperliquid'], isolationSupported: true }
+    )
+    const alerts: unknown[] = []
+    const error = await publishLeaderboardSeason('90D', {
+      database,
+      scoreCohort: jest.fn(),
+      alert: (alert) => void alerts.push(alert),
+    }).catch((failure: unknown) => failure)
+    expect((error as RankPublicationError).code).toBe('expected_source_not_fresh')
+    expect((error as RankPublicationError).message).toContain('more than 50%')
+    expect(alerts).toEqual([
+      expect.objectContaining({ severity: 'critical', code: 'season_publication_refused' }),
+    ])
+    expect(statements.some((text) => /INSERT INTO arena\.leaderboard_publication/.test(text))).toBe(
+      false
+    )
+  })
+
+  it('refuses when every expected core source would be isolated', async () => {
+    const { database } = harness(
+      [passedBoard('binance_futures', 1), missingBoard('bybit'), passedBoard('hyperliquid', 3)],
+      { sources: ['binance_futures', 'bybit', 'hyperliquid'], isolationSupported: true }
+    )
+    await expect(
+      publishLeaderboardSeason('90D', {
+        database,
+        scoreCohort: jest.fn(),
+        coreSources: ['bybit'],
+      })
+    ).rejects.toMatchObject({
+      code: 'expected_source_not_fresh',
+      message: expect.stringContaining('every core source (bybit)'),
+    })
+  })
+
+  it('isolates a minority stale source instead of refusing the season', async () => {
+    const { statements, database } = harness(
+      [passedBoard('binance_futures', 1), missingBoard('bybit'), passedBoard('hyperliquid', 3)],
+      { sources: ['binance_futures', 'bybit', 'hyperliquid'], isolationSupported: true }
+    )
+    // The fixture's authority does not shrink after the isolation insert, so
+    // the orchestrator's post-isolation cross-check must refuse.
+    await expect(
+      publishLeaderboardSeason('90D', { database, scoreCohort: jest.fn(), coreSources: [] })
+    ).rejects.toMatchObject({ code: 'isolation_not_applied' })
+    const isolationInsert = statements.findIndex((text) =>
+      /INSERT INTO arena\.leaderboard_publication_source_isolations/.test(text)
+    )
+    const eventInsert = statements.findIndex((text) =>
+      /INSERT INTO arena\.leaderboard_publication_source_isolation_events/.test(text)
+    )
+    expect(isolationInsert).toBeGreaterThan(-1)
+    expect(eventInsert).toBeGreaterThan(isolationInsert)
+    expect(statements.some((text) => /claim_leaderboard_rank_generation/.test(text))).toBe(false)
   })
 
   it('refuses a season whose sources are fresh but yield no publishable row', async () => {
