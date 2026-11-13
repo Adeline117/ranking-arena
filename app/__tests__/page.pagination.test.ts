@@ -64,6 +64,29 @@ describe('homepage ranking URL boundary', () => {
     expect(differentFilter.clientCohortKey).not.toBe(score.clientCohortKey)
   })
 
+  it('keeps SSR rows for invite/ad landings: attribution params are not a cohort', () => {
+    const landing = parseHomeRankingQuery({
+      ref: 'ABC123',
+      utm_source: 'x',
+      utm_campaign: 'airdrop',
+      fbclid: 'f',
+      gclid: 'g',
+    })
+    expect(landing.requiresClientCohortFetch).toBe(false)
+    expect(landing.isCanonical).toBe(true)
+    expect(landing.clientCohortKey).toBe(parseHomeRankingQuery({}).clientCohortKey)
+
+    const pagedInvite = parseHomeRankingQuery({ ref: 'ABC123', range: '30D', page: '2' })
+    expect(pagedInvite.requiresClientCohortFetch).toBe(false)
+    expect(pagedInvite.isCanonical).toBe(false)
+  })
+
+  it('still defers to the client for every real cohort param, even next to attribution', () => {
+    for (const key of ['sort', 'order', 'category', 'ex', 'exchange', 'q', 'preset', 'min_score']) {
+      expect(parseHomeRankingQuery({ ref: 'ABC', [key]: 'x' }).requiresClientCohortFetch).toBe(true)
+    }
+  })
+
   it('attaches ItemList authority only to the canonical 90D first page', () => {
     expect(parseHomeRankingQuery({}).isCanonical).toBe(true)
     expect(parseHomeRankingQuery({ page: '1' }).isCanonical).toBe(false)

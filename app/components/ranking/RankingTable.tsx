@@ -33,6 +33,7 @@ import { SortIndicator } from './Icons'
 import { getPnLTooltip, parseSourceInfo as parseSourceInfoUtil, getMedalGlowClass } from './utils'
 import { classifyStyle, type TradingStyle } from '@/lib/utils/trading-style'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
+import { RankingPeriodContext } from './RankingPeriodContext'
 
 // CSS animations loaded async to avoid render-blocking (medal glow, hover effects, pagination)
 // Critical layout styles (grid, responsive columns) are already in critical-css.ts and responsive.css
@@ -166,6 +167,10 @@ function RankingTableInner(props: {
   } | null
   /** False means category totals cannot define a finite page boundary. */
   categoryCountsAreExact?: boolean
+  /** Source-watermark staleness: an empty unfiltered board is "refreshing". */
+  isStale?: boolean
+  /** Clears advanced filters/presets (the empty state's reset action). */
+  onResetFilters?: () => void
 }) {
   const {
     traders: tradersRaw,
@@ -193,6 +198,8 @@ function RankingTableInner(props: {
     hasMore,
     categoryCounts,
     categoryCountsAreExact,
+    isStale = false,
+    onResetFilters,
   } = props
   const { t, language } = useLanguage()
 
@@ -639,6 +646,12 @@ function RankingTableInner(props: {
   const startIndex = hasServerPagination ? 0 : (currentPage - 1) * itemsPerPage
   const endIndex = hasServerPagination ? sortedTraders.length : startIndex + itemsPerPage
   const paginatedTraders = sortedTraders.slice(startIndex, endIndex)
+  // True whenever another server page provably exists (exact total or limit+1
+  // look-ahead). Used to suppress the card view's "end of list" footer.
+  const serverHasNextPage =
+    effectiveTotalCount !== null
+      ? totalPages !== null && currentPage < totalPages
+      : hasServerPagination && hasMore === true
 
   // Reset scroll position on page/sort/filter changes
   const tableScrollRef = useRef<HTMLDivElement>(null)
@@ -793,7 +806,7 @@ function RankingTableInner(props: {
   })
 
   return (
-    <>
+    <RankingPeriodContext.Provider value={seriesPeriod}>
       {/* Preload top-3 trader avatars for faster LCP. Card view on mobile
         only shows top-3 medals above the fold, and table view uses
         loading="lazy" on rows 4+. Previously preloaded 10 which opened
@@ -1185,7 +1198,10 @@ function RankingTableInner(props: {
                   gap: tokens.spacing[3],
                 }}
               >
-                <Text size="md" color="secondary">
+                <Text size="md" weight="semibold">
+                  {t('failedToLoadRankings')}
+                </Text>
+                <Text size="sm" color="secondary">
                   {error}
                 </Text>
                 {onRetry && (
@@ -1226,22 +1242,29 @@ function RankingTableInner(props: {
                 title={
                   debouncedSearch.trim() || hasActiveFilters
                     ? t('rankingNoMatchCriteria')
-                    : t('noTraderData')
+                    : // Single empty state for the board (RankingSection no longer
+                      // renders a second one). The request succeeded but no rows
+                      // are published: stale sources = refreshing, else empty period.
+                      isStale
+                      ? t('rankingsRefreshingTitle')
+                      : t('rankingsEmptyPeriodTitle')
                 }
                 description={
                   debouncedSearch.trim() || hasActiveFilters
                     ? t('rankingBroadenFilters')
-                    : undefined
+                    : t('rankingsRefreshingDesc')
                 }
                 action={
                   debouncedSearch.trim() || hasActiveFilters
                     ? {
-                        label: t('clearSearch'),
+                        // Label matches what the click actually clears.
+                        label: debouncedSearch.trim() ? t('clearSearch') : t('resetFilters'),
                         onClick: () => {
                           if (debouncedSearch.trim()) {
                             if (onSearchChange) onSearchChange('')
                             else setInternalSearchQuery('')
                           }
+                          if (hasActiveFilters && onResetFilters) onResetFilters()
                         },
                       }
                     : // Unfiltered + empty = soft fetch failure → offer a real retry
@@ -1364,9 +1387,27 @@ function RankingTableInner(props: {
                     </button>
                   </Box>
                 )}
+                {/* Mobile card view pages through the server cohort just like
+                  the desktop table: once the fetched page is fully expanded,
+                  expose the same limit+1 driven Pagination. Never claim
+                  "end of list" while the server still proves a next page. */}
+                {hasServerPagination && cardVisibleCount >= sortedTraders.length && (
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    totalCountIsExact={
+                      effectiveTotalCount !== null ? true : hasServerPagination ? false : true
+                    }
+                    hasMore={
+                      effectiveTotalCount === null && hasServerPagination ? hasMore === true : false
+                    }
+                    onPageChange={handlePaginationChange}
+                  />
+                )}
                 {cardVisibleCount >= sortedTraders.length &&
                   sortedTraders.length > 20 &&
-                  sortedTraders.length <= MAX_CARD_COUNT && (
+                  sortedTraders.length <= MAX_CARD_COUNT &&
+                  !serverHasNextPage && (
                     <Box style={{ textAlign: 'center', padding: tokens.spacing[4], opacity: 0.5 }}>
                       <Text size="xs" color="tertiary">
                         {t('endOfList')}
@@ -1397,7 +1438,9 @@ function RankingTableInner(props: {
                     const presentationTrader = normalizeTraderArenaScoreForPresentation(trader)
                     return (
                       <div
-                        key={`${trader.id}-${trader.source || 'unknown'}-${startIndex + idx}`}
+                        // Identity only — a position suffix remounted every row
+                        // whose position changed on sort/refresh.
+                        key={`${trader.id}-${trader.source || 'unknown'}`}
                         {...kbGetRowProps(idx)}
                       >
                         <SectionErrorBoundary>
@@ -1488,7 +1531,7 @@ function RankingTableInner(props: {
           </Box>
         </div>
       </Box>
-    </>
+    </RankingPeriodContext.Provider>
   )
 }
 

@@ -28,6 +28,7 @@ jest.mock('@/app/components/Providers/LanguageProvider', () => ({
           addToCompare: 'Add to compare',
           removeFromCompare: 'Remove from compare',
           winRatePercent: 'WIN%',
+          roiUnknown: 'ROI unknown',
         }) as Record<string, string>
       )[key] ?? key,
   }),

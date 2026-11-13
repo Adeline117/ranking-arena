@@ -368,6 +368,32 @@ const zhCore = {
   yes: '是',
   no: '否',
   ok: '确定',
+  rankingFilteredByExchange: '已按 {exchange} 筛选',
+  rankingClearExchangeFilter: '清除交易所筛选',
+  errorTimeout: '请求超时，请稍后重试',
+  resetFilters: '重置筛选',
+  clearSearch: '清除搜索',
+  failedToLoadRankings: '加载排名失败',
+  rankingNoMatchCriteria: '没有符合条件的交易员',
+  rankingBroadenFilters: '试试放宽筛选条件',
+  rankingSearchElsewhereTitle: '当前页没有匹配，以下是全站匹配的交易员：',
+  rankingFiltersCurrentPageOnly:
+    '筛选仅作用于当前页的 50 名交易员，其他页可能还有符合条件的交易员。',
+  roiUnknown: 'ROI 未知',
+  timeRangeAria: '时间范围',
+  showRangeRankingsAria: '查看 {range} 排名',
+  arenaScoreAria: 'Arena 评分：{score}',
+  arenaScoreOfHundredAria: 'Arena 评分 {score}（满分 100）',
+  platformTypeAria: '平台类型：{type}',
+  suspectedBotAria: '疑似机器人',
+  tradingStyleAria: '交易风格：{style}',
+  noRankHistoryAria: '暂无排名历史',
+  rankTrendAria: '排名走势：{from} → {to}',
+  traderActionsAria: '{name} 的操作',
+  botLabel: '机器人',
+  allTime90dShort: '全周期',
+  allTime90dTooltip:
+    '该交易所不提供原生 90 天窗口数据。显示的 90D 数据实际上是全部时间（历史）的表现数据。',
 } as const
 
 export default zhCore

@@ -1,4 +1,7 @@
 import React, { memo, useCallback, useState } from 'react'
+import { isAllTime90dSource } from '@/lib/utils/all-time-90d'
+import { useRankingPeriod } from './RankingPeriodContext'
+import { AllTime90dBadge } from './AllTime90dBadge'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import Link from 'next/link'
 import { tokens, alpha } from '@/lib/design-tokens'
@@ -63,6 +66,7 @@ export const TraderCard = memo(
     const displayName =
       trader.display_name || formatDisplayName(traderHandle, trader.source || source)
     const traderSource = trader.source || source || ''
+    const rankingPeriod = useRankingPeriod()
     const sourceInfo = parseSourceInfo(traderSource)
     const compareAccount: CompareAccountRef = { id: trader.id, source: traderSource }
     const parsedDrawdown = trader.max_drawdown == null ? null : Number(trader.max_drawdown)
@@ -159,7 +163,7 @@ export const TraderCard = memo(
             minWidth: 0,
             gap: tokens.spacing[2],
           }}
-          aria-label={`#${rank} ${displayName}, ROI ${roiText}`}
+          aria-label={`#${rank} ${displayName}, ${roiText === 'unknown' ? t('roiUnknown') : `ROI ${roiText}`}`}
         >
           {/* Top row: Rank + Avatar + Name */}
           <Box
@@ -228,7 +232,7 @@ export const TraderCard = memo(
                 {/* Confirmed Bot Badge — canonical themed style (was hardcoded
                     #a78bfa, an off-brand violet that didn't shift in light theme) */}
                 {(trader.source === 'web3_bot' || trader.trader_type === 'bot') && (
-                  <span role="img" aria-label="Bot" style={BOT_BADGE_STYLE}>
+                  <span role="img" aria-label={t('botLabel')} style={BOT_BADGE_STYLE}>
                     <span aria-hidden="true" style={BOT_EMOJI_STYLE}>
                       {'⚡'}
                     </span>
@@ -239,7 +243,7 @@ export const TraderCard = memo(
                 {trader.trader_type === 'suspected_bot' && trader.source !== 'web3_bot' && (
                   <span
                     role="img"
-                    aria-label="Suspected bot"
+                    aria-label={t('suspectedBotAria')}
                     style={{ ...BOT_BADGE_STYLE, opacity: 0.7 }}
                   >
                     <span aria-hidden="true" style={BOT_EMOJI_STYLE}>
@@ -302,7 +306,15 @@ export const TraderCard = memo(
                       </Text>
                       <ScoreConfidenceIndicator trader={trader} />
                     </Box>
-                    <ScoreMiniBar score={Number(trader.arena_score)} width={50} height={4} />
+                    <ScoreMiniBar
+                      score={Number(trader.arena_score)}
+                      width={50}
+                      height={4}
+                      ariaLabel={t('arenaScoreOfHundredAria').replace(
+                        '{score}',
+                        String(Math.round(Number(trader.arena_score)))
+                      )}
+                    />
                   </Box>
                 )
               })()}
@@ -326,6 +338,7 @@ export const TraderCard = memo(
               showArrow
               style={{ marginLeft: 'auto', flexShrink: 0 }}
             />
+            {rankingPeriod === '90D' && isAllTime90dSource(traderSource) && <AllTime90dBadge />}
           </Box>
 
           {/* Stats row */}
@@ -411,7 +424,7 @@ export const TraderCard = memo(
             and Arena Score on narrow cards. */}
         <Box
           role="group"
-          aria-label={`${displayName} actions`}
+          aria-label={t('traderActionsAria').replace('{name}', displayName)}
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',

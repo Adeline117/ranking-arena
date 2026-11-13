@@ -16,6 +16,7 @@ import {
   filterPublicRankingSources,
   sanitizePublicRankingPayload,
 } from '@/lib/rankings/publication-policy'
+import { summarizeSourceFreshness, type SourceFreshnessRow } from '@/lib/rankings/source-freshness'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -148,7 +149,11 @@ function partialResponse(
   period: '7D' | '30D' | '90D',
   limit: number,
   offset: number,
-  reason: string
+  reason: string,
+  freshness: { as_of: string | null; source_freshness: unknown[] } = {
+    as_of: null,
+    source_freshness: [],
+  }
 ) {
   return response(
     {
@@ -160,9 +165,9 @@ function partialResponse(
       total_count: null,
       totalCountIsExact: false,
       hasMore: false,
-      as_of: null,
+      as_of: freshness.as_of,
       is_stale: true,
-      source_freshness: [],
+      source_freshness: freshness.source_freshness,
       availableSources: [],
       availableSourcesIsExact: false,
       limit,
@@ -193,7 +198,8 @@ export async function GET(request: NextRequest) {
 
   const { period, limit, offset } = parsed.data
   try {
-    const query = publicRankedLeaderboardClient(getSupabaseAdmin())
+    const supabase = getSupabaseAdmin()
+    const query = publicRankedLeaderboardClient(supabase)
       .from('public_ranked_leaderboard')
       .select(PUBLIC_RANKED_LEADERBOARD_COLUMNS)
       .eq('season_id', period)
@@ -227,6 +233,33 @@ export async function GET(request: NextRequest) {
 
     const pageRows = safeRows.slice(0, limit)
     const visibleSources = filterPublicRankingSources(pageRows.map((row) => row.source))
+
+    // Same fail-closed source-watermark proof as /api/rankings: this endpoint
+    // used to hard-code `is_stale: false` / `as_of: null`, so it reported a
+    // "fresh" board while the homepage (stricter window) showed it as stale.
+    // A missing/errored watermark means no row is returned as ranked.
+    const freshnessResult =
+      visibleSources.length > 0
+        ? await supabase
+            .from('leaderboard_source_freshness')
+            .select('source,source_as_of')
+            .eq('season_id', period)
+            .in('source', visibleSources)
+        : { data: [] as SourceFreshnessRow[], error: null }
+    if (freshnessResult.error) {
+      logger.warn('[rankings-live] source freshness query failed', freshnessResult.error)
+    }
+    const freshness = summarizeSourceFreshness(
+      freshnessResult.error ? [] : ((freshnessResult.data || []) as SourceFreshnessRow[]),
+      visibleSources
+    )
+    if (pageRows.length > 0 && freshness.isStale) {
+      return partialResponse(period, limit, offset, 'source_freshness_unverified', {
+        as_of: freshness.asOf,
+        source_freshness: freshness.sources,
+      })
+    }
+
     return response(
       {
         traders: pageRows.map(mapPublicRankedRow),
@@ -237,11 +270,9 @@ export async function GET(request: NextRequest) {
         total_count: null,
         totalCountIsExact: false,
         hasMore: rawRows.length > limit,
-        // The view's serving head validates source freshness internally. It
-        // intentionally does not expose receipt/watermark proof tokens here.
-        as_of: null,
-        is_stale: false,
-        source_freshness: [],
+        as_of: freshness.asOf,
+        is_stale: freshness.isStale,
+        source_freshness: freshness.sources,
         availableSources: visibleSources,
         availableSourcesIsExact: false,
         limit,

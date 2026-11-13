@@ -6509,6 +6509,23 @@ const ja = {
   historyVerificationDesc:
     'このトレーダーの履歴データが検証を通過すると、チャートと詳細な統計がここに表示されます。',
   historyVerificationCurrentRanking: '現在のランキング（{period}）',
+  rankingFilteredByExchange: '{exchange} で絞り込み中',
+  rankingClearExchangeFilter: '取引所の絞り込みを解除',
+  rankingSearchElsewhereTitle: 'このページに一致なし。Arena 全体で一致したトレーダー：',
+  rankingFiltersCurrentPageOnly:
+    '絞り込みはこのページの 50 名のみに適用されます。他のページにも該当者がいる可能性があります。',
+  roiUnknown: 'ROI 不明',
+  timeRangeAria: '期間',
+  showRangeRankingsAria: '{range} のランキングを表示',
+  arenaScoreAria: 'Arena スコア：{score}',
+  arenaScoreOfHundredAria: 'Arena スコア {score}／100',
+  platformTypeAria: 'プラットフォーム種別：{type}',
+  suspectedBotAria: 'ボットの疑い',
+  tradingStyleAria: '取引スタイル：{style}',
+  noRankHistoryAria: '順位履歴なし',
+  rankTrendAria: '順位推移：{from} → {to}',
+  traderActionsAria: '{name} の操作',
+  allTime90dShort: '全期間',
 } as const
 
 export default ja

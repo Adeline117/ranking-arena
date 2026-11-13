@@ -432,6 +432,32 @@ const enCore = {
   rankingsRefreshingDesc:
     'We only publish rankings after the latest exchange data passes verification. Please check back shortly.',
   rankingsEmptyPeriodTitle: 'No ranked traders for this period yet',
+  rankingFilteredByExchange: 'Filtered by {exchange}',
+  rankingClearExchangeFilter: 'Clear exchange filter',
+  errorTimeout: 'Request timed out, please try again',
+  resetFilters: 'Reset Filters',
+  clearSearch: 'Clear search',
+  failedToLoadRankings: 'Failed to load rankings',
+  rankingNoMatchCriteria: 'No traders match your criteria',
+  rankingBroadenFilters: 'Try broadening your filters',
+  rankingSearchElsewhereTitle: 'No match on this page. Matching traders across Arena:',
+  rankingFiltersCurrentPageOnly:
+    'Filters apply to the 50 traders on this page only; other pages may have more matches.',
+  roiUnknown: 'ROI unknown',
+  timeRangeAria: 'Time range',
+  showRangeRankingsAria: 'Show {range} rankings',
+  arenaScoreAria: 'Arena Score: {score}',
+  arenaScoreOfHundredAria: 'Arena Score {score} of 100',
+  platformTypeAria: 'Platform type: {type}',
+  suspectedBotAria: 'Suspected bot',
+  tradingStyleAria: 'Trading style: {style}',
+  noRankHistoryAria: 'No rank history',
+  rankTrendAria: 'Rank trend: {from} → {to}',
+  traderActionsAria: '{name} actions',
+  botLabel: 'Bot',
+  allTime90dShort: 'All-time',
+  allTime90dTooltip:
+    'This exchange does not provide a native 90-day window. The 90D data shown is actually all-time (lifetime) performance data.',
 } as const
 
 export default enCore
