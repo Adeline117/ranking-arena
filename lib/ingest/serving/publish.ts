@@ -348,7 +348,7 @@ async function publishLeaderboardSnapshotTransactionInternal(
   // Count evidence must be read only after the source publication lock and
   // on this same transaction client. Concurrent publishers can no longer
   // evaluate against a baseline that changed before their own commit.
-  const { baseline, isBootstrap, shifted } = await getCountBaseline(
+  const { baseline, isBootstrap, shifted, shiftPendingConfirmation } = await getCountBaseline(
     src.id,
     timeframe,
     expectedCount,
@@ -364,6 +364,13 @@ async function publishLeaderboardSnapshotTransactionInternal(
     baseline,
     isBootstrap ? BOOTSTRAP_DEVIATION_PCT : ROLLING_DEVIATION_PCT
   )
+  if (shiftPendingConfirmation) {
+    console.error(
+      `[publish] ${src.slug} tf${timeframe}: sustained DOWNWARD level-shift to ` +
+        `${shiftPendingConfirmation.proposedBaseline} (baseline ${shiftPendingConfirmation.currentBaseline}) ` +
+        `held for manual confirmation; set arena.sources.meta.count_shift_ack.${timeframe} to accept`
+    )
+  }
 
   const { rows: snap } = await client.query<{ id: number; scraped_at: string }>(
     `INSERT INTO arena.leaderboard_snapshots
@@ -390,6 +397,15 @@ async function publishLeaderboardSnapshotTransactionInternal(
           ? { observation_cycle_id: input.observationCycleId.trim() }
           : {}),
         ...(countBaselineGeneration ? { count_baseline_generation: countBaselineGeneration } : {}),
+        // Read by the freshness sentinel, which alerts for manual confirmation.
+        ...(shiftPendingConfirmation
+          ? {
+              count_shift_pending: {
+                proposed_baseline: shiftPendingConfirmation.proposedBaseline,
+                current_baseline: shiftPendingConfirmation.currentBaseline,
+              },
+            }
+          : {}),
         ...(preparedTrust
           ? {
               source_run_id: preparedTrust.sourceRunId,

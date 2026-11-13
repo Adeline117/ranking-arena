@@ -84,12 +84,51 @@ export interface CountBaseline {
   isBootstrap: boolean
   /** true when a SUSTAINED level-shift was adopted to break a deadlock. */
   shifted?: boolean
+  /** true when the adopted downward shift was operator-acknowledged. */
+  shiftAcknowledged?: boolean
+  /**
+   * A sustained DOWNWARD shift too far below the historical baseline was
+   * detected but NOT adopted: repeated truncation must never silently become
+   * the new normal. The crawl is judged against the old baseline (and fails);
+   * an operator confirms the new level by setting
+   * arena.sources.meta.count_shift_ack.<timeframe> = <proposedBaseline>.
+   */
+  shiftPendingConfirmation?: { proposedBaseline: number; currentBaseline: number }
 }
 
 /** Consecutive consistent crawls required to ratify a level-shift. */
 export const SHIFT_CONFIRM_CRAWLS = 3
 /** Max spread among the confirming crawls for them to count as "consistent". */
 export const SHIFT_MAX_SPREAD_PCT = 10
+/**
+ * Floor for automatic downward level-shifts: a new level more than this far
+ * below the current (historical) baseline is held for operator confirmation.
+ */
+export const SHIFT_MAX_AUTO_DROP_PCT = 30
+
+/**
+ * Operator acknowledgement of a downward level-shift for (source, timeframe):
+ * arena.sources.meta.count_shift_ack.<timeframe> = approved level (number).
+ */
+async function readShiftAcknowledgement(
+  sourceId: number,
+  timeframe: number,
+  executor: CountBaselineQueryExecutor
+): Promise<number | null> {
+  const { rows } = await executor.query<{ ack: string | number | null }>(
+    `SELECT CASE
+              WHEN pg_catalog.jsonb_typeof(source_row.meta->'count_shift_ack'->($2::int)::text) = 'number'
+              THEN (source_row.meta->'count_shift_ack'->>($2::int)::text)::numeric
+            END AS ack
+       FROM arena.sources AS source_row
+      WHERE source_row.id = $1`,
+    [sourceId, timeframe]
+  )
+  const ack = rows[0]?.ack
+  if (ack === null || ack === undefined) return null
+  const value = Number(ack)
+  return Number.isFinite(value) && value > 0 ? value : null
+}
 
 /**
  * Survey counts age (boards grow/shrink over months) — a 6-month-old
@@ -272,7 +311,31 @@ export async function getCountBaseline(
         const tolerance = isBootstrap ? BOOTSTRAP_DEVIATION_PCT : ROLLING_DEVIATION_PCT
         const driftPct = (Math.abs(recentMedian - baseline) / baseline) * 100
         if (spreadPct <= SHIFT_MAX_SPREAD_PCT && driftPct > tolerance) {
-          return { baseline: Math.round(recentMedian), isBootstrap: false, shifted: true }
+          const proposed = Math.round(recentMedian)
+          const dropPct = ((baseline - recentMedian) / baseline) * 100
+          if (dropPct > SHIFT_MAX_AUTO_DROP_PCT) {
+            // Downward floor: consistent truncation is indistinguishable from
+            // a genuinely smaller board without a human. Adopt only an
+            // operator-acknowledged level that matches the observed one.
+            const ack = await readShiftAcknowledgement(sourceId, timeframe, executor)
+            if (
+              ack !== null &&
+              (Math.abs(recentMedian - ack) / ack) * 100 <= SHIFT_MAX_SPREAD_PCT
+            ) {
+              return {
+                baseline: proposed,
+                isBootstrap: false,
+                shifted: true,
+                shiftAcknowledged: true,
+              }
+            }
+            return {
+              baseline,
+              isBootstrap,
+              shiftPendingConfirmation: { proposedBaseline: proposed, currentBaseline: baseline },
+            }
+          }
+          return { baseline: proposed, isBootstrap: false, shifted: true }
         }
       }
     }
