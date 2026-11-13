@@ -13,6 +13,7 @@ import { isRetiredSource } from '@/lib/constants/retired-sources'
 import { getDataMode } from '@/lib/constants/serving-cutover'
 import { resolveServingTrader } from '@/lib/data/serving/resolve'
 import { getPublicFirstScreen } from '@/lib/data/serving/first-screen'
+import { headlineWindowFor } from '@/lib/data/serving/headline-window'
 import { fetchSimilarTraders } from '@/lib/data/trader/similar'
 import { getSourceCapabilities } from '@/lib/data/serving/capabilities'
 import { getTraderAvatarSrc } from '@/lib/utils/avatar'
@@ -631,6 +632,7 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
       pnl: best?.headlinePnl?.value ?? null,
       win_rate: bestWinRate,
       max_drawdown: typeof best?.extras.mdd === 'number' ? (best.extras.mdd as number) : null,
+      headline_window: headlineWindowFor(best?.timeframe),
       is_verified_data: verifiedKeys.has(
         verifiedTraderKey(servingResolved.source, servingResolved.exchangeTraderId)
       ),
