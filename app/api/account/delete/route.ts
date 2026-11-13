@@ -3,6 +3,7 @@
  * Related account data is retained until the hard-delete cron runs.
  */
 
+import { accountRequiresPassword } from '@/lib/auth/password-status'
 import {
   PENDING_DELETION_BAN_DURATION,
   RENEWABLE_SUBSCRIPTION_STATUSES,
@@ -22,6 +23,21 @@ const logger = createLogger('account-delete')
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+/**
+ * Which confirmation the delete dialog must collect. The client cannot tell
+ * a code-only email signup (no password) from a password account by itself.
+ */
+export const GET = withAuth(
+  async ({ user }) => {
+    const requiresPassword = await accountRequiresPassword(getSupabaseAdmin(), user)
+    return NextResponse.json(
+      { requires_password: requiresPassword },
+      { headers: { 'Cache-Control': 'private, no-store' } }
+    )
+  },
+  { name: 'account-delete-requirements', rateLimit: 'read' }
+)
+
 export const POST = withAuth(
   async ({ user, request }) => {
     let body: { password?: string; reason?: string; confirm?: string }
@@ -32,9 +48,8 @@ export const POST = withAuth(
     }
 
     const { password, reason, confirm } = body
-    const providers = (user.identities ?? []).map((identity) => identity.provider)
-    const isWalletEmail = (user.email ?? '').endsWith('@wallet.arena')
-    const hasPassword = !isWalletEmail && providers.includes('email')
+    const adminSupabase = getSupabaseAdmin()
+    const hasPassword = await accountRequiresPassword(adminSupabase, user)
 
     if (hasPassword) {
       if (!password) return badRequest('Password required')
@@ -51,7 +66,6 @@ export const POST = withAuth(
       return badRequest('Type DELETE to confirm account deletion')
     }
 
-    const adminSupabase = getSupabaseAdmin()
     const now = new Date()
     const scheduledDeletion = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1_000)
     const recoveryToken = randomBytes(32).toString('base64url')

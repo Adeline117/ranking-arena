@@ -12,6 +12,8 @@ const mockAdminSignOut = jest.fn()
 const mockStripeUpdate = jest.fn()
 const mockLocalSubscriptionUpdate = jest.fn()
 let subscriptionResult: { data: Record<string, unknown> | null; error: unknown }
+let passwordStatus: { data: unknown; error: { message: string } | null }
+let scheduleResult: { data: unknown; error: { message: string } | null }
 
 jest.mock('@/lib/api/middleware', () => ({
   withAuth: (handler: Function) => (request: Request) => handler({ user: mockUser, request }),
@@ -63,7 +65,7 @@ jest.mock('@/lib/utils/logger', () => ({
 }))
 
 import { createHash } from 'node:crypto'
-import { POST } from '../route'
+import { GET, POST } from '../route'
 
 function request(body: Record<string, unknown>): Request {
   return new Request('https://www.arenafi.org/api/account/delete', {
@@ -87,7 +89,11 @@ describe('account deletion scheduling', () => {
       error: null,
     }
     mockPasswordSignIn.mockResolvedValue({ error: null })
-    mockRpc.mockResolvedValue({ data: new Date().toISOString(), error: null })
+    passwordStatus = { data: true, error: null }
+    scheduleResult = { data: new Date().toISOString(), error: null }
+    mockRpc.mockImplementation(async (name: string) =>
+      name === 'auth_user_has_password' ? passwordStatus : scheduleResult
+    )
     mockStripeUpdate.mockResolvedValue({ status: 'active' })
     mockAdminUpdateUser.mockResolvedValue({ error: null })
     mockAdminSignOut.mockResolvedValue({ error: null })
@@ -107,7 +113,8 @@ describe('account deletion scheduling', () => {
         p_recovery_token_hash: createHash('sha256').update(body.recovery_token).digest('hex'),
       })
     )
-    expect(mockRpc.mock.calls[0][1].p_recovery_token_hash).not.toBe(body.recovery_token)
+    const scheduleCall = mockRpc.mock.calls.find(([name]) => name === 'schedule_account_deletion')
+    expect(scheduleCall?.[1].p_recovery_token_hash).not.toBe(body.recovery_token)
     expect(mockStripeUpdate).toHaveBeenCalledWith('sub_123', { cancel_at_period_end: true })
     expect(mockLocalSubscriptionUpdate).toHaveBeenCalledWith({ cancel_at_period_end: true })
     expect(mockAdminUpdateUser).toHaveBeenCalledWith('user-1', { ban_duration: '876000h' })
@@ -116,7 +123,7 @@ describe('account deletion scheduling', () => {
   })
 
   it('compensates subscription renewal when the deletion transaction fails', async () => {
-    mockRpc.mockResolvedValue({ data: null, error: { message: 'database unavailable' } })
+    scheduleResult = { data: null, error: { message: 'database unavailable' } }
 
     const response = await POST(request({ password: 'correct' }))
 
@@ -144,5 +151,35 @@ describe('account deletion scheduling', () => {
     expect(response.status).toBe(200)
     expect(mockPasswordSignIn).not.toHaveBeenCalled()
     expect(mockStripeUpdate).not.toHaveBeenCalled()
+  })
+
+  it('lets a code-only email signup (no password) confirm by typing DELETE', async () => {
+    passwordStatus = { data: false, error: null }
+
+    const requirements = await (await GET(request({}) as never)).json()
+    const response = await POST(request({ confirm: 'DELETE' }))
+
+    expect(requirements).toEqual({ requires_password: false })
+    expect(response.status).toBe(200)
+    expect(mockPasswordSignIn).not.toHaveBeenCalled()
+    expect(mockRpc).toHaveBeenCalledWith('auth_user_has_password', { p_user_id: 'user-1' })
+  })
+
+  it('still demands the password from an account that has one', async () => {
+    const requirements = await (await GET(request({}) as never)).json()
+    const response = await POST(request({ confirm: 'DELETE' }))
+
+    expect(requirements).toEqual({ requires_password: true })
+    expect(response.status).toBe(400)
+    expect(mockAdminUpdateUser).not.toHaveBeenCalled()
+  })
+
+  it('fails closed to the password rule when the status lookup errors', async () => {
+    passwordStatus = { data: null, error: { message: 'function not found' } }
+
+    const response = await POST(request({ confirm: 'DELETE' }))
+
+    expect(response.status).toBe(400)
+    expect(mockAdminUpdateUser).not.toHaveBeenCalled()
   })
 })

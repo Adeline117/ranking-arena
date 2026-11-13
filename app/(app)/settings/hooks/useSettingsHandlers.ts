@@ -1675,7 +1675,10 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     }
   }
 
-  // 打开删号弹窗时探测账号是否有密码凭据(OAuth/钱包用户无 → 走 DELETE 确认)。
+  // On opening the delete dialog, ask the server which confirmation applies.
+  // Identities alone cannot tell a code-only email signup (no password, must
+  // type DELETE) from a password account, so the identity rule is only the
+  // immediate guess and the fallback if the request fails.
   useEffect(() => {
     if (!showDeleteAccountModal) return
     const scope = captureViewer()
@@ -1683,6 +1686,25 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     const providers = (auth.user.identities ?? []).map((identity) => identity.provider)
     const isWalletEmail = (auth.user.email ?? '').endsWith('@wallet.arena')
     setDeleteHasPassword(!isWalletEmail && providers.includes('email'))
+
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch('/api/account/delete', {
+          headers: { Authorization: `Bearer ${scope.accessToken}` },
+        })
+        if (!res.ok) return
+        const data: unknown = await res.json()
+        const requiresPassword = (data as { requires_password?: unknown } | null)?.requires_password
+        if (cancelled || !viewerIsCurrent(scope) || typeof requiresPassword !== 'boolean') return
+        setDeleteHasPassword(requiresPassword)
+      } catch (error) {
+        logger.warn('[Settings] Delete confirmation requirements lookup failed:', error)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [auth.sessionGeneration, auth.user, captureViewer, showDeleteAccountModal])
 
   const handleDeleteAccount = async () => {

@@ -567,6 +567,33 @@ describe('useSettingsHandlers viewer ownership', () => {
     storageSet.mockRestore()
   })
 
+  it('asks the server which delete confirmation applies to an email account', async () => {
+    mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ requires_password: false }),
+    })
+    global.fetch = fetchMock as unknown as typeof fetch
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const auth = authFor('user-a', scope.sessionGeneration)
+    ;(auth.user as { identities: unknown[] }).identities = [{ provider: 'email' }]
+    const hook = renderHook(() => useSettingsHandlers({ auth, showToast, showConfirm, t }))
+
+    await waitFor(() => expect(hook.result.current.loading).toBe(false))
+    act(() => hook.result.current.setShowDeleteAccountModal(true))
+
+    // A code-only signup has an email identity but no password: type DELETE.
+    await waitFor(() => expect(hook.result.current.deleteHasPassword).toBe(false))
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/account/delete',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: expect.any(String) }),
+      })
+    )
+  })
+
   it('explains the way out when the delete password check fails', async () => {
     mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
     mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
