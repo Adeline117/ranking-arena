@@ -26,6 +26,9 @@ export const GET = withCron('snapshot-ranks', async (_request: NextRequest) => {
   const supabase = getSupabaseAdmin()
   const today = new Date().toISOString().split('T')[0]
   let totalInserted = 0
+  // Every DB error is collected and fails the run at the end (after the
+  // other periods had their chance) instead of being logged as success.
+  const failures: string[] = []
 
   // Parallel fetch + upsert across all 3 periods (was serial)
   const periodResults = await Promise.all(
@@ -40,6 +43,7 @@ export const GET = withCron('snapshot-ranks', async (_request: NextRequest) => {
 
       if (fetchError) {
         log.error(`Failed to fetch leaderboard_ranks for ${period}`, { error: fetchError.message })
+        failures.push(`${period} fetch: ${fetchError.message}`)
         return 0
       }
       if (!rows || rows.length === 0) {
@@ -73,6 +77,7 @@ export const GET = withCron('snapshot-ranks', async (_request: NextRequest) => {
           .upsert(batch, { onConflict: 'platform,trader_key,period,snapshot_date' })
         if (upsertError) {
           log.error(`Upsert error for ${period} batch ${i}`, { error: upsertError.message })
+          failures.push(`${period} upsert batch ${i}: ${upsertError.message}`)
         } else {
           inserted += batch.length
         }
@@ -94,7 +99,14 @@ export const GET = withCron('snapshot-ranks', async (_request: NextRequest) => {
     .lt('snapshot_date', cutoffDate)
 
   if (cleanupError) {
-    log.warn('Cleanup error', { error: cleanupError.message })
+    log.error('Cleanup error', { error: cleanupError.message })
+    failures.push(`cleanup: ${cleanupError.message}`)
+  }
+
+  if (failures.length > 0) {
+    throw new Error(
+      `snapshot-ranks: ${failures.length} DB error(s), ${totalInserted} rows written — ${failures.join('; ')}`
+    )
   }
 
   return { count: totalInserted, date: today, periods: PERIODS.length }

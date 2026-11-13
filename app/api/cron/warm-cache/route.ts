@@ -28,6 +28,7 @@ export const GET = withCron('warm-cache', async (request: NextRequest) => {
   // fetchLeaderboardFromDB call dropped its result (cache.set only lived in
   // getInitialTraders), so this cron never warmed the SSR cache at all.
   let tradersCached = 0
+  let dbError: string | null = null
   try {
     tradersCached = await Promise.race([
       refreshHomeInitialTradersCache('90D', 50),
@@ -36,7 +37,8 @@ export const GET = withCron('warm-cache', async (request: NextRequest) => {
       ),
     ])
   } catch (err) {
-    logger.warn(`[warm-cache] DB fetch failed: ${err instanceof Error ? err.message : err}`)
+    dbError = err instanceof Error ? err.message : String(err)
+    logger.error(`[warm-cache] DB fetch failed: ${dbError}`)
   }
 
   // Pre-warm only endpoints that still have a trusted cache to populate.
@@ -53,6 +55,19 @@ export const GET = withCron('warm-cache', async (request: NextRequest) => {
   ).length
   if (failedApis > 0) {
     logger.warn(`[warm-cache] ${failedApis} API warmup(s) returned non-200 or failed`)
+  }
+
+  // A failed warm is a failed run: throwing lets withCron record an error
+  // instead of a count:0 "success" (audit P2-6).
+  if (dbError || failedApis > 0) {
+    throw new Error(
+      `warm-cache failed: ${[
+        dbError ? `SSR cache refresh: ${dbError}` : null,
+        failedApis > 0 ? `${failedApis} API warmup(s) failed` : null,
+      ]
+        .filter(Boolean)
+        .join('; ')}`
+    )
   }
 
   return {
