@@ -243,6 +243,7 @@ const ja = {
   history: '履歴',
   na: 'N/A',
   score: 'スコア',
+  rankingMobileMetricLabel: '各行に表示する2つ目の指標',
   applyCreateGroup: 'グループ作成を申請',
   groupName: 'グループ名',
   groupNameEn: 'グループ名（英語）',

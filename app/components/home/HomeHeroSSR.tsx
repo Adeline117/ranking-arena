@@ -209,6 +209,7 @@ export default async function HomeHeroSSR({
       >
         <Link
           href="/login"
+          className="home-hero-cta"
           prefetch={false}
           style={{
             display: 'inline-flex',
@@ -231,6 +232,7 @@ export default async function HomeHeroSSR({
         </Link>
         <Link
           href="/pricing"
+          className="home-hero-pro"
           prefetch={false}
           style={{
             display: 'inline-flex',

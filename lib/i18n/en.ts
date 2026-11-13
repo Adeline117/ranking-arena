@@ -251,6 +251,7 @@ const en = {
   history: 'History',
   na: 'N/A',
   score: 'Score',
+  rankingMobileMetricLabel: 'Second metric shown in each row',
   // Group application related
   applyCreateGroup: 'Apply to Create Group',
   groupName: 'Group Name',

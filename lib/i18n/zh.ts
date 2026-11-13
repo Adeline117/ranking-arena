@@ -245,6 +245,7 @@ const zh = {
   history: '历史',
   na: '暂无',
   score: '评分',
+  rankingMobileMetricLabel: '每行显示的第二指标',
   // 小组申请相关
   applyCreateGroup: '申请创办小组',
   groupName: '小组名称',

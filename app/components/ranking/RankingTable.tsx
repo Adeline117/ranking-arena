@@ -10,7 +10,6 @@ import React, {
   useDeferredValue,
 } from 'react'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
-import { getCsrfHeaders } from '@/lib/api/csrf'
 import { useTableKeyboardNav } from '@/lib/hooks/useTableKeyboardNav'
 import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { RankingSkeleton } from '../ui/Skeleton'
@@ -25,10 +24,10 @@ import { CategoryType } from './CategoryRankingTabs'
 // Lazy-load non-LCP components to reduce initial bundle
 const Pagination = dynamic(() => import('../ui/Pagination'), { ssr: false })
 
-// Extracted components — keep TraderRow/TraderCard static (LCP-critical)
+// Extracted components — keep TraderRow/TraderMobileRow static (LCP-critical)
 import { TraderRow } from './TraderRow'
 import { ROW_GAP, ROW_PADDING_X } from './TraderRowStyles'
-import { TraderCard } from './TraderCard'
+import { MobileRankHeader, TraderMobileRow } from './MobileRankRows'
 import { AvatarPreload } from '../ui/AvatarPreload'
 import { SortIndicator } from './Icons'
 import { getPnLTooltip, parseSourceInfo as parseSourceInfoUtil, getMedalGlowClass } from './utils'
@@ -69,44 +68,6 @@ const LS_KEY_DENSITY = 'arena.ranking.density'
 import { useDebounce } from '@/lib/hooks/useDebounce'
 
 // ExportRankingButton moved to RankingFilters.tsx
-
-/**
- * Historical rank points need their own publication proof. In particular, do
- * not accept the legacy bare `{ "source:trader": [rank] }` payload: a stale
- * browser/CDN response in that shape predates the no-store history boundary.
- */
-function parseVerifiedRankHistorySeries(value: unknown): Record<string, number[]> | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const payload = value as Record<string, unknown>
-  if (payload.ranking_visibility !== 'verified') return null
-
-  const rawSeries = payload.series
-  if (!rawSeries || typeof rawSeries !== 'object' || Array.isArray(rawSeries)) return null
-
-  const series: Record<string, number[]> = {}
-  for (const [key, points] of Object.entries(rawSeries)) {
-    if (!Array.isArray(points) || !points.every((point) => Number.isInteger(point) && point > 0)) {
-      return null
-    }
-    series[key] = points
-  }
-  return series
-}
-
-function removeRankSeriesKeys(
-  current: Record<string, number[]>,
-  keys: readonly string[]
-): Record<string, number[]> {
-  let changed = false
-  const next = { ...current }
-  for (const key of keys) {
-    if (key in next) {
-      delete next[key]
-      changed = true
-    }
-  }
-  return changed ? next : current
-}
 
 /** Infinite scroll sentinel — triggers onVisible when scrolled into view */
 function CardLoadMoreSentinel({ onVisible }: { onVisible: () => void }) {
@@ -196,15 +157,6 @@ function RankingTableInner(props: {
     categoryCountsAreExact,
   } = props
   const { t, language } = useLanguage()
-
-  // Real per-row rank-trajectory sparklines (audit 1.3). rank_history is keyed by
-  // 7D/30D/90D, so map the COMPOSITE view onto its dominant 90D window.
-  const seriesPeriod = timeRange === 'COMPOSITE' ? '90D' : timeRange
-  // Map of `${period}:${platform}:${traderKey}` → ranks (oldest→newest). Period
-  // is part of the key so a timeframe switch can never surface stale ranks.
-  const [rankSeries, setRankSeries] = useState<Record<string, number[]>>({})
-  // Keys already requested (success keeps them; abort/failure releases for retry).
-  const requestedSeriesKeysRef = useRef<Set<string>>(new Set())
 
   // useDeferredValue allows React to interrupt the expensive 50-row render during hydration.
   // During loading state, show immediate (empty/skeleton) data.
@@ -543,74 +495,6 @@ function RankingTableInner(props: {
     traderTypeFilter,
     tradersFingerprint,
   ])
-
-  // Batch-fetch real rank-trajectory series for the visible cards (audit 1.3).
-  // Card view only — the desktop TraderRow has no sparkline. Fully non-blocking:
-  // ONE POST per page of keys, results stream into rankSeries as they arrive, and
-  // any failure leaves the static ROI-bar fallback untouched (no first-paint /
-  // poll regression). Never N+1.
-  useEffect(() => {
-    if (viewMode !== 'card') return
-    const visible = sortedTraders.slice(0, cardVisibleCount)
-    const release = (keys: string[]) => {
-      for (const k of keys) requestedSeriesKeysRef.current.delete(k)
-    }
-    const toFetch: { platform: string; trader_key: string }[] = []
-    for (const tr of visible) {
-      const platform = tr.source || source || ''
-      if (!platform || !tr.id) continue
-      const cacheKey = `${seriesPeriod}:${platform}:${tr.id}`
-      if (requestedSeriesKeysRef.current.has(cacheKey)) continue
-      requestedSeriesKeysRef.current.add(cacheKey)
-      toFetch.push({ platform, trader_key: tr.id })
-    }
-    if (toFetch.length === 0) return
-
-    const controller = new AbortController()
-    ;(async () => {
-      for (let i = 0; i < toFetch.length; i += 60) {
-        const chunk = toFetch.slice(i, i + 60)
-        const chunkKeys = chunk.map((c) => `${seriesPeriod}:${c.platform}:${c.trader_key}`)
-        try {
-          const res = await fetch('/api/rankings/rank-history', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
-            body: JSON.stringify({ traders: chunk, period: seriesPeriod, days: 7 }),
-            signal: controller.signal,
-          })
-          if (!res.ok) {
-            release(chunkKeys)
-            continue
-          }
-          const payload: unknown = await res.json()
-          if (controller.signal.aborted) {
-            release(chunkKeys)
-            return
-          }
-          const map = parseVerifiedRankHistorySeries(payload)
-          if (!map) {
-            // Expire any old in-memory series for the visible cards. The
-            // request itself may have crossed a deployment where rank_history
-            // was formerly cacheable, so leaving the previous state would
-            // still replay a raw sparkline after the server fails closed.
-            setRankSeries((prev) => removeRankSeriesKeys(prev, chunkKeys))
-            continue
-          }
-          // Re-key under the active period before merging into state.
-          const prefixed: Record<string, number[]> = {}
-          for (const [k, v] of Object.entries(map)) prefixed[`${seriesPeriod}:${k}`] = v
-          if (Object.keys(prefixed).length > 0) {
-            setRankSeries((prev) => ({ ...prev, ...prefixed }))
-          }
-        } catch {
-          // Network error / abort — release so a later render can retry.
-          release(chunkKeys)
-          if (controller.signal.aborted) return
-        }
-      }
-    })()
-    return () => controller.abort()
-  }, [viewMode, sortedTraders, cardVisibleCount, source, seriesPeriod])
 
   // Server pages can deliberately omit totals. Treat an explicit unknown as
   // server pagination (so this finite page is not sliced as a client-side
@@ -1273,31 +1157,24 @@ function RankingTableInner(props: {
               />
             ) : viewMode === 'card' ? (
               <>
-                <Box
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))',
-                    gap: tokens.spacing[3],
-                    padding: tokens.spacing[4],
-                  }}
-                >
+                {/* Mobile: compact ~56px rows (owner 2026-11-13). Geometry is
+                    the shared .mrow block in critical CSS, also used by the
+                    SSR shell, so the hand-off cannot jump. */}
+                <MobileRankHeader />
+                <div className="mrow-list">
                   {sortedTraders.slice(0, cardVisibleCount).map((trader, idx) => {
                     const rank = trader.rank
-                    const series =
-                      rankSeries[`${seriesPeriod}:${trader.source || source || ''}:${trader.id}`]
                     const presentationTrader = normalizeTraderArenaScoreForPresentation(trader)
                     return (
                       <React.Fragment key={`${trader.id}-${trader.source || 'unknown'}`}>
                         <SectionErrorBoundary>
-                          <TraderCard
+                          <TraderMobileRow
                             trader={presentationTrader}
                             rank={rank}
                             source={source}
                             language={language}
                             searchQuery={debouncedSearch}
-                            getMedalGlowClass={getMedalGlowClass}
                             parseSourceInfo={parseSourceInfoWithT}
-                            series={series}
                           />
                         </SectionErrorBoundary>
                         {!props.loggedIn && idx === 7 && (
@@ -1317,7 +1194,7 @@ function RankingTableInner(props: {
                       </React.Fragment>
                     )
                   })}
-                </Box>
+                </div>
                 {cardVisibleCount < sortedTraders.length && cardVisibleCount < MAX_CARD_COUNT && (
                   <>
                     {/* Auto-load more via IntersectionObserver */}
