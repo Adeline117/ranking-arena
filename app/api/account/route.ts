@@ -25,6 +25,7 @@ export const GET = withAuth(
         // 订阅永远读不出→account 永远显示 tier:free(被 PRO_FREE_PROMO 掩盖)
         .select('tier, current_period_end')
         .eq('user_id', user.id)
+        .in('status', ['active', 'trialing'])
         .maybeSingle(),
     ])
 

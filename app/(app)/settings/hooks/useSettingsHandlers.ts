@@ -827,6 +827,18 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     // Capture previous URLs for rollback on any failure path
     const previousAvatarUrl = avatarUrl
     const previousCoverUrl = coverUrl
+    // Restore the URL state too, not just the previews: a successful upload
+    // sets avatarUrl/coverUrl to the new file, and leaving that behind after a
+    // failed save (e.g. handle taken) silently persisted the "reverted" image
+    // on the user's next save.
+    const revertMediaState = () => {
+      setAvatarUrl(previousAvatarUrl)
+      setPreviewUrl(previousAvatarUrl)
+      setAvatarFile(null)
+      setCoverUrl(previousCoverUrl)
+      setCoverPreviewUrl(previousCoverUrl)
+      setCoverFile(null)
+    }
     try {
       const { data: currentProfile, error: currentProfileError } = await supabase
         .from('user_profiles')
@@ -909,11 +921,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
 
       if (saveError || !savedProfile) {
         uiLogger.error('Error saving profile:', JSON.stringify(saveError, null, 2))
-        // Revert avatar/cover preview on DB save failure
-        setPreviewUrl(previousAvatarUrl)
-        setAvatarFile(null)
-        setCoverPreviewUrl(previousCoverUrl)
-        setCoverFile(null)
+        revertMediaState()
         if (
           saveError?.code === '23505' ||
           saveError?.message?.includes('unique') ||
@@ -974,11 +982,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     } catch (error) {
       if (!stateBelongsToViewer(scope, profileGeneration)) return
       uiLogger.error('Error saving:', error)
-      // Revert avatar/cover preview on unexpected failure
-      setPreviewUrl(previousAvatarUrl)
-      setAvatarFile(null)
-      setCoverPreviewUrl(previousCoverUrl)
-      setCoverFile(null)
+      revertMediaState()
       showToast(t('saveFailedRetry'), 'error')
     } finally {
       if (viewerIsCurrent(scope)) {

@@ -61,3 +61,42 @@ export function parseMembershipAck(value: unknown): MembershipAck | null {
 
   return null
 }
+
+/**
+ * Map a failed join response to a specific, localized reason. The route
+ * returns a machine-readable `code` (BANNED, SCORE_TOO_LOW, ...); previously
+ * every failure collapsed into a generic "Failed to join".
+ */
+export function joinFailureMessage(
+  data: unknown,
+  t: (key: string) => string,
+  fallbackKey: 'joinFailed' | 'inviteInvalidOrExpired'
+): string {
+  const body =
+    data && typeof data === 'object' && !Array.isArray(data)
+      ? (data as { code?: unknown; required_score?: unknown })
+      : {}
+  switch (body.code) {
+    case 'BANNED':
+      return t('groupJoinBanned')
+    case 'SCORE_TOO_LOW': {
+      const score =
+        typeof body.required_score === 'number' && Number.isFinite(body.required_score)
+          ? body.required_score
+          : 0
+      return t('groupJoinScoreTooLow').replace('{score}', String(score))
+    }
+    case 'VERIFIED_ONLY':
+      return t('groupJoinVerifiedOnly')
+    case 'PREMIUM_REQUIRED':
+      return t('proRequired')
+    case 'APPROVAL_REQUIRED':
+      return t('groupJoinApprovalRequired')
+    case 'DISSOLVED':
+      return t('groupJoinDissolved')
+    case 'INVITE_ALREADY_USED':
+      return t('inviteAlreadyUsed')
+    default:
+      return t(fallbackKey)
+  }
+}
