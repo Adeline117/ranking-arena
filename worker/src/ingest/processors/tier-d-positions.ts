@@ -16,6 +16,8 @@ import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { writeRawObject } from '@/lib/ingest/raw'
 import { publishPositions } from '@/lib/ingest/serving/publish'
 import type { TierJobData } from '../queues'
+import { getConnection } from '../../connection'
+import { closeCircuitCycle } from '../circuit-cycle'
 import {
   assertSourceMatchesConsumedRegion,
   type ConsumedRegionContext,
@@ -140,6 +142,8 @@ export async function processTierD(
     }
   } finally {
     await session.close()
+    // Spec §4 per-cycle failure-rate alert (never throws).
+    await closeCircuitCycle(src, 'D', { redis: getConnection })
   }
 
   console.log(
