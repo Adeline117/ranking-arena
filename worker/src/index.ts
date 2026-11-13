@@ -50,6 +50,7 @@ async function main() {
     { ingestClientConnect },
     { alert: ingestAlert },
     { syncPublicRankingsToMeilisearch },
+    { routeRankPublicationAlert },
   ] = await Promise.all([
     import('bullmq'),
     import('./connection'),
@@ -63,6 +64,7 @@ async function main() {
     import('../../lib/ingest/db'),
     import('../../lib/ingest/alerting'),
     import('../../lib/search/meilisearch-sync'),
+    import('../../lib/rankings/publication/alert-routing'),
   ])
 
   // The season publication runs in-process on the worker's direct postgres
@@ -77,19 +79,15 @@ async function main() {
   }
   const rankPublicationDatabase = pgRankPublicationDatabase(connectPublicationClient)
   const scoreCohort = createDefaultCohortScorer()
-  // Publication alerts go through the shared ingest alert interface: a refused
-  // season or an isolated source pages (Tier-A, phase 0); exclusion warnings go
-  // to the digest. The orchestrator logs and swallows delivery failures itself.
-  const rankPublicationAlert: RankPublicationAlertSink = (publicationAlert) =>
-    ingestAlert(getRankingCommandChainConnection(), {
-      sourceSlug: `rank-publication:${publicationAlert.season}`,
-      phase: 0,
-      tier:
-        publicationAlert.severity === 'critical' || publicationAlert.code === 'sources_isolated'
-          ? 'A'
-          : 'B',
-      message: `[${publicationAlert.code}] ${publicationAlert.message}`,
-    })
+  // Publication alerts go through the shared ingest alert interface. Routing
+  // (lib/rankings/publication/alert-routing) gives every isolated source its
+  // own season×source page-cooldown key and a refusal its own key; exclusion
+  // warnings and restorations go to the digest. The orchestrator logs and swallows delivery failures itself.
+  const rankPublicationAlert: RankPublicationAlertSink = async (publicationAlert) => {
+    for (const routed of routeRankPublicationAlert(publicationAlert)) {
+      await ingestAlert(getRankingCommandChainConnection(), routed)
+    }
+  }
 
   console.log('[worker] Arena Pipeline Worker starting...')
 

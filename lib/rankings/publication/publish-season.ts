@@ -153,9 +153,15 @@ export interface RankPublicationAlert {
   season: PublicationWindow
   /** 'critical' = the season was not published; 'warning' = published, degraded. */
   severity: 'critical' | 'warning'
-  code: 'excluded_rows_over_threshold' | 'season_publication_refused' | 'sources_isolated'
+  code:
+    | 'excluded_rows_over_threshold'
+    | 'season_publication_refused'
+    | 'sources_isolated'
+    | 'sources_restored'
   message: string
   details: Record<string, unknown>
+  /** Sources the alert is about (per-source cooldown keys for isolation). */
+  sources?: string[]
 }
 
 export type RankPublicationAlertSink = (alert: RankPublicationAlert) => Promise<void> | void
@@ -946,23 +952,28 @@ async function publishInTransaction(
       )
     }
 
-    if (isolatedSources.length > 0 || restoredSources.length > 0) {
+    if (isolatedSources.length > 0) {
       await deliverAlert(deps, log, {
         season,
         severity: 'warning',
         code: 'sources_isolated',
-        message:
-          isolatedSources.length > 0
-            ? `published without ${isolatedSources.length}/${allExpectedSources.length} source(s): ${isolatedSources
-                .map(
-                  (entry) =>
-                    `${entry.source}(${entry.reasons.join('+')}, since ${entry.firstIsolatedAt})`
-                )
-                .join(
-                  ', '
-                )}${restoredSources.length > 0 ? `; restored: ${restoredSources.join(', ')}` : ''}`
-            : `restored: ${restoredSources.join(', ')}`,
-        details: { isolatedSources, restoredSources },
+        message: `published without ${isolatedSources.length}/${allExpectedSources.length} source(s): ${isolatedSources
+          .map(
+            (entry) => `${entry.source}(${entry.reasons.join('+')}, since ${entry.firstIsolatedAt})`
+          )
+          .join(', ')}`,
+        details: { isolatedSources },
+        sources: isolatedSources.map((entry) => entry.source),
+      })
+    }
+    if (restoredSources.length > 0) {
+      await deliverAlert(deps, log, {
+        season,
+        severity: 'warning',
+        code: 'sources_restored',
+        message: `restored: ${restoredSources.join(', ')}`,
+        details: { restoredSources },
+        sources: restoredSources,
       })
     }
 
