@@ -182,11 +182,19 @@ jobs:
           fi
 
       - name: Install isolated PostgreSQL 17 server binaries
+        env:
+          # 固定 17.11：pgdg 的 17.12 给每个新建列写入 attoptions={pg_attver=…}，
+          # 迁移 postflight 要求 attoptions IS NULL 且对其做布局指纹，会把自建表判成
+          # "column contract drifted"（2026-11-13 起 Pre-flight 全红）。升级前须先评审
+          # 这 6 个迁移的 attoptions 检查；17.11 取自 pgdg 归档源，不会被新版本挤掉。
+          PG17_VERSION: 17.11-1.pgdg26.04+2
         run: |
-          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          codename=$(lsb_release -cs)
+          sudo sh -c "echo 'deb http://apt.postgresql.org/pub/repos/apt ${codename}-pgdg main' > /etc/apt/sources.list.d/pgdg.list"
+          sudo sh -c "echo 'deb https://apt-archive.postgresql.org/pub/repos/apt ${codename}-pgdg-archive main' > /etc/apt/sources.list.d/pgdg-archive.list"
           curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
           sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-17 ripgrep
+          sudo apt-get install -y -qq --allow-downgrades "postgresql-17=${PG17_VERSION}" "postgresql-client-17=${PG17_VERSION}" ripgrep
           /usr/lib/postgresql/17/bin/initdb --version
 
       - name: Prove stage backfill, crossed epochs, and legacy replay
