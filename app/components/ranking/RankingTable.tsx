@@ -1437,7 +1437,9 @@ function RankingTableInner(props: {
                     const presentationTrader = normalizeTraderArenaScoreForPresentation(trader)
                     return (
                       <div
-                        key={`${trader.id}-${trader.source || 'unknown'}-${startIndex + idx}`}
+                        // Identity only — a position suffix remounted every row
+                        // whose position changed on sort/refresh.
+                        key={`${trader.id}-${trader.source || 'unknown'}`}
                         {...kbGetRowProps(idx)}
                       >
                         <SectionErrorBoundary>
