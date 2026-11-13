@@ -87,8 +87,10 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
                 const dropdownEl = document.getElementById('search-dropdown-listbox')
                 const hasSelection = dropdownEl?.querySelector('[aria-selected="true"]')
                 if (hasSelection) {
+                  // Do NOT stopPropagation here: React forwards it to the native
+                  // event, and the dropdown's Enter handler listens on `document`,
+                  // so stopping it made Enter on a highlighted result do nothing.
                   e.preventDefault()
-                  e.stopPropagation()
                   return
                 }
                 e.preventDefault()
