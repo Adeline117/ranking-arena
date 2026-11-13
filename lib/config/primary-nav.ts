@@ -1,8 +1,8 @@
 /**
  * Canonical primary navigation destinations — single source of truth.
  *
- * All three nav surfaces (top `NavLinks`, `MobileBottomNav`, feed
- * `DesktopSidebar`) derive their primary items from this list so the core
+ * The nav surfaces (top `NavLinks`, `MobileBottomNav`) derive their primary
+ * items from this list so the core
  * destinations + labels stay consistent. Each surface may append
  * surface-specific extras (e.g. "Me" on mobile / sidebar) and renders its own
  * sized SVG via the stable `icon` kind — only paths + label keys are shared.

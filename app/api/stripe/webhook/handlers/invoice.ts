@@ -2,6 +2,7 @@ import Stripe from 'stripe'
 import { stripe } from '@/lib/stripe'
 import { getSupabase, logger } from './shared'
 import { sendNotification } from '@/lib/data/notifications'
+import { getProPlanFromPriceId } from './subscription'
 
 export async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
   const subscriptionData = invoice.parent?.subscription_details?.subscription
@@ -48,6 +49,20 @@ export async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
   // After a past_due → active recovery, customer.subscription.updated may be
   // delayed or lost. This ensures the user gets Pro access back immediately
   // on successful payment, without relying solely on that event.
+  // Only a Pro membership price may restore Pro. B2B API-tier subscriptions
+  // share the same Stripe customer, so without this check every API invoice
+  // granted the payer a free Pro membership.
+  const priceId = subscription.items?.data?.[0]?.price?.id
+  const isProMembership = Boolean(priceId) && getProPlanFromPriceId(priceId) !== null
+  if (subscription.status === 'active' && !isProMembership) {
+    logger.info('Payment succeeded for a non-Pro price; Pro tier unchanged', {
+      userId: profile.id,
+      priceId,
+      subscriptionId,
+    })
+    return
+  }
+
   if (subscription.status === 'active') {
     if (profile.subscription_tier !== 'pro') {
       const { error: restoreErr } = await getSupabase()

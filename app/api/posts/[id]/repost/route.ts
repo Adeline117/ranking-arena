@@ -222,7 +222,11 @@ export const POST = withAuth(
           message: (rootPost.title || '').slice(0, 100) || 'your post',
           actor_id: user.id,
           link: `/post/${newPost.id}`,
-          reference_id: rootPost.id,
+          // Reposts share the 'comment' type (no 'repost' in the notification
+          // type contract). Keying dedupe on the root post made a repost and a
+          // comment by the same user on the same post swallow each other within
+          // the 1h dedupe window; the repost's own id keeps them distinct.
+          reference_id: newPost.id,
           read: false,
         },
         'Repost notification'

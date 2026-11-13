@@ -45,6 +45,7 @@ export function useSearchData(open: boolean, query: string) {
   const [searchData, setSearchData] = useState<UnifiedSearchResponse | null>(null)
   const [searching, setSearching] = useState(false)
   const [isOffline, setIsOffline] = useState(false)
+  const [searchFailed, setSearchFailed] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(-1)
   const [translatedTitles, setTranslatedTitles] = useState<Record<string, string>>({})
   const [translating, setTranslating] = useState(false)
@@ -224,9 +225,11 @@ export function useSearchData(open: boolean, query: string) {
 
   // Unified search with debounce
   useEffect(() => {
-    if (!open || !query.trim() || query.length < 2) {
+    const trimmedQuery = query.trim()
+    if (!open || trimmedQuery.length < 2) {
       setSearchData(null)
       setSearching(false)
+      setSearchFailed(false)
       setSelectedIndex(-1)
       if (abortControllerRef.current) abortControllerRef.current.abort()
       return
@@ -246,9 +249,10 @@ export function useSearchData(open: boolean, query: string) {
       const controller = new AbortController()
       abortControllerRef.current = controller
       setSearching(true)
+      setSearchFailed(false)
 
       try {
-        const response = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}&limit=10`, {
+        const response = await fetch(`/api/search?q=${encodeURIComponent(trimmedQuery)}&limit=10`, {
           signal: controller.signal,
         })
         if (!response.ok) throw new Error('Search failed')
@@ -261,6 +265,12 @@ export function useSearchData(open: boolean, query: string) {
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') return
         logger.error('Search error:', error)
+        // Without this the dropdown kept showing the previous query's results
+        // as if they matched the new one.
+        if (!controller.signal.aborted) {
+          setSearchData(null)
+          setSearchFailed(true)
+        }
       } finally {
         if (!controller.signal.aborted) setSearching(false)
       }
@@ -306,6 +316,7 @@ export function useSearchData(open: boolean, query: string) {
     searchData,
     searching,
     isOffline,
+    searchFailed,
     selectedIndex,
     setSelectedIndex,
     translatedTitles,

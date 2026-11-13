@@ -48,6 +48,7 @@ jest.mock('@/lib/web3/siwe-session', () => {
 
 import { useOneClickSiwe } from '../useOneClickSiwe'
 import { useSiweAuth } from '../useSiweAuth'
+import { SiweMessage } from 'siwe'
 
 const validResult = {
   action: 'existing_user' as const,
@@ -278,5 +279,28 @@ describe('SIWE hooks fail-closed completion contract', () => {
 
     expect(returned).toBeNull()
     expect(result.current.error).toBeTruthy()
+  })
+
+  it('signs a Base (8453) SIWE message even when the wallet is on another chain', async () => {
+    mockUseAccount.mockReturnValue({
+      address: WALLET_ADDRESS,
+      chainId: 42161,
+      isConnected: true,
+      isConnecting: false,
+    })
+    const fetchMock = global.fetch as jest.Mock
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ nonce: 'nonce' }))
+      .mockResolvedValueOnce(jsonResponse({ walletAddress: WALLET_ADDRESS }))
+    mockGetToken.mockResolvedValue('access-token')
+    const { result } = renderHook(() => useSiweAuth())
+
+    await act(async () => {
+      await result.current.linkWallet()
+    })
+
+    // The link/verify routes reject any chainId other than 8453.
+    expect(SiweMessage).toHaveBeenCalledWith(expect.objectContaining({ chainId: 8453 }))
+    expect(SiweMessage).not.toHaveBeenCalledWith(expect.objectContaining({ chainId: 42161 }))
   })
 })
