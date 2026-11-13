@@ -284,7 +284,7 @@ describe('SSR public ranking cohort', () => {
     expect(mockFrom).not.toHaveBeenCalled()
   })
 
-  it('serves a valid fallback cache as stale but rejects old source-only cache shapes', async () => {
+  it('serves a valid fallback cache as stale only after the DB fails, and rejects old source-only shapes', async () => {
     const legacySourceOnly = {
       traders: [{ id: 'legacy', source: 'binance_futures', rank: 1 }],
       lastUpdated: '2026-07-24T11:00:00.000Z',
@@ -295,7 +295,7 @@ describe('SSR public ranking cohort', () => {
     const fallback = validCachedResult('fallback-safe')
     mockCacheGet.mockResolvedValueOnce(legacySourceOnly).mockResolvedValueOnce(fallback)
     mockFrom.mockImplementation(() => {
-      throw new Error('a valid fallback cache must avoid database work')
+      throw new Error('database unavailable')
     })
 
     const result = await getInitialTraders('90D', 20, 0)
@@ -305,7 +305,32 @@ describe('SSR public ranking cohort', () => {
     expect(result.totalCount).toBeNull()
     expect(result.totalCountIsExact).toBe(false)
     expect(result.categoryCounts).toEqual({ all: null, futures: null, spot: null, onchain: null })
-    expect(mockFrom).not.toHaveBeenCalled()
+    // The DB is tried first: a DB-level withdrawal must not hide behind the fallback TTL.
+    expect(mockFrom).toHaveBeenCalled()
+  })
+
+  it('prefers fresh DB rows over a still-valid fallback cache on a primary miss', async () => {
+    mockCacheGet
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(validCachedResult('fallback-row'))
+    mockFrom.mockImplementation((relation: string) => {
+      if (relation === 'public_ranked_leaderboard') return cohortQuery([cohortRow('db-row', 1)])
+      if (relation === 'leaderboard_source_freshness') {
+        return resultQuery([
+          { source: 'binance_futures', source_as_of: '2026-07-24T11:00:00.000Z' },
+        ])
+      }
+      throw new Error(`unexpected relation ${relation}`)
+    })
+
+    const result = await getInitialTraders('90D', 20, 0)
+
+    expect(result.traders.map((trader) => trader.id)).toEqual(['db-row'])
+    expect(mockCacheSet).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.anything(),
+      expect.objectContaining({ ttl: 300 })
+    )
   })
 
   it('rechecks cached rows against the shared 48-hour cohort window and source watermarks', async () => {
