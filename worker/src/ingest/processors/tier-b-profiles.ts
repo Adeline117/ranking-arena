@@ -26,6 +26,7 @@ import type {
 } from '@/lib/ingest/core/types'
 import type { FetchSession } from '@/lib/ingest/fetch/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
+import { UpstreamGoneError } from '@/lib/ingest/fetch/capture'
 import { captureHistoryAcquisition } from '@/lib/ingest/history-acquisition'
 import { buildPositionHistoryAcquisitionArtifactV2 } from '@/lib/ingest/position-history-acquisition-v2'
 import {
@@ -429,6 +430,8 @@ export async function processTierB(
       let successfulTimeframes = 0
       let traderHadQualityReject = false
       let traderHadOperationalError = false
+      // Every operational error of this trader was a 404/410 "gone" response.
+      let traderOnlyGoneErrors = true
       for (const timeframe of timeframes) {
         try {
           const scrapedAt = new Date().toISOString()
@@ -558,6 +561,7 @@ export async function processTierB(
           terminalTimeframes += 1
         } catch (err) {
           traderHadOperationalError = true
+          if (!(err instanceof UpstreamGoneError)) traderOnlyGoneErrors = false
           result.errors += 1
           console.warn(
             `[tier-b] ${src.slug} trader ${trader.exchange_trader_id} ${timeframe}d failed:`,
@@ -582,6 +586,16 @@ export async function processTierB(
         // Quality rejects are terminal for this pass: throttle the next attempt
         // so continuation jobs cannot hot-loop on a permanently bad upstream
         // payload. The compatibility cursor kind remains `tierb_profiled`.
+        await markProfileAttempted(trader.id)
+      } else if (supportsProfile && traderHadOperationalError && traderOnlyGoneErrors) {
+        // 404/410 on every failing timeframe = deregistered/removed trader.
+        // Back off to the next refresh window (same throttle as a quality
+        // reject) instead of re-crawling it on every continuation hop (up to
+        // MAX_CONT_DEPTH per cadence). Transient errors stay retryable.
+        logger.warn(
+          `[tier-b] ${src.slug} trader ${trader.exchange_trader_id}: upstream 404/410, ` +
+            `backing off until the next refresh window`
+        )
         await markProfileAttempted(trader.id)
       }
 

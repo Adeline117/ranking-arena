@@ -90,6 +90,7 @@ jest.mock('../../queues', () => ({
 }))
 
 import { processTierB as processTierBInRegion } from '../tier-b-profiles'
+import { UpstreamGoneError } from '@/lib/ingest/fetch/capture'
 import { createConsumedRegionContext } from '../../consumed-region-context'
 
 const processTierB = (job: Parameters<typeof processTierBInRegion>[0]) =>
@@ -1430,6 +1431,34 @@ describe('Tier-B profile coverage accounting', () => {
     })
     expect(mockRecordStagingRejects).toHaveBeenCalledTimes(1)
     expect(mockPublishProfile).not.toHaveBeenCalled()
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) =>
+        String(sql).includes('INSERT INTO arena.ingest_cursors')
+      )
+    ).toBe(false)
+  })
+
+  it('backs off a trader whose every failing timeframe is upstream 404/410', async () => {
+    mockGetProfile.mockImplementation(async (_session, _source, _trader, timeframe) => {
+      throw new UpstreamGoneError(timeframe === 7 ? 404 : 410, 'https://gtrade.test/profile')
+    })
+
+    await expect(processTierB(job)).resolves.toMatchObject({ tradersCrawled: 0, errors: 2 })
+    expect(mockPublishProfile).not.toHaveBeenCalled()
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) =>
+        String(sql).includes('INSERT INTO arena.ingest_cursors')
+      )
+    ).toBe(true)
+  })
+
+  it('keeps a trader retryable when any failure is not a 404/410', async () => {
+    mockGetProfile.mockImplementation(async (_session, _source, _trader, timeframe) => {
+      if (timeframe === 7) throw new UpstreamGoneError(404, 'https://gtrade.test/profile')
+      throw new Error('upstream unavailable')
+    })
+
+    await expect(processTierB(job)).resolves.toMatchObject({ tradersCrawled: 0, errors: 2 })
     expect(
       mockDbQuery.mock.calls.some(([sql]) =>
         String(sql).includes('INSERT INTO arena.ingest_cursors')
