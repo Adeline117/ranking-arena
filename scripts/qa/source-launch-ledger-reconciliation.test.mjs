@@ -333,7 +333,7 @@ test('CLI reads one canonical owner-only artifact and emits no credential materi
     assert.equal(exact.status, 0, exact.stderr)
     const report = JSON.parse(exact.stdout)
     assert.equal(report.outcome, 'exact')
-    assert.equal(report.summary.exact, 128)
+    assert.equal(report.summary.exact, 147)
     assert.equal(exact.stdout.includes('postgres://'), false)
     assert.equal(exact.stdout.includes('password'), false)
     assert.equal(exact.stdout.includes('"statements"'), false)

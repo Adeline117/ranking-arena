@@ -144,9 +144,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     ...superseded,
   ]
 
-  assert.equal(predeploy.length, 128)
+  assert.equal(predeploy.length, 147)
   // Season publication follow-ups stay last; 011058 must follow the Bitget-bot
-  // freshness-authority rewrite slot (20260728124000 / 20261111134416).
+  // freshness-authority rewrite slot (20261111134416, #415's replacement for 20260728124000).
   assert.deepEqual(predeploy.slice(-6), [
     '20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql',
     '20261113011058_leaderboard_publication_source_isolation.sql',
@@ -157,106 +157,26 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.ok(
     predeploy.indexOf('20261113011058_leaderboard_publication_source_isolation.sql') >
-      predeploy.indexOf('20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql')
+      predeploy.indexOf(
+        '20261111134416_quarantine_bitget_bot_cumulative_rank_authority_prod_reader.sql'
+      )
   )
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
-    '20260729061000_tier_a_execution_claim_enforcement.sql',
+    '20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql',
   ])
   assert.equal(recoveryPrerequisites.length, 41)
+  // Recovery repairs the frozen 41-migration cutover: every predeploy migration
+  // before the 2026-07-17 hero-stats change plus the two notification
+  // contracts. Later launch additions must never join it.
   assert.deepEqual(recoveryPrerequisites, [
     ...predeploy.filter(
       (migration) =>
-        ![
-          '20260717130000_hero_stats_count_live_source_boards.sql',
-          '20260718120000_leaderboard_source_freshness.sql',
-          '20260718123000_shadow_sources_without_roi_basis.sql',
-          '20260718130000_count_trader_account_followers.sql',
-          '20260718131000_source_scope_trader_follow_activity.sql',
-          '20260718132000_active_source_platform_freshness.sql',
-          '20260718133000_history_partition_range_guard.sql',
-          '20260718134000_freshness_expected_sources.sql',
-          '20260718135000_partition_child_rls_convergence.sql',
-          '20260718140000_add_metric_completeness_daily.sql',
-          '20260718182917_arena_resolver_fetch_region.sql',
-          '20260718183000_atomic_stripe_entitlement_identity.sql',
-          '20260718183500_harden_stripe_entitlement_null_validation.sql',
-          '20260718183600_fix_stripe_lifetime_duplicate_and_early_expiry.sql',
-          '20260718184000_arena_score_inputs_board_as_of.sql',
-          '20260718184500_classify_non_entitlement_stripe_payments.sql',
-          '20260718184550_durable_tip_completion_notification.sql',
-          '20260721120000_metric_trust_shadow_gate.sql',
-          '20260721130000_raw_object_gc_outbox.sql',
-          '20260721140000_idempotent_equivalent_refund_events.sql',
-          '20260721150000_metric_trust_raw_artifact_identity.sql',
-          '20260721175746_arena_score_inputs_publish_bundle.sql',
-          '20260721210000_tip_checkout_lifecycle_atomic.sql',
-          '20260721211000_tip_checkout_completion_identity.sql',
-          '20260722030000_durable_leaderboard_acquisition_attempt_ledger.sql',
-          '20260722040000_leaderboard_acquisition_manifest_v3_compat.sql',
-          '20260722041000_pure_arena_score_v4_scorer.sql',
-          '20260722042000_leaderboard_terminal_publication_fence.sql',
-          '20260722050000_metric_trust_attempt_outcome_authority.sql',
-          '20260722051000_leaderboard_score_input_manifest_contract.sql',
-          '20260722052000_leaderboard_score_input_manifest_rank_eligible_pnl.sql',
-          '20260722053000_binance_spot_metric_source_contract.sql',
-          '20260722055000_metric_trust_source_page_lineage_forward_repair.sql',
-          '20260724010000_shadow_unverified_okx_web3_ranks.sql',
-          '20260724232500_allow_pipeline_logs_partial_success.sql',
-          '20260724234000_optimize_arena_score_inputs_json_hot_path.sql',
-          '20260724235000_leaderboard_publication_mutation_fence.sql',
-          '20260725011000_durable_ingest_worker_fence_substrate.sql',
-          '20260725012000_strengthen_arena_score_publish_evidence.sql',
-          '20260725013000_cleanup_leaderboard_rank_publication.sql',
-          '20260725014000_strengthen_leaderboard_publication_proof_authority.sql',
-          '20260725014500_close_rank_cleanup_public_execute.sql',
-          '20260725015000_leaderboard_rank_generation_claim.sql',
-          '20260725015500_bound_leaderboard_rank_generation_batches.sql',
-          '20260725016000_leaderboard_rank_generation_receipt_substrate.sql',
-          '20260725016500_leaderboard_rank_persisted_codec.sql',
-          '20260725017000_leaderboard_rank_typed_batch_contract.sql',
-          '20260725017250_normalize_leaderboard_rank_max_drawdown.sql',
-          '20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql',
-          '20260728122000_bitget_bots_canonical_timeframe.sql',
-          '20260728123000_arena_bot_header_canonical_snapshot.sql',
-          '20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql',
-          '20260729010000_api_keys_server_authority.sql',
-          '20260729011000_leaderboard_rank_manifest_attestation_substrate.sql',
-          '20260729012000_partitioned_bot_acquisition_manifest_v4.sql',
-          '20260729013000_bitget_bot_attempt_health_contract.sql',
-          '20260729014000_bitget_bot_copier_aggregate_authority.sql',
-          '20260729014500_leaderboard_rank_generation_canonical_batches.sql',
-          '20260729015000_leaderboard_rank_generation_attested_batch_writer.sql',
-          '20260729015500_tier_a_execution_claim_fence.sql',
-          '20260729054400_leaderboard_rank_generation_private_staging.sql',
-          '20260729060000_stale_leaderboard_attempt_report.sql',
-          '20260729061533_leaderboard_rank_generation_staging_only_writer.sql',
-          '20260729063000_leaderboard_rank_staging_full_xid_guard.sql',
-          '20260729064500_leaderboard_rank_generation_publication_plan.sql',
-          '20260729065000_normalize_arena_score_input_platform_aliases.sql',
-          '20260729070000_pure_arena_score_v5_zero_metric_scorer.sql',
-          '20260729070500_leaderboard_score_input_manifest_v2.sql',
-          '20260729071000_leaderboard_metric_trust_projection_v2.sql',
-          '20260729071500_tier_a_one_phase_commit_guard.sql',
-          '20260729223000_rerank_public_eligible_rows_only.sql',
-          '20260729224000_rank_eligible_leaderboard_count_cache.sql',
-          '20260729225000_token_trader_rank_authority.sql',
-          '20260729230000_token_ranking_generation_barrier.sql',
-          '20260804043000_retire_legacy_token_rankings.sql',
-          '20260804044000_freeze_legacy_position_history_relations.sql',
-          '20260804045000_quarantine_bingx_rank_authority.sql',
-          '20260804050000_harden_serving_trader_resolver.sql',
-          '20260804051000_harden_serving_source_capabilities.sql',
-          '20260804052000_fail_closed_unbound_copier_aggregates.sql',
-          '20260804053000_copier_snapshot_publication_substrate.sql',
-          '20260804054000_publish_copier_snapshot_atomically.sql',
-          '20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql',
-          '20261113011058_leaderboard_publication_source_isolation.sql',
-          '20261113012028_public_snapshot_readers_sealed_freshness.sql',
-          '20261113105605_retention_preserves_metric_trust_evidence.sql',
-          '20261113110021_leaderboard_snapshot_retention.sql',
-          '20261113110430_rank_publication_source_evidence_binding.sql',
+        migration < '20260717130000' ||
+        [
+          '20260717220000_notification_read_authority.sql',
+          '20260717222500_notification_type_contract.sql',
         ].includes(migration)
     ),
     '20260716192000_social_edge_write_contract.sql',
@@ -274,10 +194,27 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260716083256_repair_legacy_exchange_logo_paths.sql',
   ])
   assert.deepEqual(quarantined, ['20260722054000_metric_trust_source_page_lineage.sql'])
-  assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 141)
+  assert.deepEqual(superseded, [
+    '20260716104500_collection_read_write_boundaries.sql',
+    '20260725017250_normalize_leaderboard_rank_max_drawdown.sql',
+    '20260728122000_bitget_bots_canonical_timeframe.sql',
+    '20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql',
+    '20260729061000_tier_a_execution_claim_enforcement.sql',
+    '20260729230000_token_ranking_generation_barrier.sql',
+    '20260804043000_retire_legacy_token_rankings.sql',
+    '20260804044000_freeze_legacy_position_history_relations.sql',
+    '20260804045000_quarantine_bingx_rank_authority.sql',
+    '20260808001418_atomic_group_channel_settings_update.sql',
+    '20260817020000_rank_history_service_only_acl.sql',
+    '20260817030000_trader_activities_publication_fence.sql',
+    '20260817040000_notification_ranking_change_reader_fence.sql',
+    '20260817050000_arena_bot_legacy_publication_isolation.sql',
+    '20260817060000_trader_series_publication_isolation.sql',
+    '20260817061000_legacy_raw_metric_publication_isolation.sql',
+  ])
+  assert.equal(new Set(all).size, 175)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-87), [
+  assert.deepEqual(predeploy.slice(-106), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -308,7 +245,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260722050000_metric_trust_attempt_outcome_authority.sql',
     '20260722051000_leaderboard_score_input_manifest_contract.sql',
     '20260722052000_leaderboard_score_input_manifest_rank_eligible_pnl.sql',
+    '20261111191927_binance_spot_contract_registration_serving_hold.sql',
     '20260722053000_binance_spot_metric_source_contract.sql',
+    '20261111191928_binance_spot_contract_registration_serving_restore.sql',
     '20260722055000_metric_trust_source_page_lineage_forward_repair.sql',
     '20260724010000_shadow_unverified_okx_web3_ranks.sql',
     '20260724232500_allow_pipeline_logs_partial_success.sql',
@@ -322,13 +261,14 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260725015000_leaderboard_rank_generation_claim.sql',
     '20260725015500_bound_leaderboard_rank_generation_batches.sql',
     '20260725016000_leaderboard_rank_generation_receipt_substrate.sql',
+    '20261111140053_leaderboard_ranks_codec_layout_rebuild.sql',
     '20260725016500_leaderboard_rank_persisted_codec.sql',
     '20260725017000_leaderboard_rank_typed_batch_contract.sql',
-    '20260725017250_normalize_leaderboard_rank_max_drawdown.sql',
+    '20261111185914_normalize_leaderboard_rank_max_drawdown_prod_constraint.sql',
     '20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql',
-    '20260728122000_bitget_bots_canonical_timeframe.sql',
+    '20261111134210_bitget_bots_canonical_timeframe_partial_seed.sql',
     '20260728123000_arena_bot_header_canonical_snapshot.sql',
-    '20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql',
+    '20261111134416_quarantine_bitget_bot_cumulative_rank_authority_prod_reader.sql',
     '20260729010000_api_keys_server_authority.sql',
     '20260729011000_leaderboard_rank_manifest_attestation_substrate.sql',
     '20260729012000_partitioned_bot_acquisition_manifest_v4.sql',
@@ -350,15 +290,31 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260729223000_rerank_public_eligible_rows_only.sql',
     '20260729224000_rank_eligible_leaderboard_count_cache.sql',
     '20260729225000_token_trader_rank_authority.sql',
-    '20260729230000_token_ranking_generation_barrier.sql',
-    '20260804043000_retire_legacy_token_rankings.sql',
-    '20260804044000_freeze_legacy_position_history_relations.sql',
-    '20260804045000_quarantine_bingx_rank_authority.sql',
+    '20261111133259_token_ranking_generation_barrier_cron_api.sql',
+    '20261111133300_retire_legacy_token_rankings_cron_api.sql',
+    '20261111135144_freeze_legacy_position_history_relations_prod_creator.sql',
+    '20261111135302_quarantine_bingx_rank_authority_blocked_spot.sql',
     '20260804050000_harden_serving_trader_resolver.sql',
     '20260804051000_harden_serving_source_capabilities.sql',
     '20260804052000_fail_closed_unbound_copier_aggregates.sql',
     '20260804053000_copier_snapshot_publication_substrate.sql',
     '20260804054000_publish_copier_snapshot_atomically.sql',
+    '20260808010000_copier_snapshot_trust_raw_role.sql',
+    '20260808020000_copier_snapshot_trust_publication_substrate.sql',
+    '20260808021000_publish_copier_snapshot_trust_v2.sql',
+    '20260808090000_quarantine_legacy_trader_daily_snapshots.sql',
+    '20260816130000_quarantine_v1_trader_alert_browser_mutations.sql',
+    '20260816151614_public_ranked_leaderboard.sql',
+    '20260816184500_public_ranked_leaderboard_source_freshness_gate.sql',
+    '20260817000000_finalize_trader_alert_delivery_epoch_fence.sql',
+    '20261111132444_rank_history_service_only_acl_hosted_role_graph.sql',
+    '20261111132445_trader_activities_publication_fence_hosted_role_graph.sql',
+    '20261111132446_notification_ranking_change_reader_fence_hosted_role_graph.sql',
+    '20261111132447_arena_bot_legacy_publication_isolation_hosted_role_graph.sql',
+    '20261111132448_trader_series_publication_isolation_hosted_role_graph.sql',
+    '20261111132450_legacy_raw_metric_publication_isolation_hosted_role_graph.sql',
+    '20260817134214_quarantine_legacy_platform_stats_rpc.sql',
+    '20261013094743_retire_v2_partition_cron_extend_arena_partitions.sql',
     '20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql',
     '20261113011058_leaderboard_publication_source_isolation.sql',
     '20261113012028_public_snapshot_readers_sealed_freshness.sql',
@@ -409,11 +365,20 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes('20260725016000_leaderboard_rank_generation_receipt_substrate.sql'))
   assert.ok(predeploy.includes('20260725016500_leaderboard_rank_persisted_codec.sql'))
   assert.ok(predeploy.includes('20260725017000_leaderboard_rank_typed_batch_contract.sql'))
-  assert.ok(predeploy.includes('20260725017250_normalize_leaderboard_rank_max_drawdown.sql'))
-  assert.ok(predeploy.includes('20260728122000_bitget_bots_canonical_timeframe.sql'))
+  assert.ok(!predeploy.includes('20260725017250_normalize_leaderboard_rank_max_drawdown.sql'))
+  assert.ok(
+    predeploy.includes('20261111185914_normalize_leaderboard_rank_max_drawdown_prod_constraint.sql')
+  )
+  assert.ok(!predeploy.includes('20260728122000_bitget_bots_canonical_timeframe.sql'))
+  assert.ok(predeploy.includes('20261111134210_bitget_bots_canonical_timeframe_partial_seed.sql'))
   assert.ok(predeploy.includes('20260728123000_arena_bot_header_canonical_snapshot.sql'))
   assert.ok(
-    predeploy.includes('20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql')
+    !predeploy.includes('20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql')
+  )
+  assert.ok(
+    predeploy.includes(
+      '20261111134416_quarantine_bitget_bot_cumulative_rank_authority_prod_reader.sql'
+    )
   )
   assert.ok(predeploy.includes('20260729010000_api_keys_server_authority.sql'))
   assert.ok(
@@ -430,7 +395,11 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes('20260729054400_leaderboard_rank_generation_private_staging.sql'))
   assert.ok(predeploy.includes('20260729060000_stale_leaderboard_attempt_report.sql'))
   assert.ok(!predeploy.includes('20260729061000_tier_a_execution_claim_enforcement.sql'))
-  assert.ok(postdeploy.includes('20260729061000_tier_a_execution_claim_enforcement.sql'))
+  assert.ok(!postdeploy.includes('20260729061000_tier_a_execution_claim_enforcement.sql'))
+  assert.ok(superseded.includes('20260729061000_tier_a_execution_claim_enforcement.sql'))
+  assert.ok(
+    !predeploy.includes('20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql')
+  )
   assert.ok(
     predeploy.includes('20260729061533_leaderboard_rank_generation_staging_only_writer.sql')
   )
@@ -441,19 +410,35 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes('20260729070500_leaderboard_score_input_manifest_v2.sql'))
   assert.ok(predeploy.includes('20260729071000_leaderboard_metric_trust_projection_v2.sql'))
   assert.ok(predeploy.includes('20260729071500_tier_a_one_phase_commit_guard.sql'))
-  assert.deepEqual(predeploy.slice(-18, -6), [
+  assert.deepEqual(predeploy.slice(-34, -6), [
     '20260729223000_rerank_public_eligible_rows_only.sql',
     '20260729224000_rank_eligible_leaderboard_count_cache.sql',
     '20260729225000_token_trader_rank_authority.sql',
-    '20260729230000_token_ranking_generation_barrier.sql',
-    '20260804043000_retire_legacy_token_rankings.sql',
-    '20260804044000_freeze_legacy_position_history_relations.sql',
-    '20260804045000_quarantine_bingx_rank_authority.sql',
+    '20261111133259_token_ranking_generation_barrier_cron_api.sql',
+    '20261111133300_retire_legacy_token_rankings_cron_api.sql',
+    '20261111135144_freeze_legacy_position_history_relations_prod_creator.sql',
+    '20261111135302_quarantine_bingx_rank_authority_blocked_spot.sql',
     '20260804050000_harden_serving_trader_resolver.sql',
     '20260804051000_harden_serving_source_capabilities.sql',
     '20260804052000_fail_closed_unbound_copier_aggregates.sql',
     '20260804053000_copier_snapshot_publication_substrate.sql',
     '20260804054000_publish_copier_snapshot_atomically.sql',
+    '20260808010000_copier_snapshot_trust_raw_role.sql',
+    '20260808020000_copier_snapshot_trust_publication_substrate.sql',
+    '20260808021000_publish_copier_snapshot_trust_v2.sql',
+    '20260808090000_quarantine_legacy_trader_daily_snapshots.sql',
+    '20260816130000_quarantine_v1_trader_alert_browser_mutations.sql',
+    '20260816151614_public_ranked_leaderboard.sql',
+    '20260816184500_public_ranked_leaderboard_source_freshness_gate.sql',
+    '20260817000000_finalize_trader_alert_delivery_epoch_fence.sql',
+    '20261111132444_rank_history_service_only_acl_hosted_role_graph.sql',
+    '20261111132445_trader_activities_publication_fence_hosted_role_graph.sql',
+    '20261111132446_notification_ranking_change_reader_fence_hosted_role_graph.sql',
+    '20261111132447_arena_bot_legacy_publication_isolation_hosted_role_graph.sql',
+    '20261111132448_trader_series_publication_isolation_hosted_role_graph.sql',
+    '20261111132450_legacy_raw_metric_publication_isolation_hosted_role_graph.sql',
+    '20260817134214_quarantine_legacy_platform_stats_rpc.sql',
+    '20261013094743_retire_v2_partition_cron_extend_arena_partitions.sql',
   ])
   assert.ok(!recoveryPrerequisites.includes('20260729223000_rerank_public_eligible_rows_only.sql'))
   assert.ok(
@@ -1205,8 +1190,85 @@ test('status makes intentionally quarantined and superseded migrations explicit'
   assert.match(source, /quarantined-unapplied/)
   assert.match(source, /quarantined-exact-forward-repair-required/)
   assert.match(source, /quarantined-drift/)
-  assert.match(source, /superseded-by-20260717230000/)
+  assert.match(source, /'superseded-by-' \|\| target\.superseder/)
+  assert.match(source, /replacement\.version = target\.superseder/)
   assert.match(source, /missing-superseder/)
   assert.match(source, /THEN 'exact'/)
   assert.match(source, /ELSE 'drift'/)
+})
+
+test('every superseded migration names a superseder and forward replacements take its slot', () => {
+  const predeploy = migrationArray('PREDEPLOY_MIGRATIONS')
+  const postdeploy = migrationArray('POSTDEPLOY_MIGRATIONS')
+  const superseded = migrationArray('SUPERSEDED_MIGRATIONS')
+  const ordered = [...predeploy, ...postdeploy]
+  // Superseders that are not ordered launch files: a separately applied repo
+  // migration, and the production ledger version that already holds 001418.
+  const external = new Map([
+    ['20260716104500_collection_read_write_boundaries.sql', '20260717230000'],
+    ['20260808001418_atomic_group_channel_settings_update.sql', '20260808071456'],
+  ])
+  const script = resolve(ROOT, 'scripts/maintenance/apply-launch-migrations.sh')
+  for (const migration of superseded) {
+    const result = spawnSync(
+      'bash',
+      ['-c', 'source "$1"; superseder_version "$2"', 'bash', script, migration],
+      { cwd: ROOT, encoding: 'utf8' }
+    )
+    assert.equal(result.status, 0, `${migration}: ${result.stderr}`)
+    const superseder = result.stdout
+    assert.match(superseder, /^\d{14}$/)
+    assert.ok(!ordered.includes(migration), `${migration} must not be replayed`)
+    if (external.has(migration)) {
+      assert.equal(superseder, external.get(migration))
+      continue
+    }
+    const replacement = ordered.filter((file) => file.startsWith(`${superseder}_`))
+    assert.equal(replacement.length, 1, `${migration} superseder ${superseder} is not ordered`)
+    const body = readFileSync(resolve(ROOT, 'supabase/migrations', replacement[0]), 'utf8')
+    assert.ok(body.includes(migration.slice(0, 14)), `${replacement[0]} must cite ${migration}`)
+  }
+  const unknown = spawnSync(
+    'bash',
+    ['-c', 'source "$1"; superseder_version 20990101000000_unknown.sql', 'bash', script],
+    { cwd: ROOT, encoding: 'utf8' }
+  )
+  assert.equal(unknown.status, 1)
+  assert.match(unknown.stderr, /superseded migration has no superseder/)
+
+  // Forward replacements and inserts run where the rehearsal ran them.
+  const before = (a, b) => assert.ok(predeploy.indexOf(a) < predeploy.indexOf(b), `${a} < ${b}`)
+  assert.equal(
+    predeploy[predeploy.indexOf('20260722053000_binance_spot_metric_source_contract.sql') - 1],
+    '20261111191927_binance_spot_contract_registration_serving_hold.sql'
+  )
+  assert.equal(
+    predeploy[predeploy.indexOf('20260722053000_binance_spot_metric_source_contract.sql') + 1],
+    '20261111191928_binance_spot_contract_registration_serving_restore.sql'
+  )
+  assert.equal(
+    predeploy[predeploy.indexOf('20260725016500_leaderboard_rank_persisted_codec.sql') - 1],
+    '20261111140053_leaderboard_ranks_codec_layout_rebuild.sql'
+  )
+  before(
+    '20260725017000_leaderboard_rank_typed_batch_contract.sql',
+    '20261111185914_normalize_leaderboard_rank_max_drawdown_prod_constraint.sql'
+  )
+  before(
+    '20261111185914_normalize_leaderboard_rank_max_drawdown_prod_constraint.sql',
+    '20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql'
+  )
+  before(
+    '20260817000000_finalize_trader_alert_delivery_epoch_fence.sql',
+    '20261111132444_rank_history_service_only_acl_hosted_role_graph.sql'
+  )
+  before(
+    '20261111132450_legacy_raw_metric_publication_isolation_hosted_role_graph.sql',
+    '20260817134214_quarantine_legacy_platform_stats_rpc.sql'
+  )
+  // 192134 allowlists raw-object guards that later predeploy files install.
+  assert.equal(
+    postdeploy.at(-1),
+    '20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql'
+  )
 })

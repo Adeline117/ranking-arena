@@ -14,7 +14,6 @@ const known = JSON.parse(
 // gaps are listed so they can only shrink; see docs/LAUNCH_CHECKLIST.md. The
 // horizon is fixed rather than "newest classified file": classifying a later
 // forward replacement must not hide an older migration that is still a gap.
-// (Same form as #415.)
 const CLASSIFIED_THROUGH = '20260804054000_publish_copier_snapshot_atomically.sql'
 
 test('no new migration is missing from the release inventory', () => {

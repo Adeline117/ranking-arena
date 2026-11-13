@@ -27,8 +27,8 @@ export const REQUIRED_RANKING_MIGRATION_ORDER = Object.freeze([
   '20260729223000_rerank_public_eligible_rows_only.sql',
   '20260729224000_rank_eligible_leaderboard_count_cache.sql',
   '20260729225000_token_trader_rank_authority.sql',
-  '20260729230000_token_ranking_generation_barrier.sql',
-  '20260804043000_retire_legacy_token_rankings.sql',
+  '20261111133259_token_ranking_generation_barrier_cron_api.sql',
+  '20261111133300_retire_legacy_token_rankings_cron_api.sql',
 ])
 
 export const MISSING_RPC_DEFINITIONS = Object.freeze([
@@ -69,11 +69,11 @@ export const MISSING_RPC_DEFINITIONS = Object.freeze([
   Object.freeze({
     aclEvidence: Object.freeze({
       kind: 'retirement-pg17-matrix',
-      migration: '20260804043000_retire_legacy_token_rankings.sql',
+      migration: '20261111133300_retire_legacy_token_rankings_cron_api.sql',
       test: 'supabase/migrations/__tests__/token-ranking-generation-barrier.pg17.sh',
     }),
     consumers: Object.freeze(['lib/rankings/token-ranking-snapshot.ts']),
-    definingMigration: '20260729230000_token_ranking_generation_barrier.sql',
+    definingMigration: '20261111133259_token_ranking_generation_barrier_cron_api.sql',
     endState: 'service-only/head-reader-retained-after-http-containment',
     expectedAcl: 'service_role-execute-only',
     name: 'get_token_ranking_publication_head',
@@ -87,11 +87,11 @@ export const MISSING_RPC_DEFINITIONS = Object.freeze([
   Object.freeze({
     aclEvidence: Object.freeze({
       kind: 'retirement-pg17-matrix',
-      migration: '20260804043000_retire_legacy_token_rankings.sql',
+      migration: '20261111133300_retire_legacy_token_rankings_cron_api.sql',
       test: 'supabase/migrations/__tests__/token-ranking-generation-barrier.pg17.sh',
     }),
     consumers: Object.freeze(['lib/rankings/token-ranking-snapshot.ts']),
-    definingMigration: '20260729230000_token_ranking_generation_barrier.sql',
+    definingMigration: '20261111133259_token_ranking_generation_barrier_cron_api.sql',
     endState: 'retired/fail-closed-reader-after-http-containment',
     expectedAcl: 'owner-only/no-non-owner-execute',
     name: 'get_token_trader_rankings_v2',
@@ -105,11 +105,11 @@ export const MISSING_RPC_DEFINITIONS = Object.freeze([
   Object.freeze({
     aclEvidence: Object.freeze({
       kind: 'retirement-pg17-matrix',
-      migration: '20260804043000_retire_legacy_token_rankings.sql',
+      migration: '20261111133300_retire_legacy_token_rankings_cron_api.sql',
       test: 'supabase/migrations/__tests__/token-ranking-generation-barrier.pg17.sh',
     }),
     consumers: Object.freeze(['lib/rankings/token-ranking-snapshot.ts']),
-    definingMigration: '20260729230000_token_ranking_generation_barrier.sql',
+    definingMigration: '20261111133259_token_ranking_generation_barrier_cron_api.sql',
     endState: 'retired/fail-closed-reader-after-http-containment',
     expectedAcl: 'owner-only/no-non-owner-execute',
     name: 'get_popular_tokens_v2',

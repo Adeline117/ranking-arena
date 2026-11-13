@@ -202,6 +202,13 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:rank-staging-xid-pg17
 
+      # 上线迁移有序通道的一次性 PG17 证明（回滚边界、串行化、超时、断连）。
+      # 2026-08-04 起它因 readonly 列表在第一个场景前就中止却仍退出 0，从未被 CI 运行。
+      - name: Prove launch-migration emitter on disposable PG17
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:launch-migration-runner-pg17
+
       - name: Prove immutable generation publication plans
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
