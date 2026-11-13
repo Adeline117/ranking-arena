@@ -780,7 +780,10 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
           max_drawdown: (serverTraderData.performance as Record<string, unknown>).max_drawdown as
             | number
             | null,
-          rank: (serverTraderData.performance as Record<string, unknown>).rank as number | null,
+          // toTraderPageData puts the sealed-cohort rank at the top level; the
+          // performance object has no `rank` key, so reading it there left the
+          // header rank badge permanently empty for these traders.
+          rank: (serverTraderData.rank as number | null | undefined) ?? null,
           profitability_score: (serverTraderData.performance as Record<string, unknown>)
             .profitability_score as number | null,
           risk_control_score: (serverTraderData.performance as Record<string, unknown>)
