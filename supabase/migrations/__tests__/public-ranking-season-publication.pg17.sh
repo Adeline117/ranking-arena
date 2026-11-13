@@ -19,6 +19,7 @@
 #   20260725015500 bound_leaderboard_rank_generation_batches
 #   20260816151614 public_ranked_leaderboard
 #   20260816184500 public_ranked_leaderboard_source_freshness_gate
+#   20261113010326 release_leaderboard_rank_generation_lease_after_seal
 # leaderboard_ranks itself is created in the reviewed codec layout of
 # 20261111140053 (the forward repair that rebuilds it in production).
 
@@ -40,6 +41,7 @@ CHAIN=(
   20260725015500_bound_leaderboard_rank_generation_batches.sql
   20260816151614_public_ranked_leaderboard.sql
   20260816184500_public_ranked_leaderboard_source_freshness_gate.sql
+  20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql
 )
 
 for executable in initdb pg_ctl psql; do
@@ -480,10 +482,29 @@ SQL
 psql_db -qc "UPDATE arena.sources SET serving_mode = 'shadow' WHERE slug = 'okx_futures'"
 assert_equal "rejected partial seal leaves the previous cohort served" "$FIRST_VIEW" "$(anon_view)"
 
-# The first generation's 15s claim lease must expire before the season can be
-# claimed again (a concurrent publisher inside the lease is refused).
+# The successful publication released its own lease inside its transaction.
+assert_equal "sealed publication released its claim lease" "sealed|" "$(psql_db -Atqc "
+  SELECT phase || '|' || COALESCE(lease_expires_at::text, '')
+  FROM arena.leaderboard_rank_generation_heads WHERE season_id = '90D'")"
+
+# A transaction that did not seal the cohort cannot release a live lease.
+psql_db -q >/dev/null <<'SQL'
+BEGIN;
+SELECT public.claim_leaderboard_rank_generation('90D',
+  '00000000-0000-4000-8000-0000000000c1', repeat('a', 64), 1, 1, now(), 15);
+COMMIT;
+SQL
+RELEASE_ERROR="$(psql_db -Atqc "SELECT public.release_leaderboard_rank_generation_lease('90D',
+  '00000000-0000-4000-8000-0000000000c1')" 2>&1 || true)"
+[[ "$RELEASE_ERROR" == *"only by the transaction that sealed it"* ]] || {
+  echo "unsealed lease release was not refused: $RELEASE_ERROR" >&2
+  exit 1
+}
+
+# A live lease held by another (e.g. crashed or concurrent) publisher still
+# blocks the season until it expires.
 OUT="$(publish 90D)"
-assert_equal "a publication inside the live lease is refused" "false" "$(json_field "$OUT" ok)"
+assert_equal "a publication inside a foreign live lease is refused" "false" "$(json_field "$OUT" ok)"
 [[ "$(json_field "$OUT" message)" == *"active lease"* ]] || {
   echo "lease refusal has an unexpected reason: $OUT" >&2
   exit 1
@@ -516,6 +537,17 @@ assert_equal "view serves only the new cohort" "7|0|1" "$(psql_db -Atqc "
 assert_equal "every served row is the new cohort" "7" "$(psql_db -Atqc "
   SELECT pg_catalog.count(*) FROM public.leaderboard_ranks
   WHERE season_id = '90D' AND rank_publication_id = '$COHORT_TWO'")"
-assert_equal "generation sequence advanced to 2" "2" "$(json_field "$OUT" result.generationSeq)"
+assert_equal "generation sequence advanced past the foreign claim" "3" \
+  "$(json_field "$OUT" result.generationSeq)"
+assert_equal "second cycle released its lease" "true" "$(json_field "$OUT" result.leaseReleased)"
+
+# ---------------------------------------------------------------------------
+# Positive 3: an immediate re-publication is no longer blocked by the previous
+# run's lease (it was released in the sealing transaction).
+# ---------------------------------------------------------------------------
+OUT="$(publish 90D)"
+assert_equal "immediate re-publication succeeds" "true" "$(json_field "$OUT" ok)"
+assert_equal "immediate re-publication is generation 4" "4" "$(json_field "$OUT" result.generationSeq)"
+assert_equal "view still serves 7 rows" "7" "$(view_count)"
 
 echo "public ranking season publication PostgreSQL 17 proof passed"

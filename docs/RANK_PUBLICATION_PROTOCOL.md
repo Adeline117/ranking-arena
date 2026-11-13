@@ -87,7 +87,10 @@ p_expected_rank_count, p_expected_batch_count, p_computed_at, p_lease_seconds)`�
 - 编排器参数：cohort = 新 UUID；`expected_batch_count = ceil(rows / 1000)`（应用侧 `claim-rank-generation.ts`
   还要求恰好等于这个值）；租约 15 秒（数据库最小值）；`statement_timeout = 4s`，保证数据库先于客户端 5 秒超时取消，
   不会出现"结果不明确"后在已中止的事务里重试。
-- 注意：提交后头行保持 `claimed` 直到租约过期，期间同季的第二次发布会被拒绝（PG17 测试里有这个反例）。
+- 封存并确认服务后，同一事务调用 `public.release_leaderboard_rank_generation_lease(season, cohort)`
+  （`20261113010326`）把头行置为 `sealed`、租约清空；它只接受本事务插入了该 cohort 封存回执的调用，
+  所以只能由同一次运行释放。迁移未安装时编排器记日志并沿用旧行为（租约 15 秒后过期）。
+  其他发布者（崩溃或并发）持有的活动租约仍会拒绝本次发布（PG17 测试覆盖正反例）。
 
 ### 5. 写入带 cohort 的行
 

@@ -44,9 +44,11 @@ import {
 import type { TraderRow } from './trader-row'
 
 /**
- * The claim lease outlives this transaction: after COMMIT the head stays
- * `claimed` until the lease expires, which blocks a second publication of the
- * same season for this long. Keep it at the 15s database minimum.
+ * Claim lease (15s database minimum). Once the season is sealed and served,
+ * the same transaction releases it through
+ * release_leaderboard_rank_generation_lease (20261113010326), so a committed
+ * publication no longer blocks the next one. Before that migration exists the
+ * lease simply expires after COMMIT, as before.
  */
 export const RANK_PUBLICATION_LEASE_SECONDS = 15
 /** Claim RPC: the module requires timeout <= lease/3 (5s). */
@@ -213,6 +215,8 @@ export interface PublishLeaderboardSeasonResult {
   deletedRankCount: number
   sources: PublishedSourceSummary[]
   exclusions: RankRowExclusionSummary
+  /** True when the claim lease was released inside the publishing transaction. */
+  leaseReleased: boolean
 }
 
 interface PublishableRow {
@@ -711,6 +715,28 @@ export async function publishLeaderboardSeason(
       )
     }
 
+    // 10. Release the claim lease, bound to this cohort and this transaction
+    // (the release RPC requires the seal receipt this transaction inserted).
+    const releaseAvailable = await tx.query<{ available: boolean }>(
+      `SELECT pg_catalog.to_regprocedure(
+         'public.release_leaderboard_rank_generation_lease(text,uuid)'
+       ) IS NOT NULL AS available`
+    )
+    let leaseReleased = false
+    if (releaseAvailable.rows[0]?.available === true) {
+      await tx.query(
+        `SELECT public.release_leaderboard_rank_generation_lease(
+           p_season_id => $1, p_score_cohort_id => $2::uuid
+         ) AS result`,
+        [season, scoreCohortId]
+      )
+      leaseReleased = true
+    } else {
+      log(
+        `[${season}] lease release RPC not installed; the ${RANK_PUBLICATION_LEASE_SECONDS}s claim lease expires after COMMIT`
+      )
+    }
+
     if (exclusionAlert) {
       // Raised inside the transaction only after the season is confirmed
       // served; a later COMMIT failure still surfaces as the job error.
@@ -745,6 +771,7 @@ export async function publishLeaderboardSeason(
         published_rank_count: proof.published_rank_count,
       })),
       exclusions,
+      leaseReleased,
     }
   })
 }
