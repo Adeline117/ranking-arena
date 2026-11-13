@@ -441,13 +441,17 @@ export async function createOneTimePaymentSession(params: {
 }
 
 // 创建客户门户会话 (用于管理订阅)
+type PortalFlowData = NonNullable<Stripe.BillingPortal.SessionCreateParams['flow_data']>
+
 export async function createPortalSession(
   customerId: string,
-  returnUrl: string
+  returnUrl: string,
+  flowData?: PortalFlowData
 ): Promise<Stripe.BillingPortal.Session> {
   const session = await stripe.billingPortal.sessions.create({
     customer: customerId,
     return_url: returnUrl,
+    ...(flowData ? { flow_data: flowData } : {}),
   })
 
   return session
