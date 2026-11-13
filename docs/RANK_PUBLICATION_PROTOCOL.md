@@ -166,6 +166,19 @@ persistLeaderboardRanks` 必须保持没有生产调用方（`scripts/qa/public-
   发布事务内的隔离与封存同时生效，不会造成空窗。
 - 任何来源水位超过 48 小时、或 `computed_at` 超过 48 小时 → 整季下线。
 
+## 其他公开读取入口（直读快照的 anon RPC）
+
+`arena_weekly_leaders / arena_exchange_rankings / arena_first_screen / arena_core_modules`
+不读 `public_ranked_leaderboard`，而是直接投影 arena 快照。`20261113012028`（只生成未应用）把它们收紧为：
+
+- 周榜（7D）和交易所榜（7/30/90D）只读**当前正在服务的封存发布**里的来源
+  （`arena.public_sealed_rank_sources()`：head 当前有效、witness 属于该 head 的 cohort），
+  且只用非空、count-check 通过、不晚于封存水位、48 小时内的板；被隔离/未封存的来源不再出现。
+- 详情首屏的排名条目只显示 48 小时内的非空通过板（不要求封存，因为详情也覆盖非排名来源）。
+- `arena_core_modules` 只新增 `stale` 标记（as_of 为空或超过 48 小时）。在修好 trader_stats 的
+  as_of 冻结问题之前硬过滤会让大部分详情页变空，所以暂不过滤。
+- PG17 证明在 `public-ranking-season-publication.pg17.sh` 末尾。
+
 ## 迁移回放顺序（20261111140053 的文件名陷阱）
 
 - `20261111140053_leaderboard_ranks_codec_layout_rebuild.sql` 的设计槽位是"紧挨在 `20260725016500` 之前"，

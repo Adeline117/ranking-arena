@@ -589,4 +589,114 @@ assert_equal "immediate re-publication succeeds" "true" "$(json_field "$OUT" ok)
 assert_equal "immediate re-publication is generation 5" "5" "$(json_field "$OUT" result.generationSeq)"
 assert_equal "view still serves 7 rows" "7" "$(view_count)"
 
+# ---------------------------------------------------------------------------
+# Public snapshot readers (20261113012028): anon RPCs serve only sealed, fresh
+# boards. Extend the fixture with the reader columns, install marker-bearing
+# stand-ins for the 20261111134416 bodies, then apply the forward migration.
+# ---------------------------------------------------------------------------
+psql_db -q <<'SQL'
+ALTER TABLE arena.exchanges ADD COLUMN slug text;
+UPDATE arena.exchanges SET slug = pg_catalog.lower(name);
+ALTER TABLE arena.sources
+  ADD COLUMN adapter_slug text,
+  ADD COLUMN currency text NOT NULL DEFAULT 'USDT',
+  ADD COLUMN product_type text NOT NULL DEFAULT 'futures';
+UPDATE arena.sources SET adapter_slug = slug;
+ALTER TABLE arena.leaderboard_entries
+  ADD COLUMN timeframe smallint NOT NULL DEFAULT 90,
+  ADD COLUMN headline_roi numeric,
+  ADD COLUMN headline_pnl numeric,
+  ADD COLUMN headline_win_rate numeric,
+  ADD COLUMN currency text,
+  ADD COLUMN raw jsonb;
+UPDATE arena.leaderboard_entries AS entry
+SET headline_roi = metric.roi_pct, headline_pnl = metric.pnl_usd,
+    headline_win_rate = metric.win_rate
+FROM arena.fixture_trader_metrics AS metric WHERE metric.trader_id = entry.trader_id;
+CREATE TABLE arena.traders (
+  id bigint PRIMARY KEY,
+  source_id smallint NOT NULL,
+  exchange_trader_id text NOT NULL,
+  nickname text, trader_kind text, avatar_url_mirror text, avatar_url_origin text,
+  wallet_address text, bot_strategy text
+);
+INSERT INTO arena.traders (id, source_id, exchange_trader_id, nickname)
+SELECT metric.trader_id, (metric.trader_id / 10)::smallint, metric.trader_key, metric.handle
+FROM arena.fixture_trader_metrics AS metric;
+CREATE TABLE arena.trader_stats (
+  trader_id bigint NOT NULL, timeframe smallint NOT NULL, as_of timestamptz,
+  currency text, roi numeric, pnl numeric, sharpe numeric, mdd numeric, win_rate numeric,
+  win_positions integer, total_positions integer, copier_pnl numeric, copier_count integer,
+  aum numeric, volume numeric, profit_share_rate numeric, holding_duration_avg interval,
+  trading_preferences jsonb, extras jsonb
+);
+INSERT INTO arena.trader_stats (trader_id, timeframe, as_of, roi, mdd)
+VALUES (11, 90, pg_catalog.now() - interval '1 hour', 180.5, 12.5),
+       (12, 90, pg_catalog.now() - interval '20 days', 95.0, 18.0);
+CREATE TABLE arena.trader_series (
+  trader_id bigint, timeframe smallint, metric text, ts timestamptz, value numeric
+);
+
+-- Stand-ins carrying the Bitget quarantine marker the forward migration
+-- requires (the real bodies need the full production substrate).
+CREATE FUNCTION public.arena_weekly_leaders(p_limit integer DEFAULT 25) RETURNS jsonb
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+  AS $$ SELECT '{}'::jsonb /* bitget-bot-cumulative-public-reader-quarantine@1 */ $$;
+CREATE FUNCTION public.arena_exchange_rankings(p_timeframe integer) RETURNS jsonb
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+  AS $$ SELECT '{}'::jsonb /* bitget-bot-cumulative-public-reader-quarantine@1 */ $$;
+CREATE FUNCTION public.arena_first_screen(p_source text, p_trader text) RETURNS jsonb
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+  AS $$ SELECT '{}'::jsonb /* bitget-bot-cumulative-public-reader-quarantine@1 */ $$;
+CREATE FUNCTION public.arena_core_modules(p_source text, p_trader text, p_timeframe integer)
+  RETURNS jsonb
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+  AS $$ SELECT '{}'::jsonb /* bitget-bot-cumulative-public-reader-quarantine@1 */ $$;
+
+-- Boards the old readers would have served:
+--   * okx_futures (active shadow, never sealed) has a fresh passed 90D board;
+--   * binance has a NEWER passed 90D board than its sealed watermark;
+--   * binance has a fresh passed 7D board, but no 7D season is sealed;
+--   * hyperliquid has a 60h-old 30D board and an empty fresh 7D board.
+INSERT INTO arena.leaderboard_snapshots VALUES
+  (401, 4, 90, pg_catalog.now() - interval '10 minutes', 1, true),
+  (103, 1, 90, pg_catalog.now() - interval '1 minute', 1, true),
+  (104, 1, 7, pg_catalog.now() - interval '1 hour', 1, true),
+  (302, 3, 30, pg_catalog.now() - interval '60 hours', 1, true),
+  (303, 3, 7, pg_catalog.now() - interval '1 hour', 0, true);
+INSERT INTO arena.traders (id, source_id, exchange_trader_id, nickname)
+VALUES (41, 4, 'okx-only', 'OkxOnly');
+INSERT INTO arena.leaderboard_entries
+  (snapshot_id, scraped_at, trader_id, rank, timeframe, headline_roi)
+SELECT snapshot.id, snapshot.scraped_at, input.trader_id, 1, snapshot.timeframe, input.roi
+FROM (VALUES (401, 41, 999.0), (103, 11, 555.0), (104, 11, 77.0), (302, 31, 12.0))
+  AS input(snapshot_id, trader_id, roi)
+JOIN arena.leaderboard_snapshots AS snapshot ON snapshot.id = input.snapshot_id;
+SQL
+PGOPTIONS='-c client_min_messages=warning' psql_db -q \
+  -f "$MIGRATIONS/20261113012028_public_snapshot_readers_sealed_freshness.sql" >/dev/null
+
+anon_rpc() {
+  psql_db -Atqc "SET ROLE anon; SELECT $1"
+}
+assert_equal "exchange rankings list only sealed sources" "binance_futures,bybit,hyperliquid" \
+  "$(anon_rpc "pg_catalog.string_agg(r->>'source', ',' ORDER BY r->>'source')
+     FROM pg_catalog.jsonb_array_elements(public.arena_exchange_rankings(90)->'rows') AS r")"
+assert_equal "exchange rankings read the sealed board, not a newer unsealed one" "3" \
+  "$(anon_rpc "(r->>'rankedTraders')
+     FROM pg_catalog.jsonb_array_elements(public.arena_exchange_rankings(90)->'rows') AS r
+     WHERE r->>'source' = 'binance_futures'")"
+assert_equal "weekly leaders serve nothing without a sealed 7D season" "[]" \
+  "$(anon_rpc "public.arena_weekly_leaders(25)->'rows'")"
+assert_equal "first screen hides 60h-old and empty boards" "90" \
+  "$(anon_rpc "pg_catalog.string_agg(e->>'timeframe', ',')
+     FROM pg_catalog.jsonb_array_elements(
+       public.arena_first_screen('hyperliquid', 'hl-gale')->'entries') AS e")"
+assert_equal "core modules flag stale stats" "false|true" \
+  "$(anon_rpc "(public.arena_core_modules('binance_futures', 'bn-ace', 90)->>'stale') || '|' ||
+              (public.arena_core_modules('binance_futures', 'bn-bolt', 90)->>'stale')")"
+assert_equal "sealed-source helper is not anon-callable" "f" \
+  "$(psql_db -Atqc "SELECT pg_catalog.has_function_privilege('anon',
+     'arena.public_sealed_rank_sources()', 'EXECUTE')")"
+
 echo "public ranking season publication PostgreSQL 17 proof passed"
