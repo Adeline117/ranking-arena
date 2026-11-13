@@ -166,6 +166,10 @@ function RankingTableInner(props: {
   } | null
   /** False means category totals cannot define a finite page boundary. */
   categoryCountsAreExact?: boolean
+  /** Source-watermark staleness: an empty unfiltered board is "refreshing". */
+  isStale?: boolean
+  /** Clears advanced filters/presets (the empty state's reset action). */
+  onResetFilters?: () => void
 }) {
   const {
     traders: tradersRaw,
@@ -193,6 +197,8 @@ function RankingTableInner(props: {
     hasMore,
     categoryCounts,
     categoryCountsAreExact,
+    isStale = false,
+    onResetFilters,
   } = props
   const { t, language } = useLanguage()
 
@@ -1191,7 +1197,10 @@ function RankingTableInner(props: {
                   gap: tokens.spacing[3],
                 }}
               >
-                <Text size="md" color="secondary">
+                <Text size="md" weight="semibold">
+                  {t('failedToLoadRankings')}
+                </Text>
+                <Text size="sm" color="secondary">
                   {error}
                 </Text>
                 {onRetry && (
@@ -1232,22 +1241,29 @@ function RankingTableInner(props: {
                 title={
                   debouncedSearch.trim() || hasActiveFilters
                     ? t('rankingNoMatchCriteria')
-                    : t('noTraderData')
+                    : // Single empty state for the board (RankingSection no longer
+                      // renders a second one). The request succeeded but no rows
+                      // are published: stale sources = refreshing, else empty period.
+                      isStale
+                      ? t('rankingsRefreshingTitle')
+                      : t('rankingsEmptyPeriodTitle')
                 }
                 description={
                   debouncedSearch.trim() || hasActiveFilters
                     ? t('rankingBroadenFilters')
-                    : undefined
+                    : t('rankingsRefreshingDesc')
                 }
                 action={
                   debouncedSearch.trim() || hasActiveFilters
                     ? {
-                        label: t('clearSearch'),
+                        // Label matches what the click actually clears.
+                        label: debouncedSearch.trim() ? t('clearSearch') : t('resetFilters'),
                         onClick: () => {
                           if (debouncedSearch.trim()) {
                             if (onSearchChange) onSearchChange('')
                             else setInternalSearchQuery('')
                           }
+                          if (hasActiveFilters && onResetFilters) onResetFilters()
                         },
                       }
                     : // Unfiltered + empty = soft fetch failure → offer a real retry

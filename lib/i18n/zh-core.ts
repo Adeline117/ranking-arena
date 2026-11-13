@@ -371,6 +371,11 @@ const zhCore = {
   rankingFilteredByExchange: '已按 {exchange} 筛选',
   rankingClearExchangeFilter: '清除交易所筛选',
   errorTimeout: '请求超时，请稍后重试',
+  resetFilters: '重置筛选',
+  clearSearch: '清除搜索',
+  failedToLoadRankings: '加载排名失败',
+  rankingNoMatchCriteria: '没有符合条件的交易员',
+  rankingBroadenFilters: '试试放宽筛选条件',
 } as const
 
 export default zhCore

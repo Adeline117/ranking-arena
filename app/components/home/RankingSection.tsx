@@ -2,7 +2,6 @@
 
 import { useState, useCallback } from 'react'
 import dynamic from 'next/dynamic'
-import { tokens } from '@/lib/design-tokens'
 import type { Trader } from '../ranking/RankingTableTypes'
 import type { TimeRange } from './hooks/useTraderData'
 import type { CategoryCounts } from '@/lib/getInitialTraders'
@@ -241,108 +240,9 @@ export default function RankingSection({
         </div>
       )}
 
-      {!loading && !premiumLoading && error && filteredTraders.length === 0 && (
-        <div
-          style={{
-            padding: tokens.spacing[6],
-            textAlign: 'center',
-            color: tokens.colors.text.tertiary,
-            fontSize: 14,
-            lineHeight: 1.6,
-          }}
-        >
-          <div style={{ marginBottom: 8, color: 'var(--color-error, #e53935)' }}>
-            {t('failedToLoadRankings')}
-          </div>
-          <div style={{ fontSize: 13, marginBottom: 12 }}>{error}</div>
-          {onRetry && (
-            <button
-              onClick={onRetry}
-              className="tap-target"
-              style={{
-                padding: '8px 20px',
-                borderRadius: 6,
-                border: '1px solid var(--color-border-primary)',
-                background: 'var(--color-accent-primary)',
-                color: '#fff',
-                fontSize: 13,
-                cursor: 'pointer',
-              }}
-            >
-              {t('retry')}
-            </button>
-          )}
-        </div>
-      )}
-
-      {!loading && !premiumLoading && filteredTraders.length === 0 && !error && (
-        <div
-          style={{
-            padding: tokens.spacing[6],
-            textAlign: 'center',
-            color: tokens.colors.text.tertiary,
-            fontSize: 14,
-            lineHeight: 1.6,
-          }}
-        >
-          {hasActiveFilters ? (
-            t('noTradersMatchFilters')
-          ) : (
-            // No `error` here: the request succeeded but returned an empty
-            // cohort. The API withholds rows (sealed-empty projection) while
-            // source freshness/publication is unverified (`isStale`), so this
-            // is a refresh state — not a load failure.
-            <>
-              <div style={{ color: tokens.colors.text.secondary, marginBottom: 4 }}>
-                {isStale ? t('rankingsRefreshingTitle') : t('rankingsEmptyPeriodTitle')}
-              </div>
-              <div style={{ fontSize: 13 }}>{t('rankingsRefreshingDesc')}</div>
-            </>
-          )}
-          {hasActiveFilters ? (
-            <button
-              onClick={handleResetFilters}
-              className="tap-target"
-              style={{
-                margin: '12px auto 0',
-                padding: '6px 16px',
-                borderRadius: 6,
-                border: '1px solid var(--color-border-primary)',
-                background: 'transparent',
-                color: 'var(--color-accent-primary)',
-                fontSize: 13,
-                cursor: 'pointer',
-              }}
-            >
-              {t('resetFilters')}
-            </button>
-          ) : (
-            onRetry && (
-              // Unfiltered + loaded + empty = the fetch came back empty (a soft
-              // failure). Offer a real retry instead of telling the user to
-              // "refresh shortly" (which read as if it were still loading).
-              <button
-                onClick={onRetry}
-                className="tap-target"
-                style={{
-                  display: 'block',
-                  margin: '12px auto 0',
-                  padding: '8px 20px',
-                  borderRadius: 6,
-                  border: '1px solid var(--color-border-primary)',
-                  background: 'var(--color-accent-primary)',
-                  color: '#fff',
-                  fontSize: 13,
-                  cursor: 'pointer',
-                }}
-              >
-                {t('retry')}
-              </button>
-            )
-          )}
-        </div>
-      )}
-
+      {/* Error + empty states are rendered once, by RankingTable (it was
+          previously duplicated here, producing two messages / two retry
+          buttons and contradictory stale copy). */}
       <RankingTable
         traders={filteredTraders}
         loading={loading || premiumLoading}
@@ -370,6 +270,8 @@ export default function RankingSection({
         hasMore={hasMore}
         categoryCounts={categoryCounts}
         categoryCountsAreExact={categoryCountsAreExact}
+        isStale={isStale}
+        onResetFilters={handleResetFilters}
       />
 
       <div

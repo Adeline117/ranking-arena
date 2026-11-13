@@ -435,6 +435,11 @@ const enCore = {
   rankingFilteredByExchange: 'Filtered by {exchange}',
   rankingClearExchangeFilter: 'Clear exchange filter',
   errorTimeout: 'Request timed out, please try again',
+  resetFilters: 'Reset Filters',
+  clearSearch: 'Clear search',
+  failedToLoadRankings: 'Failed to load rankings',
+  rankingNoMatchCriteria: 'No traders match your criteria',
+  rankingBroadenFilters: 'Try broadening your filters',
 } as const
 
 export default enCore
