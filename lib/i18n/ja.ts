@@ -1885,6 +1885,7 @@ const ja = {
   loginTimeout: 'ログインに時間がかかっています。接続を確認して再度お試しください。',
   loginAuthFailed: 'ログインに失敗しました。もう一度お試しください。',
   loginNoSession: 'セッションを作成できませんでした。再度ログインしてください。',
+  loginCancelled: 'ログインがキャンセルされました。',
   loginEmailNotRegistered:
     'このメールアドレスのアカウントが見つかりません。先にサインアップしてください。',
   loginWithPassword: 'パスワードでログイン',

@@ -177,6 +177,14 @@ function exactSessionReference(session: Session): ExactSessionReference {
   }
 }
 
+/** Login error codes the auth callback may hand off via `?error=`. */
+const LOGIN_ERROR_MESSAGE_KEYS: Record<string, string> = {
+  auth_failed: 'loginAuthFailed',
+  no_session: 'loginNoSession',
+  profile_provisioning_failed: 'loginSetupFailed',
+  oauth_cancelled: 'loginCancelled',
+}
+
 function attemptOwnsExactSession(attempt: LoginAttempt, session: Session): boolean {
   const expected = attempt.externalSession
   return (
@@ -485,14 +493,18 @@ export default function LoginPageClient() {
 
   useEffect(() => {
     // Show error from auth callback redirect or OAuth provider errors
+    // Only known codes are shown, via i18n. The raw value is attacker-
+    // controllable (phishing copy in the trusted error box) and a second
+    // decode of an already-decoded `%` throws.
     const errorParam = searchParams.get('error')
-    if (errorParam === 'auth_failed') {
-      setError(t('loginAuthFailed'))
-    } else if (errorParam === 'no_session') {
-      setError(t('loginNoSession'))
-    } else if (errorParam) {
-      // Generic error from OAuth callback or other redirects (e.g. provider cancelled)
-      setError(decodeURIComponent(errorParam))
+    if (errorParam) {
+      setError(
+        t(
+          Object.hasOwn(LOGIN_ERROR_MESSAGE_KEYS, errorParam)
+            ? LOGIN_ERROR_MESSAGE_KEYS[errorParam]
+            : 'loginAuthFailed'
+        )
+      )
     }
     if (
       searchParams.get('account_deleted') === '1' ||

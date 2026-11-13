@@ -2017,6 +2017,7 @@ const zh = {
   loginTimeout: '登录超时，请检查网络连接后重试。',
   loginAuthFailed: '登录失败，请重试。',
   loginNoSession: '无法创建会话，请重新登录。',
+  loginCancelled: '登录已取消。',
   loginEmailNotRegistered: '该邮箱未注册，请先创建账号。',
   loginWithPassword: '使用密码登录',
   loginUsernamePlaceholder: '用户名',

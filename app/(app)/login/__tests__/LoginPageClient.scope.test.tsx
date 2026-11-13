@@ -279,6 +279,28 @@ describe('LoginPageClient exact identity boundary', () => {
     })
   })
 
+  it.each([
+    ['error=50%25', '50%'],
+    [
+      'error=Account+locked%2C+email+support%40evil.example',
+      'Account locked, email support@evil.example',
+    ],
+    ['error=constructor', 'constructor'],
+  ])('never renders a raw ?error= value (%s)', async (query, raw) => {
+    mockSearchParams = new URLSearchParams(query)
+    await renderLogin()
+
+    expect(await screen.findByText('loginAuthFailed')).toBeInTheDocument()
+    expect(screen.queryByText(raw)).not.toBeInTheDocument()
+  })
+
+  it('maps the callback profile provisioning code to a localized message', async () => {
+    mockSearchParams = new URLSearchParams('error=profile_provisioning_failed')
+    await renderLogin()
+
+    expect(await screen.findByText('loginSetupFailed')).toBeInTheDocument()
+  })
+
   it('keeps a clean-URL handoff in component memory through StrictMode replay', async () => {
     const recoveryToken = 'A'.repeat(43)
     mockSearchParams = new URLSearchParams('account_deleted=1')
