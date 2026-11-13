@@ -64,3 +64,20 @@ describe('Arena Score V5 — unknown/zero trade counts never out-rank small real
     expect(v4Zero.score).toBeGreaterThanOrEqual(v4TwentyOne.score)
   })
 })
+
+describe('Arena Score V4/V5 — large cohorts', () => {
+  it('scores a 250k cohort without a call-stack RangeError', () => {
+    const big: TraderScoreInputV4[] = Array.from({ length: 250_000 }, (_, i) => ({
+      roi: (i % 500) + 1,
+      pnl: 1_000 + i,
+      maxDrawdown: (i % 50) + 1,
+      winRate: (i % 60) + 20,
+      sharpeRatio: null,
+      profitFactor: null,
+      tradesCount: (i % 300) + 1,
+    }))
+    const results = computeArenaScoresV4(big, '90D')
+    expect(results).toHaveLength(250_000)
+    expect(Math.max(...results.slice(0, 1000).map((r) => r.totalScore))).toBeLessThanOrEqual(100)
+  }, 60_000)
+})

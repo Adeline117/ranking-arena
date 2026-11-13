@@ -864,7 +864,9 @@ function computeArenaScoresV4OrV5(
 
   // 显示分 = 队内百分位("超过 X% 的人") + 少量 composite 相对值展开顶端
   const pComp = percentRanks(composite.map((c) => c))
-  const maxComp = Math.max(...composite, 1e-9)
+  // 循环求最大值:Math.max(...arr) 展开参数在约 12 万+元素时抛 RangeError(调用栈上限)
+  let maxComp = 1e-9
+  for (const c of composite) if (c > maxComp) maxComp = c
 
   return inputs.map((_, i) => {
     const pct = pComp[i] ?? 0
