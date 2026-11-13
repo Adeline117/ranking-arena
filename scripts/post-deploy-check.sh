@@ -32,10 +32,16 @@ for path in \
   "/pricing" \
   "/api/health"; do
 
-  STATUS=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 15 \
+  STATUS=$(curl -sS -o "${TMPDIR:-/tmp}/post-deploy-body.out" -w "%{http_code}" --max-time 15 \
     --retry 2 --retry-all-errors --retry-delay 1 "${BASE}${path}" || true)
+  # /api/health is 503 for stale public data; release-safe when the shared
+  # release-health authority accepts the body (core checks pass).
+  if [ "$path" = "/api/health" ] && [ "$STATUS" = "503" ] \
+    && node scripts/ci/validate-release-health.mjs < "${TMPDIR:-/tmp}/post-deploy-body.out" >/dev/null 2>&1; then
+    STATUS="200-stale-data"
+  fi
   case "$STATUS" in
-    2??|3??)
+    2??|3??|200-stale-data)
       echo "✅ PASS [$STATUS] $path"
       PASS=$((PASS+1))
       ;;
@@ -49,7 +55,7 @@ done
 # Release identity: CLI deployments do not always populate VERCEL_GIT_COMMIT_SHA,
 # so deploy-gate injects ARENA_RELEASE_SHA at build and runtime. A mismatched SHA
 # means the domain points at a different deployment than the one CI approved.
-HEALTH_JSON=$(curl -fsS --max-time 20 --retry 2 --retry-all-errors --retry-delay 1 \
+HEALTH_JSON=$(curl -sS --max-time 20 --retry 2 --retry-all-errors --retry-delay 1 \
   "${BASE}/api/health?_release_check=$(date +%s)" || true)
 DEPLOYED_SHA=$(printf '%s' "$HEALTH_JSON" | python3 -c '
 import json,sys

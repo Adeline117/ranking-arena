@@ -38,12 +38,20 @@ jobs:
           FAILURES=""
 
           for path in "/" "/trader/soul" "/login" "/pricing" "/api/health"; do
-            STATUS=$(curl -sS -o /dev/null -w "%{http_code}" \
+            STATUS=$(curl -sS -o /tmp/smoke-body.out -w "%{http_code}" \
               --connect-timeout 5 --max-time 15 \
               --retry 2 --retry-all-errors --retry-delay 1 --retry-max-time 40 \
               "${BASE}${path}?_smoke=$(date +%s)" || true)
+            # /api/health returns 503 for stale public data. A deploy cannot make
+            # upstream data newer, so a 503 whose body passes the shared
+            # release-health authority (core checks pass, freshness-only) is
+            # release-safe and must not trigger a rollback.
+            if [ "$path" = "/api/health" ] && [ "$STATUS" = "503" ] \
+              && node scripts/ci/validate-release-health.mjs < /tmp/smoke-body.out >/dev/null 2>&1; then
+              STATUS="200-stale-data"
+            fi
             case "$STATUS" in
-              2??|3??)
+              2??|3??|200-stale-data)
                 echo "✅ PASS [$STATUS] $path"
                 PASS=$((PASS+1))
                 ;;

@@ -244,8 +244,9 @@ describe('GET /api/health', () => {
     const response = await GET()
     const body = await response.json()
 
-    expect(response.status).toBe(202)
+    expect(response.status).toBe(503)
     expect(body.status).toBe('degraded')
+    expect(body.stale).toBe(true)
     expect(body.checks.freshness).toMatchObject({
       status: 'fail',
       message: '15/32 sources fresh; 1 stale; 15 critical; 1 unknown',
@@ -270,7 +271,7 @@ describe('GET /api/health', () => {
     const response = await GET()
     const body = await response.json()
 
-    expect(response.status).toBe(202)
+    expect(response.status).toBe(503)
     expect(body.status).toBe('degraded')
     expect(body.checks.freshness).toMatchObject({
       status: 'fail',
@@ -296,7 +297,7 @@ describe('GET /api/health', () => {
     const response = await GET()
     const body = await response.json()
 
-    expect(response.status).toBe(202)
+    expect(response.status).toBe(503)
     expect(body.status).toBe('degraded')
     expect(body.checks.freshness).toMatchObject({
       status: 'fail',
@@ -323,7 +324,7 @@ describe('GET /api/health', () => {
     const response = await GET()
     const body = await response.json()
 
-    expect(response.status).toBe(202)
+    expect(response.status).toBe(503)
     expect(body.status).toBe('degraded')
     expect(body.checks.freshness).toMatchObject({
       status: 'fail',
@@ -341,7 +342,7 @@ describe('GET /api/health', () => {
     const response = await GET()
     const body = await response.json()
 
-    expect(response.status).toBe(202)
+    expect(response.status).toBe(503)
     expect(body.status).toBe('degraded')
     expect(body.checks.freshness).toMatchObject({
       status: 'fail',
@@ -374,7 +375,7 @@ describe('GET /api/health', () => {
     try {
       const { GET } = await import('../route')
       const response = await GET()
-      expect(response.status).toBe(202)
+      expect(response.status).toBe(503)
       expect(jest.getTimerCount()).toBe(0)
 
       await jest.advanceTimersByTimeAsync(15_000)
@@ -395,7 +396,7 @@ describe('GET /api/health', () => {
       const response = await responsePromise
       const body = await response.json()
 
-      expect(response.status).toBe(202)
+      expect(response.status).toBe(503)
       expect(body.checks.freshness).toMatchObject({
         status: 'fail',
         message: 'Freshness authority timed out',
@@ -601,9 +602,16 @@ describe('GET /api/health', () => {
 })
 
 describe('HEAD /api/health', () => {
-  it('should return 200', async () => {
+  it('should return 200 when every check passes', async () => {
     const { HEAD } = await import('../route')
     const response = await HEAD()
     expect(response.status).toBe(200)
+  })
+
+  it('reflects stale public data as 503, the same verdict as GET', async () => {
+    mockBuildFreshnessAuthoritySnapshot.mockRejectedValueOnce(new Error('authority unavailable'))
+    const { HEAD } = await import('../route')
+    const response = await HEAD()
+    expect(response.status).toBe(503)
   })
 })
