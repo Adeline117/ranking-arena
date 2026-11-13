@@ -56,45 +56,49 @@ const EXPECTED_INTERVALS: Record<string, number> = {
   'stripe-readiness': 1440,
 }
 
-export const GET = withCron('meta-monitor', async (_request: NextRequest) => {
-  const statuses = await PipelineLogger.getJobStatuses()
-  const stuckJobs = findStuckCronJobs(statuses, EXPECTED_INTERVALS)
+export const GET = withCron(
+  'meta-monitor',
+  async (_request: NextRequest) => {
+    const statuses = await PipelineLogger.getJobStatuses()
+    const stuckJobs = findStuckCronJobs(statuses, EXPECTED_INTERVALS)
 
-  if (stuckJobs.length > 0) {
-    const jobList = stuckJobs
-      .map(
-        (j) =>
-          `\u2022 ${j.job}: last success ${j.actualMinutes === -1 ? 'NEVER' : `${j.actualMinutes}m ago`} (expected: every ${j.expectedMinutes}m)`
-      )
-      .join('\n')
+    if (stuckJobs.length > 0) {
+      const jobList = stuckJobs
+        .map(
+          (j) =>
+            `\u2022 ${j.job}: last success ${j.actualMinutes === -1 ? 'NEVER' : `${j.actualMinutes}m ago`} (expected: every ${j.expectedMinutes}m)`
+        )
+        .join('\n')
 
-    const jobKey = stuckJobs
-      .map((j) => j.job)
-      .sort()
-      .join(',')
-    await sendRateLimitedAlert(
-      {
-        title: `Meta-Monitor: ${stuckJobs.length} cron jobs 异常`,
-        message: `以下 cron job 超过预期间隔未成功运行:\n\n${jobList}`,
-        level: stuckJobs.length >= 3 ? 'critical' : 'warning',
-        details: {
-          stuck_count: stuckJobs.length,
-          total_monitored: Object.keys(EXPECTED_INTERVALS).length,
+      const jobKey = stuckJobs
+        .map((j) => j.job)
+        .sort()
+        .join(',')
+      await sendRateLimitedAlert(
+        {
+          title: `Meta-Monitor: ${stuckJobs.length} cron jobs 异常`,
+          message: `以下 cron job 超过预期间隔未成功运行:\n\n${jobList}`,
+          level: stuckJobs.length >= 3 ? 'critical' : 'warning',
+          details: {
+            stuck_count: stuckJobs.length,
+            total_monitored: Object.keys(EXPECTED_INTERVALS).length,
+          },
         },
-      },
-      `meta-monitor:${jobKey}`,
-      3 * 60 * 60 * 1000
+        `meta-monitor:${jobKey}`,
+        3 * 60 * 60 * 1000
+      )
+    }
+
+    logger.info(
+      `[meta-monitor] Checked ${Object.keys(EXPECTED_INTERVALS).length} jobs, ${stuckJobs.length} stuck`
     )
-  }
 
-  logger.info(
-    `[meta-monitor] Checked ${Object.keys(EXPECTED_INTERVALS).length} jobs, ${stuckJobs.length} stuck`
-  )
-
-  return {
-    count: stuckJobs.length,
-    monitored: Object.keys(EXPECTED_INTERVALS).length,
-    stuck: stuckJobs.length,
-    stuckJobs,
-  }
-})
+    return {
+      count: stuckJobs.length,
+      monitored: Object.keys(EXPECTED_INTERVALS).length,
+      stuck: stuckJobs.length,
+      stuckJobs,
+    }
+  },
+  { maxDurationSec: maxDuration }
+)

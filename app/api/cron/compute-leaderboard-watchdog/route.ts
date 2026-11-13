@@ -131,5 +131,6 @@ export const GET = withCron(
     }).catch((e) => logger.error('[compute-watchdog] alert failed:', e))
 
     return { stale: true, staleSeasons: staleSeasons.map((s) => s.season), triggers }
-  }
+  },
+  { maxDurationSec: maxDuration }
 )
