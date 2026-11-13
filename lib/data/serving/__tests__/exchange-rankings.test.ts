@@ -30,4 +30,20 @@ describe('getExchangeRankings', () => {
       rows: [],
     })
   })
+
+  it('keeps an unknown product type unknown instead of defaulting to futures', async () => {
+    const row = { source: 'some_spot', asOf: '2026-11-12T00:00:00Z', rankedTraders: 3 }
+    const result = await getExchangeRankings(
+      rpcClient({
+        nonLegacyCount: 4,
+        rows: [
+          { ...row, productType: null },
+          { ...row, source: 'weird', productType: 'perp-ish' },
+          { ...row, source: 'spot_ok', productType: 'spot' },
+        ],
+      }),
+      90
+    )
+    expect(result.rows.map((r) => r.productType)).toEqual([null, null, 'spot'])
+  })
 })

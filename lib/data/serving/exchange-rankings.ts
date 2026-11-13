@@ -16,7 +16,8 @@ export interface ExchangeRankingRow {
   source: string
   exchangeSlug: string
   exchangeName: string
-  productType: 'spot' | 'futures' | 'cfd' | 'onchain'
+  /** Null when the RPC did not report a known product type — never guessed. */
+  productType: 'spot' | 'futures' | 'cfd' | 'onchain' | null
   currency: ServingCurrency
   rankedTraders: number
   medianRoi: number | null
@@ -80,9 +81,11 @@ export async function getExchangeRankings(
       source: r.source,
       exchangeSlug: typeof r.exchangeSlug === 'string' ? r.exchangeSlug : r.source,
       exchangeName: typeof r.exchangeName === 'string' ? r.exchangeName : r.source,
+      // Unknown/missing product type stays unknown (the UI omits the label)
+      // instead of mislabelling e.g. a spot board as futures.
       productType: PRODUCT_TYPES.has(r.productType as string)
-        ? (r.productType as ExchangeRankingRow['productType'])
-        : 'futures',
+        ? (r.productType as NonNullable<ExchangeRankingRow['productType']>)
+        : null,
       currency,
       rankedTraders: numOrNull(r.rankedTraders) ?? 0,
       medianRoi: numOrNull(r.medianRoi),
