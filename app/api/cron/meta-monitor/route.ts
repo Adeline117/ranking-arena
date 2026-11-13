@@ -18,29 +18,28 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
-// Expected max interval (minutes) for each job group
+// Expected max interval (minutes) for each job group.
+// Every key MUST be a job that still exists (an app/api/cron/<name> route):
+// a job with no producer can only ever report "NEVER" and trains everyone to
+// ignore this alert (2026-11 audit P2-1 removed 8 such entries:
+// batch-fetch-traders, batch-enrich, fetch-details, backfill-data,
+// link-entities, verify-fetchers, snapshot-positions, auto-post-insights).
+// Locked by __tests__/expected-intervals.test.ts.
 const EXPECTED_INTERVALS: Record<string, number> = {
-  // Core pipeline (every 30min-3h)
+  // Core pipeline
   'compute-leaderboard': 60,
-  'batch-fetch-traders': 360, // groups run every 3-6h
-  'batch-enrich': 480,
-  'fetch-details': 60,
   'precompute-composite': 240,
-  'backfill-data': 240,
 
   // Discovery & enrichment
   'generate-profiles': 720,
-  'link-entities': 1440,
 
   // Market data
   'flash-news-fetch': 60,
 
   // Monitoring & health
-  'verify-fetchers': 360,
   'cleanup-deleted-accounts': 1440,
 
   // Snapshots & ranks
-  'snapshot-positions': 120,
   'snapshot-ranks': 1440,
 
   // Search & cache
@@ -48,7 +47,6 @@ const EXPECTED_INTERVALS: Record<string, number> = {
 
   // Social
   'auto-post-market-summary': 1440,
-  'auto-post-insights': 1440,
   'auto-post-twitter': 1440,
   'daily-digest': 1440,
 
