@@ -103,7 +103,10 @@ function commonFailureResponse(result: AtomicMembershipResult | null) {
     case 'not_found':
       return NextResponse.json({ error: 'Group not found' }, { status: 404 })
     case 'dissolved':
-      return NextResponse.json({ error: 'This group has been dissolved' }, { status: 409 })
+      return NextResponse.json(
+        { error: 'This group has been dissolved', code: 'DISSOLVED' },
+        { status: 409 }
+      )
     case 'banned':
       return NextResponse.json(
         { error: 'You are banned from this group', code: 'BANNED' },

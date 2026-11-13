@@ -99,8 +99,14 @@ function normaliseWalletError(err: unknown, t: TranslationFunction): string {
   return msg || t('siweSignInFailed')
 }
 
+// The verify and link routes accept only Base mainnet (8453). A SIWE message's
+// chainId is a signed text field, not a network the wallet must be on, so pin
+// it instead of using the wallet's current chain: a wallet connected on
+// Arbitrum/Optimism/Polygon otherwise always failed with "chain mismatch".
+const SIWE_CHAIN_ID = 8453
+
 export function useSiweAuth(): UseSiweAuthReturn {
-  const { address, chainId, isConnected } = useAccount()
+  const { address, isConnected } = useAccount()
   const { signMessageAsync } = useSignMessage()
   const { t } = useLanguage()
   const { email: authEmail, getToken, signOut } = useAuthSession()
@@ -245,7 +251,7 @@ export function useSiweAuth(): UseSiweAuthReturn {
     try {
       const nonce = await fetchNonce(controller.signal, () => assertAttemptCurrent(attempt))
       assertAttemptCurrent(attempt)
-      const message = await createSiweMessage(nonce, walletAddress, chainId || 8453)
+      const message = await createSiweMessage(nonce, walletAddress, SIWE_CHAIN_ID)
       assertAttemptCurrent(attempt)
       const signature = await signMessageAsync({ message })
       assertAttemptCurrent(attempt)
@@ -302,7 +308,6 @@ export function useSiweAuth(): UseSiweAuthReturn {
     }
   }, [
     address,
-    chainId,
     fetchNonce,
     createSiweMessage,
     signMessageAsync,
@@ -344,7 +349,7 @@ export function useSiweAuth(): UseSiweAuthReturn {
     try {
       const nonce = await fetchNonce(controller.signal, () => assertAttemptCurrent(attempt))
       assertAttemptCurrent(attempt)
-      const message = await createSiweMessage(nonce, walletAddress, chainId || 8453)
+      const message = await createSiweMessage(nonce, walletAddress, SIWE_CHAIN_ID)
       assertAttemptCurrent(attempt)
       const signature = await signMessageAsync({ message })
       assertAttemptCurrent(attempt)
@@ -403,7 +408,6 @@ export function useSiweAuth(): UseSiweAuthReturn {
     }
   }, [
     address,
-    chainId,
     fetchNonce,
     createSiweMessage,
     getToken,

@@ -688,16 +688,26 @@ export function usePostActions({
       bookmarkLockRef.current.add(lockKey)
       setBookmarkLoading((prev) => ({ ...prev, [postId]: true }))
 
-      // Save previous state for rollback
+      // Optimistic update with delta-based rollback (project rule): reverse the
+      // applied delta from the CURRENT state on failure. Restoring a captured
+      // snapshot clobbered any count refreshed while the request was in flight.
       const prevBookmarked = userBookmarks[postId] ?? false
-      const prevCount = bookmarkCounts[postId] ?? 0
-
-      // Optimistic update: toggle bookmark immediately
       const optimisticBookmarked = !prevBookmarked
+      const bookmarkDelta = optimisticBookmarked ? 1 : (bookmarkCounts[postId] ?? 0) > 0 ? -1 : 0
+      const rollbackBookmark = () => {
+        setUserBookmarks((prev) =>
+          prev[postId] === optimisticBookmarked ? { ...prev, [postId]: prevBookmarked } : prev
+        )
+        setBookmarkCounts((prev) => ({
+          ...prev,
+          [postId]: Math.max(0, (prev[postId] ?? 0) - bookmarkDelta),
+        }))
+      }
+
       setUserBookmarks((prev) => ({ ...prev, [postId]: optimisticBookmarked }))
       setBookmarkCounts((prev) => ({
         ...prev,
-        [postId]: optimisticBookmarked ? prevCount + 1 : Math.max(0, prevCount - 1),
+        [postId]: Math.max(0, (prev[postId] ?? 0) + bookmarkDelta),
       }))
 
       try {
@@ -729,8 +739,7 @@ export function usePostActions({
           showToast(result.bookmarked ? t('bookmarked') : t('unbookmarked'), 'success')
         } else {
           // Rollback on server error
-          setUserBookmarks((prev) => ({ ...prev, [postId]: prevBookmarked }))
-          setBookmarkCounts((prev) => ({ ...prev, [postId]: prevCount }))
+          rollbackBookmark()
           if (response.status === 401) {
             showToast(t('loginExpiredPleaseRelogin'), 'error')
             redirectBookmarkToLogin(postId)
@@ -741,8 +750,7 @@ export function usePostActions({
       } catch (err) {
         if (!scopeIsCurrent(capturedScope)) return
         // Rollback on network error
-        setUserBookmarks((prev) => ({ ...prev, [postId]: prevBookmarked }))
-        setBookmarkCounts((prev) => ({ ...prev, [postId]: prevCount }))
+        rollbackBookmark()
         showToast(getNetworkErrorMessage(err, t), 'error')
       } finally {
         bookmarkLockRef.current.delete(lockKey)

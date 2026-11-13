@@ -440,6 +440,35 @@ describe('public search cohort materialization', () => {
 
     expect(result.map((trader) => trader.traderKey)).toEqual(['alpha-a', 'alpha-b'])
   })
+
+  it('finds names containing LIKE wildcards: escapes once for SQL, matches raw text in JS', async () => {
+    const publicQuery = publicSearchQuery({
+      data: [publicRankRow({ source_trader_id: 'john_doe', rank: 1, arena_score: 80 })],
+    })
+    const supabase = {
+      rpc: jest.fn().mockResolvedValue({
+        data: [
+          {
+            source: 'binance_futures',
+            source_trader_id: 'john_doe',
+            handle: 'john_doe',
+            avatar_url: null,
+            relevance_score: 1,
+          },
+        ],
+        error: null,
+      }),
+      from: jest.fn(() => publicQuery),
+    }
+
+    const result = await searchTraders(supabase as never, { query: 'john_doe', limit: 5 })
+
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'search_traders_fuzzy',
+      expect.objectContaining({ search_query: 'john\\_doe' })
+    )
+    expect(result.map((trader) => trader.traderKey)).toEqual(['john_doe'])
+  })
 })
 
 describe('getLeaderboard public cohort view', () => {

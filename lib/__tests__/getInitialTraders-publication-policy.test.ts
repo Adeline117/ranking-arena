@@ -209,6 +209,12 @@ describe('SSR public ranking cohort', () => {
       (cohort.range as jest.Mock).mock.invocationCallOrder[0]
     )
     expect(freshness.in).toHaveBeenCalledWith('source', ['binance_futures'])
+    // Same cohort as /api/traders (which serves every page after hydration):
+    // no extra arena_score floor, or server page N and client page N differ.
+    const scoreFloorCalls = ((cohort.gt as jest.Mock | undefined)?.mock.calls ?? []).filter(
+      ([column]) => column === 'arena_score'
+    )
+    expect(scoreFloorCalls).toEqual([])
   })
 
   it('keeps totals unknown even on terminal pages until a same-predicate count authority exists', async () => {
@@ -303,7 +309,6 @@ describe('SSR public ranking cohort', () => {
   it.each([
     ['partial witness', { pnl: null }],
     ['witness outside the six-hour cohort window', { computed_at: '2026-07-24T01:00:00.000Z' }],
-    ['witness below the homepage score floor', { arena_score: 5 }],
     ['witness not after the last visible rank', { rank: 1 }],
     ['witness from a source without a cached watermark', { source: 'bybit' }],
   ])(

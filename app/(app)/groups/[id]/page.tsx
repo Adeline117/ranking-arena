@@ -32,7 +32,11 @@ import { trackInteraction } from '@/lib/tracking'
 import { trackEvent } from '@/lib/analytics/track'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import dynamic from 'next/dynamic'
-import { buildJoinMembershipBody, parseMembershipAck } from './membership-client'
+import {
+  buildJoinMembershipBody,
+  joinFailureMessage,
+  parseMembershipAck,
+} from './membership-client'
 import { buildGroupLoginHref } from './login-intent'
 import {
   advanceGroupDetailResourceScope,
@@ -515,26 +519,21 @@ function GroupDetailScopedPage({
       setLoadingRelatedGroups(true)
 
       try {
-        const { data, error } = await supabase.rpc('get_related_groups', {
-          p_group_id: requestGroupId,
-          p_limit: 5,
-        })
+        // Hot discoverable groups. (A get_related_groups RPC was called first,
+        // but no migration defines it, so it failed on every page view.) Apply
+        // the same discovery predicate as /api/groups so dissolved or
+        // non-discoverable groups are never suggested.
+        const { data, error } = await supabase
+          .from('groups')
+          .select('id, name, name_en, avatar_url, member_count')
+          .neq('id', requestGroupId)
+          .is('dissolved_at', null)
+          .in('visibility', ['open', 'apply'])
+          .order('member_count', { ascending: false, nullsFirst: false })
+          .limit(5)
         if (!requestIsCurrent()) return
-
-        if (error || !data || data.length === 0) {
-          // Fallback to hot groups
-          const { data: fallback, error: fallbackError } = await supabase
-            .from('groups')
-            .select('id, name, name_en, avatar_url, member_count')
-            .neq('id', requestGroupId)
-            .order('member_count', { ascending: false, nullsFirst: false })
-            .limit(5)
-          if (!requestIsCurrent()) return
-          if (fallbackError) throw fallbackError
-          setRelatedGroups(fallback || [])
-        } else {
-          setRelatedGroups(data)
-        }
+        if (error) throw error
+        setRelatedGroups(data || [])
       } catch (err) {
         if (requestIsCurrent()) {
           logger.error('Error fetching related groups:', err)
@@ -770,7 +769,12 @@ function GroupDetailScopedPage({
             data && typeof data === 'object' && !Array.isArray(data)
               ? (data as { error?: unknown }).error
               : null
-          throw new Error(typeof errorMessage === 'string' ? errorMessage : t('joinFailed'))
+          logger.error('Join error:', typeof errorMessage === 'string' ? errorMessage : res.status)
+          showToast(
+            joinFailureMessage(data, t, inviteToken ? 'inviteInvalidOrExpired' : 'joinFailed'),
+            'error'
+          )
+          return
         }
 
         const ack = parseMembershipAck(data)

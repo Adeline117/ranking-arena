@@ -40,10 +40,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
         return NextResponse.json({ success: false, error: 'Post not found' }, { status: 404 })
       }
 
-      // Check authorization: author OR group admin/owner
-      let authorized = post.author_id === user.id
+      // Group posts: only the group owner/admin may pin — pinning unpins every
+      // other post in the group, so letting any author do it let a regular
+      // member displace the admins' pinned announcement. Personal posts: only
+      // the author.
+      let authorized = !post.group_id && post.author_id === user.id
 
-      if (!authorized && post.group_id) {
+      if (post.group_id) {
         const { data: membership, error: membershipError } = await supabase
           .from('group_members')
           .select('role')
@@ -92,6 +95,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             .from('posts')
             .update({ is_pinned: false })
             .eq('author_id', user.id)
+            .is('group_id', null)
             .eq('is_pinned', true)
             .neq('id', parsedPostId.data)
 

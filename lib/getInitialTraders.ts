@@ -234,13 +234,11 @@ function isCurrentHomepageCohortRow(value: InitialTrader, nowMs = Date.now()): b
   )
 }
 
-/** Homepage cohort predicate (`arena_score > 10`), see fetchInitialLeaderboardPage. */
-const HOME_MIN_SCORE = 10
-
 /**
  * Re-prove a cached look-ahead witness with the same checks the visible rows
  * pass: publication proof, homepage freshness window, upstream source
- * watermark, the homepage score floor, and ordering after the last visible row.
+ * watermark, and ordering after the last visible row (the cohort has no extra
+ * score floor — see fetchInitialLeaderboardPage).
  */
 function isValidCachedLookahead(
   witness: unknown,
@@ -255,9 +253,6 @@ function isValidCachedLookahead(
   )
   if (!Array.isArray(checked.traders) || checked.traders.length !== 1) return false
   if (!isCurrentHomepageCohortRow(witness)) return false
-  if (typeof witness.arena_score !== 'number' || !(witness.arena_score > HOME_MIN_SCORE)) {
-    return false
-  }
   const lastVisibleRank = visible.reduce((max, trader) => Math.max(max, trader.rank), 0)
   if (!(witness.rank > lastVisibleRank)) return false
   return !summarizeInitialTraderFreshness({
@@ -661,9 +656,9 @@ async function fetchInitialLeaderboardPage(
     period: timeRange,
     limit,
     offset: page * limit,
-    // Preserve the homepage's established score threshold, but apply it to
-    // every page so pagination stays one coherent, SQL-filtered cohort.
-    minScore: HOME_MIN_SCORE,
+    // No extra score floor: /api/traders (which takes over after hydration and
+    // serves every later page) applies none, so a floor here made the
+    // server-rendered page N a different row range than the client's page N.
     sortBy: 'arena_score',
     signal,
   })

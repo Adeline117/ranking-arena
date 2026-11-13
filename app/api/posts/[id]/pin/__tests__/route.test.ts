@@ -29,7 +29,7 @@ type QueryResult = { data: unknown; error: unknown }
 
 function query(result: QueryResult): Record<string, jest.Mock> {
   const builder: Record<string, jest.Mock> = {}
-  for (const method of ['select', 'eq', 'neq', 'update']) {
+  for (const method of ['select', 'eq', 'neq', 'is', 'update']) {
     builder[method] = jest.fn(() => builder)
   }
   builder.single = jest.fn().mockResolvedValue(result)
@@ -73,5 +73,57 @@ describe('POST /api/posts/[id]/pin service audience boundary', () => {
     expect(response.status).toBe(200)
     expect(body.data).toEqual({ is_pinned: true, message: 'Pinned' })
     expect(pin.eq).toHaveBeenCalledWith('id', POST_ID)
+  })
+
+  it('keeps the personal-profile unpin sweep away from the author’s group posts', async () => {
+    const target = query({
+      data: { id: POST_ID, author_id: mockUser.id, is_pinned: false, group_id: null },
+      error: null,
+    })
+    const unpin = query({ data: null, error: null })
+    const pin = query({ data: null, error: null })
+    mockFrom.mockReturnValueOnce(target).mockReturnValueOnce(unpin).mockReturnValueOnce(pin)
+
+    await POST(request as unknown as Parameters<typeof POST>[0], context)
+
+    expect(unpin.eq).toHaveBeenCalledWith('author_id', mockUser.id)
+    expect(unpin.is).toHaveBeenCalledWith('group_id', null)
+  })
+
+  it.each([['member'], [null]])(
+    'refuses a group post author whose role is %s (no unpin, no pin)',
+    async (role) => {
+      const target = query({
+        data: { id: POST_ID, author_id: mockUser.id, is_pinned: false, group_id: 'g1' },
+        error: null,
+      })
+      const membership = query({ data: role ? { role } : null, error: null })
+      mockFrom.mockReturnValueOnce(target).mockReturnValueOnce(membership)
+
+      const response = await POST(request as unknown as Parameters<typeof POST>[0], context)
+
+      expect(response.status).toBe(403)
+      expect(mockFrom).toHaveBeenCalledTimes(2)
+    }
+  )
+
+  it('allows a group admin to pin another member’s group post', async () => {
+    const target = query({
+      data: { id: POST_ID, author_id: 'someone-else', is_pinned: false, group_id: 'g1' },
+      error: null,
+    })
+    const membership = query({ data: { role: 'admin' }, error: null })
+    const unpin = query({ data: null, error: null })
+    const pin = query({ data: null, error: null })
+    mockFrom
+      .mockReturnValueOnce(target)
+      .mockReturnValueOnce(membership)
+      .mockReturnValueOnce(unpin)
+      .mockReturnValueOnce(pin)
+
+    const response = await POST(request as unknown as Parameters<typeof POST>[0], context)
+
+    expect(response.status).toBe(200)
+    expect(unpin.eq).toHaveBeenCalledWith('group_id', 'g1')
   })
 })
