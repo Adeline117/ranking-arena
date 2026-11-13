@@ -32,12 +32,13 @@ export function useTraderPeriodSync(): Period {
   const selectedPeriod = usePeriodStore((s) => s.period)
   const setPeriod = usePeriodStore((s) => s.setPeriod)
 
-  // 1. URL → store on mount
+  // 1. URL → store on mount. The store is module-global, so without a reset a
+  // trader opened in-app inherited the previous trader's period (e.g. 7D)
+  // while its URL (no ?period=) meant the 90D default, and shared links
+  // disagreed with what was shown. The URL is the source of truth.
   const urlPeriod = searchParams.get('period')
   useEffect(() => {
-    if (urlPeriod && ['7D', '30D', '90D'].includes(urlPeriod)) {
-      setPeriod(urlPeriod as Period)
-    }
+    setPeriod(urlPeriod && ['7D', '30D', '90D'].includes(urlPeriod) ? (urlPeriod as Period) : '90D')
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only on mount
   }, [])
 

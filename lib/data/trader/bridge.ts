@@ -53,6 +53,7 @@ export function toTraderPageData(
 
   // Performance (matches TraderPerformance interface)
   const performance: Record<string, unknown> = {
+    has_period_90d: p90 != null,
     roi_90d: p90?.roi ?? t.roi,
     roi_30d: p30?.roi ?? null,
     roi_7d: p7?.roi ?? null,

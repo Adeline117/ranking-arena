@@ -1,6 +1,7 @@
 {
   "unclassified": [
     "20261111134937_record_provenance_clocks_prod_reader.sql",
-    "20261111194845_fix_gmx_source_contract_current_population.sql"
+    "20261111194845_fix_gmx_source_contract_current_population.sql",
+    "20261113104533_trader_follows_hard_cap_lock.sql"
   ]
 }

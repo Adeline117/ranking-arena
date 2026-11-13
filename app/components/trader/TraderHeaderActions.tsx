@@ -33,6 +33,8 @@ interface TraderHeaderActionsProps {
   userId: string | null
   rank?: number | null
   roi90d?: number
+  /** Board window of the headline rank/ROI; the share card defaults to 90D. */
+  headlineWindow?: string
   arenaScore?: number | null
   /** Called whenever the followers count changes (for the parent's animation) */
   onFollowChange?: (delta: 1 | -1) => void
@@ -142,6 +144,7 @@ export function TraderHeaderActions({
   userId,
   rank,
   roi90d,
+  headlineWindow,
   arenaScore,
   onFollowChange,
 }: TraderHeaderActionsProps) {
@@ -305,6 +308,7 @@ export function TraderHeaderActions({
           platform={source}
           rank={rank}
           roi={roi90d}
+          window={headlineWindow}
           arenaScore={arenaScore}
         />
       </div>

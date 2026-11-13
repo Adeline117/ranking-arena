@@ -321,7 +321,7 @@ function installSupabaseBuilder() {
       request.eq[column] = value
       return builder
     })
-    for (const method of ['neq', 'order', 'limit', 'in']) {
+    for (const method of ['neq', 'order', 'limit', 'in', 'is']) {
       builder[method] = jest.fn(() => builder)
     }
     builder.maybeSingle = jest.fn(() => {
@@ -511,19 +511,14 @@ describe('group detail viewer and resource ownership', () => {
         return groupResult(String(request.eq.id), 'Current group')
       }
       if (request.table === 'groups' && request.terminal === 'then') {
-        return oldFallback.promise
+        relatedReads += 1
+        if (relatedReads === 1) return oldFallback.promise
+        return {
+          data: [{ id: 'current-related', name: `Current related ${GROUP_2}` }],
+          error: null,
+        }
       }
       return defaultQuery(request)
-    }
-    rpcResolver = (_name, args) => {
-      relatedReads += 1
-      if (relatedReads === 1) {
-        return { data: null, error: new Error('force old fallback') }
-      }
-      return {
-        data: [{ id: 'current-related', name: `Current related ${String(args.p_group_id)}` }],
-        error: null,
-      }
     }
     const params1 = Promise.resolve({ id: GROUP_1 })
     const view = render(<GroupDetailPage params={params1} />)
@@ -555,7 +550,7 @@ describe('group detail viewer and resource ownership', () => {
     expect(mockShowToast).not.toHaveBeenCalled()
     expect(
       queryRequests.filter((request) => request.table === 'groups' && request.terminal === 'then')
-    ).toHaveLength(1)
+    ).toHaveLength(2)
   })
 
   it('drops late owner and member-preview profile reads after the group changes', async () => {

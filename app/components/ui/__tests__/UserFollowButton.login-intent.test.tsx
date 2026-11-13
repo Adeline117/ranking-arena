@@ -174,6 +174,33 @@ describe('UserFollowButton login intent', () => {
     )
   })
 
+  it('keeps "follow back" after unfollowing someone who still follows you', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(response({ following: true, followedBy: true }))
+      .mockResolvedValueOnce(
+        response({ following: false, followedBy: true, mutual: false, success: true })
+      ) as typeof fetch
+
+    render(
+      <UserFollowButton
+        targetUserId="target-user"
+        currentUserId="viewer-user"
+        loginReturnPath="/u/alice"
+      />
+    )
+
+    expect(await screen.findByRole('button', { name: 'unfollowUser' })).toHaveTextContent(
+      'mutualFollow'
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'unfollowUser' }))
+
+    // `mutual` is false after an unfollow; the other user still follows you.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'followUser' })).toHaveTextContent('followBack')
+    )
+  })
+
   it('consumes an anonymous follow intent without following the target account itself', async () => {
     const href = queueProfileActionLogin({
       action: 'follow-user',
