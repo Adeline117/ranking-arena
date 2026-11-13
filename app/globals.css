@@ -1884,9 +1884,13 @@ select:focus-visible {
 .swipe-row-content .row-compare-check[aria-pressed='true'] {
   opacity: 1 !important;
 }
-/* Touch devices: always show compare checkbox (no hover available) */
+/* Touch devices: always show the card-view compare checkbox (no hover
+   available). Table rows (.row-compare-check) are excluded: on touch their
+   compare entry point is the swipe-to-reveal action, and the always-on empty
+   box sat on the top-3 medal bars as a stray dark square. A selected row
+   still shows its check via [aria-pressed='true'] above. */
 @media (hover: none) {
-  .compare-checkbox-cell {
+  .compare-checkbox-cell:not(.row-compare-check) {
     opacity: 0.5 !important;
   }
 }
