@@ -315,3 +315,12 @@ describe('rank placement (read by the trader page header)', () => {
     expect(page).not.toMatch(/performance as Record<string, unknown>\)\.rank\b/)
   })
 })
+
+describe('has_period_90d', () => {
+  it('flags a trader without a 90D period row so the 90D tab is not filled from 30D', () => {
+    expect(perf(detail({ periods: { '30D': { roi: 12 }, '90D': null } })).has_period_90d).toBe(
+      false
+    )
+    expect(perf(detail({ periods: { '90D': { roi: 50 } } })).has_period_90d).toBe(true)
+  })
+})
