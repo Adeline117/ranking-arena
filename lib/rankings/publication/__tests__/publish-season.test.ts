@@ -1,5 +1,7 @@
 import { createPgRpcClient } from '../pg-rpc-client'
 import {
+  classifyPublishableRow,
+  exclusionAlertDetails,
   fitNumeric,
   publishLeaderboardSeason,
   RankPublicationError,
@@ -99,6 +101,62 @@ describe('toPublishableRow', () => {
   })
 })
 
+describe('classifyPublishableRow', () => {
+  it.each([
+    ['partial completeness', { score_completeness: 'partial' as const }, 'incomplete_or_estimated'],
+    ['estimated metrics', { metrics_estimated: true }, 'incomplete_or_estimated'],
+    ['outlier', { is_outlier: true }, 'outlier'],
+    ['zero score', { arena_score: 0 }, 'arena_score_out_of_range'],
+    ['ROI beyond the clamp', { roi: 10000.5 }, 'roi_out_of_range'],
+    ['missing pnl', { pnl: null as unknown as number }, 'pnl_out_of_range'],
+    ['missing win rate', { win_rate: null }, 'win_rate_missing_or_out_of_range'],
+    ['missing drawdown', { max_drawdown: null }, 'max_drawdown_missing'],
+    ['drawdown rounding to 100%', { max_drawdown: 99.996 }, 'max_drawdown_liquidated'],
+    ['drawdown overflowing numeric(5,2)', { max_drawdown: 1500 }, 'max_drawdown_liquidated'],
+    ['negative drawdown', { max_drawdown: -1 }, 'max_drawdown_negative'],
+    ['untrimmed identity', { source_trader_id: ' x' }, 'invalid_identity'],
+  ])('names the exclusion reason: %s', (_label, overrides, reason) => {
+    expect(classifyPublishableRow(scored(overrides))).toEqual({ reason })
+  })
+
+  it('returns the row when every rule passes', () => {
+    expect(classifyPublishableRow(scored())).toHaveProperty('row.source', 'binance_futures')
+  })
+})
+
+describe('exclusionAlertDetails', () => {
+  it('stays quiet under both thresholds', () => {
+    expect(
+      exclusionAlertDetails(
+        { scored: 100, excluded: 10, byReason: {}, bySource: { a: { max_drawdown_missing: 10 } } },
+        new Map([['a', 100]])
+      )
+    ).toBeNull()
+  })
+
+  it('alerts when the season-wide exclusion share is over 25%', () => {
+    expect(
+      exclusionAlertDetails({ scored: 100, excluded: 30, byReason: {}, bySource: {} }, new Map())
+    ).toMatchObject({ seasonRatio: 0.3, sources: [] })
+  })
+
+  it('alerts on one source losing more than half of a meaningful cohort', () => {
+    const details = exclusionAlertDetails(
+      {
+        scored: 1000,
+        excluded: 30,
+        byReason: {},
+        bySource: { small: { max_drawdown_missing: 5 }, big: { max_drawdown_missing: 25 } },
+      },
+      new Map([
+        ['small', 6],
+        ['big', 40],
+      ])
+    )
+    expect(details?.sources).toEqual([{ source: 'big', scored: 40, excluded: 25 }])
+  })
+})
+
 describe('createPgRpcClient', () => {
   it('issues one named-argument call and encodes objects as jsonb text', async () => {
     const calls: Array<{ text: string; values?: readonly unknown[] }> = []
@@ -185,18 +243,31 @@ describe('publishLeaderboardSeason gate', () => {
     }
   }
 
-  function harness(boards: unknown[]) {
+  function harness(
+    boards: unknown[],
+    options: { sources?: string[]; isolationSupported?: boolean } = {}
+  ) {
     const statements: string[] = []
+    const sources = options.sources ?? ['binance_futures', 'bybit']
     const executor: RankPublicationSqlExecutor = {
       async query(text) {
         statements.push(text)
+        if (text.includes('leaderboard-publication-source-isolation@1')) {
+          return {
+            rows: [{ supported: options.isolationSupported === true }] as never[],
+            rowCount: 1,
+          }
+        }
+        if (text.includes('DELETE FROM arena.leaderboard_publication_source_isolations')) {
+          return { rows: [], rowCount: 0 }
+        }
         if (text.includes('clock_timestamp()')) {
           return { rows: [{ now: iso(now) }] as never[], rowCount: 1 }
         }
         if (text.includes('arena_freshness_expected_sources')) {
           return {
-            rows: [{ source: 'binance_futures' }, { source: 'bybit' }] as never[],
-            rowCount: 2,
+            rows: sources.map((source) => ({ source })) as never[],
+            rowCount: sources.length,
           }
         }
         if (text.includes('arena_score_inputs_publish_bundle_json')) {
@@ -240,6 +311,65 @@ describe('publishLeaderboardSeason gate', () => {
     expect(statements.some((text) => /INSERT INTO public\.leaderboard_ranks/.test(text))).toBe(
       false
     )
+  })
+
+  it('refuses (and alerts) when more than half of the expected sources would be isolated', async () => {
+    const { statements, database } = harness(
+      [passedBoard('binance_futures', 1), missingBoard('bybit'), missingBoard('hyperliquid')],
+      { sources: ['binance_futures', 'bybit', 'hyperliquid'], isolationSupported: true }
+    )
+    const alerts: unknown[] = []
+    const error = await publishLeaderboardSeason('90D', {
+      database,
+      scoreCohort: jest.fn(),
+      alert: (alert) => void alerts.push(alert),
+    }).catch((failure: unknown) => failure)
+    expect((error as RankPublicationError).code).toBe('expected_source_not_fresh')
+    expect((error as RankPublicationError).message).toContain('more than 50%')
+    expect(alerts).toEqual([
+      expect.objectContaining({ severity: 'critical', code: 'season_publication_refused' }),
+    ])
+    expect(statements.some((text) => /INSERT INTO arena\.leaderboard_publication/.test(text))).toBe(
+      false
+    )
+  })
+
+  it('refuses when every expected core source would be isolated', async () => {
+    const { database } = harness(
+      [passedBoard('binance_futures', 1), missingBoard('bybit'), passedBoard('hyperliquid', 3)],
+      { sources: ['binance_futures', 'bybit', 'hyperliquid'], isolationSupported: true }
+    )
+    await expect(
+      publishLeaderboardSeason('90D', {
+        database,
+        scoreCohort: jest.fn(),
+        coreSources: ['bybit'],
+      })
+    ).rejects.toMatchObject({
+      code: 'expected_source_not_fresh',
+      message: expect.stringContaining('every core source (bybit)'),
+    })
+  })
+
+  it('isolates a minority stale source instead of refusing the season', async () => {
+    const { statements, database } = harness(
+      [passedBoard('binance_futures', 1), missingBoard('bybit'), passedBoard('hyperliquid', 3)],
+      { sources: ['binance_futures', 'bybit', 'hyperliquid'], isolationSupported: true }
+    )
+    // The fixture's authority does not shrink after the isolation insert, so
+    // the orchestrator's post-isolation cross-check must refuse.
+    await expect(
+      publishLeaderboardSeason('90D', { database, scoreCohort: jest.fn(), coreSources: [] })
+    ).rejects.toMatchObject({ code: 'isolation_not_applied' })
+    const isolationInsert = statements.findIndex((text) =>
+      /INSERT INTO arena\.leaderboard_publication_source_isolations/.test(text)
+    )
+    const eventInsert = statements.findIndex((text) =>
+      /INSERT INTO arena\.leaderboard_publication_source_isolation_events/.test(text)
+    )
+    expect(isolationInsert).toBeGreaterThan(-1)
+    expect(eventInsert).toBeGreaterThan(isolationInsert)
+    expect(statements.some((text) => /claim_leaderboard_rank_generation/.test(text))).toBe(false)
   })
 
   it('refuses a season whose sources are fresh but yield no publishable row', async () => {

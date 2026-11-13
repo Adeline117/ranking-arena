@@ -3190,6 +3190,43 @@ async function drainRawObjectGcBatch(
  * deletion and leaves a retryable outbox across worker or Storage failures.
  * Returns the number of Storage objects removed. Called by maintenance.ts.
  */
+/**
+ * Does this database carry metric-trust evidence tables? Before
+ * 20260721120000 is applied there is nothing to pin.
+ */
+export const METRIC_TRUST_EVIDENCE_PRESENT_SQL = `SELECT
+  pg_catalog.to_regclass('arena.metric_trust_runs') IS NOT NULL
+  AND pg_catalog.to_regclass('arena.metric_trust_artifacts') IS NOT NULL
+  AND pg_catalog.to_regclass('arena.metric_trust_observations') IS NOT NULL AS present`
+
+/**
+ * RAW retention candidates. Objects referenced by metric-trust evidence
+ * (run population/manifest, observation artifacts) are pinned: deleting them
+ * used to CASCADE away the trust runs and observations, breaking the
+ * audit/replay chain after 30 days (20261113* makes those FKs RESTRICT).
+ */
+export function rawObjectRetentionCandidateSql(trustEvidencePresent: boolean): string {
+  const pinned = trustEvidencePresent
+    ? `
+            AND NOT EXISTS (
+              SELECT 1 FROM arena.metric_trust_runs AS run
+               WHERE run.population_raw_object_id = raw_candidate.id
+                  OR run.manifest_raw_object_id = raw_candidate.id
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM arena.metric_trust_artifacts AS artifact
+               WHERE artifact.raw_object_id = raw_candidate.id
+            )`
+    : ''
+  return `SELECT raw_candidate.id, raw_candidate.storage_path, raw_candidate.content_hash
+           FROM arena.raw_objects AS raw_candidate
+          WHERE NOT raw_candidate.quarantined
+            AND raw_candidate.fetched_at < now() - ($1 || ' days')::interval${pinned}
+          ORDER BY raw_candidate.fetched_at, raw_candidate.id
+          FOR UPDATE OF raw_candidate SKIP LOCKED
+          LIMIT 500`
+}
+
 export async function cleanupRawObjects(retentionDays = 30): Promise<number> {
   const client = await ingestClientConnect()
   let lockAcquired = false
@@ -3206,15 +3243,12 @@ export async function cleanupRawObjects(retentionDays = 30): Promise<number> {
     const pending = await readRawObjectGcBatch(client)
     if (pending.length > 0) return drainRawObjectGcBatch(client, pending)
 
+    const { rows: evidenceRows } = await client.query<{ present: boolean }>(
+      METRIC_TRUST_EVIDENCE_PRESENT_SQL
+    )
     await client.query(
       `WITH candidates AS MATERIALIZED (
-         SELECT id, storage_path, content_hash
-           FROM arena.raw_objects
-          WHERE NOT quarantined
-            AND fetched_at < now() - ($1 || ' days')::interval
-          ORDER BY fetched_at, id
-          FOR UPDATE SKIP LOCKED
-          LIMIT 500
+         ${rawObjectRetentionCandidateSql(evidenceRows[0]?.present === true)}
        ), queued AS (
          INSERT INTO arena.raw_object_gc_queue
            (raw_object_id, storage_path, content_hash)

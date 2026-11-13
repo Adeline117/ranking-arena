@@ -43,6 +43,35 @@ SET LOCAL TIME ZONE 'UTC';
 
 LOCK TABLE public.leaderboard_ranks IN ACCESS EXCLUSIVE MODE;
 
+-- Launch-slot guard (file-name-order trap). This file's timestamp sorts after
+-- every migration it must precede, so a plain file-name-order replay
+-- (supabase db reset / db push / a fresh branch database) reaches it with the
+-- later state already installed. Refuse explicitly and name the cause instead
+-- of failing on an opaque layout digest. The exact three-trigger allow-list in
+-- the preflight below additionally guarantees this rebuild can never run after
+-- 20260816184500, so it can never drop the season mutation fence triggers
+-- (leaderboard_rank_season_{insert,update,delete}_fence) it does not recreate.
+DO $launch_slot_guard$
+BEGIN
+  IF pg_catalog.to_regprocedure(
+       'arena.encode_leaderboard_rank_row_v1(public.leaderboard_ranks)'
+     ) IS NOT NULL
+     OR pg_catalog.to_regclass('arena.leaderboard_rank_season_mutation_fences') IS NOT NULL
+     OR EXISTS (
+       SELECT 1
+       FROM pg_catalog.pg_trigger AS trigger_row
+       WHERE trigger_row.tgrelid = 'public.leaderboard_ranks'::pg_catalog.regclass
+         AND NOT trigger_row.tgisinternal
+         AND trigger_row.tgname::text LIKE 'leaderboard\_rank\_season\_%\_fence'
+     ) THEN
+    RAISE EXCEPTION
+      '20261111140053 is out of its launch slot: it must run immediately before 20260725016500 (scripts/maintenance/apply-launch-migrations.sh order), never in file-name order after it'
+      USING ERRCODE = '55000',
+        HINT = 'A database that already has the persisted codec / season fence state does not need this repair; record it as superseded through the reviewed launch ledger instead of executing it.';
+  END IF;
+END
+$launch_slot_guard$;
+
 DO $preflight$
 DECLARE
   v_column_count integer;

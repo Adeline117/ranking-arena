@@ -177,8 +177,19 @@ PREDEPLOY_MIGRATIONS=(
   20261111132450_legacy_raw_metric_publication_isolation_hosted_role_graph.sql
   20260817134214_quarantine_legacy_platform_stats_rpc.sql
   20261013094743_retire_v2_partition_cron_extend_arena_partitions.sql
+  20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql
+  20261113011058_leaderboard_publication_source_isolation.sql
+  20261113012028_public_snapshot_readers_sealed_freshness.sql
+  20261113105605_retention_preserves_metric_trust_evidence.sql
+  20261113110021_leaderboard_snapshot_retention.sql
+  20261113110430_rank_publication_source_evidence_binding.sql
 )
 readonly -a PREDEPLOY_MIGRATIONS
+# The final six (season publication follow-ups, PR #419) must stay LAST: they
+# need the public serving authority (20260816184500), and 20261113011058
+# rewrites the freshness authority after the Bitget-bot quarantine
+# (20261111134416, which replaces 20260728124000 in its slot). They follow
+# #415's reordered manifest (2026-11-11 whole-database rehearsal order).
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
 # accepts it only when its exact reviewed ledger and complete object contract

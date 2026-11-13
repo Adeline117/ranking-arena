@@ -8,6 +8,7 @@
  */
 
 import { isV1RankingCommandChainPublished } from '../../lib/cron/v1-ranking-command-chain-publication'
+import type { RankPublicationAlertSink } from '../../lib/rankings/publication/publish-season'
 
 // ENDGAME (ARENA_DATA_SPEC v1.2): legacy fetch/enrich removed — leaderboard
 // data is produced by arena-ingest-worker. This worker only keeps the
@@ -48,7 +49,10 @@ async function main() {
     { startScoringHeartbeat, scoringHeartbeatNodeId },
     { markWorkerStarted, recordWorkerProgress },
     { publishLeaderboardSeason, pgRankPublicationDatabase, createDefaultCohortScorer },
-    { ingestClientConnect },
+    { rankPublicationClientConnect, closeRankPublicationPool },
+    { alert: ingestAlert },
+    { syncPublicRankingsToMeilisearch },
+    { routeRankPublicationAlert },
   ] = await Promise.all([
     import('bullmq'),
     import('./connection'),
@@ -62,19 +66,34 @@ async function main() {
     import('./ingest/progress'),
     import('../../lib/rankings/publication/publish-season'),
     import('../../lib/ingest/db'),
+    import('../../lib/ingest/alerting'),
+    import('../../lib/search/meilisearch-sync'),
+    import('../../lib/rankings/publication/alert-routing'),
   ])
 
-  // The season publication runs in-process on the worker's direct postgres
-  // connection (the fence/claim/seal RPCs are owner-only), as one transaction.
-  const rankPublicationDatabase = pgRankPublicationDatabase(async () => {
-    const client = await ingestClientConnect()
+  // The season publication (and the Meilisearch read) runs in-process on the
+  // worker's direct postgres connection (the fence/claim/seal RPCs are
+  // owner-only), as one transaction, on a dedicated 2-client pool so it neither
+  // starves nor is starved by ingest (lib/ingest/db.ts RANK_PUBLICATION_POOL_MAX).
+  const connectPublicationClient = async () => {
+    const client = await rankPublicationClientConnect()
     return {
       query: (text: string, values?: readonly unknown[]) =>
         client.query(text, values ? [...values] : undefined),
       release: (destroy?: boolean) => client.release(destroy),
     }
-  })
+  }
+  const rankPublicationDatabase = pgRankPublicationDatabase(connectPublicationClient)
   const scoreCohort = createDefaultCohortScorer()
+  // Publication alerts go through the shared ingest alert interface. Routing
+  // (lib/rankings/publication/alert-routing) gives every isolated source its
+  // own season×source page-cooldown key and a refusal its own key; exclusion
+  // warnings and restorations go to the digest. The orchestrator logs and swallows delivery failures itself.
+  const rankPublicationAlert: RankPublicationAlertSink = async (publicationAlert) => {
+    for (const routed of routeRankPublicationAlert(publicationAlert)) {
+      await ingestAlert(getRankingCommandChainConnection(), routed)
+    }
+  }
 
   console.log('[worker] Arena Pipeline Worker starting...')
 
@@ -102,6 +121,7 @@ async function main() {
             database: rankPublicationDatabase,
             scoreCohort,
             log: (message) => void job.log(message),
+            alert: rankPublicationAlert,
           })
           job.log(
             `published ${season}: cohort=${published.scoreCohortId} rows=${published.publishedRankCount} sources=${published.sources.length}`
@@ -112,19 +132,17 @@ async function main() {
         }
 
         case JOB.SYNC_MEILISEARCH: {
-          // Trigger Vercel's sync-meilisearch endpoint
-          const msSecret = process.env.CRON_SECRET
-          if (!msSecret) return { skipped: true, reason: 'no CRON_SECRET' }
-          const msUrl = process.env.SITE_URL || 'https://www.arenafi.org'
-          job.log('Triggering sync-meilisearch')
-          const msResp = await fetch(`${msUrl}/api/cron/sync-meilisearch`, {
-            headers: { Authorization: `Bearer ${msSecret}` },
-            signal: AbortSignal.timeout(120_000),
+          // In-process sync from the sealed public view. The former HTTP call
+          // targeted /api/cron/sync-meilisearch, a V1 410 tombstone.
+          job.log('Syncing sealed public rankings to Meilisearch')
+          const synced = await syncPublicRankingsToMeilisearch({
+            connect: connectPublicationClient,
+            meiliUrl: process.env.MEILISEARCH_URL ?? '',
+            meiliAdminKey: process.env.MEILISEARCH_ADMIN_KEY ?? '',
+            log: (message) => void job.log(message),
           })
-          const msBody = await msResp.json().catch(() => ({}))
-          job.log(`sync-meilisearch: ${msResp.status}`)
-          assertSuccessfulMeilisearchSyncResponse(msResp.ok, msResp.status, msBody)
-          return { status: msResp.status, ...msBody }
+          assertSuccessfulMeilisearchSyncResponse(true, 200, synced)
+          return synced
         }
 
         default:
@@ -211,6 +229,7 @@ async function main() {
     clearInterval(heartbeatTimer)
     await worker.close()
     await closeRankingCommandChainConnection()
+    await closeRankPublicationPool()
     console.log('[worker] Shutdown complete')
     process.exit(0)
   }

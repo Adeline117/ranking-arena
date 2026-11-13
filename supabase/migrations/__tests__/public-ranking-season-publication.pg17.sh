@@ -19,6 +19,9 @@
 #   20260725015500 bound_leaderboard_rank_generation_batches
 #   20260816151614 public_ranked_leaderboard
 #   20260816184500 public_ranked_leaderboard_source_freshness_gate
+#   20261113010326 release_leaderboard_rank_generation_lease_after_seal
+#   20261113011058 leaderboard_publication_source_isolation
+#   20261113110430 rank_publication_source_evidence_binding
 # leaderboard_ranks itself is created in the reviewed codec layout of
 # 20261111140053 (the forward repair that rebuilds it in production).
 
@@ -40,6 +43,9 @@ CHAIN=(
   20260725015500_bound_leaderboard_rank_generation_batches.sql
   20260816151614_public_ranked_leaderboard.sql
   20260816184500_public_ranked_leaderboard_source_freshness_gate.sql
+  20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql
+  20261113011058_leaderboard_publication_source_isolation.sql
+  20261113110430_rank_publication_source_evidence_binding.sql
 )
 
 for executable in initdb pg_ctl psql; do
@@ -135,7 +141,9 @@ CREATE TABLE arena.leaderboard_snapshots (
   timeframe smallint NOT NULL,
   scraped_at timestamptz NOT NULL,
   actual_count integer NOT NULL,
-  count_check_passed boolean NOT NULL
+  count_check_passed boolean NOT NULL,
+  raw_object_id bigint,
+  meta jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE TABLE arena.leaderboard_entries (
   snapshot_id bigint NOT NULL,
@@ -355,23 +363,41 @@ anon_view() {
 }
 
 # ---------------------------------------------------------------------------
-# Negative 1: one expected source (bybit) is stale -> nothing is written.
+# Isolation: one of three expected sources (bybit) is stale -> bybit is
+# isolated and the other two publish as one sealed season.
 # ---------------------------------------------------------------------------
 OUT="$(publish 90D)"
-assert_equal "stale source is refused" "false" "$(json_field "$OUT" ok)"
-assert_equal "stale source refusal code" "expected_source_not_fresh" "$(json_field "$OUT" code)"
-[[ "$(json_field "$OUT" message)" == *"bybit(stale)"* ]] || {
-  echo "stale refusal does not name bybit: $OUT" >&2
+assert_equal "stale minority source is isolated, not refused" "true" "$(json_field "$OUT" ok)"
+[[ "$(json_field "$OUT" result.isolatedSources)" == '[{"source":"bybit","reasons":["stale"],'* ]] || {
+  echo "isolated source is not reported: $OUT" >&2
   exit 1
 }
-assert_equal "view stays empty after stale refusal" "0" "$(view_count)"
-assert_equal "no rank row, claim, or receipt survives a refusal" "0|0|0" "$(psql_db -Atqc "
-  SELECT (SELECT pg_catalog.count(*) FROM public.leaderboard_ranks) || '|' ||
-         (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_claims) || '|' ||
-         (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_publications)")"
+assert_equal "isolated publication serves the other sources" "5" "$(view_count)"
+assert_equal "bybit is not served while isolated" "0" "$(psql_db -Atqc "
+  SELECT pg_catalog.count(*) FROM public.public_ranked_leaderboard WHERE source = 'bybit'")"
+assert_equal "isolation row and event are recorded" "bybit:{stale}|1" "$(psql_db -Atqc "
+  SELECT (SELECT pg_catalog.string_agg(filter_source || ':' || reasons::text, ',')
+            FROM arena.leaderboard_publication_source_isolations WHERE season_id = '90D') || '|' ||
+         (SELECT pg_catalog.count(*) FROM arena.leaderboard_publication_source_isolation_events
+           WHERE filter_source = 'bybit' AND action = 'isolated')")"
+assert_equal "monitoring RPC lists the isolation for service_role" "90D:bybit:{stale}" \
+  "$(psql_db -Atqc "SET ROLE service_role; SELECT season_id || ':' || filter_source || ':' || reasons::text
+     FROM public.arena_publication_source_isolations()")"
+assert_equal "monitoring RPC is not anon-callable" "f" "$(psql_db -Atqc "
+  SELECT pg_catalog.has_function_privilege('anon', 'public.arena_publication_source_isolations()', 'EXECUTE')")"
+assert_equal "serving head covers exactly the non-isolated sources" "binance_futures,hyperliquid" \
+  "$(psql_db -Atqc "SELECT pg_catalog.string_agg(source, ',' ORDER BY source)
+     FROM arena.public_ranked_leaderboard_serving_sources WHERE season_id = '90D'")"
+[[ "$(json_field "$OUT" alerts)" == *'"code":"sources_isolated"'* ]] || {
+  echo "isolation did not alert: $OUT" >&2
+  exit 1
+}
+assert_equal "isolation events are append-only" "rejected" "$(psql_db -Atqc "
+  DELETE FROM arena.leaderboard_publication_source_isolation_events" >/dev/null 2>&1 \
+  && echo deleted || echo rejected)"
 
 # ---------------------------------------------------------------------------
-# Positive: bybit publishes a fresh board -> the whole season is served.
+# Positive: bybit publishes a fresh board -> it rejoins; the whole season is served.
 # ---------------------------------------------------------------------------
 psql_db -q <<'SQL'
 INSERT INTO arena.leaderboard_snapshots VALUES
@@ -387,7 +413,31 @@ assert_equal "fresh season publishes" "true" "$(json_field "$OUT" ok)"
 COHORT_ONE="$(json_field "$OUT" result.scoreCohortId)"
 assert_equal "published rank count (partial by-flux excluded)" "7" \
   "$(json_field "$OUT" result.publishedRankCount)"
+assert_equal "bybit is reported restored" '["bybit"]' "$(json_field "$OUT" result.restoredSources)"
+assert_equal "exclusion reasons are reported" '{"filtered_by_scorer":1}' \
+  "$(json_field "$OUT" result.exclusions.byReason)"
+assert_equal "isolation rows cleared, restore event recorded" "0|1" "$(psql_db -Atqc "
+  SELECT (SELECT pg_catalog.count(*) FROM arena.leaderboard_publication_source_isolations) || '|' ||
+         (SELECT pg_catalog.count(*) FROM arena.leaderboard_publication_source_isolation_events
+           WHERE filter_source = 'bybit' AND action = 'restored')")"
 assert_equal "public view row count" "7" "$(view_count)"
+assert_equal "every source is bound with its evidence grade" \
+  '{"bybit":"count_check_only","hyperliquid":"count_check_only","binance_futures":"count_check_only"}' \
+  "$(json_field "$OUT" result.evidenceGrades)"
+assert_equal "evidence rows bind the exact passed snapshots" "binance_futures:{101},bybit:{202},hyperliquid:{301}" \
+  "$(psql_db -Atqc "SELECT string_agg(source || ':' || snapshot_ids::text, ',' ORDER BY source)
+     FROM arena.leaderboard_rank_publication_source_evidence WHERE score_cohort_id = '$COHORT_ONE'")"
+assert_equal "anon sees the served evidence level per source" "binance_futures:count_check_only,bybit:count_check_only,hyperliquid:count_check_only" \
+  "$(psql_db -Atqc "SET ROLE anon; SELECT string_agg(source || ':' || evidence_grade, ',' ORDER BY source)
+     FROM public.public_ranked_leaderboard_source_evidence WHERE season_id = '90D'")"
+if psql_db -qc "DELETE FROM arena.leaderboard_rank_publication_source_evidence" >/dev/null 2>&1; then
+  echo "publication evidence is not immutable" >&2; exit 1
+fi
+EVIDENCE_ERROR="$(psql_db -Atqc "SELECT public.record_leaderboard_rank_publication_evidence('90D',
+  '$COHORT_ONE', '[]'::jsonb)" 2>&1 || true)"
+[[ "$EVIDENCE_ERROR" == *"only by the transaction that sealed the cohort"* ]] || {
+  echo "evidence was recordable outside the sealing transaction: $EVIDENCE_ERROR" >&2; exit 1
+}
 
 # Ranks are 1..N, follow arena_score DESC, and every row carries the cohort.
 assert_equal "view rank order matches arena_score" "t" "$(psql_db -Atqc "
@@ -433,25 +483,42 @@ assert_equal "serving head is valid for ~48h" "t" "$(psql_db -Atqc "
 FIRST_VIEW="$(anon_view)"
 
 # ---------------------------------------------------------------------------
-# Negative 2: a new expected source without any board -> refusal; the view
-# keeps serving the previous cohort byte-for-byte.
+# Negative 2: four new expected sources without any board (4/7 > half) ->
+# refusal; nothing is written and the previous cohort is kept.
 # ---------------------------------------------------------------------------
-psql_db -qc "UPDATE arena.sources SET serving_mode = 'serving' WHERE slug = 'okx_futures'"
+psql_db -q <<'SQL'
+INSERT INTO arena.exchanges (id, name) VALUES (5, 'Gate'), (6, 'MEXC'), (7, 'KuCoin'), (8, 'HTX');
+INSERT INTO arena.sources (id, slug, exchange_id, status, serving_mode, timeframes_native) VALUES
+  (5, 'gate_futures', 5, 'active', 'serving', '{90}'),
+  (6, 'mexc_futures', 6, 'active', 'serving', '{90}'),
+  (7, 'kucoin_futures', 7, 'active', 'serving', '{90}'),
+  (8, 'htx_futures', 8, 'active', 'serving', '{90}');
+SQL
+COUNTS_BEFORE="$(psql_db -Atqc "
+  SELECT (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_claims) || '|' ||
+         (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_publications) || '|' ||
+         (SELECT pg_catalog.count(*) FROM arena.leaderboard_publication_source_isolation_events)")"
 OUT="$(publish 90D)"
-assert_equal "missing source is refused" "false" "$(json_field "$OUT" ok)"
-assert_equal "missing source refusal code" "expected_source_not_fresh" "$(json_field "$OUT" code)"
-[[ "$(json_field "$OUT" message)" == *"okx_futures(missing)"* ]] || {
-  echo "missing refusal does not name okx_futures: $OUT" >&2
+assert_equal "majority-missing season is refused" "false" "$(json_field "$OUT" ok)"
+assert_equal "majority refusal code" "expected_source_not_fresh" "$(json_field "$OUT" code)"
+[[ "$(json_field "$OUT" message)" == *"more than 50%"*"gate_futures(missing)"* ]] || {
+  echo "majority refusal has an unexpected message: $OUT" >&2
   exit 1
 }
-# The registry change alone invalidates the old head (expected set changed),
-# which is the database's own all-or-nothing rule; restoring it re-serves the
-# unchanged previous cohort because the refusal wrote nothing.
-psql_db -qc "UPDATE arena.sources SET serving_mode = 'shadow' WHERE slug = 'okx_futures'"
-assert_equal "previous cohort still served after refusal" "$FIRST_VIEW" "$(anon_view)"
-assert_equal "refusal left one claim and one receipt" "1|1" "$(psql_db -Atqc "
+[[ "$(json_field "$OUT" alerts)" == *'"severity":"critical","code":"season_publication_refused"'* ]] || {
+  echo "refusal did not alert: $OUT" >&2
+  exit 1
+}
+assert_equal "refusal wrote no claim, receipt, isolation or event" "$COUNTS_BEFORE|0" "$(psql_db -Atqc "
   SELECT (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_generation_claims) || '|' ||
-         (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_publications)")"
+         (SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_publications) || '|' ||
+         (SELECT pg_catalog.count(*) FROM arena.leaderboard_publication_source_isolation_events) || '|' ||
+         (SELECT pg_catalog.count(*) FROM arena.leaderboard_publication_source_isolations)")"
+# The registry change alone invalidates the old head (expected set changed),
+# which is the database's own rule; restoring it re-serves the unchanged
+# previous cohort because the refusal wrote nothing.
+psql_db -qc "UPDATE arena.sources SET serving_mode = 'shadow' WHERE id IN (5, 6, 7, 8)"
+assert_equal "previous cohort still served after refusal" "$FIRST_VIEW" "$(anon_view)"
 
 # ---------------------------------------------------------------------------
 # Negative 3 (database side): even if a caller skipped the orchestrator's gate,
@@ -480,10 +547,29 @@ SQL
 psql_db -qc "UPDATE arena.sources SET serving_mode = 'shadow' WHERE slug = 'okx_futures'"
 assert_equal "rejected partial seal leaves the previous cohort served" "$FIRST_VIEW" "$(anon_view)"
 
-# The first generation's 15s claim lease must expire before the season can be
-# claimed again (a concurrent publisher inside the lease is refused).
+# The successful publication released its own lease inside its transaction.
+assert_equal "sealed publication released its claim lease" "sealed|" "$(psql_db -Atqc "
+  SELECT phase || '|' || COALESCE(lease_expires_at::text, '')
+  FROM arena.leaderboard_rank_generation_heads WHERE season_id = '90D'")"
+
+# A transaction that did not seal the cohort cannot release a live lease.
+psql_db -q >/dev/null <<'SQL'
+BEGIN;
+SELECT public.claim_leaderboard_rank_generation('90D',
+  '00000000-0000-4000-8000-0000000000c1', repeat('a', 64), 1, 1, now(), 15);
+COMMIT;
+SQL
+RELEASE_ERROR="$(psql_db -Atqc "SELECT public.release_leaderboard_rank_generation_lease('90D',
+  '00000000-0000-4000-8000-0000000000c1')" 2>&1 || true)"
+[[ "$RELEASE_ERROR" == *"only by the transaction that sealed it"* ]] || {
+  echo "unsealed lease release was not refused: $RELEASE_ERROR" >&2
+  exit 1
+}
+
+# A live lease held by another (e.g. crashed or concurrent) publisher still
+# blocks the season until it expires.
 OUT="$(publish 90D)"
-assert_equal "a publication inside the live lease is refused" "false" "$(json_field "$OUT" ok)"
+assert_equal "a publication inside a foreign live lease is refused" "false" "$(json_field "$OUT" ok)"
 [[ "$(json_field "$OUT" message)" == *"active lease"* ]] || {
   echo "lease refusal has an unexpected reason: $OUT" >&2
   exit 1
@@ -503,6 +589,14 @@ SELECT 102, scraped_at, input.trader_id, input.rank
 FROM arena.leaderboard_snapshots, (VALUES (11, 1), (12, 2), (14, 3)) AS input(trader_id, rank)
 WHERE id = 102;
 SQL
+# Attempt-bound capture for binance's new board: a metric-trust run exists.
+psql_db -q <<'SQL'
+CREATE TABLE arena.metric_trust_runs (
+  source_run_id text PRIMARY KEY, snapshot_id bigint NOT NULL, manifest_raw_object_id bigint NOT NULL
+);
+UPDATE arena.leaderboard_snapshots SET raw_object_id = 9001 WHERE id = 102;
+INSERT INTO arena.metric_trust_runs VALUES (repeat('a', 64), 102, 9002);
+SQL
 OUT="$(publish 90D)"
 assert_equal "second cycle publishes" "true" "$(json_field "$OUT" ok)"
 COHORT_TWO="$(json_field "$OUT" result.scoreCohortId)"
@@ -516,6 +610,133 @@ assert_equal "view serves only the new cohort" "7|0|1" "$(psql_db -Atqc "
 assert_equal "every served row is the new cohort" "7" "$(psql_db -Atqc "
   SELECT pg_catalog.count(*) FROM public.leaderboard_ranks
   WHERE season_id = '90D' AND rank_publication_id = '$COHORT_TWO'")"
-assert_equal "generation sequence advanced to 2" "2" "$(json_field "$OUT" result.generationSeq)"
+assert_equal "generation sequence advanced past the foreign claim" "4" \
+  "$(json_field "$OUT" result.generationSeq)"
+assert_equal "second cycle released its lease" "true" "$(json_field "$OUT" result.leaseReleased)"
+assert_equal "attempt-bound source is graded and traceable to run/manifest/RAW" \
+  "attempt_bound|{102}|{9001}|{$(printf 'a%.0s' {1..64})}|{9002}" \
+  "$(psql_db -Atqc "SELECT evidence_grade || '|' || snapshot_ids::text || '|' || raw_object_ids::text
+       || '|' || source_run_ids::text || '|' || manifest_raw_object_ids::text
+     FROM arena.leaderboard_rank_publication_source_evidence
+     WHERE score_cohort_id = '$COHORT_TWO' AND source = 'binance_futures'")"
+
+# ---------------------------------------------------------------------------
+# Positive 3: an immediate re-publication is no longer blocked by the previous
+# run's lease (it was released in the sealing transaction).
+# ---------------------------------------------------------------------------
+OUT="$(publish 90D)"
+assert_equal "immediate re-publication succeeds" "true" "$(json_field "$OUT" ok)"
+assert_equal "immediate re-publication is generation 5" "5" "$(json_field "$OUT" result.generationSeq)"
+assert_equal "view still serves 7 rows" "7" "$(view_count)"
+
+# ---------------------------------------------------------------------------
+# Public snapshot readers (20261113012028): anon RPCs serve only sealed, fresh
+# boards. Extend the fixture with the reader columns, install marker-bearing
+# stand-ins for the 20261111134416 bodies, then apply the forward migration.
+# ---------------------------------------------------------------------------
+psql_db -q <<'SQL'
+ALTER TABLE arena.exchanges ADD COLUMN slug text;
+UPDATE arena.exchanges SET slug = pg_catalog.lower(name);
+ALTER TABLE arena.sources
+  ADD COLUMN adapter_slug text,
+  ADD COLUMN currency text NOT NULL DEFAULT 'USDT',
+  ADD COLUMN product_type text NOT NULL DEFAULT 'futures';
+UPDATE arena.sources SET adapter_slug = slug;
+ALTER TABLE arena.leaderboard_entries
+  ADD COLUMN timeframe smallint NOT NULL DEFAULT 90,
+  ADD COLUMN headline_roi numeric,
+  ADD COLUMN headline_pnl numeric,
+  ADD COLUMN headline_win_rate numeric,
+  ADD COLUMN currency text,
+  ADD COLUMN raw jsonb;
+UPDATE arena.leaderboard_entries AS entry
+SET headline_roi = metric.roi_pct, headline_pnl = metric.pnl_usd,
+    headline_win_rate = metric.win_rate
+FROM arena.fixture_trader_metrics AS metric WHERE metric.trader_id = entry.trader_id;
+CREATE TABLE arena.traders (
+  id bigint PRIMARY KEY,
+  source_id smallint NOT NULL,
+  exchange_trader_id text NOT NULL,
+  nickname text, trader_kind text, avatar_url_mirror text, avatar_url_origin text,
+  wallet_address text, bot_strategy text
+);
+INSERT INTO arena.traders (id, source_id, exchange_trader_id, nickname)
+SELECT metric.trader_id, (metric.trader_id / 10)::smallint, metric.trader_key, metric.handle
+FROM arena.fixture_trader_metrics AS metric;
+CREATE TABLE arena.trader_stats (
+  trader_id bigint NOT NULL, timeframe smallint NOT NULL, as_of timestamptz,
+  currency text, roi numeric, pnl numeric, sharpe numeric, mdd numeric, win_rate numeric,
+  win_positions integer, total_positions integer, copier_pnl numeric, copier_count integer,
+  aum numeric, volume numeric, profit_share_rate numeric, holding_duration_avg interval,
+  trading_preferences jsonb, extras jsonb
+);
+INSERT INTO arena.trader_stats (trader_id, timeframe, as_of, roi, mdd)
+VALUES (11, 90, pg_catalog.now() - interval '1 hour', 180.5, 12.5),
+       (12, 90, pg_catalog.now() - interval '20 days', 95.0, 18.0);
+CREATE TABLE arena.trader_series (
+  trader_id bigint, timeframe smallint, metric text, ts timestamptz, value numeric
+);
+
+-- Stand-ins carrying the Bitget quarantine marker the forward migration
+-- requires (the real bodies need the full production substrate).
+CREATE FUNCTION public.arena_weekly_leaders(p_limit integer DEFAULT 25) RETURNS jsonb
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+  AS $$ SELECT '{}'::jsonb /* bitget-bot-cumulative-public-reader-quarantine@1 */ $$;
+CREATE FUNCTION public.arena_exchange_rankings(p_timeframe integer) RETURNS jsonb
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+  AS $$ SELECT '{}'::jsonb /* bitget-bot-cumulative-public-reader-quarantine@1 */ $$;
+CREATE FUNCTION public.arena_first_screen(p_source text, p_trader text) RETURNS jsonb
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+  AS $$ SELECT '{}'::jsonb /* bitget-bot-cumulative-public-reader-quarantine@1 */ $$;
+CREATE FUNCTION public.arena_core_modules(p_source text, p_trader text, p_timeframe integer)
+  RETURNS jsonb
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+  AS $$ SELECT '{}'::jsonb /* bitget-bot-cumulative-public-reader-quarantine@1 */ $$;
+
+-- Boards the old readers would have served:
+--   * okx_futures (active shadow, never sealed) has a fresh passed 90D board;
+--   * binance has a NEWER passed 90D board than its sealed watermark;
+--   * binance has a fresh passed 7D board, but no 7D season is sealed;
+--   * hyperliquid has a 60h-old 30D board and an empty fresh 7D board.
+INSERT INTO arena.leaderboard_snapshots VALUES
+  (401, 4, 90, pg_catalog.now() - interval '10 minutes', 1, true),
+  (103, 1, 90, pg_catalog.now() - interval '1 minute', 1, true),
+  (104, 1, 7, pg_catalog.now() - interval '1 hour', 1, true),
+  (302, 3, 30, pg_catalog.now() - interval '60 hours', 1, true),
+  (303, 3, 7, pg_catalog.now() - interval '1 hour', 0, true);
+INSERT INTO arena.traders (id, source_id, exchange_trader_id, nickname)
+VALUES (41, 4, 'okx-only', 'OkxOnly');
+INSERT INTO arena.leaderboard_entries
+  (snapshot_id, scraped_at, trader_id, rank, timeframe, headline_roi)
+SELECT snapshot.id, snapshot.scraped_at, input.trader_id, 1, snapshot.timeframe, input.roi
+FROM (VALUES (401, 41, 999.0), (103, 11, 555.0), (104, 11, 77.0), (302, 31, 12.0))
+  AS input(snapshot_id, trader_id, roi)
+JOIN arena.leaderboard_snapshots AS snapshot ON snapshot.id = input.snapshot_id;
+SQL
+PGOPTIONS='-c client_min_messages=warning' psql_db -q \
+  -f "$MIGRATIONS/20261113012028_public_snapshot_readers_sealed_freshness.sql" >/dev/null
+
+anon_rpc() {
+  psql_db -Atqc "SET ROLE anon; SELECT $1"
+}
+assert_equal "exchange rankings list only sealed sources" "binance_futures,bybit,hyperliquid" \
+  "$(anon_rpc "pg_catalog.string_agg(r->>'source', ',' ORDER BY r->>'source')
+     FROM pg_catalog.jsonb_array_elements(public.arena_exchange_rankings(90)->'rows') AS r")"
+assert_equal "exchange rankings read the sealed board, not a newer unsealed one" "3" \
+  "$(anon_rpc "(r->>'rankedTraders')
+     FROM pg_catalog.jsonb_array_elements(public.arena_exchange_rankings(90)->'rows') AS r
+     WHERE r->>'source' = 'binance_futures'")"
+assert_equal "weekly leaders serve nothing without a sealed 7D season" "[]" \
+  "$(anon_rpc "public.arena_weekly_leaders(25)->'rows'")"
+assert_equal "first screen hides 60h-old and empty boards" "90" \
+  "$(anon_rpc "pg_catalog.string_agg(e->>'timeframe', ',')
+     FROM pg_catalog.jsonb_array_elements(
+       public.arena_first_screen('hyperliquid', 'hl-gale')->'entries') AS e")"
+assert_equal "core modules flag stale stats" "false|true" \
+  "$(anon_rpc "(public.arena_core_modules('binance_futures', 'bn-ace', 90)->>'stale') || '|' ||
+              (public.arena_core_modules('binance_futures', 'bn-bolt', 90)->>'stale')")"
+assert_equal "sealed-source helper is not anon-callable" "f" \
+  "$(psql_db -Atqc "SELECT pg_catalog.has_function_privilege('anon',
+     'arena.public_sealed_rank_sources()', 'EXECUTE')")"
 
 echo "public ranking season publication PostgreSQL 17 proof passed"

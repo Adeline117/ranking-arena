@@ -1725,6 +1725,7 @@ const ja = {
   adminStatusStale: '古い',
   adminStatusCritical: '緊急',
   adminStatusUnknown: '不明',
+  adminStatusQuarantined: '隔離中',
   adminNoDataLabel: 'データなし',
   adminLastUpdate: '最も古い上流ウォーターマーク：{time}',
   adminAgeHours: '経過時間：{hours}時間',

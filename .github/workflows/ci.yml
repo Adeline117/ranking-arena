@@ -224,6 +224,16 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:public-ranked-leaderboard-pg17
 
+      - name: Prove the codec rebuild refuses file-name-order replay
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:codec-rebuild-slot-guard-pg17
+
+      - name: Prove snapshot retention keeps publication evidence
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:snapshot-retention-pg17
+
       - name: Prove canonical score-input platform aliases
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
@@ -496,6 +506,11 @@ jobs:
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:public-ranking-season-publication-pg17
+
+      - name: Prove retention keeps metric-trust evidence
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:retention-trust-evidence-pg17
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0

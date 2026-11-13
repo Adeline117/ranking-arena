@@ -276,22 +276,6 @@ interface LeaderboardProfile {
   pnl: number | null
 }
 
-interface PublicRankedLeaderboardQueryResult {
-  data: unknown[] | null
-  error: unknown | null
-}
-
-type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
-  select(columns: string): PublicRankedLeaderboardQuery
-  eq(column: string, value: string): PublicRankedLeaderboardQuery
-  in(column: string, values: readonly string[]): PublicRankedLeaderboardQuery
-  abortSignal(signal: AbortSignal): PublicRankedLeaderboardQuery
-}
-
-type PublicRankedLeaderboardClient = {
-  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
-}
-
 function fail(
   kind: TokenRankingReadErrorKind,
   message: string,
@@ -807,16 +791,6 @@ function publicProfileRank(value: unknown): number | null {
   return rank !== null && Number.isSafeInteger(rank) && rank > 0 ? rank : null
 }
 
-function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
-  // The security-barrier view is additive while generated Supabase types catch
-  // up. Keep this escape hatch narrow so this reader cannot fall back to the
-  // raw ranking relation.
-  if (!isRecord(value) || typeof value.from !== 'function') {
-    throw new TypeError('Supabase client does not expose the public ranking cohort')
-  }
-  return value as PublicRankedLeaderboardClient
-}
-
 /**
  * Validate one optional profile overlay independently of the token snapshot.
  * A bad/missing row deliberately returns null: the token generation remains
@@ -919,7 +893,7 @@ async function loadProfiles(
   const sources = [...new Set(publicRows.map((row) => row.source))]
 
   try {
-    const query = publicRankedLeaderboardClient(supabase)
+    const query = supabase
       .from('public_ranked_leaderboard')
       .select(PUBLIC_PROFILE_COLUMNS)
       .eq('season_id', period)

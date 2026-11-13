@@ -1855,6 +1855,7 @@ const zh = {
   adminStatusStale: '陈旧',
   adminStatusCritical: '严重',
   adminStatusUnknown: '未知',
+  adminStatusQuarantined: '已隔离',
   adminNoDataLabel: '无数据',
   adminLastUpdate: '最老上游水位: {time}',
   adminAgeHours: '距今: {hours} 小时',

@@ -144,7 +144,23 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     ...superseded,
   ]
 
-  assert.equal(predeploy.length, 141)
+  assert.equal(predeploy.length, 147)
+  // Season publication follow-ups stay last; 011058 must follow the Bitget-bot
+  // freshness-authority rewrite slot (20261111134416, #415's replacement for 20260728124000).
+  assert.deepEqual(predeploy.slice(-6), [
+    '20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql',
+    '20261113011058_leaderboard_publication_source_isolation.sql',
+    '20261113012028_public_snapshot_readers_sealed_freshness.sql',
+    '20261113105605_retention_preserves_metric_trust_evidence.sql',
+    '20261113110021_leaderboard_snapshot_retention.sql',
+    '20261113110430_rank_publication_source_evidence_binding.sql',
+  ])
+  assert.ok(
+    predeploy.indexOf('20261113011058_leaderboard_publication_source_isolation.sql') >
+      predeploy.indexOf(
+        '20261111134416_quarantine_bitget_bot_cumulative_rank_authority_prod_reader.sql'
+      )
+  )
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
@@ -196,9 +212,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260817060000_trader_series_publication_isolation.sql',
     '20260817061000_legacy_raw_metric_publication_isolation.sql',
   ])
-  assert.equal(new Set(all).size, 169)
+  assert.equal(new Set(all).size, 175)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-100), [
+  assert.deepEqual(predeploy.slice(-106), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -299,6 +315,12 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20261111132450_legacy_raw_metric_publication_isolation_hosted_role_graph.sql',
     '20260817134214_quarantine_legacy_platform_stats_rpc.sql',
     '20261013094743_retire_v2_partition_cron_extend_arena_partitions.sql',
+    '20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql',
+    '20261113011058_leaderboard_publication_source_isolation.sql',
+    '20261113012028_public_snapshot_readers_sealed_freshness.sql',
+    '20261113105605_retention_preserves_metric_trust_evidence.sql',
+    '20261113110021_leaderboard_snapshot_retention.sql',
+    '20261113110430_rank_publication_source_evidence_binding.sql',
   ])
   assert.ok(predeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(predeploy.includes('20260718183500_harden_stripe_entitlement_null_validation.sql'))
@@ -388,7 +410,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes('20260729070500_leaderboard_score_input_manifest_v2.sql'))
   assert.ok(predeploy.includes('20260729071000_leaderboard_metric_trust_projection_v2.sql'))
   assert.ok(predeploy.includes('20260729071500_tier_a_one_phase_commit_guard.sql'))
-  assert.deepEqual(predeploy.slice(-28), [
+  assert.deepEqual(predeploy.slice(-34, -6), [
     '20260729223000_rerank_public_eligible_rows_only.sql',
     '20260729224000_rank_eligible_leaderboard_count_cache.sql',
     '20260729225000_token_trader_rank_authority.sql',
