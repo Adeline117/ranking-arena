@@ -216,7 +216,6 @@ const eslintConfig = defineConfig([
       'app/components/trader/AdvancedMetricsCard.tsx',
       'app/components/trader/CopyTradeSimulator.tsx',
       'app/components/home/RankingControls.tsx',
-      'app/components/onboarding/WelcomeModal.tsx',
       'app/components/market/DefiOverview.tsx',
       'app/components/utils/ErrorBoundary.tsx',
       'app/components/home/SSRRankingTable.tsx',
