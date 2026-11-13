@@ -10,6 +10,8 @@ import type {
 
 export interface TraderHeaderAccountMetrics {
   roi90d: number | undefined
+  /** Board window of a serving headline; undefined = 90D (legacy default). */
+  headlineWindow?: string
   arenaScore: number | null
   scoreConfidence: string | null
   tradesCount: number | null
@@ -619,6 +621,7 @@ export function resolveTraderHeaderAccountMetrics(
   if (!suppressAccountMetrics) return metrics
   return {
     roi90d: undefined,
+    headlineWindow: undefined,
     arenaScore: null,
     scoreConfidence: null,
     tradesCount: null,
