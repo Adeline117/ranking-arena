@@ -3154,7 +3154,10 @@ async function drainRawObjectGcBatch(
   const storage = getStorageClient().storage.from(RAW_BUCKET)
   const { error } = await storage.remove(storagePaths)
   if (error) {
-    const message = error.message ?? 'unknown Storage error'
+    // arena.raw_object_gc_queue_attempt_shape (20260721130000) requires a
+    // non-blank last_error once attempts > 0. A blank Storage message would
+    // violate it and lose the durable retry bookkeeping.
+    const message = error.message?.trim() || 'unknown Storage error'
     try {
       await client.query(
         `UPDATE arena.raw_object_gc_queue

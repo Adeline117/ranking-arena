@@ -34,6 +34,9 @@ export const TIER_A_ONE_PHASE_COMMIT_HELPER_SHA256 =
   'd06a19a74542804b5a56ba6ecbece173e2b3c651aaca480a38abbada7945a431' as const
 export const TIER_A_EXECUTION_CONSTRAINT_CATALOG_SHA256 =
   '6e9627e5c475035c5e4f17c39754b25f81b16360ab84244b66bb50239d8dc0a9' as const
+// Trigger catalog installed by 20261111192134 (the launch replacement for
+// 20260729061000): the original 21 rows plus the three reviewed raw_objects
+// guards from 20260803100000, 20260804053000, and 20260808010000.
 export const TIER_A_EXECUTION_TRIGGER_CATALOG_SHA256 =
   '4f0ab9c41b541eabc9ce75973356b567a45a2ad6942a4e327e182bcc43e73100' as const
 

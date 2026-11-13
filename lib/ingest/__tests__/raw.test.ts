@@ -622,6 +622,24 @@ describe('cleanupRawObjects fail-closed garbage collection', () => {
     expect(mockClientRelease).toHaveBeenCalledTimes(1)
   })
 
+  it.each([[''], ['   '], [undefined]])(
+    'records a non-blank last_error when Storage returns message %p',
+    async (storageMessage) => {
+      useRawGcQueryPlan({ pending: ['raw/retry.json.gz'] })
+      mockRemove.mockResolvedValueOnce({ error: { message: storageMessage } })
+
+      await expect(cleanupRawObjects()).rejects.toThrow(
+        'RAW cleanup remove failed; durable queue retained: unknown Storage error'
+      )
+
+      const updateIndex = rawGcQueryIndex('attempts = attempts + 1')
+      expect(updateIndex).toBeGreaterThanOrEqual(0)
+      const lastError = mockClientQuery.mock.calls[updateIndex][1][1] as string
+      expect(lastError.trim()).not.toBe('')
+      expect(lastError).toBe('unknown Storage error')
+    }
+  )
+
   it('keeps the durable queue when Storage succeeds but acknowledgement fails', async () => {
     useRawGcQueryPlan({
       pending: ['raw/retry.json.gz'],
