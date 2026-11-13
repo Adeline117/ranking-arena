@@ -440,6 +440,7 @@ const enCore = {
   failedToLoadRankings: 'Failed to load rankings',
   rankingNoMatchCriteria: 'No traders match your criteria',
   rankingBroadenFilters: 'Try broadening your filters',
+  rankingSearchElsewhereTitle: 'No match on this page. Matching traders across Arena:',
 } as const
 
 export default enCore

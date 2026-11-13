@@ -534,6 +534,31 @@ describe('排序 / 分页 / 搜索', () => {
     expect(renderedPages[renderCountBeforeRangeCommit]).toBe(1)
   })
 
+  it('server search fallback goes to searchMatchesElsewhere, never into the ranked rows', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        results: {
+          traders: [{ id: 'bybit:far-away', title: '@FarAway', meta: { platform: 'bybit' } }],
+        },
+      }),
+    })
+    const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+    act(() => result.current.handleSearchChange('faraway'))
+    await act(async () => {
+      jest.advanceTimersByTime(500)
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/search?q=faraway'),
+      expect.anything()
+    )
+    expect(result.current.searchMatchesElsewhere.map((t) => t.id)).toEqual(['far-away'])
+    expect(result.current.filteredTraders.map((t) => t.id)).not.toContain('far-away')
+  })
+
   it('handleSearchChange 设置 query 并重置页码（新搜索不该停留在旧页）', () => {
     const { result } = setup()
     act(() => result.current.handlePageChange(5))

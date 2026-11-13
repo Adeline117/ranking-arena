@@ -6733,6 +6733,8 @@ const ko = {
   historyVerificationCurrentRanking: '현재 랭킹 ({period})',
   rankingFilteredByExchange: '{exchange}(으)로 필터링됨',
   rankingClearExchangeFilter: '거래소 필터 해제',
+  rankingSearchElsewhereTitle:
+    '이 페이지에 일치 항목이 없습니다. Arena 전체에서 일치하는 트레이더:',
 } as const
 
 export default ko

@@ -6864,6 +6864,7 @@ const en = {
   historyVerificationCurrentRanking: 'Current ranking ({period})',
   rankingFilteredByExchange: 'Filtered by {exchange}',
   rankingClearExchangeFilter: 'Clear exchange filter',
+  rankingSearchElsewhereTitle: 'No match on this page. Matching traders across Arena:',
 } as const
 
 export default en

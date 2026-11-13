@@ -376,6 +376,7 @@ const zhCore = {
   failedToLoadRankings: '加载排名失败',
   rankingNoMatchCriteria: '没有符合条件的交易员',
   rankingBroadenFilters: '试试放宽筛选条件',
+  rankingSearchElsewhereTitle: '当前页没有匹配，以下是全站匹配的交易员：',
 } as const
 
 export default zhCore

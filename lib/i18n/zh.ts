@@ -6674,6 +6674,7 @@ const zh = {
   historyVerificationCurrentRanking: '当前排名（{period}）',
   rankingFilteredByExchange: '已按 {exchange} 筛选',
   rankingClearExchangeFilter: '清除交易所筛选',
+  rankingSearchElsewhereTitle: '当前页没有匹配，以下是全站匹配的交易员：',
 } as const
 
 export default zh

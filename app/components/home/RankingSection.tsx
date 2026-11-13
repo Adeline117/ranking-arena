@@ -16,6 +16,7 @@ import { useRankingFilters, FREE_LEADERBOARD_LIMIT } from './useRankingFilters'
 import CategoryRankingTabs, { type CategoryType } from '../ranking/CategoryRankingTabs'
 import { trackEvent } from '@/lib/analytics/track'
 import ExchangeScopeNotice from './ExchangeScopeNotice'
+import SearchElsewhereMatches from './SearchElsewhereMatches'
 
 const AdvancedFilterPanel = dynamic(() => import('./AdvancedFilterPanel'), { ssr: false })
 const FilterStatusMessages = dynamic(() => import('./FilterStatusMessages'), { ssr: false })
@@ -109,6 +110,7 @@ export default function RankingSection({
     source,
     advancedFiltered,
     filteredTraders,
+    searchMatchesElsewhere,
     handleFilterChange,
     handleSortChange,
     handlePageChange,
@@ -239,6 +241,8 @@ export default function RankingSection({
           {t('staleDataRecovering')}
         </div>
       )}
+
+      <SearchElsewhereMatches traders={searchMatchesElsewhere} />
 
       {/* Error + empty states are rendered once, by RankingTable (it was
           previously duplicated here, producing two messages / two retry

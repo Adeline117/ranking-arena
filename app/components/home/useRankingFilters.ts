@@ -964,26 +964,28 @@ export function useRankingFilters({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, advancedFiltered])
 
-  const filteredTraders = useMemo(() => {
-    // With server-side pagination, the API returns one page at a time — no need to slice
-    const base = fetchPage
-      ? advancedFiltered
-      : isPro
+  const filteredTraders = useMemo(
+    () =>
+      // With server-side pagination, the API returns one page at a time — no need to slice
+      fetchPage
         ? advancedFiltered
-        : advancedFiltered.slice(0, FREE_LEADERBOARD_LIMIT)
-    if (serverSearchResults.length === 0) return base
-    const q = searchQuery.trim().toLowerCase()
-    if (q.length < 2) return base
-    const clientMatches = base.filter((t) => {
-      const handle = (t.handle || t.id || '').toLowerCase()
-      return handle.includes(q) || t.id.toLowerCase().includes(q)
-    })
-    if (clientMatches.length > 0) return base
-    const existingIds = new Set(base.map((t) => t.id))
-    const newResults = serverSearchResults.filter((t) => !existingIds.has(t.id))
-    return [...base, ...newResults]
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPro, advancedFiltered, serverSearchResults, searchQuery])
+        : isPro
+          ? advancedFiltered
+          : advancedFiltered.slice(0, FREE_LEADERBOARD_LIMIT),
+    [fetchPage, isPro, advancedFiltered]
+  )
+
+  // Site-wide `/api/search` matches for a query with no match on this page.
+  // They carry no published rank for this cohort, so they must never be
+  // merged into the ranking table (which only renders persisted ranks — the
+  // old merge was silently filtered out). RankingSection lists them as
+  // profile links instead.
+  const searchMatchesElsewhere = useMemo(() => {
+    if (serverSearchResults.length === 0) return []
+    if (searchQuery.trim().length < 2) return []
+    const existingIds = new Set(filteredTraders.map((t) => t.id))
+    return serverSearchResults.filter((t) => !existingIds.has(t.id))
+  }, [serverSearchResults, searchQuery, filteredTraders])
 
   // Pro required handler — show toast instead of redirecting away (jarring UX)
   const handleProRequired = useCallback(() => {
@@ -1086,6 +1088,7 @@ export function useRankingFilters({
     source,
     advancedFiltered,
     filteredTraders,
+    searchMatchesElsewhere,
     // Handlers
     handleFilterChange,
     handleSortChange,

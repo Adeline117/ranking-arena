@@ -6505,6 +6505,7 @@ const ja = {
   historyVerificationCurrentRanking: '現在のランキング（{period}）',
   rankingFilteredByExchange: '{exchange} で絞り込み中',
   rankingClearExchangeFilter: '取引所の絞り込みを解除',
+  rankingSearchElsewhereTitle: 'このページに一致なし。Arena 全体で一致したトレーダー：',
 } as const
 
 export default ja

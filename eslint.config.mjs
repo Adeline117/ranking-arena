@@ -225,6 +225,7 @@ const eslintConfig = defineConfig([
       'app/components/home/SSRRankingTable.tsx',
       'app/components/home/HomeHeroSSR.tsx',
       'app/components/home/ExchangeScopeNotice.tsx',
+      'app/components/home/SearchElsewhereMatches.tsx',
     ],
     rules: {
       'no-restricted-syntax': ['error', ...baseRestrictedSyntax, ...appRestrictedSyntax],
