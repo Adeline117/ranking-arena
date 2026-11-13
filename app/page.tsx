@@ -217,10 +217,12 @@ export default async function Page({ searchParams }: { searchParams: Promise<Hom
       {itemListJsonLd && <JsonLd data={itemListJsonLd} />}
 
       {/* SSR TopNav — stays visible permanently (see HomePage.tsx). Outside
-          <main> so the skip link actually skips it in the tab order. */}
-      <div id="ssr-topnav">
-        <TopNav />
-      </div>
+          <main> so the skip link actually skips it in the tab order. Rendered
+          WITHOUT a wrapper element: a same-height wrapper div becomes the
+          sticky containing block, so .top-nav-header (position:sticky; top:0)
+          scrolled away with it and left a 56px dead band above the table's
+          sticky column header (which assumes the nav is pinned at top:0). */}
+      <TopNav />
 
       <main id="main-content" tabIndex={-1}>
         {/* WelcomeBanner moved to HomePageLoader Phase 2 (client-only) */}

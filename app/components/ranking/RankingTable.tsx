@@ -877,7 +877,7 @@ function RankingTableInner(props: {
               background: 'var(--color-bg-secondary, #14121C)',
               borderRadius: onCategoryChange ? '0' : `${tokens.radius.xl} ${tokens.radius.xl} 0 0`,
               position: 'sticky',
-              top: 56,
+              top: 'var(--nav-height, 56px)',
               zIndex: tokens.zIndex.sticky,
             }}
           >

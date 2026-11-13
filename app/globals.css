@@ -20,7 +20,8 @@
      imported with the server data, so there is no empty center-column gap.
    - HomePageClient's layout effect remains a fallback for browsers without
      :has() support.
-   #ssr-topnav stays visible permanently. */
+   The SSR TopNav stays visible permanently (rendered unwrapped so its
+   position:sticky pins against the viewport, like every other page). */
 
 /*
  * Performance Optimization: CSS files moved to async loading
@@ -196,9 +197,19 @@ html.theme-transition #main-content {
   --color-error: #ff7c7c;
   --color-warning: #ffc107;
 
-  /* Transition tokens */
+  /* Transition tokens — --transition-base agrees with tokens.transition.base (200ms) */
   --transition-fast: 0.15s;
-  --transition-base: 0.25s;
+  --transition-base: 0.2s;
+
+  /* Motion tokens (docs/DESIGN.md): short, decelerating, never looping on data */
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --motion-slow: 260ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* TopNav height — sticky sidebars / table header pin directly beneath it */
+  --nav-height: 56px;
 }
 
 /* ============================================
@@ -1250,8 +1261,8 @@ select:focus-visible {
 .three-col-left,
 .three-col-right {
   position: sticky;
-  top: 60px;
-  height: calc(100vh - 60px);
+  top: var(--nav-height, 56px);
+  height: calc(100vh - var(--nav-height, 56px));
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
@@ -1271,7 +1282,7 @@ select:focus-visible {
 }
 
 .three-col-center {
-  min-height: calc(100vh - 60px);
+  min-height: calc(100vh - var(--nav-height, 56px));
   min-width: 0;
   overflow-x: hidden;
 }
@@ -3190,10 +3201,14 @@ input[type='search']::-webkit-search-cancel-button:hover {
 .top-nav-header {
   position: sticky;
   top: 0;
-  height: 56px;
+  height: var(--nav-height, 56px);
   border-bottom: 1px solid var(--color-border-primary);
   background: var(--color-bg-primary);
   z-index: 200;
+  /* Same frosted glass on every page. .glass in animations.css carries the
+     blur too, but the provider-less homepage never loads that sheet. */
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 .ranking-time-range-bar {
   display: flex;
@@ -3910,8 +3925,8 @@ td[data-numeric],
 }
 .rankings-right-sidebar {
   position: sticky;
-  top: 60px;
-  height: calc(100vh - 60px);
+  top: var(--nav-height, 56px);
+  height: calc(100vh - var(--nav-height, 56px));
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
