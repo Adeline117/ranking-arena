@@ -950,6 +950,8 @@ const zh = {
   logoutConfirm: '确定要退出当前账号吗？',
   logoutFailed: '退出失败，请重试',
   pleaseLoginAgain: '请先登录',
+  deleteAccountInvalidPassword:
+    '密码不正确。如果你是用邮箱验证码注册、从未设置过密码，请先重置密码，再回来注销。',
   accountMarkedDeleted: '账号已标记为注销，30天内可通过登录恢复',
   networkErrorRetry: '网络错误，请重试',
   notificationsSaved: '通知偏好已保存',

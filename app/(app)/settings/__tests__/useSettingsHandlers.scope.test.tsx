@@ -567,6 +567,33 @@ describe('useSettingsHandlers viewer ownership', () => {
     storageSet.mockRestore()
   })
 
+  it('explains the way out when the delete password check fails', async () => {
+    mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: async () => ({ error: 'Invalid password' }),
+    }) as unknown as typeof fetch
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const auth = authFor('user-a', scope.sessionGeneration)
+    ;(auth.user as { identities: unknown[] }).identities = [{ provider: 'email' }]
+    const hook = renderHook(() => useSettingsHandlers({ auth, showToast, showConfirm, t }))
+
+    await waitFor(() => expect(hook.result.current.loading).toBe(false))
+    act(() => {
+      hook.result.current.setShowDeleteAccountModal(true)
+      hook.result.current.setDeletePassword('never-set-one')
+    })
+    await waitFor(() => expect(hook.result.current.deleteHasPassword).toBe(true))
+
+    await act(async () => {
+      await hook.result.current.handleDeleteAccount()
+    })
+
+    expect(hook.result.current.deleteError).toBe('deleteAccountInvalidPassword')
+  })
+
   it('uses full-document replacement, never client history, when all storage is blocked', async () => {
     const recoveryToken = 'A'.repeat(43)
     mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))

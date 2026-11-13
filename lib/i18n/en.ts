@@ -964,6 +964,8 @@ const en = {
   logoutConfirm: 'Are you sure you want to logout?',
   logoutFailed: 'Logout failed, please try again',
   pleaseLoginAgain: 'Please login first',
+  deleteAccountInvalidPassword:
+    'Incorrect password. If you signed up with an email code and never set a password, reset your password first, then try again.',
   accountMarkedDeleted: 'Account marked for deletion, you can recover within 30 days',
   networkErrorRetry: 'Network error, please try again',
   notificationsSaved: 'Notification preferences saved',

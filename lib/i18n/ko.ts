@@ -901,6 +901,8 @@ const ko = {
   logoutConfirm: '로그아웃하시겠습니까?',
   logoutFailed: '로그아웃 실패, 다시 시도해 주세요',
   pleaseLoginAgain: '먼저 로그인해 주세요',
+  deleteAccountInvalidPassword:
+    '비밀번호가 올바르지 않습니다. 이메일 코드로 가입하고 비밀번호를 설정한 적이 없다면 먼저 비밀번호를 재설정한 후 다시 시도해 주세요.',
   accountMarkedDeleted: '계정이 삭제 예정입니다. 30일 이내에 복구할 수 있습니다',
   networkErrorRetry: '네트워크 오류, 다시 시도해 주세요',
   notificationsSaved: '알림 설정이 저장되었습니다',

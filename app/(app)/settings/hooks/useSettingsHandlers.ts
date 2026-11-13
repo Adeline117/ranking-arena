@@ -1717,7 +1717,13 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
       const data = await res.json()
       if (!viewerIsCurrent(scope)) return
       if (!res.ok) {
-        setDeleteError(data.error || t('operationFailed'))
+        // 403 = password check failed. The server cannot tell a wrong password
+        // from an email-code signup that never set one, so say how to get out.
+        setDeleteError(
+          res.status === 403 && deleteHasPassword
+            ? t('deleteAccountInvalidPassword')
+            : data.error || t('operationFailed')
+        )
         return
       }
       const recoveryLoginPath = buildAccountRecoveryLoginPath()

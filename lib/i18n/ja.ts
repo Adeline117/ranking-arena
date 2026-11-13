@@ -863,6 +863,8 @@ const ja = {
   logoutConfirm: 'ログアウトしてもよろしいですか？',
   logoutFailed: 'ログアウトに失敗しました。もう一度お試しください',
   pleaseLoginAgain: '最初にログインしてください',
+  deleteAccountInvalidPassword:
+    'パスワードが正しくありません。メールコードで登録しパスワードを設定していない場合は、先にパスワードをリセットしてからもう一度お試しください。',
   accountMarkedDeleted: 'アカウントは削除予定です。30日以内に復元できます',
   networkErrorRetry: 'ネットワークエラー。もう一度お試しください',
   notificationsSaved: '通知設定が保存されました',
