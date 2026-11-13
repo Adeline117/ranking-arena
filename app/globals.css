@@ -1156,6 +1156,20 @@ select:focus-visible {
   }
 }
 
+/* Background-sweep skeleton (inline-styled skeletons with a 200%-wide
+   gradient background: PostFeed, NotificationsList, messages, trader page).
+   Deliberately NOT named "shimmer": critical-css.ts defines shimmer as a
+   translateX slide for .skeleton::after, so elements using it for a
+   background sweep slid their whole box left/right instead. */
+@keyframes skeleton-sweep {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
 /* Skeleton shape variants removed — unused (Skeleton.tsx uses inline props) */
 
 /* ============================================

@@ -73,7 +73,8 @@
 
 /* 脉冲动画 - 用于强调重要指标 */
 @keyframes subtlePulse {
-  0%, 100% {
+  0%,
+  100% {
     box-shadow: 0 0 0 0 rgba(139, 111, 168, 0);
   }
   50% {
@@ -81,19 +82,13 @@
   }
 }
 
-/* 光泽滑过动画 */
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
+/* 光泽滑过动画: keyframes 为 globals.css 的 skeleton-sweep(不再复用
+   "shimmer" 名称 — critical-css.ts 里 shimmer 是 translateX 位移) */
 
 /* 呼吸效果 */
 @keyframes breathe {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.6;
   }
   50% {
@@ -115,7 +110,8 @@
 
 /* 卡片悬浮动画 */
 @keyframes cardFloat {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0);
   }
   50% {
@@ -163,7 +159,9 @@
 
 .profile-tab-button {
   position: relative;
-  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .profile-tab-button:hover {
@@ -182,7 +180,7 @@
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.profile-tab-button[aria-selected="true"]::after {
+.profile-tab-button[aria-selected='true']::after {
   transform: scaleX(1);
 }
 
@@ -194,7 +192,9 @@
 /* Performance 卡片 */
 .performance-card {
   animation: fadeInScale 0.5s ease-out 0.35s both;
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .performance-card:hover {
@@ -222,7 +222,9 @@
 }
 
 .metric-item {
-  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .metric-item:hover {
@@ -234,7 +236,9 @@
 /* About 卡片 */
 .about-card {
   animation: slideInRight 0.5s ease-out 0.4s both;
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .about-card:hover {
@@ -248,7 +252,9 @@
 }
 
 .feed-item {
-  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
 }
@@ -278,13 +284,23 @@
 .stats-card {
   animation: fadeInScale 0.5s ease-out;
   animation-fill-mode: both;
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.stats-card:nth-child(1) { animation-delay: 0.1s; }
-.stats-card:nth-child(2) { animation-delay: 0.2s; }
-.stats-card:nth-child(3) { animation-delay: 0.3s; }
-.stats-card:nth-child(4) { animation-delay: 0.4s; }
+.stats-card:nth-child(1) {
+  animation-delay: 0.1s;
+}
+.stats-card:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.stats-card:nth-child(3) {
+  animation-delay: 0.3s;
+}
+.stats-card:nth-child(4) {
+  animation-delay: 0.4s;
+}
 
 .stats-card:hover {
   transform: translateY(-6px);
@@ -297,7 +313,9 @@
 }
 
 .portfolio-row {
-  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .portfolio-row:hover {
@@ -309,14 +327,27 @@
 .position-card {
   animation: fadeInUp 0.4s ease-out;
   animation-fill-mode: both;
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.position-card:nth-child(1) { animation-delay: 0.05s; }
-.position-card:nth-child(2) { animation-delay: 0.1s; }
-.position-card:nth-child(3) { animation-delay: 0.15s; }
-.position-card:nth-child(4) { animation-delay: 0.2s; }
-.position-card:nth-child(5) { animation-delay: 0.25s; }
+.position-card:nth-child(1) {
+  animation-delay: 0.05s;
+}
+.position-card:nth-child(2) {
+  animation-delay: 0.1s;
+}
+.position-card:nth-child(3) {
+  animation-delay: 0.15s;
+}
+.position-card:nth-child(4) {
+  animation-delay: 0.2s;
+}
+.position-card:nth-child(5) {
+  animation-delay: 0.25s;
+}
 
 .position-card:hover {
   transform: translateY(-4px) scale(1.01);
@@ -330,7 +361,9 @@
 }
 
 .similar-trader-item {
-  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .similar-trader-item:hover {
@@ -378,7 +411,7 @@
     rgba(255, 255, 255, 0) 100%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
+  animation: skeleton-sweep 1.5s infinite;
 }
 
 /* ============================================
@@ -409,7 +442,9 @@
   background: rgba(255, 255, 255, 0.2);
   border-radius: 50%;
   transform: translate(-50%, -50%);
-  transition: width 0.6s, height 0.6s;
+  transition:
+    width 0.6s,
+    height 0.6s;
 }
 
 .ripple-effect:active::after {

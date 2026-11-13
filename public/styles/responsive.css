@@ -1498,7 +1498,9 @@
 /* Lazy image placeholders */
 .lazy-img-placeholder {
   background: var(--color-bg-tertiary);
-  animation: shimmer 1.5s ease-in-out infinite;
+  /* skeleton-sweep (globals.css) — "shimmer" is a translateX slide that
+     moved the whole placeholder box. */
+  animation: skeleton-sweep 1.5s ease-in-out infinite;
 }
 
 /* Reduce motion for users who prefer it */
