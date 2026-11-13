@@ -17,7 +17,7 @@ import { writeRawObject } from '@/lib/ingest/raw'
 import { publishPositions } from '@/lib/ingest/serving/publish'
 import { parsePositionSnapshot } from '@/lib/ingest/core/position-snapshot'
 import { NATIVE_COHORT_MAX_SNAPSHOT_AGE_SECONDS } from '@/lib/ingest/native-cohort'
-import type { TierJobData } from '../queues'
+import { getRegionQueue, INGEST_JOB, type TierJobData } from '../queues'
 import {
   assertSourceMatchesConsumedRegion,
   type ConsumedRegionContext,
@@ -71,7 +71,14 @@ export interface TierDResult {
   tradersCrawled: number
   positionsWritten: number
   errors: number
+  /** Traders deferred to a continuation job by the wall-clock deadline. */
+  remaining?: number
 }
+
+/** Bound on continuation hops per pass (mirrors Tier-B's MAX_CONT_DEPTH). */
+const MAX_TIER_D_CONT_DEPTH = 50
+/** Must mirror the scheduler's Tier-D registration priority. */
+const TIER_D_PRIORITY = 3
 
 export async function processTierD(
   job: Job<TierJobData>,
@@ -86,13 +93,26 @@ export async function processTierD(
     return { tradersCrawled: 0, positionsWritten: 0, errors: 0 }
   }
 
-  const targets = shuffle(await getPositionTargets(src.id, src.positions_topn))
+  const contDepth = Number(job.data.contDepth ?? 0)
+  const carried = job.data.tierDRemainingTraderIds
+  const selected = await getPositionTargets(src.id, src.positions_topn)
+  // A continuation crawls only what its predecessor left, still re-validated
+  // against the current top-N (a trader that dropped out is not crawled).
+  const targets = Array.isArray(carried)
+    ? selected.filter((t) => carried.includes(t.id))
+    : shuffle(selected)
   if (targets.length === 0) {
     console.log(`[tier-d] ${src.slug}: no passed snapshots yet — nothing to crawl`)
     return { tradersCrawled: 0, positionsWritten: 0, errors: 0 }
   }
 
   const delayHours = Number(src.meta.positions_delay_hours ?? 0) || 0
+  // Deadline chunking (same rationale as Tier-B): a long positions pass must
+  // yield its bulk slot instead of holding it for hours; the rest continues
+  // in a re-enqueued job at the same priority.
+  const deadlineMs = Math.max(60_000, Number(src.meta.tier_d_deadline_ms ?? 600_000))
+  const deadlineAt = Date.now() + deadlineMs
+  const remainingIds: number[] = []
   // Tier-D can run for hours on large position sets. Its own stable profile
   // prevents that session from holding Tier A's warm default profile hostage.
   const session = await openSession(src, {
@@ -102,7 +122,11 @@ export async function processTierD(
   const result: TierDResult = { tradersCrawled: 0, positionsWritten: 0, errors: 0 }
 
   try {
-    for (const trader of targets) {
+    for (const [index, trader] of targets.entries()) {
+      if (Date.now() >= deadlineAt) {
+        remainingIds.push(...targets.slice(index).map((t) => t.id))
+        break
+      }
       try {
         const scrapedAt = new Date()
         const bundle = await adapter.getPositions(
@@ -154,9 +178,44 @@ export async function processTierD(
     await session.close()
   }
 
+  if (remainingIds.length > 0) {
+    result.remaining = remainingIds.length
+    if (contDepth < MAX_TIER_D_CONT_DEPTH) {
+      const nextDepth = contDepth + 1
+      try {
+        await getRegionQueue(src.fetch_region).add(
+          INGEST_JOB.TIER_D,
+          {
+            sourceSlug: src.slug,
+            contDepth: nextDepth,
+            tierDRemainingTraderIds: remainingIds,
+          } satisfies TierJobData,
+          {
+            priority: TIER_D_PRIORITY,
+            jobId: `tierd-cont-${src.slug}-${nextDepth}`,
+            delay: 5_000,
+            removeOnComplete: true,
+            removeOnFail: { age: 3600 },
+          }
+        )
+      } catch (err) {
+        console.warn(
+          `[tier-d] ${src.slug} continuation enqueue failed (next cadence covers it):`,
+          err instanceof Error ? err.message : err
+        )
+      }
+    } else {
+      console.warn(
+        `[tier-d] ${src.slug}: continuation depth ${contDepth} reached, ` +
+          `${remainingIds.length} traders wait for the next cadence`
+      )
+    }
+  }
+
   console.log(
     `[tier-d] ${src.slug}: ${result.tradersCrawled}/${targets.length} traders, ` +
-      `${result.positionsWritten} open positions, ${result.errors} errors`
+      `${result.positionsWritten} open positions, ${result.errors} errors` +
+      (remainingIds.length > 0 ? `, ${remainingIds.length} deferred` : '')
   )
   return result
 }

@@ -22,6 +22,11 @@ jest.mock('@/lib/ingest/db', () => ({
   getIngestPool: jest.fn(() => ({ query: (...args: unknown[]) => mockDbQuery(...args) })),
 }))
 jest.mock('@/lib/ingest/raw', () => ({ writeRawObject: jest.fn() }))
+const mockQueueAdd = jest.fn()
+jest.mock('../../queues', () => ({
+  getRegionQueue: jest.fn(() => ({ add: (...args: unknown[]) => mockQueueAdd(...args) })),
+  INGEST_JOB: { TIER_D: 'tier-d' },
+}))
 jest.mock('@/lib/ingest/serving/publish', () => ({
   publishPositions: (...args: unknown[]) => mockPublishPositions(...args),
 }))
@@ -114,5 +119,54 @@ describe('Tier-D fails closed on unusable position captures', () => {
     expect(String(sql)).toContain('scraped_at > now() - make_interval(secs => $3::int)')
     expect(String(sql)).toContain('ORDER BY timeframe, scraped_at DESC, id DESC')
     expect(params).toEqual([1, 10, 72 * 3600])
+  })
+
+  it('yields at the deadline and enqueues a continuation with exactly the uncrawled traders', async () => {
+    mockGetSourceBySlug.mockResolvedValue({ ...bitgetSource, meta: { tier_d_deadline_ms: 60_000 } })
+    mockDbQuery.mockResolvedValue({
+      rows: [
+        { id: 7, exchange_trader_id: 'u-1', meta: null },
+        { id: 8, exchange_trader_id: 'u-2', meta: null },
+        { id: 9, exchange_trader_id: 'u-3', meta: null },
+      ],
+    })
+    const adapter = adapterReturning({ code: '200', data: [] })
+    const realNow = Date.now
+    let calls = 0
+    // first trader within budget, then the clock passes the deadline
+    jest.spyOn(Date, 'now').mockImplementation(() => realNow() + (calls++ >= 2 ? 120_000 : 0))
+    mockGetAdapter.mockReturnValue(adapter)
+
+    const result = await processTierD(job)
+    jest.spyOn(Date, 'now').mockRestore()
+
+    expect(result.tradersCrawled).toBe(1)
+    expect(result.remaining).toBe(2)
+    expect(mockQueueAdd).toHaveBeenCalledTimes(1)
+    const [name, data, opts] = mockQueueAdd.mock.calls[0]
+    expect(name).toBe('tier-d')
+    expect(data).toMatchObject({ sourceSlug: 'bitget_futures', contDepth: 1 })
+    expect((data.tierDRemainingTraderIds as number[]).sort()).toHaveLength(2)
+    expect(opts).toMatchObject({ priority: 3, jobId: 'tierd-cont-bitget_futures-1' })
+  })
+
+  it('a continuation crawls only the carried traders that are still in the top-N', async () => {
+    mockDbQuery.mockResolvedValue({
+      rows: [
+        { id: 7, exchange_trader_id: 'u-1', meta: null },
+        { id: 8, exchange_trader_id: 'u-2', meta: null },
+      ],
+    })
+    const adapter = adapterReturning({ code: '200', data: [] })
+    mockGetAdapter.mockReturnValue(adapter)
+
+    const result = await processTierD({
+      data: { sourceSlug: 'bitget_futures', contDepth: 1, tierDRemainingTraderIds: [8, 99] },
+    } as Job<TierJobData>)
+
+    expect(result.tradersCrawled).toBe(1)
+    expect(adapter.getPositions).toHaveBeenCalledTimes(1)
+    expect(adapter.getPositions.mock.calls[0][2]).toBe('u-2')
+    expect(mockQueueAdd).not.toHaveBeenCalled()
   })
 })

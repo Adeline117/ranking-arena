@@ -275,11 +275,29 @@ const gateAdapter: SourceAdapter = {
     }
     await warmSession(session, src)
     const fetcher = pageFetcher(session)
-    const url =
-      endpoint(src, 'positions', `${B}/apiw/v2/copy/leader/position`) +
-      `?sub_website_id=0&leader_id=${exchangeTraderId}&market=&page=1&page_size=50`
-    const payload = await replayJson(session, fetcher, { url, method: 'GET', headers: HEADERS })
-    return { pages: [{ pageIndex: 1, payload, url, fetchedAt }], fetchedAt }
+    // Tier-D replaces the trader's whole open-position set, so every page must
+    // be captured: page through using the envelope's top-level pagecount
+    // (fixture positions-fut.json: page/pagesize/pagecount/totalcount). A book
+    // larger than the page budget fails closed instead of publishing a cut set.
+    const pageSize = 50
+    const maxPages = Number(src.meta.positions_max_pages ?? 20) || 20
+    const pages: RawPage[] = []
+    for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
+      const url =
+        endpoint(src, 'positions', `${B}/apiw/v2/copy/leader/position`) +
+        `?sub_website_id=0&leader_id=${exchangeTraderId}&market=&page=${pageNo}&page_size=${pageSize}`
+      const payload = await replayJson(session, fetcher, { url, method: 'GET', headers: HEADERS })
+      pages.push({ pageIndex: pageNo, payload, url, fetchedAt: new Date().toISOString() })
+      const envelope = payload as Record<string, unknown> | null
+      const rows = Array.isArray(envelope?.data) ? envelope.data.length : 0
+      const pageCount = Number(envelope?.pagecount)
+      if (Number.isSafeInteger(pageCount) && pageCount >= 0) {
+        if (pageNo >= pageCount) return { pages, fetchedAt }
+        continue
+      }
+      if (rows < pageSize) return { pages, fetchedAt }
+    }
+    throw new Error(`[gate] open positions exceed ${maxPages} pages — refusing a partial book`)
   },
 
   /**

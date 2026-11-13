@@ -101,3 +101,46 @@ describe('gate orders/transfers history page budget', () => {
     expect(pages).toHaveLength(1)
   })
 })
+
+describe('gate open positions pagination', () => {
+  const position = (i: number) => ({ market: `M${i}_USDT`, size: 1, entry_price: '1' })
+  it('captures every page reported by pagecount', async () => {
+    const result = await gateAdapter.getPositions(
+      session((url) => {
+        const pageNo = pageNoOf(url)
+        return {
+          code: 200,
+          data: pageNo === 1 ? Array.from({ length: 50 }, (_, i) => position(i)) : [position(99)],
+          page: pageNo,
+          pagesize: 50,
+          pagecount: 2,
+          totalcount: 51,
+        }
+      }),
+      src,
+      'leader-1'
+    )
+    expect(result.pages.map((p) => p.pageIndex)).toEqual([1, 2])
+    const parsed = result.pages.flatMap((p) =>
+      gateAdapter.parsePositions(p.payload, {
+        sourceSlug: src.slug,
+        currency: 'USDT',
+        tfLabelMap: {},
+        scrapedAt: '2026-11-13T00:00:00.000Z',
+        meta: {},
+      })
+    )
+    expect(parsed).toHaveLength(51)
+  })
+
+  it('refuses a partial book beyond the page budget', async () => {
+    const capped = { ...src, meta: { positions_max_pages: 2 } } as unknown as SourceRow
+    await expect(
+      gateAdapter.getPositions(
+        session(() => ({ code: 200, data: [position(1)], pagecount: 5 })),
+        capped,
+        'leader-1'
+      )
+    ).rejects.toThrow(/refusing a partial book/)
+  })
+})
