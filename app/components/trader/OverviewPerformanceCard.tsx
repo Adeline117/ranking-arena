@@ -92,6 +92,19 @@ export default function OverviewPerformanceCard({
     }, 150)
   }
 
+  // 90D-labelled values must come from the 90D period only. The contract
+  // reports the 90D-native fields (`roi_90d`, `arena_score_90d`) as explicit
+  // null when the trader has no 90D row; the un-suffixed fields (`pnl`,
+  // `win_rate`, …) are the *primary* period, which then falls back to 30D/7D.
+  // Showing those under the 90D tab would label 30D numbers as 90D.
+  const has90DData = !(
+    'roi_90d' in performance &&
+    'arena_score_90d' in performance &&
+    performance.roi_90d == null &&
+    performance.arena_score_90d == null
+  )
+  const only90 = <T,>(value: T): T | undefined => (has90DData ? value : undefined)
+
   const getData = () => {
     switch (period) {
       case '7D':
@@ -104,10 +117,10 @@ export default function OverviewPerformanceCard({
           maxDrawdown: performance.max_drawdown_7d,
           arenaScore: performance.arena_score_7d,
           sharpeRatio: performance.sharpe_ratio_7d,
-          winningPositions: performance.winning_positions_7d ?? performance.winning_positions,
-          totalPositions: performance.total_positions_7d ?? performance.total_positions,
+          winningPositions: performance.winning_positions_7d,
+          totalPositions: performance.total_positions_7d,
           profitabilityScore: resolveValidScoreFallback(performance.return_score_7d),
-          riskControlScore: resolveValidScoreFallback(performance.pnl_score_7d),
+          riskControlScore: undefined,
           scoreConfidence: performance.score_confidence_7d,
           // V3 Metrics
           sortinoRatio: performance.sortino_ratio_7d,
@@ -128,10 +141,10 @@ export default function OverviewPerformanceCard({
           maxDrawdown: performance.max_drawdown_30d,
           arenaScore: performance.arena_score_30d,
           sharpeRatio: performance.sharpe_ratio_30d,
-          winningPositions: performance.winning_positions_30d ?? performance.winning_positions,
-          totalPositions: performance.total_positions_30d ?? performance.total_positions,
+          winningPositions: performance.winning_positions_30d,
+          totalPositions: performance.total_positions_30d,
           profitabilityScore: resolveValidScoreFallback(performance.return_score_30d),
-          riskControlScore: resolveValidScoreFallback(performance.pnl_score_30d),
+          riskControlScore: undefined,
           scoreConfidence: performance.score_confidence_30d,
           // V3 Metrics
           sortinoRatio: performance.sortino_ratio_30d,
@@ -147,31 +160,29 @@ export default function OverviewPerformanceCard({
         return {
           roi: performance.roi_90d,
           roiDisclosure: performance.roiDisclosures?.['90D'],
-          pnl: performance.pnl,
-          pnlDisclosure: performance.pnlDisclosures?.['90D'],
-          winRate: performance.win_rate,
-          maxDrawdown: performance.max_drawdown,
+          pnl: only90(performance.pnl),
+          pnlDisclosure: only90(performance.pnlDisclosures?.['90D']),
+          winRate: only90(performance.win_rate),
+          maxDrawdown: only90(performance.max_drawdown),
           arenaScore: performance.arena_score_90d,
-          sharpeRatio: performance.sharpe_ratio,
-          winningPositions: performance.winning_positions,
-          totalPositions: performance.total_positions,
-          profitabilityScore: resolveValidScoreFallback(
-            performance.profitability_score,
-            performance.return_score
+          sharpeRatio: only90(performance.sharpe_ratio),
+          winningPositions: only90(performance.winning_positions),
+          totalPositions: only90(performance.total_positions),
+          profitabilityScore: only90(
+            resolveValidScoreFallback(performance.profitability_score, performance.return_score)
           ),
-          riskControlScore: resolveValidScoreFallback(
-            performance.risk_control_score,
-            performance.pnl_score
+          riskControlScore: only90(
+            resolveValidScoreFallback(performance.risk_control_score, performance.pnl_score)
           ),
-          scoreConfidence: performance.score_confidence,
+          scoreConfidence: only90(performance.score_confidence),
           // V3 Metrics
-          sortinoRatio: performance.sortino_ratio,
-          calmarRatio: performance.calmar_ratio,
-          alpha: performance.alpha,
-          arenaScoreV3: performance.arena_score_v3,
+          sortinoRatio: only90(performance.sortino_ratio),
+          calmarRatio: only90(performance.calmar_ratio),
+          alpha: only90(performance.alpha),
+          arenaScoreV3: only90(performance.arena_score_v3),
           // Additional stats
-          tradesCount: performance.trades_count,
-          avgHoldingTimeHours: performance.avg_holding_time_hours,
+          tradesCount: only90(performance.trades_count),
+          avgHoldingTimeHours: only90(performance.avg_holding_time_hours),
         }
     }
   }

@@ -169,8 +169,33 @@ describe('OverviewPerformanceCard period switching', () => {
     fireEvent.click(screen.getByRole('button', { name: '30D period' }))
 
     expect(screen.getByTestId('period-scores')).toHaveAttribute('data-profitability', '0')
-    expect(screen.getByTestId('period-scores')).toHaveAttribute('data-risk', '12')
+    // pnl_score is not a risk-control score; there is no 30D risk dimension.
+    expect(screen.getByTestId('period-scores')).toHaveAttribute('data-risk', 'unknown')
     expect(screen.getByTestId('period-scores')).toHaveAttribute('data-confidence', 'partial')
+  })
+
+  it('shows unknown under 90D when the trader has no 90D row instead of primary-period values', () => {
+    render(
+      <OverviewPerformanceCard
+        performance={{
+          // bridge contract: 90D-native fields are explicit null without a 90D row
+          roi_90d: null,
+          arena_score_90d: null,
+          // primary period (30D fallback) values — must not appear under 90D
+          pnl: 500,
+          win_rate: 60,
+          profitability_score: 80,
+          risk_control_score: 70,
+          pnl_30d: 500,
+        }}
+      />
+    )
+    expect(screen.getByTestId('period-pnl')).toBeEmptyDOMElement()
+    expect(screen.getByTestId('period-scores')).toHaveAttribute('data-profitability', 'unknown')
+    expect(screen.getByTestId('period-scores')).toHaveAttribute('data-risk', 'unknown')
+
+    fireEvent.click(screen.getByRole('button', { name: '30D period' }))
+    expect(screen.getByTestId('period-pnl')).toHaveTextContent('500')
   })
 
   it('does not mask an invalid canonical 90D dimension with a legacy score', () => {
