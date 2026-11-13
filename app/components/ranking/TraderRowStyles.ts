@@ -4,7 +4,7 @@
  * (defeats React.memo; ~750-1000 throwaway objects per 50-row render pass -> ~0).
  */
 import { tokens } from '@/lib/design-tokens'
-import { TRADER_TEXT_TERTIARY, TRADER_ACCENT_ERROR } from './shared/TraderDisplay'
+import { TRADER_TEXT_TERTIARY } from './shared/TraderDisplay'
 
 // Shared horizontal rhythm for the sticky column header AND every data row.
 // The header used gap 8 / padding-x 16 while rows used 12 / 20, so numeric
@@ -204,18 +204,20 @@ export const STAT_TEXT_TERTIARY_STYLE: React.CSSProperties = {
   opacity: 0.75,
 }
 
-// MDD text base style (opacity merged at render time)
-export const MDD_TEXT_BASE_STYLE: React.CSSProperties = {
-  color: TRADER_ACCENT_ERROR,
+// Neutral supporting stat (Win% / MDD / Sharpe): 13px text-secondary, no
+// gain/loss color. Mirrored by .ssr-metric-value in critical CSS.
+export const SUPPORTING_STAT_STYLE: React.CSSProperties = {
+  color: tokens.colors.text.secondary,
   lineHeight: 1.2,
   fontSize: tokens.typography.fontSize.sm,
   fontVariantNumeric: 'tabular-nums',
 }
 
-// AnimatedROI base style (color merged at render time)
+// AnimatedROI base style (color merged at render time). 14px: Arena Score is
+// the row's single primary number (owner 2026-11-13); ROI is secondary.
 export const ROI_TEXT_BASE_STYLE: React.CSSProperties = {
   lineHeight: 1.2,
-  fontSize: tokens.typography.fontSize.lg,
+  fontSize: tokens.typography.fontSize.base,
   letterSpacing: '-0.02em',
   maxWidth: '100%',
   overflow: 'hidden',
