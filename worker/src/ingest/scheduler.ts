@@ -86,6 +86,19 @@ function loadSchedulerRuntime(): Promise<void> {
  * template), and a missing priority puts iterations in the prio-0 `wait` lane
  * — ahead of EVERYTHING, inverting the whole tier design.
  */
+/**
+ * Revive-kick priority (2026-11 audit P2-13): a kick at the SAME priority as
+ * its tier queues behind every sibling iteration of that tier, so a revived
+ * (already overdue) source waits a full backlog again. One notch higher puts
+ * it ahead of its own tier while never jumping past the next tier up (ties at
+ * most). Priority 1 is BullMQ's highest prioritized value — 0 would mean the
+ * unprioritized `wait` lane, which runs before everything (take-7 inversion),
+ * so Tier-A kicks stay at 1.
+ */
+export function revivePriority(tierPriority: number): number {
+  return Math.max(1, tierPriority - 1)
+}
+
 const PRIORITY_BY_PREFIX: Record<string, number> = {
   tiera: 1,
   derive: 2,
@@ -151,11 +164,52 @@ function comparePendingJobs(a: PendingJobIdentity, b: PendingJobIdentity): numbe
   return (a.id ?? '').localeCompare(b.id ?? '')
 }
 
+/**
+ * Board size used for the Tier-A lane split (2026-11 audit P2-13).
+ * `arena.sources.expected_count` is a configured value that goes stale as a
+ * board grows; a board configured at 2k that now returns 20k rows would keep
+ * monopolising fast-lane slots. Use the larger of the configured count and
+ * the largest recently observed PASSED snapshot. Unknown on both sides stays
+ * unknown (→ heavy/bulk, see isFastTierA).
+ */
+export function effectiveTierABoardSize(
+  expectedCount: number | null | undefined,
+  observedCount: number | null | undefined
+): number | null {
+  const known = [expectedCount, observedCount].filter(
+    (n): n is number => typeof n === 'number' && Number.isFinite(n) && n > 0
+  )
+  return known.length > 0 ? Math.max(...known) : null
+}
+
+/** Largest PASSED snapshot row count per source over the last 7 days. A read
+ *  failure is logged and yields an empty map (configured counts only). */
+async function observedBoardSizes(): Promise<Map<string, number>> {
+  try {
+    const { rows } = await getIngestPool().query<{ slug: string; observed: number | string }>(
+      `SELECT s.slug, max(ls.actual_count) AS observed
+         FROM arena.leaderboard_snapshots ls
+         JOIN arena.sources s ON s.id = ls.source_id
+        WHERE ls.count_check_passed
+          AND ls.scraped_at > now() - interval '7 days'
+        GROUP BY s.slug`
+    )
+    return new Map(rows.map((r) => [r.slug, Number(r.observed)]))
+  } catch (err) {
+    console.error(
+      '[ingest-scheduler] observed board-size read failed; using configured expected_count only:',
+      err instanceof Error ? err.message : err
+    )
+    return new Map()
+  }
+}
+
 /** Register every scheduler one source owns; throws on the first failure
  *  (the caller isolates it). Keys are added to `wanted` BEFORE their await. */
 async function registerSourceSchedulers(
   src: ActiveSources[number],
-  wanted: Map<string, string>
+  wanted: Map<string, string>,
+  observedBoardSize: number | undefined
 ): Promise<void> {
   const data = { sourceSlug: src.slug }
   // Bulk tiers run on the source's fetch_region queue so a worker
@@ -172,7 +226,8 @@ async function registerSourceSchedulers(
   // + worker pool that the giants can never touch; heavy Tier-A + all
   // Tier-B/D/series/derive stay on the bulk queue. Priority 1 still applies
   // within the fast lane.
-  const onFast = fastLaneEnabled() && isFastTierA(src.expected_count)
+  const onFast =
+    fastLaneEnabled() && isFastTierA(effectiveTierABoardSize(src.expected_count, observedBoardSize))
   const tierAQueue = onFast ? getFastQueue(src.fetch_region) : queue
   const tierAName = onFast ? regionFastQueueName(src.fetch_region) : bulkName
   const tierA = `tiera:${src.slug}`
@@ -237,6 +292,7 @@ export async function reconcileSchedulers(): Promise<void> {
 
   await loadSchedulerRuntime()
   const sources = await getActiveSources()
+  const observedSizes = await observedBoardSizes()
   // scheduler key → the queue NAME it must live on. A Set isn't enough: a
   // source can MOVE between the bulk and fast lanes (board grows past
   // FAST_TIER_A_MAX_COUNT), and the cleanup pass must then remove the stale
@@ -253,7 +309,7 @@ export async function reconcileSchedulers(): Promise<void> {
 
   for (const src of sources) {
     try {
-      await registerSourceSchedulers(src, wanted)
+      await registerSourceSchedulers(src, wanted, observedSizes.get(src.slug))
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err)
       failedSources.push({ slug: src.slug, phase: src.phase, error })
@@ -428,7 +484,7 @@ export async function reconcileSchedulers(): Promise<void> {
       // on completion via removeOnComplete, so the next genuine revive re-kicks).
       try {
         await q.add(scheduler.name, tmplData, {
-          priority: tierPriority,
+          priority: revivePriority(tierPriority),
           jobId: `revive-kick-${key.replace(/:/g, '-')}`,
           removeOnComplete: true,
           removeOnFail: { age: 3600 },
