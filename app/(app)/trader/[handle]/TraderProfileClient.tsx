@@ -188,6 +188,7 @@ export interface UnregisteredTraderData {
 
 // TraderTabKey moved to ./hooks/useTraderTabs
 import { useTraderPeriodSync } from './hooks/useTraderPeriodSync'
+import { applyHeaderPeriod } from './header-period'
 import { useTraderActiveAccount } from './hooks/useTraderActiveAccount'
 import { useTraderTabs } from './hooks/useTraderTabs'
 import { useServingTabData } from './hooks/useServingTabData'
@@ -1115,32 +1116,44 @@ export default function TraderProfileClient({
   // share card never labels a 30D rank/ROI as 90D.
   const headlineWindow = accountDetailReady ? visibleData.headline_window : undefined
   const headlineIsNon90 = headlineWindow != null && headlineWindow !== '90d'
-  const headerAccountMetrics = resolveTraderHeaderAccountMetrics(suppressAccountContent, {
-    roi90d: headlineIsNon90
-      ? (visibleData.roi ?? undefined)
-      : (exactPerformance?.roi_90d ??
-        (accountDetailReady && visibleData.roi != null ? visibleData.roi : undefined)),
-    headlineWindow,
-    arenaScore:
-      exactPerformance?.arena_score_90d ??
-      exactPerformance?.arena_score ??
-      (accountDetailReady ? (visibleData.arena_score ?? null) : null),
-    scoreConfidence: exactPerformance?.score_confidence ?? null,
-    tradesCount: exactPerformance?.trades_count ?? null,
-    rank: accountDetailReady ? (visibleData.rank ?? null) : null,
-    platform: accountDetailReady ? visibleSource : effectivePlatform || undefined,
-    traderKey: accountDetailReady ? visibleTraderKey : undefined,
-    tradingStyle:
-      (exactPerformanceRecord?.tradingStyle as string) ?? exactPerformance?.trading_style ?? null,
-    // Source capture time only — never trackedSince (first-seen) or compute time.
-    lastUpdated: resolveHeaderDataTime(
-      scopedTraderData?.lastUpdated,
-      (validatedActiveAccount ? selectedServingFirstScreen : servingFirstScreen)?.entries.find(
-        (entry) => entry.timeframe === 90
-      )?.provenance.asOf
-    ),
-    isBot: visibleSource === 'web3_bot',
-  })
+  const headerFirstScreen = validatedActiveAccount ? selectedServingFirstScreen : servingFirstScreen
+  const headerAccountMetrics = resolveTraderHeaderAccountMetrics(
+    suppressAccountContent,
+    applyHeaderPeriod(
+      selectedPeriod,
+      {
+        roi90d: headlineIsNon90
+          ? (visibleData.roi ?? undefined)
+          : (exactPerformance?.roi_90d ??
+            (accountDetailReady && visibleData.roi != null ? visibleData.roi : undefined)),
+        headlineWindow,
+        arenaScore:
+          exactPerformance?.arena_score_90d ??
+          exactPerformance?.arena_score ??
+          (accountDetailReady ? (visibleData.arena_score ?? null) : null),
+        scoreConfidence: exactPerformance?.score_confidence ?? null,
+        tradesCount: exactPerformance?.trades_count ?? null,
+        rank: accountDetailReady ? (visibleData.rank ?? null) : null,
+        platform: accountDetailReady ? visibleSource : effectivePlatform || undefined,
+        traderKey: accountDetailReady ? visibleTraderKey : undefined,
+        tradingStyle:
+          (exactPerformanceRecord?.tradingStyle as string) ??
+          exactPerformance?.trading_style ??
+          null,
+        // Source capture time only — never trackedSince (first-seen) or compute time.
+        lastUpdated: resolveHeaderDataTime(
+          scopedTraderData?.lastUpdated,
+          headerFirstScreen?.entries.find((entry) => entry.timeframe === 90)?.provenance.asOf
+        ),
+        isBot: visibleSource === 'web3_bot',
+      },
+      {
+        performance: exactPerformance,
+        entries: headerFirstScreen?.entries,
+        accountDetailReady,
+      }
+    )
+  )
 
   // P4 three-tab unification (spec §4): every serving source renders the SAME
   // Overview/Stats/Portfolio tabs as legacy (fed via legacy-adapter), instead of
