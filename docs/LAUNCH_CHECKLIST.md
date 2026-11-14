@@ -67,6 +67,14 @@
 9. **解除 NO-GO**：核心接口和数据新鲜度连续 24 小时正常，由 owner 决定。
 10. **Beta**：分批邀请真实用户。
 
+## 榜单空窗期（2026-11-14 已定，owner 授权代为决定）
+
+迁移应用后，公开榜单只显示通过新鲜度校验的已封存数据。数据自 8 月起没有更新，所以从部署到 worker 恢复、首个周期发布之间，榜单为空。
+
+- **不展示过期数据**：空窗期不回退到 8 月的旧排名，也不放宽新鲜度闸门。显示现有的如实空状态（`rankingsRefreshingTitle` / `rankingsRefreshingDesc`："Rankings are being refreshed… We only publish rankings after the latest exchange data passes verification"）。
+- **不对外宣传，直到有数据**：执行顺序第 7–9 步完成之前（worker 单实例金丝雀跑完整调度周期，首个周期通过校验并发布，核心接口和新鲜度连续 24 小时正常），不做公开宣传，也不解除 NO-GO。
+- **缩短空窗**：生产迁移和部署完成后，立即按第 8 步恢复 worker；它是空窗长短的唯一决定因素。
+
 ## 上线前要确认的产品问题
 
 - `lib/config/product-facts.ts` 写死了回退值 9,600 名交易员和 28 个榜单。接口取不到数据时，登录页和关于页会照常显示这些数字。V1 文档要求公开数字来自带时间戳的事实源，是否保留由 owner 决定。
