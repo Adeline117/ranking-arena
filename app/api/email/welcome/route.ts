@@ -12,8 +12,12 @@ import { extractUserFromRequest } from '@/lib/auth/extract-user'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { BASE_URL } from '@/lib/constants/urls'
+import { incr } from '@/lib/cache'
 
 const logger = createLogger('welcome-email')
+
+const NEW_ACCOUNT_WINDOW_MS = 24 * 60 * 60 * 1000
+const STRICT_REPLAY_WINDOW_MS = 120_000
 
 export async function POST(request: NextRequest) {
   // Rate limit to prevent abuse
@@ -32,11 +36,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, skipped: 'no_email' })
     }
 
-    // Only send to users created within the last 2 minutes (prevents replay)
-    const createdAt = new Date(user.created_at).getTime()
-    const now = Date.now()
-    if (now - createdAt > 120_000) {
+    // Email signup creates the auth user when the code is sent, and this call
+    // only fires after the code, password and handle steps — usually well past
+    // two minutes. Accept any account from the last day and use a once-per-user
+    // marker for replay protection instead of the age window.
+    const accountAgeMs = Date.now() - new Date(user.created_at).getTime()
+    if (accountAgeMs > NEW_ACCOUNT_WINDOW_MS) {
       return NextResponse.json({ ok: true, skipped: 'not_new_user' })
+    }
+    const sendCount = await incr(`welcome-email-sent:${user.id}`)
+    if (sendCount === null) {
+      // No shared marker available: keep the old strict window so a replayed
+      // request cannot send repeatedly.
+      if (accountAgeMs > STRICT_REPLAY_WINDOW_MS) {
+        return NextResponse.json({ ok: true, skipped: 'not_new_user' })
+      }
+    } else if (sendCount > 1) {
+      return NextResponse.json({ ok: true, skipped: 'already_sent' })
     }
 
     const html = buildWelcomeEmail()

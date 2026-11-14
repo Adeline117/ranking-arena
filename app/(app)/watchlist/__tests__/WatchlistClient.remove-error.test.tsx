@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const mockPush = jest.fn()
 const mockShowToast = jest.fn()
@@ -69,6 +70,15 @@ import WatchlistClient from '../WatchlistClient'
 const originalFetch = global.fetch
 const originalMatchMedia = window.matchMedia
 
+function renderWatchlist(queryClient = new QueryClient()) {
+  render(
+    <QueryClientProvider client={queryClient}>
+      <WatchlistClient />
+    </QueryClientProvider>
+  )
+  return queryClient
+}
+
 describe('WatchlistClient remove failure', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -115,7 +125,7 @@ describe('WatchlistClient remove failure', () => {
       }
     }) as unknown as typeof fetch
 
-    render(<WatchlistClient />)
+    renderWatchlist()
 
     expect(await screen.findByText('Alice')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
@@ -125,5 +135,40 @@ describe('WatchlistClient remove failure', () => {
       expect(mockShowToast).toHaveBeenCalledWith('Watchlist update failed', 'error')
     )
     expect(screen.getByText('Alice')).toBeInTheDocument()
+  })
+
+  it('links by account id and resyncs the star-button cache after a removal', async () => {
+    global.fetch = jest.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'DELETE') {
+        return { ok: true, status: 200, json: async () => ({ watchlist: [] }) }
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          watchlist: [
+            {
+              source: 'binance',
+              source_trader_id: 'alice-id',
+              handle: 'Alice, (shared)',
+              created_at: '2026-07-17T00:00:00.000Z',
+              roi: 12,
+            },
+          ],
+        }),
+      }
+    }) as unknown as typeof fetch
+    const queryClient = new QueryClient()
+    const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
+
+    renderWatchlist(queryClient)
+
+    const link = (await screen.findByText('Alice, (shared)')).closest('a')
+    expect(link).toHaveAttribute('href', '/trader/alice-id?platform=binance')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Yes' }))
+
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['watchlist'] }))
   })
 })

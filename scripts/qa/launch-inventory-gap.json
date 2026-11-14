@@ -1,3 +1,6 @@
 {
-  "unclassified": []
+  "unclassified": [
+    "20261113151848_sync_user_profile_email_from_auth.sql",
+    "20261113151849_auth_user_has_password_rpc.sql"
+  ]
 }

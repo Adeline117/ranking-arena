@@ -9778,6 +9778,7 @@ export type Database = {
       }
       arena_weekly_leaders: { Args: { p_limit?: number }; Returns: Json }
       b2c_product_metrics: { Args: { p_window_days?: number }; Returns: Json }
+      auth_user_has_password: { Args: { p_user_id: string }; Returns: boolean }
       bind_group_pass_stripe_ownership_atomic: {
         Args: {
           p_payment_intent_id: string

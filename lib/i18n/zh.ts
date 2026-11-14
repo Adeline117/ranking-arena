@@ -951,6 +951,8 @@ const zh = {
   logoutConfirm: '确定要退出当前账号吗？',
   logoutFailed: '退出失败，请重试',
   pleaseLoginAgain: '请先登录',
+  deleteAccountInvalidPassword:
+    '密码不正确。如果你是用邮箱验证码注册、从未设置过密码，请先重置密码，再回来注销。',
   accountMarkedDeleted: '账号已标记为注销，30天内可通过登录恢复',
   networkErrorRetry: '网络错误，请重试',
   notificationsSaved: '通知偏好已保存',
@@ -2019,6 +2021,7 @@ const zh = {
   loginTimeout: '登录超时，请检查网络连接后重试。',
   loginAuthFailed: '登录失败，请重试。',
   loginNoSession: '无法创建会话，请重新登录。',
+  loginCancelled: '登录已取消。',
   loginEmailNotRegistered: '该邮箱未注册，请先创建账号。',
   loginWithPassword: '使用密码登录',
   loginUsernamePlaceholder: '用户名',

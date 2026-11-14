@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
+import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import EmptyState from '@/app/components/ui/EmptyState'
@@ -63,13 +64,16 @@ function formatScore(score: number | null | undefined): string {
 type SortKey = 'added' | 'roi' | 'pnl' | 'score' | 'rank'
 
 function traderHref(item: WatchlistItem): string {
-  return `/trader/${encodeURIComponent(item.handle || item.source_trader_id)}?platform=${item.source}`
+  // Link by the stored account id, like the rankings table: a handle is not
+  // unique per exchange and resolves to a 404 (or another trader) when shared.
+  return `/trader/${encodeURIComponent(item.source_trader_id)}?platform=${encodeURIComponent(item.source)}`
 }
 
 export default function WatchlistClient({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useLanguage()
   const { showToast } = useToast()
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [, setEmail] = useState<string | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([])
@@ -173,6 +177,9 @@ export default function WatchlistClient({ embedded = false }: { embedded?: boole
         setWatchlist((prev) =>
           prev.filter((w) => !(w.source === source && w.source_trader_id === id))
         )
+        // The star buttons read a separate ['watchlist', viewer, generation]
+        // query; without this they keep showing the removed trader as saved.
+        void queryClient.invalidateQueries({ queryKey: ['watchlist'] })
       } catch (err) {
         console.error('[watchlist] remove failed:', err)
         showToast(t('watchlistError'), 'error')
@@ -180,7 +187,7 @@ export default function WatchlistClient({ embedded = false }: { embedded?: boole
         setRemoving(null)
       }
     },
-    [showToast, t]
+    [queryClient, showToast, t]
   )
 
   const platforms = useMemo(

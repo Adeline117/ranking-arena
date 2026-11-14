@@ -1,5 +1,9 @@
 /** Recover an account during its 30-day deletion grace period. */
 
+import {
+  PENDING_DELETION_BAN_DURATION,
+  RENEWABLE_SUBSCRIPTION_STATUSES,
+} from '@/lib/auth/deletion-ban'
 import { createHash } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -36,7 +40,7 @@ export const dynamic = 'force-dynamic'
 
 async function banOnce(userId: string): Promise<boolean> {
   const { error } = await getSupabaseAdmin().auth.admin.updateUserById(userId, {
-    ban_duration: '720h',
+    ban_duration: PENDING_DELETION_BAN_DURATION,
   })
   if (error) {
     logger.error('Failed to restore deletion ban', { userId, error: error.message })
@@ -82,7 +86,7 @@ async function resumeSubscription(userId: string): Promise<boolean> {
       .from('subscriptions')
       .select('stripe_subscription_id, status, plan, cancel_at_period_end')
       .eq('user_id', userId)
-      .in('status', ['active', 'trialing'])
+      .in('status', [...RENEWABLE_SUBSCRIPTION_STATUSES])
       .limit(1)
       .maybeSingle()
     if (error) throw error
@@ -162,10 +166,23 @@ export const POST = withPublic(
       )
       if (emailLimited) return emailLimited
 
+      // ILIKE wildcards: `_` is escaped; `%`, `\` and PostgREST's `*` alias
+      // have no place in a recoverable address and must never widen the match.
+      const normalizedEmail = email.trim()
+      if (/[*%\\]/.test(normalizedEmail)) {
+        return NextResponse.json(
+          { success: false, error: INVALID_PASSWORD_RECOVERY },
+          { status: 401 }
+        )
+      }
+      const emailPattern = normalizedEmail.replace(/_/g, '\\_')
+
       const { data: profile, error } = await admin
         .from('user_profiles')
         .select('id, deletion_scheduled_at')
-        .eq('email', email)
+        // GoTrue matches sign-in emails case-insensitively, so the lookup must
+        // too; an exact match answered 401 to anyone who typed a different case.
+        .ilike('email', emailPattern)
         .not('deleted_at', 'is', null)
         .maybeSingle()
 

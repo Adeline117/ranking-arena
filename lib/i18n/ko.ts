@@ -902,6 +902,8 @@ const ko = {
   logoutConfirm: '로그아웃하시겠습니까?',
   logoutFailed: '로그아웃 실패, 다시 시도해 주세요',
   pleaseLoginAgain: '먼저 로그인해 주세요',
+  deleteAccountInvalidPassword:
+    '비밀번호가 올바르지 않습니다. 이메일 코드로 가입하고 비밀번호를 설정한 적이 없다면 먼저 비밀번호를 재설정한 후 다시 시도해 주세요.',
   accountMarkedDeleted: '계정이 삭제 예정입니다. 30일 이내에 복구할 수 있습니다',
   networkErrorRetry: '네트워크 오류, 다시 시도해 주세요',
   notificationsSaved: '알림 설정이 저장되었습니다',
@@ -1982,6 +1984,7 @@ const ko = {
   loginTimeout: '로그인에 시간이 걸리고 있습니다. 연결을 확인하고 다시 시도해 주세요.',
   loginAuthFailed: '로그인에 실패했습니다. 다시 시도해 주세요.',
   loginNoSession: '세션을 생성할 수 없습니다. 다시 로그인해 주세요.',
+  loginCancelled: '로그인이 취소되었습니다.',
   loginEmailNotRegistered: '이 이메일로 등록된 계정이 없습니다. 먼저 회원가입해 주세요.',
   loginWithPassword: '비밀번호로 로그인',
   loginUsernamePlaceholder: '사용자 이름',
