@@ -39,7 +39,7 @@ type Dict = Record<string, unknown>
 export const TF_WINDOW: Record<RankingTimeframe, string> = {
   7: 'week',
   30: 'month',
-  90: 'allTime', // 90 is DERIVED from allTime by interpolation (spike §3)
+  90: 'allTime', // owner plan A: 90D = native allTime (disclosed in the UI)
 }
 
 function num(v: unknown): number | null {
@@ -347,9 +347,9 @@ function fillMetricEvidence(
  * Profile = portfolio + clearinghouseState (spike §2-3).
  *   7/30: native window — pnl is the window's cumulative end value, ROI on a
  *         start-equity basis; series straight from the window histories.
- *   90:   derived — lerp the cumulative allTime histories at (scrapedAt−90d);
- *         series = allTime points inside the window, PnL rebased to 0 at the
- *         window start. Disclosed via extras.derivation.
+ *   90:   ROI/PnL = the board's native allTime window (plan A, same basis
+ *         as the 90D board); series/risk = allTime points inside the
+ *         trailing 90d, PnL rebased to 0 at the window start.
  */
 export function parseHyperliquidProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
   const payload = (raw ?? {}) as {
@@ -360,6 +360,7 @@ export function parseHyperliquidProfile(raw: unknown, ctx: ParseCtx): ParsedProf
     fillsFetchState?: unknown
     fillsFetchReason?: unknown
     timeframe?: unknown
+    boardAllTime?: unknown
   }
   const tfNum = num(payload.timeframe) ?? 30
   const tf = (tfNum === 0 ? 90 : tfNum) as RankingTimeframe
@@ -423,34 +424,22 @@ export function parseHyperliquidProfile(raw: unknown, ctx: ParseCtx): ParsedProf
       push(seriesFrom(tf, 'account_value', eqPts))
     }
   } else {
-    // 90d derived from allTime interpolation (spike §3, method 2)
+    // 90D = HL native allTime (owner plan A; TF_WINDOW[90] = 'allTime'). ROI
+    // and PnL are the board's own allTime values (adapter attaches the
+    // trader's board window as boardAllTime), so the board, this profile and
+    // trader_stats share one basis. HL exposes no reproducible allTime ROI in
+    // the portfolio (its denominator is deposit-based), so without the board
+    // window this block is omitted rather than re-derived on another basis.
+    // Risk, fills and series stay the trailing-90d slice of allTime history.
     const win = portfolioWindow(payload.portfolio, 'allTime')
+    const native = (payload.boardAllTime ?? null) as Dict | null
+    const nativeRoi = num(native?.roi)
+    const nativePnl = num(native?.pnl)
     if (win) {
       const pnlPts = histPoints(win.pnlHistory)
       const eqPts = histPoints(win.accountValueHistory)
       const windowStart = Date.parse(ctx.scrapedAt) - 90 * DAY_MS
-      const pnlNow = pnlPts.length > 0 ? pnlPts[pnlPts.length - 1].value : null
       const pnlAnchor = lerpAt(pnlPts, windowStart)
-      const eqAnchor = lerpAt(eqPts, windowStart)
-      const pnl = pnlNow !== null && pnlAnchor !== null ? pnlNow - pnlAnchor : null
-      // 90d ROI basis (2026-07-07 data-quality fix): prefer CURRENT equity minus
-      // window PnL (aum − pnl = start-of-window equity) over the fragile lerped
-      // eqAnchor. For accounts younger than 90d, lerpAt clamps to the FIRST
-      // accountValue point — often a tiny initial deposit — so pnl/eqAnchor
-      // exploded to the 10000% clamp for ~every whale (leaderboard showed
-      // ">10K%" while the detail page showed the real ~66%). The aum basis is
-      // robust to that anchor and matches the profile detail page, unifying the
-      // two surfaces. eqAnchor stays as a fallback when aum is unavailable.
-      const startEquity =
-        aum !== null && pnl !== null && aum - pnl > 0
-          ? aum - pnl
-          : eqAnchor !== null && eqAnchor > 0
-            ? eqAnchor
-            : null
-      const roi =
-        pnl !== null && startEquity !== null && startEquity > 0
-          ? clampRoiPct((pnl / startEquity) * 100)
-          : null
       // Tier-0 risk on the in-window equity slice (allTime equity ≥ windowStart).
       const eqInWindow = eqPts.filter((p) => p.ts >= windowStart)
       const risk = riskFromEquitySeries(
@@ -460,30 +449,31 @@ export function parseHyperliquidProfile(raw: unknown, ctx: ParseCtx): ParsedProf
         risk.mdd !== null || risk.sharpe !== null
           ? { risk_derivation: 'daily-approx', risk_samples: risk.samples, sortino: risk.sortino }
           : {}
-      stats.push({
-        timeframe: 90,
-        asOf: ctx.scrapedAt,
-        roi,
-        pnl,
-        aum,
-        volume: null, // only allTime vlm exists — no honest 90d volume
-        extras: {
-          derivation: 'portfolio_alltime_lerp',
-          roi_basis: 'start_equity',
-          ...riskExtras,
-          ...fillsExtras,
-        },
-        ...EMPTY_STATS,
-        sharpe: risk.sharpe, // Tier-0 (overrides EMPTY_STATS null)
-        mdd: risk.mdd,
-        // M3-3a fills replay (overrides EMPTY_STATS nulls when trips exist)
-        winRate: hasTrips ? fstats.winRate : null,
-        // explicit 0s on a confirmed zero-activity window (fills present,
-        // no trips) — null only when the fills fetch failed.
-        winPositions: fstats ? fstats.winPositions : null,
-        totalPositions: fstats ? fstats.totalPositions : null,
-        holdingDurationAvgHours: hasTrips ? fstats.avgHoldingHours : null,
-      })
+      if (nativeRoi !== null && nativePnl !== null)
+        stats.push({
+          timeframe: 90,
+          asOf: ctx.scrapedAt,
+          roi: clampRoiPct(nativeRoi * 100),
+          pnl: nativePnl,
+          aum,
+          volume: null, // board allTime vlm is not a 90d figure
+          extras: {
+            derivation: 'board_native_alltime',
+            roi_basis: 'native_alltime',
+            ...riskExtras,
+            ...fillsExtras,
+          },
+          ...EMPTY_STATS,
+          sharpe: risk.sharpe, // Tier-0 (overrides EMPTY_STATS null)
+          mdd: risk.mdd,
+          // M3-3a fills replay (overrides EMPTY_STATS nulls when trips exist)
+          winRate: hasTrips ? fstats.winRate : null,
+          // explicit 0s on a confirmed zero-activity window (fills present,
+          // no trips) — null only when the fills fetch failed.
+          winPositions: fstats ? fstats.winPositions : null,
+          totalPositions: fstats ? fstats.totalPositions : null,
+          holdingDurationAvgHours: hasTrips ? fstats.avgHoldingHours : null,
+        })
       const inWindow = pnlPts.filter((p) => p.ts >= windowStart)
       push(
         seriesFrom(

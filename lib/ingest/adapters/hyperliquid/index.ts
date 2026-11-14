@@ -16,7 +16,7 @@
  *           top 10k; the long tail stays reachable via Tier-C by address).
  *   Tier B/C POST api.hyperliquid.xyz/info {portfolio} + {clearinghouseState}
  *           (weights 20 + 2 of 1200/min — rate_budget_ms=1100). One portfolio
- *           response serves all three TFs (90d derived by lerp, spike §3),
+ *           response serves all three TFs (90D ROI/PnL = board allTime, plan A),
  *           so the pair is memoized per (session, trader).
  *   Tier D  POST {clearinghouseState} → open positions, fresh each call.
  *
@@ -111,6 +111,52 @@ function getBoard(session: FetchSession, src: SourceRow): Promise<BoardFetch> {
     cached.catch(() => boardCache.delete(session)) // never memoize a failure
   }
   return cached
+}
+
+/**
+ * Native allTime window ({pnl, roi}) per address — the basis of the 90D board
+ * (owner plan A, TF_WINDOW[90] = 'allTime'). The profile's 90D block carries
+ * these exact values so board and profile agree. Built once per session from
+ * the memoized board; a failed download is memoized as "unavailable" (logged
+ * once) so a Tier-B pass cannot re-download 32 MB per trader.
+ */
+const boardAllTimeIndex = new WeakMap<FetchSession, Promise<Map<string, Dict> | null>>()
+
+function boardAllTime(
+  session: FetchSession,
+  src: SourceRow,
+  address: string
+): Promise<Dict | null> {
+  let index = boardAllTimeIndex.get(session)
+  if (!index) {
+    index = getBoard(session, src).then(
+      (board) => {
+        const byAddress = new Map<string, Dict>()
+        for (const row of board.rows) {
+          const id = String(row.ethAddress ?? '').toLowerCase()
+          const wp = row.windowPerformances
+          const perf = Array.isArray(wp)
+            ? (
+                wp.find((pair) => Array.isArray(pair) && pair[0] === 'allTime') as
+                  | [string, Dict]
+                  | undefined
+              )?.[1]
+            : ((wp as Record<string, Dict> | undefined)?.allTime ?? undefined)
+          if (id && perf) byAddress.set(id, perf)
+        }
+        return byAddress
+      },
+      (err: unknown) => {
+        console.warn(
+          `[hyperliquid] board download failed; 90D profile blocks skipped this session:`,
+          err instanceof Error ? err.message : err
+        )
+        return null
+      }
+    )
+    boardAllTimeIndex.set(session, index)
+  }
+  return index.then((byAddress) => byAddress?.get(address) ?? null)
 }
 
 /** window pnl for the fetch-side sort (mirrors parsers.windowPerf). */
@@ -341,7 +387,17 @@ const hyperliquidAdapter: SourceAdapter = {
             snapshot: null,
             reason: 'deferred_by_profile_intent',
           })
-    const [base, outcome] = await Promise.all([basePromise, outcomePromise])
+    // Only the scheduled crawl pays for the shared board download; other
+    // intents get no 90D stats block (the board's own value stays).
+    const nativeAllTimePromise =
+      intent === 'scheduled_full' && (timeframe === 90 || timeframe === 0)
+        ? boardAllTime(session, src, address)
+        : Promise.resolve(null)
+    const [base, outcome, boardAllTimePerf] = await Promise.all([
+      basePromise,
+      outcomePromise,
+      nativeAllTimePromise,
+    ])
     const fetchedAt = new Date().toISOString()
     return {
       pages: [
@@ -354,6 +410,7 @@ const hyperliquidAdapter: SourceAdapter = {
             fillsFetchState: outcome.state,
             fillsFetchReason: outcome.reason,
             fillsSnapshot: outcome.snapshot,
+            boardAllTime: boardAllTimePerf,
           },
           url: endpoint(src, 'info', INFO_URL),
           fetchedAt,
