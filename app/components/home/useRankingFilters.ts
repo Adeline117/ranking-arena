@@ -890,9 +890,12 @@ export function useRankingFilters({
       lastServerQueryRef.current = ''
       return
     }
+    // Same fields RankingTable searches, so "no match on this page" never
+    // appears above rows the table is showing.
     const clientMatches = advancedFiltered.filter((t) => {
       const handle = (t.handle || t.id || '').toLowerCase()
-      return handle.includes(q) || t.id.toLowerCase().includes(q)
+      const displayName = (t.display_name || '').toLowerCase()
+      return handle.includes(q) || t.id.toLowerCase().includes(q) || displayName.includes(q)
     })
     if (clientMatches.length > 0) {
       if (serverSearchResults.length > 0) setServerSearchResults([])
@@ -906,7 +909,11 @@ export function useRankingFilters({
       lastServerQueryRef.current = q
       fetch(`/api/search?q=${encodeURIComponent(q)}&limit=20`, { signal: controller.signal })
         .then((r) => (r.ok ? r.json() : null))
-        .then((data) => {
+        .then((json) => {
+          // /api/search answers with the `success()` envelope: { success, data }.
+          // Reading `results` off the envelope itself found nothing, so the
+          // fallback never showed (audit P2-4).
+          const data = json?.data
           if (!data?.results?.traders?.length) {
             setServerSearchResults([])
             return

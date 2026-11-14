@@ -646,9 +646,13 @@ describe('排序 / 分页 / 搜索', () => {
   it('server search fallback goes to searchMatchesElsewhere, never into the ranked rows', async () => {
     mockFetch.mockResolvedValue({
       ok: true,
+      // The real /api/search `success()` envelope.
       json: async () => ({
-        results: {
-          traders: [{ id: 'bybit:far-away', title: '@FarAway', meta: { platform: 'bybit' } }],
+        success: true,
+        data: {
+          results: {
+            traders: [{ id: 'bybit:far-away', title: '@FarAway', meta: { platform: 'bybit' } }],
+          },
         },
       }),
     })
@@ -666,6 +670,21 @@ describe('排序 / 分页 / 搜索', () => {
     )
     expect(result.current.searchMatchesElsewhere.map((t) => t.id)).toEqual(['far-away'])
     expect(result.current.filteredTraders.map((t) => t.id)).not.toContain('far-away')
+  })
+
+  it('a display-name match on this page is a page match: no site-wide fallback request', async () => {
+    const rows = [trader('0xabc', { handle: '0xabc', display_name: 'Satoshi Desk' })]
+    const { result } = setup(rows, { fetchPage: mockFetchPage })
+    act(() => result.current.handleSearchChange('satoshi'))
+    await act(async () => {
+      jest.advanceTimersByTime(500)
+      await Promise.resolve()
+    })
+    expect(mockFetch).not.toHaveBeenCalledWith(
+      expect.stringContaining('/api/search'),
+      expect.anything()
+    )
+    expect(result.current.searchMatchesElsewhere).toEqual([])
   })
 
   it('handleSearchChange 设置 query 并重置页码（新搜索不该停留在旧页）', () => {
