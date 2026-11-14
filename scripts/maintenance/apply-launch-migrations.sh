@@ -181,6 +181,7 @@ PREDEPLOY_MIGRATIONS=(
   20261113104533_trader_follows_hard_cap_lock.sql
   20261113151848_sync_user_profile_email_from_auth.sql
   20261113151849_auth_user_has_password_rpc.sql
+  20261114104438_sealed_publication_data_gap_summary.sql
   20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql
   20261113011058_leaderboard_publication_source_isolation.sql
   20261113012028_public_snapshot_readers_sealed_freshness.sql
@@ -213,6 +214,10 @@ readonly -a PREDEPLOY_MIGRATIONS
 # rejects at >= 100, and a raced insert surfaces as a 500 (no extra row)
 # instead of the new route's 429. Both sit before the final six, which do not
 # depend on them.
+# 20261114104438 (data gap summary judged on sealed publication, audit P2-2)
+# only replaces the body of a cron/admin-only reader; it needs the public
+# serving view (20260816151614/184500) and sits before the final six, which do
+# not depend on it.
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
 # accepts it only when its exact reviewed ledger and complete object contract
