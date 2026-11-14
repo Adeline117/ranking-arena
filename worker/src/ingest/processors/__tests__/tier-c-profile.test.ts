@@ -70,6 +70,10 @@ jest.mock('@/lib/ingest/db', () => ({
 jest.mock('../../queues', () => ({ tierCResultKey: jest.fn(() => 'tier-c:result') }))
 
 import { processTierC } from '../tier-c-profile'
+import {
+  CopierPageCapReachedError,
+  HistoryPageCapReachedError,
+} from '@/lib/ingest/core/history-page-cap'
 
 const src = {
   id: 34,
@@ -780,6 +784,41 @@ describe('Tier-C incomplete profile window gate', () => {
     expect(renderPayload.rows[0]).not.toHaveProperty('orderKind')
     expect(renderPayload.rows[0]).not.toHaveProperty('dedupeHash')
     expect(renderPayload.rows[0]).not.toHaveProperty('raw')
+  })
+
+  it('publishes a first-page-only orders cut as caller-limited (no cursor advance)', async () => {
+    mockGetAdapter.mockReturnValue(ordersAdapter())
+    mockGetHistory.mockImplementation(() =>
+      (async function* () {
+        yield* positionHistoryStream(1)
+        throw new HistoryPageCapReachedError('gtrade', 'orders', 1)
+      })()
+    )
+    mockParseHistory.mockReturnValue([orderRow])
+
+    await expect(processTierC(ordersJob, 'local')).resolves.toMatchObject({ rows: 1 })
+    expect(mockWriteRawObject.mock.calls[0][0]).toMatchObject({
+      meta: { caller_limited: true, fetch_failed: false },
+    })
+    expect(mockPublishHistoryRows).toHaveBeenCalledWith(src, 42, 'orders', [orderRow], null)
+  })
+
+  it('publishes a first-page-only copier cut as a caller-limited snapshot', async () => {
+    mockGetAdapter.mockReturnValue(copiersAdapter())
+    mockGetHistory.mockImplementation(() =>
+      (async function* () {
+        yield* positionHistoryStream(1)
+        throw new CopierPageCapReachedError('gtrade', 1)
+      })()
+    )
+    mockParseHistory.mockReturnValue([copierRow])
+
+    await expect(processTierC(copiersJob, 'local')).resolves.toMatchObject({
+      snapshotReady: true,
+    })
+    expect(mockWriteCopierSnapshotRawArtifact.mock.calls[0][0]).toMatchObject({
+      artifact: { page_count: 1, caller_limited: true },
+    })
   })
 
   it('renders transfer parser rows with the warm RPC field contract', async () => {
