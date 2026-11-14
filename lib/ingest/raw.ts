@@ -3206,7 +3206,8 @@ export const METRIC_TRUST_EVIDENCE_PRESENT_SQL = `SELECT
  * audit/replay chain after 30 days (20261113* makes those FKs RESTRICT).
  * The board payload a snapshot soft-references (leaderboard_snapshots.
  * raw_object_id, the only RAW evidence of a no-trust-path board) is pinned
- * while the snapshot exists; snapshot retention (20261114102645) bounds that.
+ * while the snapshot exists, and retires with it (snapshot retention,
+ * 20261113110021).
  */
 export function rawObjectRetentionCandidateSql(trustEvidencePresent: boolean): string {
   const pinned = trustEvidencePresent

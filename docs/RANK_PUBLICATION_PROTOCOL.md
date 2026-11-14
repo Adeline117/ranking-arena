@@ -177,10 +177,10 @@ persistLeaderboardRanks` 已于 2026-11-13 删除；`scripts/qa/public-ranking-s
 - 只接受本事务刚封存的 cohort、与封存 proof 完全一致的来源集合、该来源自己的已通过板。
 - 公开视图 `public.public_ranked_leaderboard_source_evidence`（anon 可读）给出当前在服务季每个来源的
   `evidence_grade` 与 `source_as_of`，前端可据此区分证据等级。
-- 快照保留策略（20261113110021）同时保留被证据绑定的快照。`20261114102645` 起改为有界：
-  封存回执永久保留；发布来源证据、快照、entries、信任 run/observation、Tier-A receipt 默认保留
-  180 天（最少 90 天）。窗口外只保留每个 (source, timeframe) 最新通过的榜、当前 freshness 指向的榜
-  和当前 serving head 的证据；其余一起删除，不留悬空引用。快照存在期间其 raw_object_id 不被 RAW GC 回收。
+- 快照保留策略（20261113110021）同时保留被证据绑定的快照：窗口（默认 180 天）外，被信任
+  run/observation、Tier-A receipt、发布来源证据、发布 proofs 或当前 freshness 引用的快照，以及每个
+  (source, timeframe) 最新通过的榜永久保留（这些证据行按设计只追加，不能删）；其余过期快照连同
+  entries 删除。快照存在期间其 raw_object_id 不被 RAW GC 回收。
 
 ## 其他公开读取入口（直读快照的 anon RPC）
 

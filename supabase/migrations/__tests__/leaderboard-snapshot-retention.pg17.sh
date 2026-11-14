@@ -150,68 +150,36 @@ assert_equal "evidence-bound snapshot stays, superseded latest goes" "2,3,4,6,8,
   "$(psql_db -Atqc "SELECT string_agg(id::text, ',' ORDER BY id) FROM arena.leaderboard_snapshots")"
 
 
-# 20261114102645: bounded retention. Trust runs, receipts and historical
-# publication evidence no longer pin a snapshot forever; only the latest passed
-# board, the current freshness board and evidence of a serving head (or inside
-# the window) do. Give the stand-ins the production append-only triggers.
+# Bounded part of the policy: every expired snapshot that no append-only
+# evidence row binds is deleted with its entries; one bound only by a
+# metric-trust observation (immutable, no cascade path) survives. Nothing left
+# points at a deleted snapshot.
 psql_db -q <<'SQL'
-ALTER TABLE arena.leaderboard_snapshots ADD COLUMN raw_object_id bigint;
-CREATE FUNCTION arena.fixture_reject_mutation() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN RAISE EXCEPTION 'append-only %', TG_TABLE_NAME; END $$;
-CREATE TRIGGER metric_trust_runs_reject_direct_mutation BEFORE UPDATE OR DELETE
-  ON arena.metric_trust_runs FOR EACH ROW EXECUTE FUNCTION arena.fixture_reject_mutation();
-CREATE TRIGGER metric_trust_observations_reject_direct_mutation BEFORE UPDATE OR DELETE
-  ON arena.metric_trust_observations FOR EACH ROW EXECUTE FUNCTION arena.fixture_reject_mutation();
-CREATE TRIGGER tier_a_execution_window_receipts_immutable BEFORE UPDATE OR DELETE
-  ON arena.tier_a_execution_window_receipts FOR EACH ROW EXECUTE FUNCTION arena.fixture_reject_mutation();
-ALTER TABLE arena.leaderboard_rank_publication_source_evidence ENABLE TRIGGER USER;
-INSERT INTO arena.metric_trust_observations VALUES (31, 3);
-INSERT INTO arena.leaderboard_rank_publications (id, proofs, season_id) VALUES
-  ('00000000-0000-4000-8000-000000000002', '[]', '90D'),
-  ('00000000-0000-4000-8000-000000000003', '[]', '90D');
-INSERT INTO arena.public_ranked_leaderboard_serving_heads
-  VALUES ('90D', '00000000-0000-4000-8000-000000000003');
--- 10: old, bound only by 400-day-old evidence of a retired cohort (goes)
--- 11: old, bound by 400-day-old evidence of the serving head (stays)
--- 12: old, named by the current freshness row of binance (stays)
-INSERT INTO arena.leaderboard_snapshots (id, source_id, timeframe, scraped_at, count_check_passed) VALUES
-  (10, 1, 90, '2024-10-01 00:00:00+00', true),
-  (11, 1, 90, '2024-10-02 00:00:00+00', true),
-  (12, 1, 90, '2024-10-03 00:00:00+00', true);
-INSERT INTO public.leaderboard_source_freshness VALUES ('90D', 'binance_futures', '2024-10-03 00:00:00+00');
-ALTER TABLE arena.leaderboard_rank_publication_source_evidence DISABLE TRIGGER USER;
-INSERT INTO arena.leaderboard_rank_publication_source_evidence
-  (score_cohort_id, season_id, source, evidence_grade, snapshot_ids, recorded_at)
-VALUES
-  ('00000000-0000-4000-8000-000000000002', '90D', 'binance_futures', 'count_check_only', '{10}',
-   now() - interval '400 days'),
-  ('00000000-0000-4000-8000-000000000003', '90D', 'binance_futures', 'count_check_only', '{11}',
-   now() - interval '400 days');
-ALTER TABLE arena.leaderboard_rank_publication_source_evidence ENABLE TRIGGER USER;
+INSERT INTO arena.leaderboard_snapshots VALUES
+  (10, 1, 90, '2025-02-01 00:00:00+00', false),
+  (11, 1, 90, '2025-02-02 00:00:00+00', false),
+  (12, 2, 90, '2025-02-03 00:00:00+00', false);
+INSERT INTO arena.leaderboard_entries
+SELECT snapshot.scraped_at, snapshot.id, trader.id
+FROM arena.leaderboard_snapshots AS snapshot CROSS JOIN (VALUES (100), (101)) AS trader(id)
+WHERE snapshot.id IN (10, 11, 12);
+INSERT INTO arena.metric_trust_observations VALUES (31, 10);
 SQL
-PGOPTIONS='-c client_min_messages=warning' psql_db -q \
-  -f "$ROOT_DIR/supabase/migrations/20261114102645_leaderboard_snapshot_bounded_retention.sql" >/dev/null
-
-assert_equal "pruning retires trust runs, observations, receipts and expired evidence with their snapshots" \
-  '{"contract": "leaderboard-snapshot-retention@2", "retention_days": 90, "deleted_entries": 4, "deleted_receipts": 1, "deleted_snapshots": 3, "deleted_trust_runs": 1, "deleted_trust_observations": 1, "deleted_publication_evidence": 1}' \
+assert_equal "unbound expired snapshots and their entries go" \
+  '{"contract": "leaderboard-snapshot-retention@1", "retention_days": 90, "deleted_entries": 4, "deleted_snapshots": 2}' \
   "$(psql_db -Atqc "SELECT arena.prune_leaderboard_snapshots(90, 100)")"
-assert_equal "kept: bybit's latest passed, recent, window evidence, serving-head evidence, freshness board, latest" \
-  "2,6,8,9,11,12" \
+assert_equal "evidence-bound snapshots survive" "2,3,4,6,8,9,10" \
   "$(psql_db -Atqc "SELECT string_agg(id::text, ',' ORDER BY id) FROM arena.leaderboard_snapshots")"
-assert_equal "no evidence row or trust row points at a deleted snapshot" "0" "$(psql_db -Atqc "
-  SELECT (SELECT count(*) FROM arena.leaderboard_rank_publication_source_evidence AS evidence
-           WHERE NOT evidence.snapshot_ids <@ ARRAY(SELECT id FROM arena.leaderboard_snapshots))
-       + (SELECT count(*) FROM arena.metric_trust_runs) + (SELECT count(*) FROM arena.metric_trust_observations)
-       + (SELECT count(*) FROM arena.tier_a_execution_window_receipts)")"
-assert_equal "the append-only triggers are enabled again" "O,O,O,O" "$(psql_db -Atqc "
-  SELECT string_agg(tgenabled::text, ',') FROM pg_trigger
-   WHERE tgname IN ('metric_trust_runs_reject_direct_mutation',
-     'metric_trust_observations_reject_direct_mutation',
-     'tier_a_execution_window_receipts_immutable', 'rank_publication_evidence_immutable')")"
-if psql_db -qc "DELETE FROM arena.leaderboard_rank_publication_source_evidence" >/dev/null 2>&1; then
-  echo "publication evidence became directly deletable" >&2; exit 1
-fi
-assert_equal "a second run is a no-op" '0' "$(psql_db -Atqc "
-  SELECT arena.prune_leaderboard_snapshots(90, 100)->>'deleted_snapshots'")"
+assert_equal "no evidence row points at a deleted snapshot" "0" "$(psql_db -Atqc "
+  SELECT (SELECT count(*) FROM arena.metric_trust_runs AS r
+           WHERE NOT EXISTS (SELECT 1 FROM arena.leaderboard_snapshots s WHERE s.id = r.snapshot_id))
+       + (SELECT count(*) FROM arena.metric_trust_observations AS o
+           WHERE NOT EXISTS (SELECT 1 FROM arena.leaderboard_snapshots s WHERE s.id = o.snapshot_id))
+       + (SELECT count(*) FROM arena.tier_a_execution_window_receipts AS t
+           WHERE NOT EXISTS (SELECT 1 FROM arena.leaderboard_snapshots s WHERE s.id = t.snapshot_id))
+       + (SELECT count(*) FROM arena.leaderboard_rank_publication_source_evidence AS e
+           WHERE NOT e.snapshot_ids <@ ARRAY(SELECT id FROM arena.leaderboard_snapshots))
+       + (SELECT count(*) FROM arena.leaderboard_entries AS en
+           WHERE NOT EXISTS (SELECT 1 FROM arena.leaderboard_snapshots s WHERE s.id = en.snapshot_id))")"
 
 echo "leaderboard snapshot retention PostgreSQL 17 proof passed"
