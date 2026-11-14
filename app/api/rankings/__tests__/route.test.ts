@@ -268,14 +268,81 @@ describe('GET /api/rankings public-ranked cohort', () => {
     expect(platform.rankingQuery.eq).not.toHaveBeenCalledWith('source_type', 'web3')
   })
 
-  it('serves composite from the published 90D cohort and labels it 90D (no fake COMPOSITE)', async () => {
-    const { rankingQuery } = mockPublicView([publicRankedRow()])
+  function mockSeasonViews(bySeason: Record<string, Record<string, unknown>[]>) {
+    const freshnessQuery = makeChainableQuery({ data: [freshWatermark()], error: null })
+    const seasons: string[] = []
+    mockSupabaseQuery.mockImplementation((table: string) => {
+      if (table === 'leaderboard_source_freshness') return freshnessQuery
+      if (table !== 'public_ranked_leaderboard') throw new Error(`Unexpected relation: ${table}`)
+      let season = ''
+      let ids: string[] | null = null
+      let range: [number, number] | null = null
+      const chain: Record<string, unknown> = new Proxy(
+        {},
+        {
+          get(_t, prop) {
+            if (prop === 'then') {
+              let rows = (bySeason[season] ?? []).filter(
+                (row) => ids == null || ids.includes(String(row.source_trader_id))
+              )
+              if (range) rows = rows.slice(range[0], range[1] + 1)
+              return (resolve: (v: QueryResult) => void) =>
+                Promise.resolve({ data: rows, error: null }).then(resolve)
+            }
+            if (prop === 'catch' || prop === 'finally') return undefined
+            return (...args: unknown[]) => {
+              if (prop === 'eq' && args[0] === 'season_id') {
+                season = String(args[1])
+                seasons.push(season)
+              }
+              if (prop === 'in') ids = args[1] as string[]
+              if (prop === 'range') range = [args[0] as number, args[1] as number]
+              return chain
+            }
+          },
+        }
+      )
+      return chain
+    })
+    return { seasons }
+  }
+
+  it('ranks window=composite by the 70/25/5 composite and labels it COMPOSITE', async () => {
+    const row = (id: string, season: string, arena_score: number, rank: number) =>
+      publicRankedRow({ source_trader_id: id, season_id: season, arena_score, rank })
+    const { seasons } = mockSeasonViews({
+      // 90D order: a (90) before b (80)
+      '90D': [row('a', '90D', 90, 1), row('b', '90D', 80, 2)],
+      // b has strong 30D/7D; a has none (90D only → 0.9 × 90 = 81)
+      '30D': [row('b', '30D', 100, 1)],
+      '7D': [row('b', '7D', 100, 1)],
+    })
+
     const response = await GET(new NextRequest('http://localhost/api/rankings?window=composite'))
-    const data = unwrap(await response.json())
+    const data = unwrap(await response.json()) as {
+      window: string
+      traders: Array<{ trader_key: string; arena_score: number; rank: number }>
+    }
 
     expect(response.status).toBe(200)
-    expect(rankingQuery.eq).toHaveBeenCalledWith('season_id', '90D')
-    expect(data.window).toBe('90D')
+    expect(data.window).toBe('COMPOSITE')
+    // b: 0.7 × 80 + 0.25 × 100 + 0.05 × 100 = 86 (no momentum at 7D = 30D)
+    expect(data.traders.map((t) => [t.trader_key, t.arena_score, t.rank])).toEqual([
+      ['b', 86, 1],
+      ['a', 81, 2],
+    ])
+    expect(new Set(seasons)).toEqual(new Set(['90D', '30D', '7D']))
+  })
+
+  it('rejects composite requests it cannot rank exactly', async () => {
+    for (const url of [
+      'http://localhost/api/rankings?window=composite&sort_by=roi',
+      'http://localhost/api/rankings?window=composite&sort_dir=asc',
+      'http://localhost/api/rankings?window=composite&offset=450&limit=100',
+    ]) {
+      const response = await GET(new NextRequest(url))
+      expect(response.status).toBe(400)
+    }
   })
 
   it('fails closed when a displayed source has no trustworthy source watermark', async () => {

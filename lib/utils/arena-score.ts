@@ -724,20 +724,30 @@ export const ARENA_V4_CONFIG = {
   PNL_LO: 1_000,
   PNL_HI: 10_000_000,
   SAMPLE_K: 50, // 样本量置信:trades/(trades+50) → 50 笔=0.5,250=0.83
-  // 成交数未知(null/0)时按"约 5 笔真实成交"计样本置信:5/(5+50)≈0.091(V4 与 V5 同)。
-  // 旧值 0.3(≈21.4 笔)让 0 成交/未知成交的号比 1–21 笔真实交易员置信度更高
-  // (审计探针:t=0→60.6 分、t=1→23.1、t=10→47.7、t=21→59.9)。上游没有可靠的逐源
-  // "成交数是否真实提供"声明接入评分(expected-metrics 按 adapter 键、评分按旧
-  // serving 源名,且部分 CEX 用 0 表示未知),无法区分"真 0"与"未知";
-  // 取保守下界:未知永远不高于小样本真实交易员。
-  // PG17 双实现:迁移 20261113014105 同步改写 compute_arena_scores_v4/v5_json,
+  // 成交数未知时按 1 笔真实成交计样本置信:1/(1+50)(V4 与 V5 同)。未知不是证据,
+  // 未知的号永远不高于任何 ≥1 笔的真实交易员(审计 2026-11-12 P1-2:原先按 0.3≈21.4 笔,
+  // 后改 5 笔,仍高于 1–4 笔真实成交)。
+  // "未知"= null,或非 TRUE_ZERO_TRADES_SOURCES 源的 0(多数 CEX 用 0 表示没提供)。
+  // PG17 双实现:迁移 20261114101514 同步改写 compute_arena_scores_v4/v5_json,
   // golden vectors 已按新口径重签——三者必须一起上线。
-  UNKNOWN_TRADES_EQUIV: 5,
+  UNKNOWN_TRADES_EQUIV: 1,
   CONF_FLOOR: 0.35, // 置信度下限——真实交易员永不归零
   // 显示分 = composite 队内百分位 × DISPLAY_PCT + composite 相对值 × (1−);
   // 混一点相对值,让顶端精英不至于全挤 100(纯百分位在极顶端会饱和)。
   DISPLAY_PCT: 0.7,
 } as const
+
+/**
+ * 成交数由我们从链上成交自算的源:adapter 对"算不出"给 null、对"窗口内确实没有平仓"给 0
+ * (gmx wins+losses、gtrade closes、hyperliquid fills 回合数)。这些源的 0 是真 0,
+ * 样本置信 = 0 → 低于任何真实小样本。其它源的 0 一律当未知。
+ * PG17 评分器里有同一份列表,改这里必须同步迁移并重签 golden vectors。
+ */
+export const TRUE_ZERO_TRADES_SOURCES: ReadonlySet<string> = new Set([
+  'gmx',
+  'gtrade',
+  'hyperliquid',
+])
 
 /**
  * 队内百分位(percent_rank):每个非空值 → (严格小于它的个数)/(非空总数−1) ∈ [0,1]。
@@ -842,11 +852,12 @@ function computeArenaScoresV4OrV5(
     const quality = den > 0 ? clip(num / den, 0, 1) : 0
 
     // Confidence:样本量 × 数据完整度(软准入门槛)
-    // 0 = "未知交易数"(很多 CEX 源对未知返回 0),不是真的 0 笔——按 null(未知)处理,
-    // 否则 cN=0→置信度触底,结构性压低合法源。但未知的样本置信只按
-    // UNKNOWN_TRADES_EQUIV 笔计,绝不高于小样本真实交易员(见配置注释)。
-    const trades = t.tradesCount != null && t.tradesCount > 0 ? t.tradesCount : null
-    const sampleTrades = trades ?? V.UNKNOWN_TRADES_EQUIV
+    // 已知成交数(含自算源的真 0)直接用;未知按 UNKNOWN_TRADES_EQUIV 笔计(见配置注释)。
+    const tc = t.tradesCount
+    const known =
+      tc != null &&
+      (tc > 0 || (tc === 0 && t.source != null && TRUE_ZERO_TRADES_SOURCES.has(t.source)))
+    const sampleTrades = known ? tc : V.UNKNOWN_TRADES_EQUIV
     const cN = sampleTrades / (sampleTrades + V.SAMPLE_K)
     const presentCnt = [shArr[i], mddArr[i], winArr[i], pfArr[i]].filter((v) => v != null).length
     const cC = Math.max(presentCnt / 4, 0.25)

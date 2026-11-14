@@ -10,7 +10,7 @@ import type { Period } from '@/lib/utils/arena-score'
 import type { ScoreConfidence } from '@/lib/utils/arena-score'
 import type { UnifiedTrader } from '@/lib/types/unified-trader'
 import { getLeaderboard } from '@/lib/data/unified'
-import { isInPublicCohort } from '@/lib/rankings/public-cohort'
+import { cachedRowsStillInPublicCohort, isInPublicCohort } from '@/lib/rankings/public-cohort'
 import { attachAvatarMirrors } from '@/lib/data/avatar-mirrors'
 import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
 import { claimedTraderBadgeKey, getClaimedTraderBadgeKeys } from '@/lib/data/claimed-trader-badges'
@@ -358,15 +358,6 @@ function sanitizeInitialTradersResult(
   }
 }
 
-function staleCacheResult(
-  ...candidates: Array<InitialTradersResult | null>
-): InitialTradersResult | null {
-  const stale = candidates.find(
-    (candidate) => candidate && Array.isArray(candidate.traders) && candidate.traders.length > 0
-  )
-  return stale ? { ...stale, isStale: true } : null
-}
-
 function normalizeInitialPageLimit(value: number): number {
   return Number.isSafeInteger(value) ? Math.min(Math.max(value, 1), 50) : 20
 }
@@ -398,9 +389,6 @@ export function homeInitialTradersCacheKeys(timeRange: Period, page: number, lim
     cacheKey: publicRankingCacheKey(
       `home-initial-traders-v7:${timeRange}:n${safeLimit}:p${safePage}`
     ),
-    fallbackKey: publicRankingCacheKey(
-      `home-initial-traders-fallback-v7:${timeRange}:n${safeLimit}:p${safePage}`
-    ),
   }
 }
 
@@ -419,33 +407,25 @@ export async function refreshHomeInitialTradersCache(
   const safeLimit = normalizeInitialPageLimit(limit)
   const result = await fetchLeaderboardFromDB(timeRange, safeLimit, 0)
   if (result.traders.length === 0) return 0
-  const { cacheKey, fallbackKey } = homeInitialTradersCacheKeys(timeRange, 0, safeLimit)
-  const writes = await Promise.all([
-    cache.set(cacheKey, result, {
-      ttl: PUBLIC_RANKING_PRIMARY_CACHE_TTL_SECONDS,
-      tags: [PUBLIC_RANKING_REDIS_TAG, `season:${timeRange}`],
-      skipMemory: true,
-      writeFence,
-    }),
-    cache.set(fallbackKey, result, {
-      ttl: 14400,
-      tags: [PUBLIC_RANKING_REDIS_TAG, `season:${timeRange}`],
-      skipMemory: true,
-      writeFence,
-    }),
-  ])
-  if (writes.some((written) => !written)) {
+  const { cacheKey } = homeInitialTradersCacheKeys(timeRange, 0, safeLimit)
+  const written = await cache.set(cacheKey, result, {
+    ttl: PUBLIC_RANKING_PRIMARY_CACHE_TTL_SECONDS,
+    tags: [PUBLIC_RANKING_REDIS_TAG, `season:${timeRange}`],
+    skipMemory: true,
+    writeFence,
+  })
+  if (!written) {
     throw new Error('SSR homepage Redis cache write was not confirmed')
   }
   return result.traders.length
 }
 
 /**
- * Upper bound on how long the homepage can keep showing rows that the database
- * has since withdrawn WITHOUT a publication (source quarantine by migration,
- * serving-head/season fence invalidation): those paths do not advance the
- * shared write fence, so only cache age bounds them. Matches /api/traders'
- * 300s cohort cache and the homepage ISR revalidate window.
+ * SSR homepage cache TTL. Rows the database withdraws WITHOUT a publication
+ * (source quarantine by migration, serving-head/season fence invalidation) do
+ * not advance the shared write fence; every cache hit therefore re-checks its
+ * rows' membership in the live view (cachedRowsStillInPublicCohort). Matches
+ * /api/traders' 300s cohort cache and the homepage ISR revalidate window.
  */
 export const PUBLIC_RANKING_PRIMARY_CACHE_TTL_SECONDS = 300
 
@@ -459,115 +439,72 @@ export async function getInitialTraders(
     return unknownInitialTradersResult()
   }
 
-  // Try Redis cache first — fresh hit returns immediately.
-  // Two-tier cache strategy:
-  //   1. Primary cache (2h TTL) — normal serving
-  //   2. Fallback cache (4h TTL) — safety net when DB is down/slow
+  // Redis first. There is deliberately no long-lived "fallback" tier: a
+  // DB-level withdrawal does not advance the write fence, so a 4h copy would
+  // keep withdrawn rows on the homepage whenever the database answered empty
+  // or failed. On a DB failure the page is unknown and the client refetches.
   const safeLimit = normalizeInitialPageLimit(limit)
   const safePage = normalizeInitialPage(page)
-  const { cacheKey, fallbackKey } = homeInitialTradersCacheKeys(timeRange, safePage, safeLimit)
+  const { cacheKey } = homeInitialTradersCacheKeys(timeRange, safePage, safeLimit)
 
-  // ONE Redis round trip: the publication write fence plus both cache tiers
-  // from a single atomic MGET snapshot (previously fence SET NX + GET, primary
-  // GET, fallback GET ran sequentially). The fence is captured no later than
-  // the entries and before any database query; if a publication advances this
-  // generation while the request is in flight, its eventual fire-and-forget
-  // writes are rejected atomically by Redis.
+  // ONE Redis round trip: the publication write fence plus the cache entry
+  // from a single atomic MGET snapshot. The fence is captured before any
+  // database query; if a publication advances this generation while the
+  // request is in flight, its eventual fire-and-forget write is rejected
+  // atomically by Redis.
   const snapshot = await cache.readSharedCacheWriteFenceWithEntries<InitialTradersResult>(
     PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY,
-    [cacheKey, fallbackKey]
+    [cacheKey]
   )
   const writeFence = snapshot.fence
-  let cached: InitialTradersResult | null = null
-  let fallbackCached: InitialTradersResult | null = null
   if (writeFence !== null) {
     try {
-      cached = snapshot.entries[0] ?? null
+      const cached = snapshot.entries[0] ?? null
       if (cached && cached.traders && cached.traders.length > 0) {
         const safeCached = sanitizeInitialTradersResult(cached, timeRange, { fromCache: true })
-        if (safeCached && safeCached.traders.length > 0) return safeCached
-        cached = safeCached
+        // One indexed membership read: rows the view has since withdrawn must
+        // not survive in the cache until its TTL.
+        if (
+          safeCached &&
+          safeCached.traders.length > 0 &&
+          (await cachedRowsStillInPublicCohort(getSupabaseAdmin(), timeRange, safeCached.traders))
+        ) {
+          return safeCached
+        }
       }
-      // Primary cache miss — keep the fallback for a DB failure only. Serving
-      // it before trying the DB let a DB-level withdrawal (source quarantine,
-      // season fence) stay on the homepage for the fallback's full TTL, since
-      // such withdrawals do not advance the publication write fence.
-      fallbackCached = snapshot.entries[1] ?? null
-      if (fallbackCached) {
-        fallbackCached = sanitizeInitialTradersResult(fallbackCached, timeRange, {
-          fromCache: true,
-        })
-      }
-    } catch (_err) {
-      // Malformed cache payload — fall through to DB
+    } catch (err) {
+      logger.warn(
+        `[getInitialTraders] cache entry not reusable: ${err instanceof Error ? err.message : err}`
+      )
     }
   }
 
   // fetchLeaderboardFromDB owns the single 5s timeout and aborts the actual
-  // Supabase requests. Do not race it with a second timer here: that used to
-  // abandon still-running PostgREST requests whenever the outer race won.
-  try {
-    const result =
-      sanitizeInitialTradersResult(
-        await fetchLeaderboardFromDB(timeRange, safeLimit, safePage),
-        timeRange
-      ) ?? unknownInitialTradersResult()
+  // Supabase requests; it reports failures as the explicit unknown state.
+  const result =
+    sanitizeInitialTradersResult(
+      await fetchLeaderboardFromDB(timeRange, safeLimit, safePage),
+      timeRange
+    ) ?? unknownInitialTradersResult()
 
-    // Defensive fallback for DB errors/timeouts that are normalized to an
-    // empty result by fetchLeaderboardFromDB. In normal serving, a non-empty
-    // fallback already returned above without starting the DB request.
-    if (result.traders.length === 0) {
-      return staleCacheResult(cached, fallbackCached) ?? result
-    }
-
-    // Cache successful result. The primary TTL bounds how long a DB-level
-    // withdrawal can stay visible (see PUBLIC_RANKING_PRIMARY_CACHE_TTL_SECONDS).
-    // Fallback cache has 4h TTL as a safety net used ONLY when the DB fails.
-    if (result.traders.length > 0) {
-      fireAndForget(
-        Promise.all([
-          cache.set(cacheKey, result, {
-            ttl: PUBLIC_RANKING_PRIMARY_CACHE_TTL_SECONDS,
-            tags: [PUBLIC_RANKING_REDIS_TAG, `season:${timeRange}`],
-            skipMemory: true,
-            writeFence,
-          }),
-          cache.set(fallbackKey, result, {
-            ttl: 14400,
-            tags: [PUBLIC_RANKING_REDIS_TAG, `season:${timeRange}`],
-            skipMemory: true,
-            writeFence,
-          }),
-        ]),
-        'cache-set-initial-traders'
-      )
-    }
-    return result
-  } catch (err) {
-    logger.warn(
-      `[getInitialTraders] DB fetch failed/timed out: ${err instanceof Error ? err.message : err}`
+  // The TTL bounds how long a DB-level withdrawal can stay visible on a page
+  // that is not re-read (see PUBLIC_RANKING_PRIMARY_CACHE_TTL_SECONDS).
+  if (result.traders.length > 0) {
+    fireAndForget(
+      cache.set(cacheKey, result, {
+        ttl: PUBLIC_RANKING_PRIMARY_CACHE_TTL_SECONDS,
+        tags: [PUBLIC_RANKING_REDIS_TAG, `season:${timeRange}`],
+        skipMemory: true,
+        writeFence,
+      }),
+      'cache-set-initial-traders'
     )
-    // Availability fallback during compute-leaderboard contention. Only rows
-    // whose cached publication proof *and upstream source watermark* still
-    // pass were retained above; an expired/unknown source never wins merely
-    // because it is more visually convenient than an empty ranking state.
-    const stale = staleCacheResult(
-      sanitizeInitialTradersResult(cached, timeRange, { fromCache: true }),
-      sanitizeInitialTradersResult(fallbackCached, timeRange, { fromCache: true })
-    )
-    if (stale) {
-      logger.info(
-        `[getInitialTraders] Serving STALE cache after DB timeout (page=${safePage}, traders=${stale.traders.length})`
-      )
-      return stale
-    }
-    // No cache either — Phase 2 client will fetch from API on hydration.
-    return unknownInitialTradersResult()
   }
+  return result
 }
 
 /**
- * Direct Supabase fetch -- used by cron to populate cache and as fallback.
+ * Direct Supabase fetch -- used by cron to populate cache and on a cache miss.
  * Exported so the cron refresh route can call it without triggering cache reads.
  *
  * The underlying reader is the security-barrier public cohort view. It applies

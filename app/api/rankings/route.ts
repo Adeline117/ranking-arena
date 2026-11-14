@@ -8,7 +8,10 @@
  * filtered in application code.
  *
  * Query parameters:
- * - window: 7d | 30d | 90d | composite (required; composite is served and labelled as 90D)
+ * - window: 7d | 30d | 90d | composite (required). composite ranks the published
+ *   90D cohort by the 70/25/5 composite (lib/rankings/composite-ranking.ts);
+ *   it supports only sort_by=arena_score, sort_dir=desc and offset+limit ≤ 500,
+ *   and each row's arena_score is the composite (other metrics are 90D).
  * - category: futures | spot | onchain (optional; platform takes precedence)
  * - platform: canonical active source (optional)
  * - limit: 1..500 (default 100)
@@ -44,6 +47,7 @@ import type {
   PublicRankingsWindow,
 } from '@/lib/contracts/rankings'
 import { applyPublicCohortFilters } from '@/lib/rankings/public-cohort'
+import { COMPOSITE_MAX_DEPTH, rankCompositeCohort } from '@/lib/rankings/composite-ranking'
 
 const logger = createLogger('rankings-api')
 const PUBLIC_RANKING_RESPONSE_CACHE_CONTROL = 'private, no-store, max-age=0, must-revalidate'
@@ -138,14 +142,15 @@ function publicSeason(window: PublicRankingWindow): TradingPeriod {
   return (window === 'composite' ? '90D' : window.toUpperCase()) as TradingPeriod
 }
 
-/**
- * The response labels the season actually served. There is no published
- * 70/25/5 composite cohort — `window=composite` is served from the 90D
- * season — so labelling it `COMPOSITE` claimed a score that was never
- * computed. lib/contracts/core-api.ts allows only 7D/30D/90D here.
- */
-function responseWindow(window: PublicRankingWindow): '7D' | '30D' | '90D' {
-  return publicSeason(window)
+function responseWindow(window: PublicRankingWindow): PublicRankingsWindow {
+  return window === 'composite' ? 'COMPOSITE' : publicSeason(window)
+}
+
+/** source_trader_id values per lookup query (keeps the PostgREST URL bounded). */
+const COMPOSITE_LOOKUP_CHUNK = 150
+
+function rowKey(row: Record<string, unknown>): string {
+  return `${String(row.source)}\u0000${String(row.source_trader_id)}`
 }
 
 function sourceTypeForCategory(category: PublicRankingCategory): string {
@@ -306,6 +311,19 @@ export const GET = withPublic(
       throw ApiError.validation('Invalid trader_type. Must be one of: human, bot')
     }
 
+    if (normalizedWindow === 'composite') {
+      if (sortBy !== 'arena_score' || sortDir !== 'desc') {
+        throw ApiError.validation(
+          'window=composite ranks by the composite score only (sort_by=arena_score, sort_dir=desc)'
+        )
+      }
+      if (offset + limit > COMPOSITE_MAX_DEPTH) {
+        throw ApiError.validation(
+          `window=composite supports offset + limit <= ${COMPOSITE_MAX_DEPTH}`
+        )
+      }
+    }
+
     const window = responseWindow(normalizedWindow)
     const seasonId = publicSeason(normalizedWindow)
 
@@ -342,58 +360,145 @@ export const GET = withPublic(
     // The security-barrier view enforces public rank membership before every
     // predicate below. Keep all additional filters and the finite range in the
     // database; mapping code must never repair a page assembled from raw rows.
-    let query = supabase
-      .from('public_ranked_leaderboard')
-      .select(PUBLIC_RANKED_LEADERBOARD_COLUMNS)
-      .eq('season_id', seasonId)
-      // Redundant to the view, but records the persisted-rank contract at this
-      // endpoint boundary and protects a rolling migration with an older view.
-      .not('rank', 'is', null)
+    const cohortQuery = (season: TradingPeriod) =>
+      applyPublicCohortFilters(
+        supabase
+          .from('public_ranked_leaderboard')
+          .select(PUBLIC_RANKED_LEADERBOARD_COLUMNS)
+          .eq('season_id', season)
+          // Redundant to the view, but records the persisted-rank contract at
+          // this endpoint boundary and protects a rolling migration.
+          .not('rank', 'is', null)
+      )
     // Shared public cohort predicate (score floor, ROI bound, 48h window) —
     // identical to the homepage SSR page and /api/traders.
-    query = applyPublicCohortFilters(query)
-
-    if (platform) {
-      query = query.eq('source', platform)
-    } else if (category) {
-      query = query.eq('source_type', sourceTypeForCategory(category))
-    }
-    if (minPnl !== undefined) query = query.gte('pnl', minPnl)
-    if (hasMinTrades) query = query.gte('trades_count', minTrades)
-    if (traderType === 'bot') {
-      query = query.or('trader_type.eq.bot,trader_type.eq.suspected_bot,source.eq.web3_bot')
-    } else if (traderType === 'human') {
-      query = query.neq('source', 'web3_bot').or('trader_type.is.null,trader_type.eq.human')
-    }
-
-    const sortColumn = SORT_COLUMN[sortBy]
-    query = query.order(sortColumn, { ascending: sortDir === 'asc', nullsFirst: false })
-    if (sortColumn !== 'rank') {
-      query = query.order('rank', { ascending: true, nullsFirst: false })
-    }
-
-    // PostgREST ranges are inclusive: one extra view row is the only
-    // pagination witness. There is intentionally no count fallback.
-    const { data, error } = await query.range(offset, offset + limit)
-    if (error) {
-      logger.error('public ranked cohort query failed', error)
-      throw new Error('Public ranked cohort query failed')
+    const membershipQuery = () => {
+      let query = cohortQuery(seasonId)
+      if (platform) {
+        query = query.eq('source', platform)
+      } else if (category) {
+        query = query.eq('source_type', sourceTypeForCategory(category))
+      }
+      if (minPnl !== undefined) query = query.gte('pnl', minPnl)
+      if (hasMinTrades) query = query.gte('trades_count', minTrades)
+      if (traderType === 'bot') {
+        query = query.or('trader_type.eq.bot,trader_type.eq.suspected_bot,source.eq.web3_bot')
+      } else if (traderType === 'human') {
+        query = query.neq('source', 'web3_bot').or('trader_type.is.null,trader_type.eq.human')
+      }
+      const sortColumn = SORT_COLUMN[sortBy]
+      query = query.order(sortColumn, { ascending: sortDir === 'asc', nullsFirst: false })
+      if (sortColumn !== 'rank') {
+        query = query.order('rank', { ascending: true, nullsFirst: false })
+      }
+      return query
     }
 
-    const rawRows = Array.isArray(data) ? data : []
-    const sanitized = sanitizePublicRankingPayload(
-      { traders: rawRows, window: seasonId },
-      { expectedPeriod: seasonId }
-    )
-    const safeRows = Array.isArray(sanitized.traders)
-      ? sanitized.traders.filter(hasPositivePublishedRank)
-      : ([] as Record<string, unknown>[])
-    const integrityCompromised = safeRows.length !== rawRows.length
+    // Rows that fail the publication policy are never dropped silently: the
+    // whole page fails closed (see integrityCompromised below).
+    const readSafe = async (
+      q: PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>,
+      season: TradingPeriod
+    ): Promise<{ rows: Record<string, unknown>[]; compromised: boolean }> => {
+      const { data, error } = await q
+      if (error) {
+        logger.error('public ranked cohort query failed', error)
+        throw new Error('Public ranked cohort query failed')
+      }
+      const raw = Array.isArray(data) ? data : []
+      const sanitized = sanitizePublicRankingPayload(
+        { traders: raw, window: season },
+        { expectedPeriod: season }
+      )
+      const safe = Array.isArray(sanitized.traders)
+        ? sanitized.traders.filter(hasPositivePublishedRank)
+        : ([] as Record<string, unknown>[])
+      return { rows: safe, compromised: safe.length !== raw.length }
+    }
+
+    let pageRows: Record<string, unknown>[]
+    let hasMore: boolean
+    let integrityCompromised = false
+    let compositeScanBounded = false
+    if (normalizedWindow === 'composite') {
+      type Row90 = { key: string; score90d: number; row: Record<string, unknown> }
+      const result = await rankCompositeCohort<Row90>({
+        need: offset + limit + 1,
+        fetch90: async (from, to) => {
+          const read = await readSafe(membershipQuery().range(from, to), '90D')
+          if (read.compromised) integrityCompromised = true
+          return read.rows.flatMap((row) => {
+            const score90d = nullableFiniteNumber(row.arena_score)
+            if (score90d == null) {
+              integrityCompromised = true
+              return []
+            }
+            return [{ key: rowKey(row), score90d, row }]
+          })
+        },
+        fetchShortScores: async (rows) => {
+          const scores = new Map<string, { score30d: number | null; score7d: number | null }>()
+          const ids = [...new Set(rows.map(({ row }) => String(row.source_trader_id)))]
+          const chunks: string[][] = []
+          for (let i = 0; i < ids.length; i += COMPOSITE_LOOKUP_CHUNK) {
+            chunks.push(ids.slice(i, i + COMPOSITE_LOOKUP_CHUNK))
+          }
+          const wanted = new Set(rows.map(({ key }) => key))
+          const reads = await Promise.all(
+            (['30D', '7D'] as const).flatMap((season) =>
+              chunks.map(async (chunk) => ({
+                season,
+                read: await readSafe(cohortQuery(season).in('source_trader_id', chunk), season),
+              }))
+            )
+          )
+          for (const { season, read } of reads) {
+            if (read.compromised) integrityCompromised = true
+            for (const row of read.rows) {
+              const key = rowKey(row)
+              if (!wanted.has(key)) continue
+              const entry = scores.get(key) ?? { score30d: null, score7d: null }
+              const value = nullableFiniteNumber(row.arena_score)
+              if (season === '30D') entry.score30d = value
+              else entry.score7d = value
+              scores.set(key, entry)
+            }
+          }
+          return scores
+        },
+      })
+      if (result.status === 'scan_bounded') {
+        compositeScanBounded = true
+        pageRows = []
+        hasMore = false
+      } else {
+        pageRows = result.ranked.slice(offset, offset + limit).map(({ row, composite }, i) => ({
+          ...row.row,
+          arena_score: composite,
+          rank: offset + i + 1,
+          // There is no composite rank history: a 90D rank delta is not one.
+          rank_change: null,
+          is_new: false,
+        }))
+        hasMore = result.ranked.length > offset + limit
+      }
+    } else {
+      // PostgREST ranges are inclusive: one extra view row is the only
+      // pagination witness. There is intentionally no count fallback.
+      const read = await readSafe(membershipQuery().range(offset, offset + limit), seasonId)
+      integrityCompromised = read.compromised
+      pageRows = read.rows.slice(0, limit)
+      hasMore = read.rows.length > limit
+    }
+
     // The view is expected to make this impossible. If a rolling schema,
     // proxy, or cache layer nevertheless returns an invalid row, do not shift
     // a later row into this finite page: that would create a false offset
     // continuation. Fail the complete page closed instead.
-    if (integrityCompromised) {
+    if (integrityCompromised || compositeScanBounded) {
+      const reason = compositeScanBounded
+        ? 'composite_scan_bounded'
+        : 'ineligible_public_cohort_row_removed'
       const response = apiSuccess({
         traders: [],
         window,
@@ -415,12 +520,11 @@ export const GET = withPublic(
         offset,
         ranking_visibility: 'partial',
         ranking_visibility_reason: 'publication_policy_filtered',
-        ranking_visibility_reasons: ['ineligible_public_cohort_row_removed'],
+        ranking_visibility_reasons: [reason],
       } satisfies PublicRankingsData)
       response.headers.set('Cache-Control', PUBLIC_RANKING_RESPONSE_CACHE_CONTROL)
       return response
     }
-    const pageRows = safeRows.slice(0, limit)
     const visibleSources = filterPublicRankingSources(pageRows.map((row) => row.source))
 
     // `source_as_of` remains the compatibility freshness field. It is queried
@@ -472,7 +576,6 @@ export const GET = withPublic(
 
     const freshnessBySource = sourceFreshnessStatusMap(freshnessSummary)
     const traders = pageRows.map((row) => mapPublicRankedRow(row, freshnessBySource))
-    const hasMore = rawRows.length > limit && !integrityCompromised
     const response = apiSuccess({
       traders,
       window,

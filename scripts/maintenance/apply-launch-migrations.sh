@@ -178,6 +178,7 @@ PREDEPLOY_MIGRATIONS=(
   20260817134214_quarantine_legacy_platform_stats_rpc.sql
   20261013094743_retire_v2_partition_cron_extend_arena_partitions.sql
   20261113014105_arena_score_unknown_trades_confidence.sql
+  20261114101514_arena_score_true_zero_trades_confidence.sql
   20261113104533_trader_follows_hard_cap_lock.sql
   20261113151848_sync_user_profile_email_from_auth.sql
   20261113151849_auth_user_has_password_rpc.sql
@@ -206,8 +207,9 @@ readonly -a PREDEPLOY_MIGRATIONS
 # 20261114103025 (hero stats from the sealed cohort) keeps the RPC's return
 # shape, so either app version reads it; it needs the public serving view.
 #
-# 20261113014105 (unknown-trade-count sample confidence, issue #435) is
-# predeploy and must follow every migration whose pre/postflight pins the old
+# 20261113014105 (unknown-trade-count sample confidence, issue #435) and its
+# follow-up 20261114101514 (true-zero trade counts, audit P1-2), in that order,
+# are predeploy and must follow every migration whose pre/postflight pins the old
 # v4/v5 scorer or manifest-encoder prosrc digests (latest: 20260729071000),
 # otherwise those preflights abort. Public publication (protocol plan A,
 # docs/RANK_PUBLICATION_PROTOCOL.md) scores in TypeScript and never calls the

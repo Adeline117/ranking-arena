@@ -92,6 +92,7 @@ const score = (inputs: GoldenInput[], period: Period): GoldenOutput[] =>
       sharpeRatio: input.sharpe_ratio,
       profitFactor: input.profit_factor,
       tradesCount: input.trades_count,
+      source: input.source,
     })),
     period
   )
@@ -156,6 +157,7 @@ describe('Arena Score v4 PostgreSQL golden vectors', () => {
       'single_row_30d',
       'single_row_90d',
       'extreme_positive_and_negative_pnl',
+      'true_zero_vs_unknown_trade_count',
     ])
   })
 
