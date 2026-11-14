@@ -69,6 +69,12 @@ describe('toMeilisearchTraderDocument', () => {
     expect(doc).toMatchObject({ rank: 1, roi: 12.5, arena_score: 70.1, max_drawdown: null })
   })
 
+  it('labels the rank computation time as computed_at, never as a display-time key', () => {
+    const doc = toMeilisearchTraderDocument(rankRow('90D', 1), '90D')
+    expect(doc.computed_at).toBe('2026-11-12T00:00:00.000000Z')
+    expect(doc).not.toHaveProperty('updated_at')
+  })
+
   it('refuses a row from another season or without a rank', () => {
     expect(() => toMeilisearchTraderDocument(rankRow('7D', 1), '90D')).toThrow(/season/)
     expect(() => toMeilisearchTraderDocument(rankRow('90D', 0), '90D')).toThrow(/rank/)
