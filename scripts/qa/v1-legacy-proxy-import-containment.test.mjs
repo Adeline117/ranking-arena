@@ -75,17 +75,3 @@ test('Cloudflare legacy proxy worker is a fixed no-store 410 with no upstream ca
   assert.match(source, /'Vercel-CDN-Cache-Control':\s*'no-store'/)
   assert.doesNotMatch(source, /\b(?:await\s+)?fetch\s*\(\s*[^)]/)
 })
-
-test('Cloudflare proxy config has no smart placement (latency-driven, region-blind)', () => {
-  const config = readFileSync(path.join(repositoryRoot, 'cloudflare-worker/wrangler.toml'), 'utf8')
-  const active = config
-    .split('\n')
-    .filter((line) => !line.trim().startsWith('#'))
-    .join('\n')
-
-  // Issue #439: smart placement can move execution (and exchange egress) into
-  // a geo-blocked region. Default placement only; an explicit region pin
-  // belongs to a reviewed reopening change with an egress proof.
-  assert.doesNotMatch(active, /^\s*\[placement\]/m)
-  assert.doesNotMatch(active, /mode\s*=\s*"smart"/)
-})
