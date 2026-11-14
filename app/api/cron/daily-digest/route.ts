@@ -1,18 +1,18 @@
 /**
- * Daily Digest Cron — sends a Telegram summary at UTC 00:00
+ * Web daily digest cron — one Telegram summary of the WEB side:
+ * - Vercel cron success rate and top errors (pipeline_logs, 24h)
+ * - buffered web WARNING alerts (the only reader of that buffer)
  *
- * Content:
- * - Pipeline success rate (24h)
- * - Normal/stale/critical platform counts
- * - Enrichment completion rate
- * - Snapshot counts (24h vs yesterday)
- * - Buffered warnings summary
- * - Top errors
+ * Not to be confused with the ingest worker's `maint:daily-digest`
+ * (worker/src/ingest/processors/daily-digest.ts), which reports source
+ * coverage, rejects and worker health. The per-platform freshness section
+ * this route used to send was judged on leaderboard_ranks.computed_at (cannot
+ * see unsealed publication) and duplicated the worker digest, so it was
+ * removed (2026-11 audit S3).
  */
 
 import { NextRequest } from 'next/server'
 import { sendDailyDigest, type DailyDigestData } from '@/lib/notifications/telegram'
-import { DEAD_BLOCKED_PLATFORMS, SOURCES_WITH_DATA } from '@/lib/constants/exchanges'
 import { withCron } from '@/lib/api/with-cron'
 
 export const dynamic = 'force-dynamic'
@@ -21,15 +21,13 @@ export const maxDuration = 120
 export const GET = withCron(
   'daily-digest',
   async (_request: NextRequest, { supabase }) => {
-    const deadSet = new Set(DEAD_BLOCKED_PLATFORMS as string[])
-    const activePlatforms = (SOURCES_WITH_DATA as string[]).filter((p) => !deadSet.has(p))
-
     // Pipeline success rate (24h)
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-    const { data: logs } = await supabase
+    const { data: logs, error: logsError } = await supabase
       .from('pipeline_logs')
       .select('status')
       .gte('started_at', oneDayAgo)
+    if (logsError) throw new Error(`pipeline_logs read failed: ${logsError.message}`)
 
     const totalRuns = logs?.length || 0
     const successRuns = logs?.filter((l) => l.status === 'success').length || 0
@@ -37,69 +35,13 @@ export const GET = withCron(
     const alertCount24h =
       logs?.filter((l) => l.status === 'error' || l.status === 'timeout').length || 0
 
-    // Platform freshness — latest computed_at per source from leaderboard_ranks
-    // (migrated off retiring trader_latest; computed_at = canonical "last scored").
-    const latestByPlatform = new Map<string, string>()
-    const freshnessChecks = activePlatforms.map(async (platform) => {
-      try {
-        const { data } = await Promise.race([
-          supabase
-            .from('leaderboard_ranks')
-            .select('computed_at')
-            .eq('source', platform)
-            .order('computed_at', { ascending: false })
-            .limit(1)
-            .maybeSingle(),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`Freshness query timeout for ${platform}`)), 15_000)
-          ),
-        ])
-        if (data?.computed_at) {
-          latestByPlatform.set(platform, data.computed_at)
-        }
-      } catch {
-        // Individual platform timeout — skip it, will show as 999h
-      }
-    })
-    await Promise.all(freshnessChecks)
-
-    const platformFreshness: DailyDigestData['platformFreshness'] = activePlatforms.map((p) => {
-      const latest = latestByPlatform.get(p)
-      const hoursAgo = latest
-        ? Math.round(((Date.now() - new Date(latest).getTime()) / (60 * 60 * 1000)) * 10) / 10
-        : 999
-      return {
-        name: p,
-        hoursAgo,
-        status:
-          hoursAgo > 24
-            ? ('critical' as const)
-            : hoursAgo > 8
-              ? ('stale' as const)
-              : ('ok' as const),
-      }
-    })
-
-    // Ranked-trader counts in window (migrated off retiring trader_latest →
-    // leaderboard_ranks; counts ranked traders scored in the window, computed_at).
-    const { count: snapshotCount24h } = await supabase
-      .from('leaderboard_ranks')
-      .select('*', { count: 'estimated', head: true })
-      .gte('computed_at', oneDayAgo)
-
-    const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
-    const { count: snapshotCountYesterday } = await supabase
-      .from('leaderboard_ranks')
-      .select('*', { count: 'estimated', head: true })
-      .gte('computed_at', twoDaysAgo)
-      .lt('computed_at', oneDayAgo)
-
     // Top errors
-    const { data: errorLogs } = await supabase
+    const { data: errorLogs, error: errorLogsError } = await supabase
       .from('pipeline_logs')
       .select('job_name')
       .gte('started_at', oneDayAgo)
       .in('status', ['error', 'timeout'])
+    if (errorLogsError) throw new Error(`pipeline_logs read failed: ${errorLogsError.message}`)
 
     const errorCounts = new Map<string, number>()
     for (const log of errorLogs || []) {
@@ -110,14 +52,7 @@ export const GET = withCron(
       .slice(0, 5)
       .map(([job, count]) => ({ job, count }))
 
-    const digestData: DailyDigestData = {
-      alertCount24h,
-      pipelineSuccessRate,
-      platformFreshness,
-      topErrors,
-      snapshotCount24h: snapshotCount24h || 0,
-      snapshotCountYesterday: snapshotCountYesterday || 0,
-    }
+    const digestData: DailyDigestData = { alertCount24h, pipelineSuccessRate, topErrors }
 
     const sent = await sendDailyDigest(digestData)
 

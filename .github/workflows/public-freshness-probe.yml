@@ -6,13 +6,14 @@ name: Public Data Freshness Probe
 # worker host it was supposed to watch.
 #
 # This probe is deliberately independent of all of that:
-#   - no repository secret: it reads only the PUBLIC https://www.arenafi.org/api/health
+#   - no Arena credential: it reads only the PUBLIC https://www.arenafi.org/api/health
 #     with a plain GET (no auth header, no cookies);
 #   - no checkout, no repository code, no third-party action: nothing from the
 #     default branch executes except this inline shell;
 #   - not gated by any V1 publication constant and not on the worker host.
-# The only credential is the job-scoped GITHUB_TOKEN, limited to `issues: write`,
-# used to open/update/close ONE de-duplicated issue (no Telegram dependency).
+# The only credentials are the job-scoped GITHUB_TOKEN, limited to `issues: write`,
+# used to open/update/close ONE de-duplicated issue (no Telegram dependency),
+# and the external dead-man ping URL (below), which grants nothing in Arena.
 #
 # Fails the run (GitHub emails the workflow owner) and opens/updates the issue when:
 #   - /api/health is unreachable or returns non-2xx (stale data now returns 503), or
@@ -21,8 +22,14 @@ name: Public Data Freshness Probe
 #   - checks.freshness.status is not "pass".
 # Self-heals: the issue is closed on the first healthy run.
 #
-# Note: GitHub pauses scheduled workflows after 60 days without repository
-# activity; the owner must keep it enabled (Actions → this workflow).
+# Dead-man switch (audit P0-1 / S5-1): when the schedule never fires (Actions
+# billing block, workflow disabled, GitHub's 60-day inactivity pause) nothing
+# inside GitHub or arenafi.org can notice. Every run therefore ends by pinging
+# an EXTERNAL heartbeat check (healthchecks.io-style `<url>/<exit code>`;
+# 0 = healthy, non-zero = failing). That service — not GitHub, not the probed
+# site — alerts the owner when pings stop. Owner setup: create a check with a
+# 30 min period and ~60 min grace and store its ping URL as the repository
+# secret FRESHNESS_PROBE_DEADMAN_URL. Without it every run warns.
 
 on:
   schedule:
@@ -48,8 +55,21 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          DEADMAN_PING_URL: ${{ secrets.FRESHNESS_PROBE_DEADMAN_URL }}
         run: |
           set -uo pipefail
+
+          ping_deadman() {
+            local code="$1"
+            if [ -z "${DEADMAN_PING_URL:-}" ]; then
+              echo "::warning::FRESHNESS_PROBE_DEADMAN_URL not set — a probe that stops running goes unnoticed"
+              return
+            fi
+            curl --silent --show-error --fail --max-time 10 --retry 2 --output /dev/null \
+              "${DEADMAN_PING_URL%/}/${code}" \
+              || echo "::warning::dead-man ping failed"
+          }
+          trap 'ping_deadman "$?"' EXIT
 
           find_open_issue() {
             gh issue list --state open --search "\"$ISSUE_TITLE\" in:title" \

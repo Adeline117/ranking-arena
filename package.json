@@ -148,6 +148,7 @@
     "qa:trader-series-publication-isolation-pg17": "bash supabase/migrations/__tests__/trader-series-publication-isolation.pg17.sh",
     "qa:legacy-raw-metric-publication-isolation-pg17": "bash supabase/migrations/__tests__/legacy-raw-metric-publication-isolation.pg17.sh",
     "qa:legacy-platform-stats-rpc-pg17": "bash supabase/migrations/__tests__/quarantine-legacy-platform-stats-rpc.pg17.sh",
+    "qa:sealed-gap-summary-pg17": "bash supabase/migrations/__tests__/sealed-publication-data-gap-summary.pg17.sh",
     "qa:copier-projection-v2-pg17": "bash supabase/migrations/__tests__/copier-snapshot-projection-v2.pg17.sh",
     "qa:exchange-connection-acl-pg17": "bash supabase/migrations/__tests__/exchange-connections-server-only.pg17.sh",
     "qa:trader-authorization-acl-pg17": "bash supabase/migrations/__tests__/trader-authorizations-server-only.pg17.sh",

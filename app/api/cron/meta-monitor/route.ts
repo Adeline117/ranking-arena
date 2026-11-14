@@ -12,49 +12,14 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { logger } from '@/lib/logger'
 import { withCron } from '@/lib/api/with-cron'
-import { findStuckCronJobs } from '@/lib/cron/meta-monitor-policy'
+import {
+  findStuckCronJobs,
+  META_MONITOR_EXPECTED_INTERVALS as EXPECTED_INTERVALS,
+} from '@/lib/cron/meta-monitor-policy'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
-
-// Expected max interval (minutes) for each job group.
-// Every key MUST be a job that still exists (an app/api/cron/<name> route):
-// a job with no producer can only ever report "NEVER" and trains everyone to
-// ignore this alert (2026-11 audit P2-1 removed 8 such entries:
-// batch-fetch-traders, batch-enrich, fetch-details, backfill-data,
-// link-entities, verify-fetchers, snapshot-positions, auto-post-insights).
-// Locked by __tests__/expected-intervals.test.ts.
-const EXPECTED_INTERVALS: Record<string, number> = {
-  // Core pipeline
-  'compute-leaderboard': 60,
-  'precompute-composite': 240,
-
-  // Discovery & enrichment
-  'generate-profiles': 720,
-
-  // Market data
-  'flash-news-fetch': 60,
-
-  // Monitoring & health
-  'cleanup-deleted-accounts': 1440,
-
-  // Snapshots & ranks
-  'snapshot-ranks': 1440,
-
-  // Search & cache
-  'sync-meilisearch': 60,
-
-  // Social
-  'auto-post-market-summary': 1440,
-  'auto-post-twitter': 1440,
-  'daily-digest': 1440,
-
-  // Subscriptions
-  'subscription-expiry': 1440,
-  'reconcile-subscriptions': 1440,
-  'stripe-readiness': 1440,
-}
 
 export const GET = withCron(
   'meta-monitor',

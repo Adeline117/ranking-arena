@@ -28,6 +28,10 @@ function nativeStartupHarness() {
     events.push('timer')
     return reconcileTimer
   })
+  const ensurePartitions = jest.fn(async () => {
+    events.push('partitions')
+    return 0
+  })
   const markReady = jest.fn(() => {
     events.push('ready')
   })
@@ -62,6 +66,7 @@ function nativeStartupHarness() {
 
   const steps = {
     clearServingTimer,
+    ensurePartitions,
     lifecycle,
     markReady,
     reconcileSchedulers,
@@ -72,6 +77,7 @@ function nativeStartupHarness() {
 
   return {
     clearServingTimer,
+    ensurePartitions,
     events,
     heartbeatTimer,
     loseAuthority: () => {
@@ -99,7 +105,14 @@ describe('native ingest serving startup boundary', () => {
 
     const serving = await startNativeIngestServing(harness.steps)
 
-    expect(harness.events).toEqual(['heartbeat', 'reconcile', 'timer', 'start', 'ready'])
+    expect(harness.events).toEqual([
+      'heartbeat',
+      'reconcile',
+      'timer',
+      'partitions',
+      'start',
+      'ready',
+    ])
     expect(harness.runtime.state).toBe('running')
     expect(serving.heartbeatTimer).toBe(harness.heartbeatTimer)
     expect(serving.reconcileTimer).toBe(harness.reconcileTimer)
@@ -192,6 +205,26 @@ describe('native ingest serving startup boundary', () => {
     expect(harness.markReady).not.toHaveBeenCalled()
   })
 
+  it('never starts consumers when startup partition preparation fails', async () => {
+    const harness = nativeStartupHarness()
+    harness.ensurePartitions.mockRejectedValueOnce(new Error('lock timeout'))
+
+    await expect(startNativeIngestServing(harness.steps)).rejects.toMatchObject({
+      code: 'startup_failed',
+    })
+
+    expect(harness.events).toEqual([
+      'heartbeat',
+      'reconcile',
+      'timer',
+      'clear:reconcile',
+      'clear:heartbeat',
+      'stop',
+    ])
+    expect(harness.start).not.toHaveBeenCalled()
+    expect(harness.markReady).not.toHaveBeenCalled()
+  })
+
   it('clears every started timer when consumer startup fails', async () => {
     const harness = nativeStartupHarness()
     harness.start.mockImplementationOnce(async () => {
@@ -207,6 +240,7 @@ describe('native ingest serving startup boundary', () => {
       'heartbeat',
       'reconcile',
       'timer',
+      'partitions',
       'start',
       'clear:reconcile',
       'clear:heartbeat',
@@ -256,6 +290,7 @@ describe('native ingest serving startup boundary', () => {
       'heartbeat',
       'reconcile',
       'timer',
+      'partitions',
       'start',
       'ready',
       'clear:reconcile',

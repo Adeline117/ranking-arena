@@ -13,19 +13,19 @@
  *     Telegram outage does not silently swallow the same page for 6h;
  *   - the digest is drained atomically (MULTI LRANGE+DEL) and restored to
  *     the head of the list when the send fails, so a 401 day loses nothing;
- *   - every undelivered alert leaves a trace in Redis
- *     (ALERT_FAILURE_COUNT_KEY counter + ALERT_FAILURE_LOG_KEY bounded list)
- *     that an out-of-band check can read without Telegram working.
+ *   - when Telegram fails, pages and the digest fall back to the independent
+ *     GitHub issue channel (lib/alerts/github-issue.ts, env-gated by
+ *     ALERT_GITHUB_TOKEN + ALERT_GITHUB_REPO on the worker host);
+ *   - a page that NEITHER channel delivered throws AlertDeliveryError, so the
+ *     calling job fails visibly instead of "succeeding" silently.
  *
  * WORKER-ONLY MODULE (Redis via ioredis instance passed in).
  */
 
 import type IORedis from 'ioredis'
+import { postGithubIssueAlert } from '../alerts/github-issue'
 
 export const DIGEST_KEY = 'arena:ingest:digest'
-export const ALERT_FAILURE_COUNT_KEY = 'arena:ingest:alert-failures:count'
-export const ALERT_FAILURE_LOG_KEY = 'arena:ingest:alert-failures:log'
-const ALERT_FAILURE_LOG_MAX = 200
 const DIGEST_MAX = 2000
 
 export interface IngestAlert {
@@ -60,8 +60,8 @@ function isRetryableStatus(status: number): boolean {
 
 /**
  * Send one Telegram message. Never throws: the caller gets an explicit
- * delivery result so it can release cooldowns / restore the digest and
- * record the failure.
+ * delivery result so it can fall back, release cooldowns or restore the
+ * digest.
  */
 export async function sendTelegram(
   text: string,
@@ -107,23 +107,28 @@ export async function sendTelegram(
   return { ok: false, attempts: maxAttempts, reason }
 }
 
-/** Leave a durable trace of an undelivered alert. Best-effort: a Redis
- *  error here is logged, never thrown (the caller is already failing). */
-async function recordDeliveryFailure(
-  redis: IORedis,
-  kind: 'page' | 'digest',
-  reason: string,
-  subject: string
-): Promise<void> {
-  try {
-    await redis.incr(ALERT_FAILURE_COUNT_KEY)
-    await redis.lpush(
-      ALERT_FAILURE_LOG_KEY,
-      JSON.stringify({ kind, reason, subject: subject.slice(0, 200), at: new Date().toISOString() })
-    )
-    await redis.ltrim(ALERT_FAILURE_LOG_KEY, 0, ALERT_FAILURE_LOG_MAX - 1)
-  } catch (err) {
-    console.error('[ingest-alert] could not record delivery failure in Redis:', err)
+type Delivery = { ok: true; channel: 'telegram' | 'github' } | { ok: false; reason: string }
+
+/** Telegram first; on failure the independent GitHub issue channel. */
+async function deliver(
+  text: string,
+  issueTitle: string,
+  sendOpts?: TelegramSendOptions
+): Promise<Delivery> {
+  const telegram = await sendTelegram(text, sendOpts)
+  if (telegram.ok) return { ok: true, channel: 'telegram' }
+  const body = `${text}\n\n_Telegram 主通道发送失败(${telegram.reason}),worker GitHub issue 兜底。_\n${new Date().toISOString()}`
+  if (await postGithubIssueAlert(issueTitle, body)) return { ok: true, channel: 'github' }
+  return { ok: false, reason: `telegram ${telegram.reason}; github issue not delivered` }
+}
+
+export class AlertDeliveryError extends Error {
+  constructor(
+    readonly subject: string,
+    readonly reason: string
+  ) {
+    super(`ingest page not delivered on any channel (${subject}): ${reason}`)
+    this.name = 'AlertDeliveryError'
   }
 }
 
@@ -139,7 +144,7 @@ export function pageCooldownKey(sourceSlug: string, tier: IngestAlert['tier']): 
 }
 
 /** Route an alert: page now (phase<=1 Tier A, cooldown-gated) or queue for
- *  the digest. */
+ *  the digest. Throws AlertDeliveryError when a page reached no channel. */
 export async function alert(
   redis: IORedis,
   a: Omit<IngestAlert, 'at'>,
@@ -161,7 +166,11 @@ export async function alert(
   if (gate !== 'OK') return
 
   const text = `🚨 [ingest ${full.sourceSlug} Tier-${full.tier}] ${full.message}`
-  const delivery = await sendTelegram(text, sendOpts)
+  const delivery = await deliver(
+    text,
+    `🛑 [SEV1] ingest ${full.sourceSlug} Tier-${full.tier}`,
+    sendOpts
+  )
   if (delivery.ok) return
 
   // Not delivered: release the cooldown so the next sentinel pass retries
@@ -172,7 +181,7 @@ export async function alert(
   } catch (err) {
     console.error('[ingest-alert] could not release page cooldown:', err)
   }
-  await recordDeliveryFailure(redis, 'page', delivery.reason, text)
+  throw new AlertDeliveryError(`${full.sourceSlug} Tier-${full.tier}`, delivery.reason)
 }
 
 export class DigestDeliveryError extends Error {
@@ -236,10 +245,9 @@ export async function flushDigest(redis: IORedis, sendOpts?: TelegramSendOptions
   const items = await drainDigest(redis)
   if (items.length === 0) return 0
 
-  const delivery = await sendTelegram(formatDigest(items), sendOpts)
+  const delivery = await deliver(formatDigest(items), '📋 [ingest] daily digest', sendOpts)
   if (delivery.ok) return items.length
 
   await restoreDigest(redis, items)
-  await recordDeliveryFailure(redis, 'digest', delivery.reason, `digest of ${items.length} events`)
   throw new DigestDeliveryError(items.length, delivery.reason)
 }

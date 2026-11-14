@@ -3,8 +3,9 @@
  * Schedule: Daily at 04:00 UTC
  *
  * Calls get_data_gap_summary() to identify traders in trader_sources that
- * have no recent leaderboard data (>48h stale) and reports a per-platform
- * summary via alert. Detection + alert only: the former hand-off to
+ * have no fresh SEALED public publication (>48h; judged on
+ * public_ranked_leaderboard + seal time since 20261114104438, not
+ * leaderboard_ranks.computed_at) and reports a per-platform summary via alert. Detection + alert only: the former hand-off to
  * retry-dead-letters (reconciliation:gaps:* → enrich:retry:*) had no consumer
  * and silently discarded the gaps, so it was removed (2026-11 audit P2-2).
  */

@@ -3,8 +3,7 @@
  */
 import type IORedis from 'ioredis'
 import {
-  ALERT_FAILURE_COUNT_KEY,
-  ALERT_FAILURE_LOG_KEY,
+  AlertDeliveryError,
   DIGEST_KEY,
   DigestDeliveryError,
   alert,
@@ -28,11 +27,6 @@ class FakeRedis {
   async del(key: string) {
     const had = this.strings.delete(key) || this.lists.delete(key)
     return had ? 1 : 0
-  }
-  async incr(key: string) {
-    const n = Number(this.strings.get(key) ?? '0') + 1
-    this.strings.set(key, String(n))
-    return n
   }
   private list(key: string) {
     const l = this.lists.get(key) ?? []
@@ -84,6 +78,7 @@ function mockFetch(...responses: Array<{ status: number } | Error>) {
         ok: r.status >= 200 && r.status < 300,
         status: r.status,
         text: async () => `status ${r.status}`,
+        json: async () => ({ items: [] }),
       })
   }
   global.fetch = fn as unknown as typeof fetch
@@ -95,6 +90,9 @@ const ORIGINAL_FETCH = global.fetch
 
 beforeEach(() => {
   process.env = { ...ORIGINAL_ENV, TELEGRAM_BOT_TOKEN: 'tok', TELEGRAM_ALERT_CHAT_ID: 'chat' }
+  for (const k of ['ALERT_GITHUB_TOKEN', 'GITHUB_TOKEN', 'GH_TOKEN', 'ALERT_GITHUB_REPO']) {
+    delete process.env[k]
+  }
   jest.spyOn(console, 'error').mockImplementation(() => {})
 })
 
@@ -151,18 +149,31 @@ describe('alert', () => {
     await alert(asRedis(redis), page, { sleep: noSleep })
     expect(redis.strings.has(pageCooldownKey('bybit', 'A'))).toBe(true)
     expect(redis.lists.get(DIGEST_KEY)).toHaveLength(1)
-    expect(redis.strings.get(ALERT_FAILURE_COUNT_KEY)).toBeUndefined()
   })
 
-  it('releases the cooldown and records the failure when the page is not delivered', async () => {
+  it('falls back to a GitHub issue when Telegram fails and keeps the cooldown', async () => {
+    process.env.ALERT_GITHUB_TOKEN = 'gh'
+    process.env.ALERT_GITHUB_REPO = 'owner/repo'
+    const redis = new FakeRedis()
+    // Telegram 401, issue search (no match), issue create.
+    const fetchFn = mockFetch({ status: 401 }, { status: 200 }, { status: 201 })
+    await alert(asRedis(redis), page, { sleep: noSleep })
+    const create = fetchFn.mock.calls[2]
+    expect(create[0]).toBe('https://api.github.com/repos/owner/repo/issues')
+    const issue = JSON.parse(create[1].body)
+    expect(issue.title).toBe('🛑 [SEV1] ingest bybit Tier-A')
+    expect(issue.body).toContain('stale')
+    expect(issue.body).toContain('http_401')
+    expect(redis.strings.has(pageCooldownKey('bybit', 'A'))).toBe(true)
+  })
+
+  it('throws and releases the cooldown when no channel delivered the page', async () => {
     const redis = new FakeRedis()
     mockFetch({ status: 401 })
-    await alert(asRedis(redis), page, { sleep: noSleep })
+    await expect(alert(asRedis(redis), page, { sleep: noSleep })).rejects.toBeInstanceOf(
+      AlertDeliveryError
+    )
     expect(redis.strings.has(pageCooldownKey('bybit', 'A'))).toBe(false)
-    expect(redis.strings.get(ALERT_FAILURE_COUNT_KEY)).toBe('1')
-    const log = JSON.parse(redis.lists.get(ALERT_FAILURE_LOG_KEY)![0])
-    expect(log).toMatchObject({ kind: 'page' })
-    expect(log.reason).toContain('http_401')
     // The record is still in the digest.
     expect(redis.lists.get(DIGEST_KEY)).toHaveLength(1)
 
@@ -175,7 +186,9 @@ describe('alert', () => {
   it('still queues the digest when fetch throws on every attempt', async () => {
     const redis = new FakeRedis()
     mockFetch(new Error('timeout'), new Error('timeout'), new Error('timeout'))
-    await expect(alert(asRedis(redis), page, { sleep: noSleep })).resolves.toBeUndefined()
+    await expect(alert(asRedis(redis), page, { sleep: noSleep })).rejects.toBeInstanceOf(
+      AlertDeliveryError
+    )
     expect(redis.lists.get(DIGEST_KEY)).toHaveLength(1)
   })
 
@@ -228,7 +241,15 @@ describe('flushDigest', () => {
     )
     const left = redis.lists.get(DIGEST_KEY)!.map((s) => JSON.parse(s).message)
     expect(left).toEqual(['1', '2', 'late'])
-    expect(redis.strings.get(ALERT_FAILURE_COUNT_KEY)).toBe('1')
-    expect(JSON.parse(redis.lists.get(ALERT_FAILURE_LOG_KEY)![0]).kind).toBe('digest')
+  })
+
+  it('counts the digest as delivered when the GitHub issue fallback succeeds', async () => {
+    process.env.ALERT_GITHUB_TOKEN = 'gh'
+    process.env.ALERT_GITHUB_REPO = 'owner/repo'
+    const redis = new FakeRedis()
+    await redis.rpush(DIGEST_KEY, item('a', '1'))
+    mockFetch({ status: 401 }, { status: 200 }, { status: 201 })
+    await expect(flushDigest(asRedis(redis), { sleep: noSleep })).resolves.toBe(1)
+    expect(redis.lists.get(DIGEST_KEY)).toBeUndefined()
   })
 })

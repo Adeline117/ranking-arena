@@ -307,6 +307,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:exchange-connection-acl-pg17
 
+      - name: Prove sealed-publication data gap summary
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:sealed-gap-summary-pg17
+
       - name: Prove trader authorization service-only ACL
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
