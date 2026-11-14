@@ -1,5 +1,14 @@
 import { generateUnsubscribeToken, verifyUnsubscribeToken } from '../unsubscribe-token'
 
+const ORIGINAL_SECRET = process.env.CRON_SECRET
+beforeEach(() => {
+  process.env.CRON_SECRET = 'test-signing-secret-for-unsubscribe-tokens'
+})
+afterAll(() => {
+  if (ORIGINAL_SECRET === undefined) delete process.env.CRON_SECRET
+  else process.env.CRON_SECRET = ORIGINAL_SECRET
+})
+
 describe('unsubscribe token（HMAC 签名）', () => {
   it('生成→校验 往返成功，还原 userId + type', () => {
     const token = generateUnsubscribeToken('user-123', 'digest')
@@ -54,5 +63,18 @@ describe('unsubscribe token（HMAC 签名）', () => {
     } finally {
       Date.now = realNow
     }
+  })
+
+  it('没有签名密钥时拒绝签发，也不接受任何 token（无源码内回退值）', () => {
+    const token = generateUnsubscribeToken('user-123', 'digest')
+    delete process.env.CRON_SECRET
+    expect(() => generateUnsubscribeToken('user-123', 'digest')).toThrow(/CRON_SECRET/)
+    expect(verifyUnsubscribeToken(token)).toBeNull()
+  })
+
+  it('换了签名密钥后，旧密钥签的 token 失效', () => {
+    const token = generateUnsubscribeToken('user-123', 'digest')
+    process.env.CRON_SECRET = 'a-different-signing-secret'
+    expect(verifyUnsubscribeToken(token)).toBeNull()
   })
 })
