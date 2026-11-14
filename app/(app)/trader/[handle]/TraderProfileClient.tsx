@@ -188,7 +188,7 @@ export interface UnregisteredTraderData {
 
 // TraderTabKey moved to ./hooks/useTraderTabs
 import { useTraderPeriodSync } from './hooks/useTraderPeriodSync'
-import { applyHeaderPeriod } from './header-period'
+import { applyHeaderPeriod, ninetyDayHeadline, resolveHeadline } from './header-period'
 import { useTraderActiveAccount } from './hooks/useTraderActiveAccount'
 import { useTraderTabs } from './hooks/useTraderTabs'
 import { useServingTabData } from './hooks/useServingTabData'
@@ -518,8 +518,8 @@ export default function TraderProfileClient({
         source: profile.source || urlPlatform || '',
         source_trader_id: profile.trader_key || profile.id,
         rank: null,
-        arena_score: performance?.arena_score_90d ?? performance?.arena_score ?? null,
-        roi: performance?.roi_90d ?? performance?.roi_30d ?? performance?.roi_7d ?? null,
+        // No headline_window = 90D label: 90D values only (P1-3).
+        ...ninetyDayHeadline(performance),
         pnl: performance?.pnl ?? null,
         win_rate: performance?.win_rate ?? null,
         max_drawdown: performance?.max_drawdown ?? null,
@@ -1089,12 +1089,8 @@ export default function TraderProfileClient({
         source: visibleSource,
         source_trader_id: visibleTraderKey,
         rank: null,
-        arena_score: exactPerformance?.arena_score_90d ?? exactPerformance?.arena_score ?? null,
-        roi:
-          exactPerformance?.roi_90d ??
-          exactPerformance?.roi_30d ??
-          exactPerformance?.roi_7d ??
-          null,
+        // No headline_window = 90D label: 90D values only (P1-3).
+        ...ninetyDayHeadline(exactPerformance),
         pnl: exactPerformance?.pnl ?? null,
         win_rate: exactPerformance?.win_rate ?? null,
         max_drawdown: exactPerformance?.max_drawdown ?? null,
@@ -1115,24 +1111,18 @@ export default function TraderProfileClient({
   // A serving headline taken from a non-90D board keeps its own window so the
   // share card never labels a 30D rank/ROI as 90D.
   const headlineWindow = accountDetailReady ? visibleData.headline_window : undefined
-  const headlineIsNon90 = headlineWindow != null && headlineWindow !== '90d'
   const headerFirstScreen = validatedActiveAccount ? selectedServingFirstScreen : servingFirstScreen
   const headerAccountMetrics = resolveTraderHeaderAccountMetrics(
     suppressAccountContent,
     applyHeaderPeriod(
       selectedPeriod,
       {
-        roi90d: headlineIsNon90
-          ? (visibleData.roi ?? undefined)
-          : (exactPerformance?.roi_90d ??
-            (accountDetailReady && visibleData.roi != null ? visibleData.roi : undefined)),
-        headlineWindow,
-        arenaScore:
-          exactPerformance?.arena_score_90d ??
-          exactPerformance?.arena_score ??
-          (accountDetailReady ? (visibleData.arena_score ?? null) : null),
-        scoreConfidence: exactPerformance?.score_confidence ?? null,
-        tradesCount: exactPerformance?.trades_count ?? null,
+        ...resolveHeadline({
+          performance: exactPerformance,
+          headlineWindow,
+          visible: visibleData,
+          accountDetailReady,
+        }),
         rank: accountDetailReady ? (visibleData.rank ?? null) : null,
         platform: accountDetailReady ? visibleSource : effectivePlatform || undefined,
         traderKey: accountDetailReady ? visibleTraderKey : undefined,

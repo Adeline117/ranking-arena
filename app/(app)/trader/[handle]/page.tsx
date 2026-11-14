@@ -768,15 +768,13 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     // Pull basic scores from serverTraderData if available
     ...(serverTraderData?.performance
       ? {
-          arena_score: (serverTraderData.performance as Record<string, unknown>).arena_score as
+          // No headline_window = the header labels these 90D: 90D values only,
+          // never the primary-period arena_score or a 30D/7D ROI (P1-3).
+          arena_score: ((serverTraderData.performance as Record<string, unknown>).arena_score_90d ??
+            null) as number | null,
+          roi: ((serverTraderData.performance as Record<string, unknown>).roi_90d ?? null) as
             | number
             | null,
-          // Header ROI = primary period (90D → 30D → 7D), same order as the
-          // unlabelled arena_score/pnl above; roi_90d alone is null without 90D.
-          roi: ((serverTraderData.performance as Record<string, unknown>).roi_90d ??
-            (serverTraderData.performance as Record<string, unknown>).roi_30d ??
-            (serverTraderData.performance as Record<string, unknown>).roi_7d ??
-            null) as number | null,
           pnl: (serverTraderData.performance as Record<string, unknown>).pnl as number | null,
           win_rate: (serverTraderData.performance as Record<string, unknown>).win_rate as
             | number
