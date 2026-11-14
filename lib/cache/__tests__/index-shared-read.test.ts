@@ -28,10 +28,16 @@ jest.mock('@/lib/utils/logger', () => ({
   },
 }))
 
-import { get, getOrSetWithLock, readSharedCacheWriteFenceWithEntries } from '../index'
+import {
+  get,
+  getOrSetWithLock,
+  readSharedCacheWriteFenceWithEntries,
+  resetLocalLoadStateForTests,
+} from '../index'
 
 describe('shared cache reads', () => {
   beforeEach(() => {
+    resetLocalLoadStateForTests()
     jest.clearAllMocks()
     mockMemoryGet.mockReturnValue('stale-process-value')
   })
@@ -204,7 +210,10 @@ describe('shared cache reads', () => {
 })
 
 describe('readSharedCacheWriteFenceWithEntries', () => {
-  beforeEach(() => jest.clearAllMocks())
+  beforeEach(() => {
+    jest.clearAllMocks()
+    resetLocalLoadStateForTests()
+  })
 
   function txRedis(execResult: unknown[] | Error) {
     const tx = {
@@ -253,5 +262,68 @@ describe('readSharedCacheWriteFenceWithEntries', () => {
       fence: null,
       entries: [null],
     })
+  })
+})
+
+describe('getOrSetWithLock degraded-Redis protection', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    resetLocalLoadStateForTests()
+    mockMemoryGet.mockReturnValue(null)
+  })
+
+  function lockFailingRedis() {
+    return {
+      get: jest.fn().mockResolvedValue(null),
+      set: jest.fn(async () => {
+        throw new Error('upstash unavailable')
+      }),
+      eval: jest.fn().mockResolvedValue(1),
+      del: jest.fn().mockResolvedValue(1),
+    }
+  }
+
+  it('single-flights concurrent loads of the same key within one instance', async () => {
+    mockGetSharedRedis.mockResolvedValue(lockFailingRedis())
+    let release: (value: string) => void = () => undefined
+    const fetcher = jest.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          release = resolve
+        })
+    )
+
+    const loads = Promise.all([
+      getOrSetWithLock('hot-key', fetcher, { ttl: 300, skipMemory: true }),
+      getOrSetWithLock('hot-key', fetcher, { ttl: 300, skipMemory: true }),
+      getOrSetWithLock('hot-key', fetcher, { ttl: 300, skipMemory: true }),
+    ])
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    release('db-value')
+
+    await expect(loads).resolves.toEqual(['db-value', 'db-value', 'db-value'])
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
+  it('serves a short-lived local copy while Redis lock calls keep failing', async () => {
+    mockGetSharedRedis.mockResolvedValue(lockFailingRedis())
+    const fetcher = jest.fn().mockResolvedValue('db-value')
+
+    await getOrSetWithLock('degraded-key', fetcher, { ttl: 300, skipMemory: true })
+    await getOrSetWithLock('degraded-key', fetcher, { ttl: 300, skipMemory: true })
+
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not use the degraded local copy once it expires', async () => {
+    mockGetSharedRedis.mockResolvedValue(lockFailingRedis())
+    const fetcher = jest.fn().mockResolvedValue('db-value')
+    const realNow = Date.now
+    await getOrSetWithLock('expiring-key', fetcher, { ttl: 300, skipMemory: true })
+    jest.spyOn(Date, 'now').mockImplementation(() => realNow() + 6_000)
+    await getOrSetWithLock('expiring-key', fetcher, { ttl: 300, skipMemory: true })
+    jest.spyOn(Date, 'now').mockRestore()
+
+    expect(fetcher).toHaveBeenCalledTimes(2)
   })
 })

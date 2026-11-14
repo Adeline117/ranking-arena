@@ -52,7 +52,11 @@ describe('Arena Bot publication cron pause', () => {
   )
 
   it('keeps both routes behind withCron so cron authentication remains unchanged', () => {
-    expect(mockWithCron).toHaveBeenCalledWith('auto-post-market-summary', expect.any(Function))
-    expect(mockWithCron).toHaveBeenCalledWith('auto-post-weekly-recap', expect.any(Function))
+    expect(mockWithCron).toHaveBeenCalledWith('auto-post-market-summary', expect.any(Function), {
+      maxDurationSec: expect.any(Number),
+    })
+    expect(mockWithCron).toHaveBeenCalledWith('auto-post-weekly-recap', expect.any(Function), {
+      maxDurationSec: expect.any(Number),
+    })
   })
 })

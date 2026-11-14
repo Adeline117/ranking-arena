@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { RankingTable } from '../RankingTable'
 import type { Trader } from '../RankingTableTypes'
 
@@ -28,14 +28,14 @@ jest.mock('../TraderRow', () => ({
   ),
 }))
 
-jest.mock('../TraderCard', () => ({
-  TraderCard: ({ trader, rank, series }: { trader: Trader; rank: number; series?: number[] }) => (
+jest.mock('../MobileRankRows', () => ({
+  MobileRankHeader: () => <div data-testid="mobile-rank-header" />,
+  TraderMobileRow: ({ trader, rank }: { trader: Trader; rank: number }) => (
     <div
       data-testid="published-rank-card"
       data-trader-id={trader.id}
       data-rank={rank}
       data-arena-score={trader.arena_score ?? 'unknown'}
-      data-rank-series={series ? JSON.stringify(series) : 'none'}
     />
   ),
 }))
@@ -211,12 +211,11 @@ describe('RankingTable persisted rank authority', () => {
     ])
   })
 
-  it('rejects a legacy bare rank-history cache payload instead of replaying its sparkline', async () => {
+  it('mobile compact rows do not fetch the retired rank-history sparkline series', async () => {
+    // The ~56px compact rows (owner 2026-11-13) carry no sparkline, so the
+    // card-era batch POST to /api/rankings/rank-history was removed with them.
     setViewport(true)
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ 'binance_futures:published-37': [7, 3] }),
-    }) as jest.Mock
+    global.fetch = jest.fn() as jest.Mock
 
     render(
       <RankingTable
@@ -229,14 +228,8 @@ describe('RankingTable persisted rank authority', () => {
       />
     )
 
-    await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
-        '/api/rankings/rank-history',
-        expect.objectContaining({ method: 'POST' })
-      )
-    })
-    await waitFor(() => {
-      expect(screen.getByTestId('published-rank-card')).toHaveAttribute('data-rank-series', 'none')
-    })
+    expect(await screen.findByTestId('published-rank-card')).toBeInTheDocument()
+    expect(screen.getByTestId('mobile-rank-header')).toBeInTheDocument()
+    expect(global.fetch).not.toHaveBeenCalledWith('/api/rankings/rank-history', expect.anything())
   })
 })

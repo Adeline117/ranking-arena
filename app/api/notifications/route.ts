@@ -60,8 +60,17 @@ export const GET = withAuth(
       }
 
       return successWithPagination(
-        { notifications, unread_count: features.social ? unreadCount : notifications.length },
-        { limit, offset, has_more: notifications.length === limit }
+        {
+          notifications,
+          // With social off the DB count includes hidden social rows, so count
+          // the visible unread rows instead (not every visible row).
+          unread_count: features.social
+            ? unreadCount
+            : notifications.filter((n: { read?: boolean }) => !n.read).length,
+        },
+        // Paging follows what the DB returned: a page that had social rows
+        // filtered out is shorter than `limit` but is not the last page.
+        { limit, offset, has_more: initialNotifications.length === limit }
       )
     } catch (error: unknown) {
       return handleError(error, 'notifications GET')

@@ -1,15 +1,10 @@
 name: Build Ingest Worker Image
 
-# Builds the release-stamped ingest-worker container (worker/Dockerfile.ingest) and
-# pushes it to GitHub Container Registry (ghcr.io). Release/SHA tags are
-# conflict-checked aliases; the recorded digest is the authoritative artifact
-# identity. Production SG rollout currently uses the transactional PM2 artifact
-# path; direct container cutover remains disabled until it has the same host lease
-# and automatic rollback guarantees.
-#
-# No extra secrets: pushing to ghcr.io uses the built-in GITHUB_TOKEN. The image is
-# private to the repo by default; the SG box pulls it with a read:packages PAT (set
-# during cutover — see the runbook).
+# Builds the ingest-worker container (worker/Dockerfile.ingest), smoke-tests it on
+# the runner, and only then pushes it to ghcr.io. Nothing deploys this image: the
+# SG worker runs through the PM2 path, and container rollout stays disabled (see
+# docs/INGEST_WORKER_DEPLOY.md). A future rollout must reference the pushed digest,
+# not a tag.
 #
 # SECURITY SUSPENDED (V1 NO-GO): main currently has no enforceable protection,
 # so a push must not hand repository code a packages:write token. The job is
@@ -17,9 +12,7 @@ name: Build Ingest Worker Image
 # protected tag/release or an environment-only gate with a required reviewer.
 
 on:
-  # Build only when an actual worker runtime input changes. The production Gate
-  # compares the deterministic release ID, so app/docs-only commits safely reuse
-  # the already-smoked image instead of forcing a meaningless fleet restart.
+  # These paths are the worker runtime inputs hashed by worker-release-id.mjs.
   push:
     branches: [main]
     paths:
@@ -42,11 +35,6 @@ jobs:
   build-push:
     if: ${{ false }}
     runs-on: ubuntu-latest
-    outputs:
-      image: ${{ steps.image.outputs.name }}
-      worker_release_id: ${{ steps.worker_release.outputs.id }}
-      digest: ${{ steps.promote.outputs.digest }}
-      digest_ref: ${{ steps.promote.outputs.digest_ref }}
     permissions:
       contents: read
       packages: write # push to ghcr.io
@@ -55,202 +43,62 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      # Push builds may finish after an app/docs-only commit advances main; the
-      # triggering commit remains an immutable main commit.
-      - name: Derive deterministic worker release ID
-        id: worker_release
+      - name: Resolve release ID and image name
+        id: meta
         shell: bash
         run: |
           set -euo pipefail
-          RELEASE_ID="$(node scripts/ci/worker-release-id.mjs "$GITHUB_SHA")"
-          if [[ ! "$RELEASE_ID" =~ ^[0-9a-f]{64}$ ]]; then
-            echo "::error::worker release ID is malformed"
-            exit 1
-          fi
-          printf 'id=%s\n' "$RELEASE_ID" >> "$GITHUB_OUTPUT"
-      # OCI image repository names must be lowercase. GitHub preserves the
-      # account's display casing in GITHUB_REPOSITORY (Adeline117/...), which
-      # otherwise makes buildx reject the tag before the Docker build starts.
-      - name: Prepare lowercase image name
-        id: image
+          release_id="$(node scripts/ci/worker-release-id.mjs "$GITHUB_SHA")"
+          [[ "$release_id" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::malformed worker release ID"; exit 1; }
+          # OCI repository names must be lowercase; GITHUB_REPOSITORY keeps display casing.
+          image="ghcr.io/$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')/ingest-worker"
+          printf 'release_id=%s\nimage=%s\n' "$release_id" "$image" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      # Built into the runner's local Docker only. Nothing reaches the registry
+      # until the smoke step below has passed.
+      - name: Build image locally
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: worker/Dockerfile.ingest
+          load: true
+          push: false
+          build-args: |
+            DEPLOYED_SHA=${{ github.sha }}
+            WORKER_RELEASE_ID=${{ steps.meta.outputs.release_id }}
+          tags: ${{ steps.meta.outputs.image }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      # Runs before registry login, so image code never sees the packages token.
+      - name: Smoke image — baked stamps + actual module loads
         shell: bash
+        env:
+          IMAGE_REF: ${{ steps.meta.outputs.image }}:${{ github.sha }}
+          DEPLOYED_SHA: ${{ github.sha }}
+          WORKER_RELEASE_ID: ${{ steps.meta.outputs.release_id }}
         run: |
           set -euo pipefail
-          repo=$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')
-          image="ghcr.io/$repo/ingest-worker"
-          printf 'name=%s\n' "$image" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+          baked_sha=$(docker run --rm --entrypoint cat "$IMAGE_REF" /app/DEPLOYED_SHA)
+          [ "$baked_sha" = "$DEPLOYED_SHA" ] || { echo "::error::baked SHA stamp mismatch"; exit 1; }
+          baked_release=$(docker run --rm --entrypoint cat "$IMAGE_REF" /app/WORKER_RELEASE_ID)
+          [ "$baked_release" = "$WORKER_RELEASE_ID" ] || { echo "::error::baked release stamp mismatch"; exit 1; }
+          docker run --rm --entrypoint node "$IMAGE_REF" --import tsx --input-type=module -e \
+            "for (const m of ['bullmq','ioredis','viem','abitype','luxon','playwright','tsx','dotenv','pg','ccxt']) await import(m); await import('./worker/src/ingest/heartbeat.ts'); console.log('worker-modules-loaded')"
       - name: Log in to ghcr.io
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Prepare unique quarantine tag
-        id: quarantine
+      - name: Push smoked image
         shell: bash
         env:
-          IMAGE: ${{ steps.image.outputs.name }}
+          IMAGE: ${{ steps.meta.outputs.image }}
+          WORKER_RELEASE_ID: ${{ steps.meta.outputs.release_id }}
         run: |
           set -euo pipefail
-          tag="quarantine-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${GITHUB_SHA}"
-          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
-          printf 'ref=%s:%s\n' "$IMAGE" "$tag" >> "$GITHUB_OUTPUT"
-      # This is intentionally the only registry tag created before smoke. A bad
-      # image remains quarantined; this workflow never gives it a release/SHA alias.
-      - name: Build + push quarantine image
-        id: build_quarantine
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: worker/Dockerfile.ingest
-          push: true
-          build-args: |
-            DEPLOYED_SHA=${{ github.sha }}
-            WORKER_RELEASE_ID=${{ steps.worker_release.outputs.id }}
-          tags: ${{ steps.quarantine.outputs.ref }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-      # Pull by the OCI digest returned by buildx. Reading the baked stamp and
-      # importing each runtime dependency (rather than merely resolving a path)
-      # validates the exact bytes that can later be deployed.
-      - name: Smoke quarantine digest — stamp + actual module loads
-        shell: bash
-        env:
-          IMAGE: ${{ steps.image.outputs.name }}
-          DIGEST: ${{ steps.build_quarantine.outputs.digest }}
-          DEPLOYED_SHA: ${{ github.sha }}
-          WORKER_RELEASE_ID: ${{ steps.worker_release.outputs.id }}
-        run: |
-          set -euo pipefail
-          set -o pipefail
-          if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-            echo "::error::buildx returned a malformed OCI digest"
-            exit 1
-          fi
-          digest_ref="${IMAGE}@${DIGEST}"
-          docker pull "$digest_ref"
-          baked_sha=$(docker run --rm --entrypoint cat \
-            "$digest_ref" /app/DEPLOYED_SHA)
-          [ "$baked_sha" = "$DEPLOYED_SHA" ] || {
-            echo "::error::image deployed SHA stamp is not exact"; exit 1;
-          }
-          baked_release=$(docker run --rm --entrypoint cat \
-            "$digest_ref" /app/WORKER_RELEASE_ID)
-          [ "$baked_release" = "$WORKER_RELEASE_ID" ] || {
-            echo "::error::image worker release stamp is not exact"; exit 1;
-          }
-          docker run --rm --entrypoint node "$digest_ref" --import tsx --input-type=module -e \
-            "for (const m of ['bullmq','ioredis','viem','abitype','luxon','playwright','tsx','dotenv','pg','ccxt']) await import(m); await import('./worker/src/ingest/heartbeat.ts'); console.log('worker-modules-loaded')"
-      # Check every formal alias before creating any of them. An existing alias
-      # may be reused only when it already resolves to this exact digest; a
-      # different digest is a release collision and fails without retagging it.
-      - name: Promote verified digest to release and SHA aliases
-        id: promote
-        shell: bash
-        env:
-          IMAGE: ${{ steps.image.outputs.name }}
-          DIGEST: ${{ steps.build_quarantine.outputs.digest }}
-          WORKER_RELEASE_ID: ${{ steps.worker_release.outputs.id }}
-          AUDIT_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-
-          if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-            echo "::error::refusing to promote a malformed OCI digest"
-            exit 1
-          fi
-
-          inspect_digest() {
-            local ref="$1"
-            local output digest
-            if output="$(docker buildx imagetools inspect "$ref" 2>&1)"; then
-              digest="$(printf '%s\n' "$output" | awk '$1 == "Digest:" { print $2; exit }')"
-              if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-                echo "::error::registry returned no valid digest for $ref" >&2
-                printf '%s\n' "$output" >&2
-                return 1
-              fi
-              printf '%s\n' "$digest"
-              return 0
-            fi
-            # GHCR/buildx reports an absent tag as exactly
-            # `ERROR: <requested-ref>: not found`. Match the requested ref
-            # literally so an auth/network error cannot be mistaken for a
-            # safely creatable missing alias.
-            if grep -Fqx "ERROR: $ref: not found" <<<"$output" \
-              || grep -Eqi 'manifest unknown|name unknown|404 Not Found|failed to resolve source metadata.*: not found' <<<"$output"; then
-              return 2
-            fi
-            echo "::error::could not safely inspect $ref" >&2
-            printf '%s\n' "$output" >&2
-            return 1
-          }
-
-          declare -a targets=(
-            "${IMAGE}:${WORKER_RELEASE_ID}"
-            "${IMAGE}:${AUDIT_SHA}"
-          )
-          declare -a missing=()
-          for ref in "${targets[@]}"; do
-            if existing="$(inspect_digest "$ref")"; then
-              if [[ "$existing" != "$DIGEST" ]]; then
-                echo "::error::refusing to overwrite $ref ($existing) with $DIGEST"
-                exit 1
-              fi
-              echo "$ref already resolves to verified digest $DIGEST"
-            else
-              status=$?
-              if [[ "$status" -eq 2 ]]; then
-                missing+=("$ref")
-              else
-                exit "$status"
-              fi
-            fi
-          done
-
-          if (( ${#missing[@]} > 0 )); then
-            declare -a tag_args=()
-            for ref in "${missing[@]}"; do
-              tag_args+=(--tag "$ref")
-            done
-            docker buildx imagetools create "${tag_args[@]}" "${IMAGE}@${DIGEST}"
-          fi
-
-          for ref in "${targets[@]}"; do
-            promoted_digest="$(inspect_digest "$ref")" || {
-              echo "::error::could not verify promoted alias $ref"
-              exit 1
-            }
-            if [[ "$promoted_digest" != "$DIGEST" ]]; then
-              echo "::error::promoted alias $ref resolved to $promoted_digest, expected $DIGEST"
-              exit 1
-            fi
-          done
-
-          digest_ref="${IMAGE}@${DIGEST}"
-          printf 'digest=%s\n' "$DIGEST" >> "$GITHUB_OUTPUT"
-          printf 'digest_ref=%s\n' "$digest_ref" >> "$GITHUB_OUTPUT"
-          jq -n \
-            --arg image "$IMAGE" \
-            --arg digest "$DIGEST" \
-            --arg digest_ref "$digest_ref" \
-            --arg worker_release_id "$WORKER_RELEASE_ID" \
-            --arg audit_sha "$AUDIT_SHA" \
-            --arg quarantine_ref "${{ steps.quarantine.outputs.ref }}" \
-            '{schema_version: 1, image: $image, digest: $digest, digest_ref: $digest_ref, worker_release_id: $worker_release_id, audit_sha: $audit_sha, quarantine_ref: $quarantine_ref}' \
-            > worker-image-release.json
-          {
-            echo '### Verified ingest Worker image'
-            echo
-            echo "- Digest ref: \`$digest_ref\`"
-            echo "- Worker release ID: \`$WORKER_RELEASE_ID\`"
-            echo "- Audit SHA: \`$AUDIT_SHA\`"
-          } >> "$GITHUB_STEP_SUMMARY"
-      - name: Upload digest deployment record
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: ingest-worker-release-${{ steps.worker_release.outputs.id }}
-          path: worker-image-release.json
-          if-no-files-found: error
-          retention-days: 30
+          docker tag "$IMAGE:$GITHUB_SHA" "$IMAGE:$WORKER_RELEASE_ID"
+          docker push "$IMAGE:$GITHUB_SHA"
+          docker push "$IMAGE:$WORKER_RELEASE_ID"
+          digest_ref=$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE:$GITHUB_SHA")
+          echo "Pushed \`$digest_ref\` (release \`$WORKER_RELEASE_ID\`)" >> "$GITHUB_STEP_SUMMARY"

@@ -22,6 +22,10 @@ export const LAUNCH_MIGRATION_PHASES = Object.freeze([
     name: 'quarantinedPredeploy',
     sourceArray: 'QUARANTINED_PREDEPLOY_MIGRATIONS',
   }),
+  Object.freeze({
+    name: 'adr023SingleFile',
+    sourceArray: 'ADR023_SINGLE_FILE_MIGRATIONS',
+  }),
   Object.freeze({ name: 'postdeploy', sourceArray: 'POSTDEPLOY_MIGRATIONS' }),
   Object.freeze({
     name: 'recoveryPrerequisites',

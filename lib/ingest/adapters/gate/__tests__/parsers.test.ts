@@ -162,6 +162,20 @@ describe('parseGatePositions', () => {
     expect(p.entryPrice).toBeCloseTo(69841.1, 1)
     expect(p.unrealizedPnl).toBeCloseTo(4978.93, 2)
   })
+
+  it('throws on HTTP-200 business errors instead of reporting a flat book', () => {
+    expect(() => parseGatePositions(null, ctx)).toThrow(/non-success/)
+    expect(() => parseGatePositions({ code: 40001, message: 'risk', data: null }, ctx)).toThrow(
+      /code=40001/
+    )
+    expect(() => parseGatePositions({ code: 200, data: null }, ctx)).toThrow(/malformed/)
+    expect(() => parseGatePositions({ code: 200, data: { list: [] } }, ctx)).toThrow(/malformed/)
+  })
+
+  it('accepts a genuine empty book only from a success envelope', () => {
+    expect(parseGatePositions({ code: 200, message: '', data: [] }, ctx)).toEqual([])
+    expect(parseGatePositions({ code: 0, message: 'ok', data: [] }, ctx)).toEqual([])
+  })
 })
 
 describe('parseGateHistory', () => {

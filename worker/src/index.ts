@@ -38,13 +38,20 @@ async function main() {
 
   const [
     { Worker },
-    { getConnection, closeConnection },
-    { QUEUE_NAME, JOB, getQueue },
+    { getRankingCommandChainConnection, closeRankingCommandChainConnection },
+    { QUEUE_NAME, JOB, getQueue, rankingCommandChainBullConnection },
     { PIPELINE_WORKER_CONCURRENCY },
-    { assertSuccessfulMeilisearchSyncResponse },
+    { assertSuccessfulMeilisearchSyncResponse: assertMeilisearchSyncLoaded },
     { registerSchedules },
     { startDashboard },
     { assertMetricTrustWorkerReadiness },
+    { startScoringHeartbeat, scoringHeartbeatNodeId },
+    { markWorkerStarted, recordWorkerProgress },
+    { publishLeaderboardSeason, pgRankPublicationDatabase, createDefaultCohortScorer },
+    { rankPublicationClientConnect, closeRankPublicationPool },
+    { alert: ingestAlert },
+    { syncPublicRankingsToMeilisearch },
+    { routeRankPublicationAlert },
   ] = await Promise.all([
     import('bullmq'),
     import('./connection'),
@@ -54,7 +61,43 @@ async function main() {
     import('./scheduler'),
     import('./dashboard'),
     import('./ingest/metric-trust-readiness'),
+    import('./scoring-heartbeat'),
+    import('./ingest/progress'),
+    import('../../lib/rankings/publication/publish-season'),
+    import('../../lib/ingest/db'),
+    import('../../lib/ingest/alerting'),
+    import('../../lib/search/meilisearch-sync'),
+    import('../../lib/rankings/publication/alert-routing'),
   ])
+  // An assertion function must carry an explicit type to be callable (TS2775).
+  const assertSuccessfulMeilisearchSyncResponse: typeof import('./pipeline-response').assertSuccessfulMeilisearchSyncResponse =
+    assertMeilisearchSyncLoaded
+
+  // The season publication (and the Meilisearch read) runs in-process on the
+  // worker's direct postgres connection (the fence/claim/seal RPCs are
+  // owner-only), as one transaction, on a dedicated 2-client pool so it neither
+  // starves nor is starved by ingest (lib/ingest/db.ts RANK_PUBLICATION_POOL_MAX).
+  const connectPublicationClient = async () => {
+    const client = await rankPublicationClientConnect()
+    return {
+      query: (text: string, values?: readonly unknown[]) =>
+        client.query(text, values ? [...values] : undefined),
+      release: (destroy?: boolean) => client.release(destroy),
+    }
+  }
+  const rankPublicationDatabase = pgRankPublicationDatabase(connectPublicationClient)
+  const scoreCohort = createDefaultCohortScorer()
+  // Publication alerts go through the shared ingest alert interface. Routing
+  // (lib/rankings/publication/alert-routing) gives every isolated source its
+  // own season×source page-cooldown key and a refusal its own key; exclusion
+  // warnings and restorations go to the digest. The orchestrator logs and swallows delivery failures itself.
+  // Inline type import: the entry keeps the V1 gate as its only top-level import.
+  const rankPublicationAlert: import('../../lib/rankings/publication/publish-season').RankPublicationAlertSink =
+    async (publicationAlert) => {
+      for (const routed of routeRankPublicationAlert(publicationAlert)) {
+        await ingestAlert(getRankingCommandChainConnection(), routed)
+      }
+    }
 
   console.log('[worker] Arena Pipeline Worker starting...')
 
@@ -73,41 +116,41 @@ async function main() {
     async (job) => {
       switch (job.name) {
         case JOB.COMPUTE_LEADERBOARD: {
-          // Trigger Vercel's compute-leaderboard endpoint (still runs there)
-          const { season } = job.data as { season: string }
-          const cronSecret = process.env.CRON_SECRET
-          if (!cronSecret) {
-            job.log('[skip] CRON_SECRET not set, cannot trigger compute-leaderboard')
-            return { skipped: true }
-          }
-          const siteUrl = process.env.SITE_URL || 'https://www.arenafi.org'
-          job.log(`Triggering compute-leaderboard for ${season}`)
-          const resp = await fetch(`${siteUrl}/api/cron/compute-leaderboard?season=${season}`, {
-            headers: { Authorization: `Bearer ${cronSecret}` },
-            signal: AbortSignal.timeout(300_000), // 5 min timeout
+          // Score + publish one season: claim -> cohort upsert -> cleanup ->
+          // rerank -> seal, all-or-nothing (lib/rankings/publication). The
+          // former HTTP trigger targeted a 410 route tombstone.
+          const { season } = job.data as { season: '7D' | '30D' | '90D' }
+          job.log(`Publishing leaderboard season ${season}`)
+          const published = await publishLeaderboardSeason(season, {
+            database: rankPublicationDatabase,
+            scoreCohort,
+            log: (message) => void job.log(message),
+            alert: rankPublicationAlert,
           })
-          const body = await resp.json().catch(() => ({}))
           job.log(
-            `compute-leaderboard ${season}: ${resp.status} — ${JSON.stringify(body).slice(0, 200)}`
+            `published ${season}: cohort=${published.scoreCohortId} rows=${published.publishedRankCount} sources=${published.sources.length}`
           )
-          if (!resp.ok) throw new Error(`compute-leaderboard ${season} returned ${resp.status}`)
-          return { season, status: resp.status, ...body }
+          // Output watermark (audit P2-8): only a successful publication counts.
+          await recordWorkerProgress(
+            getRankingCommandChainConnection(),
+            'scoring',
+            scoringHeartbeatNodeId()
+          )
+          return published
         }
 
         case JOB.SYNC_MEILISEARCH: {
-          // Trigger Vercel's sync-meilisearch endpoint
-          const msSecret = process.env.CRON_SECRET
-          if (!msSecret) return { skipped: true, reason: 'no CRON_SECRET' }
-          const msUrl = process.env.SITE_URL || 'https://www.arenafi.org'
-          job.log('Triggering sync-meilisearch')
-          const msResp = await fetch(`${msUrl}/api/cron/sync-meilisearch`, {
-            headers: { Authorization: `Bearer ${msSecret}` },
-            signal: AbortSignal.timeout(120_000),
+          // In-process sync from the sealed public view. The former HTTP call
+          // targeted /api/cron/sync-meilisearch, a V1 410 tombstone.
+          job.log('Syncing sealed public rankings to Meilisearch')
+          const synced = await syncPublicRankingsToMeilisearch({
+            connect: connectPublicationClient,
+            meiliUrl: process.env.MEILISEARCH_URL ?? '',
+            meiliAdminKey: process.env.MEILISEARCH_ADMIN_KEY ?? '',
+            log: (message) => void job.log(message),
           })
-          const msBody = await msResp.json().catch(() => ({}))
-          job.log(`sync-meilisearch: ${msResp.status}`)
-          assertSuccessfulMeilisearchSyncResponse(msResp.ok, msResp.status, msBody)
-          return { status: msResp.status, ...msBody }
+          assertSuccessfulMeilisearchSyncResponse(true, 200, synced)
+          return synced
         }
 
         default:
@@ -116,7 +159,7 @@ async function main() {
       }
     },
     {
-      connection: getConnection(),
+      connection: rankingCommandChainBullConnection(),
       concurrency: PIPELINE_WORKER_CONCURRENCY,
       removeOnComplete: { age: 24 * 3600, count: 1000 }, // Keep last 1000 completed jobs for 24h
       removeOnFail: { age: 7 * 24 * 3600, count: 5000 }, // Keep failed jobs for 7 days
@@ -166,12 +209,18 @@ async function main() {
     console.error('[worker] UNCAUGHT EXCEPTION:', err)
     worker
       .close()
-      .then(() => closeConnection())
+      .then(() => closeRankingCommandChainConnection())
       .finally(() => process.exit(1))
   })
   process.on('unhandledRejection', (reason) => {
     console.error('[worker] UNHANDLED REJECTION:', reason)
   })
+
+  // Liveness heartbeat on the shared roster (same mechanism as the ingest
+  // worker). The first HSET must commit before this process reports ready,
+  // so a scoring worker that cannot be monitored does not run unmonitored.
+  const heartbeatTimer = await startScoringHeartbeat(getRankingCommandChainConnection())
+  await markWorkerStarted(getRankingCommandChainConnection(), scoringHeartbeatNodeId())
 
   console.log(
     `[worker] Ready — processing queue "${QUEUE_NAME}" with ` +
@@ -185,8 +234,10 @@ async function main() {
   // 4. Graceful shutdown
   const shutdown = async (signal: string) => {
     console.log(`\n[worker] ${signal} received, shutting down gracefully...`)
+    clearInterval(heartbeatTimer)
     await worker.close()
-    await closeConnection()
+    await closeRankingCommandChainConnection()
+    await closeRankPublicationPool()
     console.log('[worker] Shutdown complete')
     process.exit(0)
   }

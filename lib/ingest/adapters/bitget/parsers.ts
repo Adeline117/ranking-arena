@@ -300,8 +300,19 @@ function bitgetSide(v: unknown): 'long' | 'short' | null {
  * contract size / mark price / uPnL — those stay NULL (NULL-collapse, §6).
  */
 export function parseBitgetPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const data = (raw as Dict)?.data
-  if (!Array.isArray(data)) return []
+  // Tier-D replaces the trader's whole open-position set, so an HTTP-200
+  // business error (risk soft-block, `data: null`) must never parse as "flat".
+  // traderPosition answers code "200" (live capture); the trace API family
+  // answers "00000". Anything else is a failed fetch, not an empty book.
+  const envelope = raw as Dict | null
+  const code = envelope?.code
+  if (code !== '200' && code !== '00000' && code !== 200) {
+    throw new Error(`[bitget] positions returned a non-success API envelope (code=${String(code)})`)
+  }
+  const data = envelope?.data
+  if (!Array.isArray(data)) {
+    throw new Error('[bitget] positions returned a malformed envelope (data is not an array)')
+  }
   const out: ParsedPosition[] = []
   for (const item of data as Dict[]) {
     const symbol = (item.symbolDisplayName ?? item.symbolId) as string | undefined

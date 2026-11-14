@@ -9,6 +9,7 @@ import { success as apiSuccess } from '@/lib/api/response'
 import { ApiError } from '@/lib/api/errors'
 import { createLogger } from '@/lib/utils/logger'
 import { recordAdminLog } from '@/lib/admin/audit-log'
+import { ADMIN_BAN_DURATION } from '@/lib/auth/deletion-ban'
 
 const logger = createLogger('admin-ban-user')
 
@@ -60,6 +61,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       if (banError) {
         logger.error('Error banning user', { error: banError, userId, adminId: admin.id })
         throw ApiError.database(banError.message)
+      }
+
+      // Block sign-in and token refresh too. banned_at stays the source of
+      // truth for server routes, so a failure here is logged, not fatal.
+      const { error: authBanError } = await supabase.auth.admin.updateUserById(userId, {
+        ban_duration: ADMIN_BAN_DURATION,
+      })
+      if (authBanError) {
+        logger.error('User banned in profile but auth-level ban failed', {
+          userId,
+          adminId: admin.id,
+          error: authBanError.message,
+        })
       }
 
       // Log the action

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -27,6 +27,11 @@ import {
 } from '@/lib/notifications/ranking-change-fence'
 
 type Notification = NotificationWithActor
+interface NotificationsPage {
+  notifications: Notification[]
+  unread_count: number
+  hasMore: boolean
+}
 
 // U10-2: chip filter → actual stored notification type(s). Producers emit
 // `new_follower` (not `follow`) and `post_reply` (not `comment`), so the naive
@@ -109,6 +114,41 @@ export default function NotificationsList({
   }, [activateViewer, scopeKey, viewer])
 
   // React Query infinite scroll for notifications
+  const queryClient = useQueryClient()
+  const notificationsQueryKey = useMemo(
+    () => [
+      'notifications',
+      NOTIFICATION_READER_CACHE_EPOCH,
+      viewer?.viewerKey ?? 'inactive',
+      viewer?.sessionGeneration ?? -1,
+    ],
+    [viewer?.viewerKey, viewer?.sessionGeneration]
+  )
+  // Optimistic read-state changes must also land in the query cache: the local
+  // list is re-derived from it on every page load / remount, and the badge is
+  // re-synced from pages[0].unread_count, so a cache-blind update reverts.
+  const patchCachedNotifications = useCallback(
+    (markRead: (n: Notification) => boolean | null, unreadDelta: (unread: number) => number) => {
+      queryClient.setQueryData<InfiniteData<NotificationsPage, number>>(
+        notificationsQueryKey,
+        (prev) =>
+          prev && {
+            ...prev,
+            pages: prev.pages.map((page, index) => ({
+              ...page,
+              notifications: page.notifications.map((n) => {
+                const read = markRead(n)
+                return read == null || read === n.read ? n : { ...n, read }
+              }),
+              unread_count:
+                index === 0 ? Math.max(0, unreadDelta(page.unread_count)) : page.unread_count,
+            })),
+          }
+      )
+    },
+    [notificationsQueryKey, queryClient]
+  )
+
   const {
     data: notifData,
     fetchNextPage,
@@ -118,13 +158,8 @@ export default function NotificationsList({
     isError: loadFailed,
     refetch: refetchNotifications,
   } = useInfiniteQuery({
-    queryKey: [
-      'notifications',
-      NOTIFICATION_READER_CACHE_EPOCH,
-      viewer?.viewerKey ?? 'inactive',
-      viewer?.sessionGeneration ?? -1,
-    ],
-    queryFn: async ({ pageParam = 0 }: { pageParam: number }) => {
+    queryKey: notificationsQueryKey,
+    queryFn: async ({ pageParam = 0 }: { pageParam: number }): Promise<NotificationsPage> => {
       if (!viewer || !isInboxViewerCurrent(viewer, authRef.current)) {
         throw new Error('stale inbox viewer')
       }
@@ -226,10 +261,14 @@ export default function NotificationsList({
 
     // Delta: capture IDs that were unread (not a full snapshot — just the delta set)
     const unreadIds = new Set(notifications.filter((n) => !n.read).map((n) => n.id))
-    const previousUnreadCount = unreadNotifications
+    const previousUnreadCount = selectScopedUnreadNotifications(useInboxStore.getState(), operation)
 
     // Optimistic update
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+    patchCachedNotifications(
+      () => true,
+      () => 0
+    )
     setUnreadNotifications(operation, 0)
 
     try {
@@ -252,7 +291,14 @@ export default function NotificationsList({
       if (!isInboxViewerCurrent(operation, authRef.current)) return
       // Delta rollback: only restore read=false for IDs that were unread before
       setNotifications((prev) => prev.map((n) => (unreadIds.has(n.id) ? { ...n, read: false } : n)))
-      setUnreadNotifications(operation, previousUnreadCount)
+      patchCachedNotifications(
+        (n) => (unreadIds.has(n.id) ? false : null),
+        (unread) => unread + unreadIds.size
+      )
+      // Re-add what this operation cleared on top of anything that arrived
+      // (e.g. a realtime insert) while the request was in flight.
+      const currentCount = selectScopedUnreadNotifications(useInboxStore.getState(), operation)
+      setUnreadNotifications(operation, currentCount + previousUnreadCount)
       showToast(t('operationFailed'), 'error')
     } finally {
       if (pendingMarkAllRef.current === operationScopeKey) pendingMarkAllRef.current = null
@@ -263,7 +309,7 @@ export default function NotificationsList({
     setUnreadNotifications,
     showToast,
     t,
-    unreadNotifications,
+    patchCachedNotifications,
     viewer,
   ])
 
@@ -284,7 +330,14 @@ export default function NotificationsList({
 
       // Optimistic update (delta-based)
       setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)))
-      setUnreadNotifications(operation, Math.max(0, unreadNotifications - 1))
+      patchCachedNotifications(
+        (n) => (n.id === id ? true : null),
+        (unread) => unread - 1
+      )
+      setUnreadNotifications(
+        operation,
+        Math.max(0, selectScopedUnreadNotifications(useInboxStore.getState(), operation) - 1)
+      )
 
       try {
         const result = await authedFetch(
@@ -306,6 +359,10 @@ export default function NotificationsList({
         if (!isInboxViewerCurrent(operation, authRef.current)) return
         // Delta rollback: reverse the -1 from current state
         setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: false } : n)))
+        patchCachedNotifications(
+          (n) => (n.id === id ? false : null),
+          (unread) => unread + 1
+        )
         const currentCount = selectScopedUnreadNotifications(useInboxStore.getState(), operation)
         setUnreadNotifications(operation, currentCount + 1)
         showToast(t('operationFailed'), 'error')
@@ -319,7 +376,7 @@ export default function NotificationsList({
       setUnreadNotifications,
       showToast,
       t,
-      unreadNotifications,
+      patchCachedNotifications,
       viewer,
     ]
   )
@@ -514,7 +571,7 @@ export default function NotificationsList({
                       borderRadius: '50%',
                       background: tokens.colors.bg.tertiary,
                       flexShrink: 0,
-                      animation: 'shimmer 1.5s ease-in-out infinite',
+                      animation: 'skeleton-sweep 1.5s ease-in-out infinite',
                       backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`,
                       backgroundSize: '200% 100%',
                     }}
@@ -526,7 +583,7 @@ export default function NotificationsList({
                         height: 14,
                         borderRadius: 4,
                         background: tokens.colors.bg.tertiary,
-                        animation: 'shimmer 1.5s ease-in-out infinite',
+                        animation: 'skeleton-sweep 1.5s ease-in-out infinite',
                         backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`,
                         backgroundSize: '200% 100%',
                       }}
@@ -537,7 +594,7 @@ export default function NotificationsList({
                         height: 12,
                         borderRadius: 4,
                         background: tokens.colors.bg.tertiary,
-                        animation: 'shimmer 1.5s ease-in-out infinite',
+                        animation: 'skeleton-sweep 1.5s ease-in-out infinite',
                         backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`,
                         backgroundSize: '200% 100%',
                       }}

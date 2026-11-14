@@ -1,4 +1,11 @@
 /**
+ * LEGACY / UNCONTROLLED. The `arena-worker` entry below runs `npx tsx` against
+ * the SHARED working tree (no pinned release, no rollback). Its controlled
+ * replacement is worker/deploy-scoring-local.sh +
+ * worker/ecosystem.local-scoring.config.cjs (prebuilt artifact, exact-commit
+ * release dir); `arena-ingest-worker` is deployed by deploy-ingest-local.sh.
+ * During the V1 NO-GO neither channel may be executed for real.
+ *
  * PM2 ecosystem config for Arena Pipeline Worker.
  *
  * Usage on Mac Mini:

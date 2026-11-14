@@ -352,6 +352,32 @@ export const tokens = {
     '2xl': '1536px',
   },
 
+  // Page containers (px). One outer container + one gutter per breakpoint so
+  // the nav, hero, source strip and three-column grid share a left/right edge
+  // (owner decision 2026-11-13). Mirrored as CSS custom properties by
+  // lib/performance/critical-css.ts (--container-*, --container-gutter) —
+  // CSS cannot import this file, so a jest test pins the two together.
+  layout: {
+    container: {
+      content: 1200, // reading pages / default nav
+      wide: 1400, // homepage up to the baseline breakpoint
+      max: 1600, // homepage above it
+    },
+    gutter: {
+      mobile: 12, // < breakpoint.md (768)
+      tablet: 16, // 768 – 1023
+      desktop: 32, // ≥ breakpoint.lg (1024)
+    },
+    // Three-column homepage tiers (min-width, px). 1280–1439 compact columns,
+    // exactly 1440 = the owner-protected baseline (240 / 1fr / 260, guarded by
+    // e2e/smoke-critical-path.spec.ts), >1440 wide container + columns.
+    breakpoint: {
+      compact: 1280,
+      baseline: 1440,
+      wide: 1441,
+    },
+  },
+
   // Icon sizes (standardized)
   iconSize: {
     xs: 12,

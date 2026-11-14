@@ -40,8 +40,6 @@ function makeRepo(t) {
   git(repo, 'init', '-q')
   put(repo, '.npmrc', 'engine-strict=true\n')
   put(repo, '.dockerignore', '.env*\nnode_modules\n')
-  put(repo, '.github/workflows/build-ingest-image.yml', 'name: build worker\n')
-  put(repo, '.github/workflows/deploy-ingest-sg.yml', 'name: deploy worker\n')
   put(repo, 'package.json', '{"name":"worker-release-fixture","private":true}\n')
   put(repo, 'package-lock.json', '{"name":"worker-release-fixture","lockfileVersion":3}\n')
   put(repo, 'tsconfig.json', '{"compilerOptions":{"strict":true}}\n')
@@ -97,8 +95,6 @@ test('changes when worker, lib, package, lockfile, npm, or TypeScript inputs cha
     ],
     ['.npmrc', 'engine-strict=false\n'],
     ['.dockerignore', '.env*\nnode_modules\nworker/tests\n'],
-    ['.github/workflows/build-ingest-image.yml', 'name: build worker v2\n'],
-    ['.github/workflows/deploy-ingest-sg.yml', 'name: deploy worker v2\n'],
     ['scripts/ci/worker-release-id.mjs', 'export const contract = 2\n'],
     ['tsconfig.json', '{"compilerOptions":{"strict":false}}\n'],
   ]
@@ -117,8 +113,6 @@ test('rejects missing root files and missing worker or lib trees', async (t) => 
   const missingInputs = [
     '.npmrc',
     '.dockerignore',
-    '.github/workflows/build-ingest-image.yml',
-    '.github/workflows/deploy-ingest-sg.yml',
     'package-lock.json',
     'package.json',
     'tsconfig.json',

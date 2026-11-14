@@ -71,7 +71,7 @@
         {
           "source": "alpha",
           "sourceTraderId": "tie-a",
-          "totalScore": 43.82,
+          "totalScore": 45.31,
           "quality": 0.2,
           "confidence": 0.92,
           "factors": {
@@ -85,7 +85,7 @@
         {
           "source": "beta",
           "sourceTraderId": "tie-b",
-          "totalScore": 43.82,
+          "totalScore": 45.31,
           "quality": 0.2,
           "confidence": 0.92,
           "factors": {
@@ -101,7 +101,7 @@
           "sourceTraderId": "zero-risk-fields",
           "totalScore": 100,
           "quality": 1,
-          "confidence": 0.62,
+          "confidence": 0.53,
           "factors": {
             "roi": 1,
             "pnl": 1,
@@ -113,7 +113,7 @@
         {
           "source": "epsilon",
           "sourceTraderId": "partial",
-          "totalScore": 19.2,
+          "totalScore": 19.49,
           "quality": 0.05,
           "confidence": 0.71,
           "factors": {
@@ -129,7 +129,7 @@
           "sourceTraderId": "null-risk",
           "totalScore": 0,
           "quality": 0,
-          "confidence": 0.62,
+          "confidence": 0.53,
           "factors": {
             "roi": 0,
             "pnl": 0,
@@ -389,9 +389,9 @@
         {
           "source": "extreme",
           "sourceTraderId": "pnl-cap",
-          "totalScore": 70.95,
+          "totalScore": 67.59,
           "quality": 0.78,
-          "confidence": 0.79,
+          "confidence": 0.64,
           "factors": {
             "roi": 0.75,
             "pnl": 1,
@@ -417,9 +417,9 @@
         {
           "source": "extreme",
           "sourceTraderId": "zero",
-          "totalScore": 19.37,
+          "totalScore": 19.1,
           "quality": 0.1,
-          "confidence": 0.62,
+          "confidence": 0.53,
           "factors": {
             "roi": 0.25,
             "pnl": 0,
@@ -452,7 +452,7 @@
     "contract": "arena-score-v4-dense-seed@1",
     "period": "30D",
     "count": 257,
-    "expectedCentDigest": "db2a7a1f5805c76afa12519bde9cc4faf49deeb8bf222b9e57a9b3495bac6f58"
+    "expectedCentDigest": "97231ab23e4d0a319899828dc14eca57ad51678c69420b765625d7531600bde1"
   },
   "roundingBoundary": [
     { "input": 1.005, "expected": 1.01 },

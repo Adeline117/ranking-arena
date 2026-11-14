@@ -29,6 +29,13 @@ git push origin vX.Y.Z
 版本可回滚到任意 tag。生产回滚锚点 = Vercel 部署历史（每个 READY 部署带
 `--meta gateSha`），promote 上一个 READY 即可（RUNBOOK「Deployment Rollback」）。
 
+## 算分进程 arena-worker 的受控发布通道（2026-11，V1 暂停期间不得执行）
+
+- 入口：`worker/deploy-scoring-local.sh --target-sha=<40hex> [--dry-run]`，PM2 配置 `worker/ecosystem.local-scoring.config.cjs`，构建 `worker/build-scoring-worker.mjs`。
+- 与 `deploy-ingest-local.sh` 同等约束：目标必须是 origin/main 中的精确 commit；`git archive` 到不可变目录 `<ARENA_SCORING_RELEASE_ROOT>/<sha>`；按该 commit 的 lockfile 安装依赖并构建单一产物，PM2 用显式 Node 运行产物（不再 `npx tsx` 跑共享工作树）；以该发布日志中的 scoring 心跳写入作为成功判据，失败回滚到上一发布。
+- **V1 NO-GO 期间**：只允许 `--dry-run`（只读：不写文件、不碰 PM2）。真实执行会在目标 commit 的 `V1_RANKING_COMMAND_CHAIN_PUBLISHED` 不为 true 时拒绝；即便为 true，也需要 owner 另行记录的发布计划与授权，agent 不得自行执行。
+- 旧 `worker/ecosystem.config.cjs` 中的 `arena-worker` 条目为遗留、不受控入口，不得再用于发布。
+
 ## 分支保护 required checks（✅ 已启用 2026-07-02，owner bypass 保留不影响单人流）
 
 **现状（已应用）**：`protect main` ruleset = deletion + non_fast_forward +

@@ -36,10 +36,18 @@ SERVER_LOG="$TMP_ROOT/postgres.log"
 PORT=$((40000 + ($$ % 20000)))
 mkdir -p "$SOCKET_DIR"
 
+HARNESS_COMPLETED=0
+
 cleanup() {
   local status=$?
   local pid
   trap - EXIT INT TERM
+  # A fatal shell error (e.g. assigning a readonly variable) can reach this trap
+  # with status 0. Only a run that reached the final PASS line may succeed.
+  if ((status == 0)) && [[ "$HARNESS_COMPLETED" != '1' ]]; then
+    echo 'PG17 emitter harness exited before completing every scenario' >&2
+    status=1
+  fi
   for pid in ${BACKGROUND_PIDS:-}; do
     kill -TERM "$pid" >/dev/null 2>&1 || true
   done
@@ -119,8 +127,17 @@ CREATE TABLE runner_harness.effects (
 );
 SQL
 
+# The runner freezes its ordered lists with `readonly -a` (since 2026-08-04), so
+# sourcing it directly made the fixture reassignment below abort the harness
+# before any scenario ran. Source a disposable copy with only those freeze lines
+# removed; the checked-in runner keeps its readonly guard unchanged.
+HARNESS_RUNNER="$TMP_ROOT/apply-launch-migrations.harness.sh"
+sed -E '/^[[:space:]]*readonly -a [A-Z_]+_MIGRATIONS[[:space:]]*$/d' "$RUNNER" >"$HARNESS_RUNNER"
+if grep -qE '^[[:space:]]*readonly -a [A-Z_]+_MIGRATIONS' "$HARNESS_RUNNER"; then
+  fail 'harness runner copy still freezes a migration list'
+fi
 # shellcheck source=apply-launch-migrations.sh
-source "$RUNNER"
+source "$HARNESS_RUNNER"
 
 # Harness-only dependencies. Production entry points and governance checks are
 # never called or weakened here; only the SQL emitter and target-order checker
@@ -428,4 +445,5 @@ assert_equal '0|0' \
 assert_equal 'true|true' "$(try_and_release_global_lock)" \
   'mid-body failure disconnect lock release'
 
+HARNESS_COMPLETED=1
 echo 'PG17 EMITTER HARNESS PASS: transactional rollback boundary, cooperative serialization, timeout, and disconnect invariants hold'

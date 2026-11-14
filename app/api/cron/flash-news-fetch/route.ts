@@ -160,60 +160,64 @@ async function withTranslatedTitles<T extends { title: string }>(
   return enriched
 }
 
-const handler = withCron('flash-news-fetch', async (_req: NextRequest) => {
-  const supabase = getSupabaseAdmin()
+const handler = withCron(
+  'flash-news-fetch',
+  async (_req: NextRequest) => {
+    const supabase = getSupabaseAdmin()
 
-  // Fetch all feeds in parallel
-  const feedResults = await Promise.allSettled(RSS_FEEDS.map(fetchRSSFeed))
-  const rejectedFeeds = feedResults.filter((r) => r.status === 'rejected')
-  if (rejectedFeeds.length > 0) {
-    logger.warn(
-      `[flash-news-fetch] ${rejectedFeeds.length}/${feedResults.length} feeds failed: ${rejectedFeeds.map((r) => (r as PromiseRejectedResult).reason?.message || String((r as PromiseRejectedResult).reason)).join('; ')}`
-    )
-  }
-  const allItems = feedResults
-    .filter(
-      (r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof fetchRSSFeed>>> =>
-        r.status === 'fulfilled'
-    )
-    .flatMap((r) => r.value)
+    // Fetch all feeds in parallel
+    const feedResults = await Promise.allSettled(RSS_FEEDS.map(fetchRSSFeed))
+    const rejectedFeeds = feedResults.filter((r) => r.status === 'rejected')
+    if (rejectedFeeds.length > 0) {
+      logger.warn(
+        `[flash-news-fetch] ${rejectedFeeds.length}/${feedResults.length} feeds failed: ${rejectedFeeds.map((r) => (r as PromiseRejectedResult).reason?.message || String((r as PromiseRejectedResult).reason)).join('; ')}`
+      )
+    }
+    const allItems = feedResults
+      .filter(
+        (r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof fetchRSSFeed>>> =>
+          r.status === 'fulfilled'
+      )
+      .flatMap((r) => r.value)
 
-  if (allItems.length === 0) {
-    return { count: 0, message: 'No items fetched' }
-  }
+    if (allItems.length === 0) {
+      return { count: 0, message: 'No items fetched' }
+    }
 
-  // Deduplicate by checking existing titles from last 24h
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-  const { data: existing } = await supabase
-    .from('flash_news')
-    .select('title')
-    .gte('published_at', since)
+    // Deduplicate by checking existing titles from last 24h
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    const { data: existing } = await supabase
+      .from('flash_news')
+      .select('title')
+      .gte('published_at', since)
 
-  const existingTitles = new Set((existing || []).map((e) => e.title.toLowerCase().trim()))
-  const newItems = allItems.filter((item) => !existingTitles.has(item.title.toLowerCase().trim()))
+    const existingTitles = new Set((existing || []).map((e) => e.title.toLowerCase().trim()))
+    const newItems = allItems.filter((item) => !existingTitles.has(item.title.toLowerCase().trim()))
 
-  if (newItems.length === 0) {
-    return { count: 0, message: 'All items already exist' }
-  }
+    if (newItems.length === 0) {
+      return { count: 0, message: 'All items already exist' }
+    }
 
-  // Pre-translate titles (en → zh/ja/ko) before insert. Best-effort — never
-  // blocks the insert; a failed translation just leaves that column null.
-  const itemsToInsert = await withTranslatedTitles(newItems)
+    // Pre-translate titles (en → zh/ja/ko) before insert. Best-effort — never
+    // blocks the insert; a failed translation just leaves that column null.
+    const itemsToInsert = await withTranslatedTitles(newItems)
 
-  // Upsert new items
-  const { data: inserted, error: insertError } = await supabase
-    .from('flash_news')
-    .upsert(itemsToInsert, { onConflict: 'title', ignoreDuplicates: true })
-    .select('id')
+    // Upsert new items
+    const { data: inserted, error: insertError } = await supabase
+      .from('flash_news')
+      .upsert(itemsToInsert, { onConflict: 'title', ignoreDuplicates: true })
+      .select('id')
 
-  if (insertError) {
-    logger.error('[flash-news-fetch] Insert error:', insertError)
-    throw new Error(insertError.message)
-  }
+    if (insertError) {
+      logger.error('[flash-news-fetch] Insert error:', insertError)
+      throw new Error(insertError.message)
+    }
 
-  logger.info(`[flash-news-fetch] Inserted ${inserted?.length || 0} new flash news items`)
-  return { count: inserted?.length || 0, total_fetched: allItems.length }
-})
+    logger.info(`[flash-news-fetch] Inserted ${inserted?.length || 0} new flash news items`)
+    return { count: inserted?.length || 0, total_fetched: allItems.length }
+  },
+  { maxDurationSec: maxDuration }
+)
 
 // Vercel Cron sends GET requests
 export const GET = handler

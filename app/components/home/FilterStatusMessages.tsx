@@ -2,17 +2,13 @@
 
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { Box, Text } from '../base'
+import { Box } from '../base'
 
 interface FilterStatusMessagesProps {
   loading: boolean
   language: string
   selectedExchange: string | null
   advancedFilteredCount: number
-  /** Only an exact same-cohort total may drive the all-filtered assertion. */
-  tradersCount: number | null | undefined
-  hasActiveFilters: boolean
-  onResetFilters: () => void
 }
 
 export default function FilterStatusMessages({
@@ -20,14 +16,13 @@ export default function FilterStatusMessages({
   language: _language,
   selectedExchange,
   advancedFilteredCount,
-  tradersCount,
-  hasActiveFilters,
-  onResetFilters,
 }: FilterStatusMessagesProps) {
   const { t } = useLanguage()
   return (
     <>
-      {/* Exchange trader count hint */}
+      {/* Exchange trader count hint. (The former "all traders filtered out"
+          prompt depended on an exact total that is never available; the
+          filtered empty state + reset now lives in RankingTable.) */}
       {!loading && selectedExchange && advancedFilteredCount > 0 && advancedFilteredCount < 20 && (
         <Box
           style={{
@@ -43,50 +38,6 @@ export default function FilterStatusMessages({
           {t('tradersOnExchange').replace('{count}', String(advancedFilteredCount))}
         </Box>
       )}
-
-      {/* Show reset prompt when all traders filtered out by advanced filter */}
-      {!loading &&
-        advancedFilteredCount === 0 &&
-        typeof tradersCount === 'number' &&
-        tradersCount > 0 &&
-        hasActiveFilters && (
-          <Box
-            style={{
-              padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
-              marginBottom: tokens.spacing[2],
-              textAlign: 'center',
-              background: tokens.glass.bg.light,
-              borderRadius: tokens.radius.md,
-              border: `1px solid var(--color-border-primary)`,
-            }}
-          >
-            <Text
-              size="sm"
-              style={{
-                color: 'var(--color-text-secondary)',
-                marginBottom: tokens.spacing[2],
-                display: 'block',
-              }}
-            >
-              {t('allTradersFilteredOut')}
-            </Text>
-            <button
-              onClick={onResetFilters}
-              style={{
-                padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-                background: `var(--color-accent-primary, ${tokens.colors.accent.primary})20`,
-                border: `1px solid var(--color-accent-primary, ${tokens.colors.accent.primary})40`,
-                borderRadius: tokens.radius.md,
-                color: `var(--color-accent-primary, ${tokens.colors.accent.primary})`,
-                cursor: 'pointer',
-                fontSize: tokens.typography.fontSize.sm,
-                fontWeight: tokens.typography.fontWeight.bold,
-              }}
-            >
-              {t('resetFilters')}
-            </button>
-          </Box>
-        )}
     </>
   )
 }

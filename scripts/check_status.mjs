@@ -37,7 +37,10 @@ async function fetchJson(baseUrl, path) {
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
 
-  if (!response.ok) {
+  // /api/health answers 503 (stale data / DB down) with a full diagnostic body;
+  // read it so the report shows WHY instead of a bare transport error.
+  const healthBody = path === '/api/health' && response.status === 503
+  if (!response.ok && !healthBody) {
     throw new Error(`${path} returned HTTP ${response.status}`)
   }
   return response.json()

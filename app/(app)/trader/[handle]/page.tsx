@@ -774,7 +774,12 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
           arena_score: (serverTraderData.performance as Record<string, unknown>).arena_score as
             | number
             | null,
-          roi: (serverTraderData.performance as Record<string, unknown>).roi_90d as number | null,
+          // Header ROI = primary period (90D → 30D → 7D), same order as the
+          // unlabelled arena_score/pnl above; roi_90d alone is null without 90D.
+          roi: ((serverTraderData.performance as Record<string, unknown>).roi_90d ??
+            (serverTraderData.performance as Record<string, unknown>).roi_30d ??
+            (serverTraderData.performance as Record<string, unknown>).roi_7d ??
+            null) as number | null,
           pnl: (serverTraderData.performance as Record<string, unknown>).pnl as number | null,
           win_rate: (serverTraderData.performance as Record<string, unknown>).win_rate as
             | number

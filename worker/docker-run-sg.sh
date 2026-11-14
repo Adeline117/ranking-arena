@@ -8,8 +8,8 @@
 # under the same Redis node identity, and the old Docker path had no reliable
 # automatic rollback.
 #
-# The image workflow still builds, digest-smokes, and records a quarantined OCI
-# artifact. Re-enable container deployment only together with a host-level
+# The image workflow only builds, smoke-tests, and pushes an OCI image; it
+# deploys nothing. Re-enable container deployment only together with a host-level
 # owner lease, digest-bound rollout transaction, and tested automatic rollback.
 
 set -euo pipefail

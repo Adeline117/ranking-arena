@@ -193,6 +193,18 @@ test('uses a degraded release identity for deploy ancestry without masking stale
   assert.doesNotMatch(result.ghLog, /issue create/)
 })
 
+test('reads release identity from a 503 stale-data health body', () => {
+  const result = runScenario({
+    oldestAgeMinutes: 10,
+    newestAgeMinutes: 2,
+    healthStatus: 'degraded',
+    healthHttp: '503',
+  })
+  assert.equal(result.status, 0)
+  assert.match(result.stdout, /health=degraded/)
+  assert.doesNotMatch(result.ghLog, /issue create/)
+})
+
 test('rejects unsupported release states before doing ancestry math', () => {
   const result = runScenario({ healthStatus: 'unhealthy' })
   assert.equal(result.status, 1)

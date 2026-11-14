@@ -250,6 +250,7 @@ const ko = {
   history: '기록',
   na: 'N/A',
   score: '점수',
+  rankingMobileMetricLabel: '각 행에 표시할 두 번째 지표',
   // Group application related
   applyCreateGroup: '그룹 생성 신청',
   groupName: '그룹 이름',
@@ -901,6 +902,8 @@ const ko = {
   logoutConfirm: '로그아웃하시겠습니까?',
   logoutFailed: '로그아웃 실패, 다시 시도해 주세요',
   pleaseLoginAgain: '먼저 로그인해 주세요',
+  deleteAccountInvalidPassword:
+    '비밀번호가 올바르지 않습니다. 이메일 코드로 가입하고 비밀번호를 설정한 적이 없다면 먼저 비밀번호를 재설정한 후 다시 시도해 주세요.',
   accountMarkedDeleted: '계정이 삭제 예정입니다. 30일 이내에 복구할 수 있습니다',
   networkErrorRetry: '네트워크 오류, 다시 시도해 주세요',
   notificationsSaved: '알림 설정이 저장되었습니다',
@@ -1813,6 +1816,7 @@ const ko = {
   adminStatusStale: '오래됨',
   adminStatusCritical: '위험',
   adminStatusUnknown: '알 수 없음',
+  adminStatusQuarantined: '격리됨',
   adminNoDataLabel: '데이터 없음',
   adminLastUpdate: '가장 오래된 상류 워터마크: {time}',
   adminAgeHours: '경과: {hours}시간',
@@ -1980,6 +1984,7 @@ const ko = {
   loginTimeout: '로그인에 시간이 걸리고 있습니다. 연결을 확인하고 다시 시도해 주세요.',
   loginAuthFailed: '로그인에 실패했습니다. 다시 시도해 주세요.',
   loginNoSession: '세션을 생성할 수 없습니다. 다시 로그인해 주세요.',
+  loginCancelled: '로그인이 취소되었습니다.',
   loginEmailNotRegistered: '이 이메일로 등록된 계정이 없습니다. 먼저 회원가입해 주세요.',
   loginWithPassword: '비밀번호로 로그인',
   loginUsernamePlaceholder: '사용자 이름',
@@ -3084,6 +3089,7 @@ const ko = {
     'Arena Score는 현재 운영 중인 모든 소스 보드의 트레이더를 같은 기준으로 순위화합니다.',
   heroNeutrality:
     '어떤 소스도 순위를 돈으로 살 수 없습니다 — 운영 중인 모든 보드에 같은 규칙을 적용합니다.',
+  heroNeutralityShort: '어떤 소스도 순위를 돈으로 살 수 없습니다.',
   heroHowRanked: '랭킹 산정 방식 →',
   heroCTABrowse: '순위 둘러보기',
   heroCTASignUp: '무료 가입',
@@ -6737,6 +6743,24 @@ const ko = {
   historyVerificationDesc:
     '이 트레이더의 과거 데이터가 검증을 통과하면 차트와 상세 통계가 여기에 표시됩니다.',
   historyVerificationCurrentRanking: '현재 랭킹 ({period})',
+  rankingFilteredByExchange: '{exchange}(으)로 필터링됨',
+  rankingClearExchangeFilter: '거래소 필터 해제',
+  rankingSearchElsewhereTitle:
+    '이 페이지에 일치 항목이 없습니다. Arena 전체에서 일치하는 트레이더:',
+  rankingFiltersCurrentPageOnly:
+    '필터는 이 페이지의 트레이더 50명에게만 적용됩니다. 다른 페이지에도 해당 트레이더가 있을 수 있습니다.',
+  roiUnknown: 'ROI 알 수 없음',
+  timeRangeAria: '기간',
+  showRangeRankingsAria: '{range} 랭킹 보기',
+  arenaScoreAria: 'Arena 점수: {score}',
+  arenaScoreOfHundredAria: 'Arena 점수 {score}/100',
+  platformTypeAria: '플랫폼 유형: {type}',
+  suspectedBotAria: '봇 의심',
+  tradingStyleAria: '거래 스타일: {style}',
+  noRankHistoryAria: '순위 기록 없음',
+  rankTrendAria: '순위 추이: {from} → {to}',
+  traderActionsAria: '{name} 작업',
+  allTime90dShort: '전체 기간',
 } as const
 
 export default ko

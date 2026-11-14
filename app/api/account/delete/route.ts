@@ -3,6 +3,11 @@
  * Related account data is retained until the hard-delete cron runs.
  */
 
+import { accountRequiresPassword } from '@/lib/auth/password-status'
+import {
+  PENDING_DELETION_BAN_DURATION,
+  RENEWABLE_SUBSCRIPTION_STATUSES,
+} from '@/lib/auth/deletion-ban'
 import { createHash, randomBytes } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -18,6 +23,21 @@ const logger = createLogger('account-delete')
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+/**
+ * Which confirmation the delete dialog must collect. The client cannot tell
+ * a code-only email signup (no password) from a password account by itself.
+ */
+export const GET = withAuth(
+  async ({ user }) => {
+    const requiresPassword = await accountRequiresPassword(getSupabaseAdmin(), user)
+    return NextResponse.json(
+      { requires_password: requiresPassword },
+      { headers: { 'Cache-Control': 'private, no-store' } }
+    )
+  },
+  { name: 'account-delete-requirements', rateLimit: 'read' }
+)
+
 export const POST = withAuth(
   async ({ user, request }) => {
     let body: { password?: string; reason?: string; confirm?: string }
@@ -28,9 +48,8 @@ export const POST = withAuth(
     }
 
     const { password, reason, confirm } = body
-    const providers = (user.identities ?? []).map((identity) => identity.provider)
-    const isWalletEmail = (user.email ?? '').endsWith('@wallet.arena')
-    const hasPassword = !isWalletEmail && providers.includes('email')
+    const adminSupabase = getSupabaseAdmin()
+    const hasPassword = await accountRequiresPassword(adminSupabase, user)
 
     if (hasPassword) {
       if (!password) return badRequest('Password required')
@@ -47,7 +66,6 @@ export const POST = withAuth(
       return badRequest('Type DELETE to confirm account deletion')
     }
 
-    const adminSupabase = getSupabaseAdmin()
     const now = new Date()
     const scheduledDeletion = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1_000)
     const recoveryToken = randomBytes(32).toString('base64url')
@@ -61,7 +79,7 @@ export const POST = withAuth(
         .from('subscriptions')
         .select('stripe_subscription_id, status, plan')
         .eq('user_id', user.id)
-        .in('status', ['active', 'trialing', 'past_due'])
+        .in('status', [...RENEWABLE_SUBSCRIPTION_STATUSES])
         .limit(1)
         .maybeSingle()
       if (subscriptionError) throw subscriptionError
@@ -140,9 +158,15 @@ export const POST = withAuth(
     }
 
     const { error: banError } = await adminSupabase.auth.admin.updateUserById(user.id, {
-      ban_duration: '720h',
+      ban_duration: PENDING_DELETION_BAN_DURATION,
     })
-    const { error: signOutError } = await adminSupabase.auth.admin.signOut(user.id, 'global')
+    // admin.signOut takes the user's access token (not their id): passing the
+    // id fails as an invalid JWT and leaves every session alive.
+    const authorization = request.headers.get('authorization')
+    const accessToken = authorization?.startsWith('Bearer ') ? authorization.slice(7) : null
+    const signOutError = accessToken
+      ? (await adminSupabase.auth.admin.signOut(accessToken, 'global')).error
+      : { message: 'no bearer token available to revoke sessions' }
     if (banError || signOutError) {
       // `deleted_at` is independently enforced by server auth, so access stays
       // blocked even if Supabase session invalidation is temporarily degraded.

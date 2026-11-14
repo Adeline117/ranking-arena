@@ -11,11 +11,15 @@ import { withCron } from '@/lib/api/with-cron'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-export const GET = withCron('sync-authorized-traders', async () => ({
-  count: 0,
-  queued: 0,
-  errors: 0,
-  total: 0,
-  disabled: true,
-  reason: 'CEX account connections do not prove public leaderboard identity in Arena V1',
-}))
+export const GET = withCron(
+  'sync-authorized-traders',
+  async () => ({
+    count: 0,
+    queued: 0,
+    errors: 0,
+    total: 0,
+    disabled: true,
+    reason: 'CEX account connections do not prove public leaderboard identity in Arena V1',
+  }),
+  { maxDurationSec: maxDuration }
+)

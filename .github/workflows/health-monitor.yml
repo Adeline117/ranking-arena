@@ -100,7 +100,7 @@ jobs:
 
           STATUS="down"
           MESSAGE=""
-          if [ "$CURL_EXIT" -ne 0 ] || [[ "$HTTP" != "200" && "$HTTP" != "202" ]]; then
+          if [ "$CURL_EXIT" -ne 0 ] || [[ "$HTTP" != "200" && "$HTTP" != "202" && "$HTTP" != "503" ]]; then
             MESSAGE="Release identity transport failure (curl=$CURL_EXIT HTTP=${HTTP:-000})"
           elif ! RELEASE_HEALTH=$(jq -er '.status | select(. == "healthy" or . == "degraded")' \
             /tmp/release-health.json 2>/dev/null); then

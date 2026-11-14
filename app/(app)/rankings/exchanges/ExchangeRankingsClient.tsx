@@ -466,9 +466,11 @@ export default function ExchangeRankingsClient({
                             {row.exchangeName}
                           </Text>
                         </Link>
-                        <Text size="xs" color="tertiary">
-                          {t(PRODUCT_I18N[row.productType])}
-                        </Text>
+                        {row.productType && (
+                          <Text size="xs" color="tertiary">
+                            {t(PRODUCT_I18N[row.productType])}
+                          </Text>
+                        )}
                         {row.provenance.derived && <DerivedBoardBadge />}
                       </Box>
                     </td>

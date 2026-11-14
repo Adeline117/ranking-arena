@@ -273,6 +273,41 @@ if [[ "$FAILED_STATE" != "1|true|Storage timeout" ]]; then
   exit 1
 fi
 
+# lib/ingest/raw.ts records Storage failures with exactly this UPDATE. A blank
+# Storage message must never reach last_error: the attempt-shape CHECK rejects
+# it and the durable failure bookkeeping would be lost. The worker substitutes
+# 'unknown Storage error' for blank messages; prove both halves here.
+WORKER_GC_FAILURE_SQL="UPDATE arena.raw_object_gc_queue
+    SET attempts = attempts + 1,
+        last_attempt_at = now(),
+        last_error = \$worker_message\$%s\$worker_message\$
+  WHERE storage_path = ANY(ARRAY(
+    SELECT storage_path FROM arena.raw_object_gc_queue WHERE raw_object_id = 1
+  )::text[]);"
+for blank_message in '' '   '; do
+  # shellcheck disable=SC2059
+  expect_failure \
+    "blank Storage failure message '$blank_message'" \
+    "$(printf "$WORKER_GC_FAILURE_SQL" "$blank_message")"
+  if ! grep -Fq 'raw_object_gc_queue_attempt_shape' "$ERROR_FILE"; then
+    echo "blank Storage failure was rejected for the wrong reason:" >&2
+    cat "$ERROR_FILE" >&2
+    exit 1
+  fi
+done
+# shellcheck disable=SC2059
+WORKER_FALLBACK_RESULT="$(
+  psql_cmd -Atq \
+    -c 'BEGIN' \
+    -c "$(printf "$WORKER_GC_FAILURE_SQL" 'unknown Storage error')" \
+    -c "SELECT attempts || '|' || last_error FROM arena.raw_object_gc_queue WHERE raw_object_id = 1" \
+    -c 'ROLLBACK'
+)"
+if [[ "$WORKER_FALLBACK_RESULT" != "2|unknown Storage error" ]]; then
+  echo "worker fallback Storage failure message was not recorded: $WORKER_FALLBACK_RESULT" >&2
+  exit 1
+fi
+
 expect_failure \
   "skipped failure attempt" \
   "UPDATE arena.raw_object_gc_queue

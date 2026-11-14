@@ -27,7 +27,7 @@ function validReport(): FreshnessReport {
   return {
     ok: false,
     checked_at: '2026-07-18T18:00:00.000Z',
-    summary: { total: 1, fresh: 0, stale: 0, critical: 0, unknown: 1 },
+    summary: { total: 1, fresh: 0, stale: 0, critical: 0, unknown: 1, quarantined: 0 },
     thresholds: { stale_hours: 8, critical_hours: 24 },
     platforms: [
       {

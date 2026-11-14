@@ -16,8 +16,9 @@ interface ScraperStatusTabProps {
 const STATUS_ORDER: Record<string, number> = {
   unknown: 0,
   critical: 1,
-  stale: 2,
-  fresh: 3,
+  quarantined: 2,
+  stale: 3,
+  fresh: 4,
 }
 
 export default function ScraperStatusTab({
@@ -33,6 +34,7 @@ export default function ScraperStatusTab({
     stale: tokens.colors.accent.warning,
     critical: tokens.colors.accent.error,
     unknown: tokens.colors.accent.error,
+    quarantined: tokens.colors.accent.warning,
   }
 
   const getStatusLabel = (status: string): string => {
@@ -41,6 +43,7 @@ export default function ScraperStatusTab({
       stale: t('adminStatusStale'),
       critical: t('adminStatusCritical'),
       unknown: t('adminStatusUnknown'),
+      quarantined: t('adminStatusQuarantined'),
     }
     return labels[status] || status
   }

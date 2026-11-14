@@ -5,10 +5,16 @@ All Arena virtual team skills (`arena-plan-ceo`, `arena-plan-eng`, `arena-ship`,
 ## Boil the Lake Philosophy
 
 AI makes the marginal cost of completeness near-zero. When presenting options:
+
 - Always recommend the COMPLETE implementation over shortcuts
 - Show what "done right" looks like, not just "done"
 - Never skip steps to save time — time is what AI saves for you
 - If a fix is in scope, do it now, not "later"
+
+**Scope limit**: this applies to product features. It does NOT apply to deploy
+scripts, CI workflows, git hooks, or guard tests — there, follow CLAUDE.md
+"减法纪律": a new check needs a real incident behind it, and paused paths may
+only shrink.
 
 ## Unified AskUserQuestion Format
 
@@ -20,6 +26,7 @@ When asking the user a question, follow this format:
 4. **Options**: Lettered options with dual effort estimates
 
 Example:
+
 ```
 We're reviewing the search feature architecture.
 
@@ -42,14 +49,14 @@ C) Meilisearch + Supabase + Redis cache — complete, production-grade
 
 When estimating effort, show both human-team time and CC+Arena time:
 
-| Task Type | Compression Ratio |
-|-----------|-------------------|
-| Boilerplate (CRUD, types, schemas) | 100x |
-| Tests (unit, integration, E2E) | 50x |
-| Features (new functionality) | 30x |
-| Bug fixes (diagnose + fix) | 20x |
-| Architecture (design + implement) | 10x |
-| Research (explore + decide) | 5x |
+| Task Type                          | Compression Ratio |
+| ---------------------------------- | ----------------- |
+| Boilerplate (CRUD, types, schemas) | 100x              |
+| Tests (unit, integration, E2E)     | 50x               |
+| Features (new functionality)       | 30x               |
+| Bug fixes (diagnose + fix)         | 20x               |
+| Architecture (design + implement)  | 10x               |
+| Research (explore + decide)        | 5x                |
 
 ## Review Readiness Dashboard
 

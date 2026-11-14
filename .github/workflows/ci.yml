@@ -202,6 +202,13 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:rank-staging-xid-pg17
 
+      # 上线迁移有序通道的一次性 PG17 证明（回滚边界、串行化、超时、断连）。
+      # 2026-08-04 起它因 readonly 列表在第一个场景前就中止却仍退出 0，从未被 CI 运行。
+      - name: Prove launch-migration emitter on disposable PG17
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:launch-migration-runner-pg17
+
       - name: Prove immutable generation publication plans
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
@@ -216,6 +223,16 @@ jobs:
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:public-ranked-leaderboard-pg17
+
+      - name: Prove the codec rebuild refuses file-name-order replay
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:codec-rebuild-slot-guard-pg17
+
+      - name: Prove snapshot retention keeps publication evidence
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:snapshot-retention-pg17
 
       - name: Prove canonical score-input platform aliases
         env:
@@ -378,7 +395,7 @@ jobs:
       - name: Type-check ingest worker and ownership control plane
         run: npm run type-check:ingest-worker
       - name: V1 ranking command-chain containment
-        run: node --test worker/tests/v1-ranking-command-chain-containment.test.mjs
+        run: node --test worker/tests/v1-ranking-command-chain-containment.test.mjs scripts/qa/local-scoring-deploy.test.mjs scripts/qa/v1-legacy-proxy-import-containment.test.mjs
       - name: V1 native ingest execution containment
         run: node --test scripts/qa/v1-ingest-execution-containment.test.mjs
       - name: VPS process topology safety
@@ -474,6 +491,32 @@ jobs:
 
       - name: Core path coverage floor
         run: node scripts/qa/core-coverage-floor.mjs coverage/coverage-summary.json
+
+      # The season publication proof drives the TypeScript orchestrator, so it
+      # runs here (node_modules installed) rather than in the SQL-only pre-checks.
+      - name: Install isolated PostgreSQL 17 server binaries
+        env:
+          # 与 Pre-flight 同一固定版本：17.12 给新建列写 attoptions={pg_attver=…}，
+          # 迁移 postflight 会判 "column contract drifted"（见 Pre-flight 同名步骤注释）。
+          PG17_VERSION: 17.11-1.pgdg26.04+2
+        run: |
+          codename=$(lsb_release -cs)
+          sudo sh -c "echo 'deb http://apt.postgresql.org/pub/repos/apt ${codename}-pgdg main' > /etc/apt/sources.list.d/pgdg.list"
+          sudo sh -c "echo 'deb https://apt-archive.postgresql.org/pub/repos/apt ${codename}-pgdg-archive main' > /etc/apt/sources.list.d/pgdg-archive.list"
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --allow-downgrades "postgresql-17=${PG17_VERSION}" "postgresql-client-17=${PG17_VERSION}"
+          /usr/lib/postgresql/17/bin/initdb --version
+
+      - name: Prove one complete public ranking season publication
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:public-ranking-season-publication-pg17
+
+      - name: Prove retention keeps metric-trust evidence
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:retention-trust-evidence-pg17
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
