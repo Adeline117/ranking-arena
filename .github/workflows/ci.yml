@@ -378,6 +378,8 @@ jobs:
         run: npm run qa:launch-migration-runner
       - name: Backup pipeline fail-closed contract
         run: node --test scripts/maintenance/backup-to-r2.test.mjs
+      - name: Critical-tier backup encryption and coverage contract
+        run: npm run qa:backup-critical
       - name: Restore pipeline fail-closed contract
         run: node --test scripts/maintenance/restore-from-r2.test.mjs
       - name: Auth recovery preflight fail-closed contract

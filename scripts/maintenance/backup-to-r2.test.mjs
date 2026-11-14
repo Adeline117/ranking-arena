@@ -518,8 +518,13 @@ test('passes literal argv and only target auth through a scrubbed pg_dump env', 
             .filter((line) => /^PG[A-Z0-9_]*=/.test(line))
             .sort(),
           [
-            'PGDATABASE=postgresql://backup@db.example.com/app?sslmode=require',
+            // A URI in PGDATABASE is a literal database name to libpq; the
+            // target must arrive as separate connection variables.
+            'PGDATABASE=app',
+            'PGHOST=db.example.com',
             'PGPASSWORD=p@ss:word',
+            'PGSSLMODE=require',
+            'PGUSER=backup',
           ]
         )
         for (const name of [
@@ -571,7 +576,9 @@ test('a passwordless target cannot inherit ambient libpq authentication variable
     )
 
     const passwordlessEnv = await readFile(envLog, 'utf8')
-    assert.match(passwordlessEnv, /^PGDATABASE=postgresql:\/\/backup@db\.example\.com\/app$/m)
+    assert.match(passwordlessEnv, /^PGDATABASE=app$/m)
+    assert.match(passwordlessEnv, /^PGHOST=db\.example\.com$/m)
+    assert.match(passwordlessEnv, /^PGUSER=backup$/m)
     assert.doesNotMatch(passwordlessEnv, /^PG(?:PASSWORD|PASSFILE|SERVICE)=/m)
     assert.ok((await assertBackupArtifact(output, 1, { completionToken: COMPLETION_TOKEN })) > 0)
   })
@@ -977,7 +984,8 @@ test('the executable uses a shell-free non-pruning pipeline and CI runs the cont
   const ci = await readFile(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8')
 
   assert.match(source, /spawn\(pgDumpPath/)
-  assert.match(source, /PGDATABASE: connectionUrl/)
+  assert.match(source, /libpqEnvFromConnectionUrl\(connectionUrl/)
+  assert.doesNotMatch(source, /PGDATABASE: connectionUrl/)
   assert.match(source, /createGzip\(\)/)
   assert.doesNotMatch(source, /\/bin\/bash|pipefail/)
   assert.doesNotMatch(source, /DeleteObjectsCommand|pruneOldBackups/)
