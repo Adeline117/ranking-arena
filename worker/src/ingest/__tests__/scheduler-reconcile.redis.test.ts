@@ -152,7 +152,7 @@ describeRedis('reconcileSchedulers against real BullMQ', () => {
     expect(await pendingIds(q, 'repeat:')).toEqual(iterationsBefore)
   })
 
-  it('revives a broken chain and replaces a stuck iteration without leaving the old one', async () => {
+  it('heals a broken chain and replaces a stuck iteration without leaving the old one', async () => {
     const q = getRegionQueue('local')
     await reconcileSchedulers()
     const tierA = await schedulerOf(q, 'tiera:srcx')
@@ -174,17 +174,17 @@ describeRedis('reconcileSchedulers against real BullMQ', () => {
     nowSpy = jest.spyOn(Date, 'now').mockReturnValue(later)
     await reconcileSchedulers()
 
-    const revivedA = await schedulerOf(q, 'tiera:srcx')
-    expect(await pendingIds(q, 'repeat:tiera:srcx:')).toEqual([
-      `repeat:tiera:srcx:${revivedA.next}`,
-    ])
-    const kickA = await q.getJob('revive-kick-tiera-srcx')
-    expect(kickA?.opts.priority).toBe(1)
+    // The registration upsert already re-creates a missing iteration at the
+    // next future slot, so the chain is whole again (no revive kick needed).
+    const healedA = await schedulerOf(q, 'tiera:srcx')
+    expect(healedA.next).toBeGreaterThan(tierA.next!)
+    expect(await pendingIds(q, 'repeat:tiera:srcx:')).toEqual([`repeat:tiera:srcx:${healedA.next}`])
 
     const revivedD = await schedulerOf(q, 'tierd:srcx')
     const tierDIterations = await pendingIds(q, 'repeat:tierd:srcx:')
     expect(tierDIterations).toEqual([`repeat:tierd:srcx:${revivedD.next}`])
     expect(tierDIterations).not.toContain(stuckTierD)
-    expect(await q.getJob('revive-kick-tierd-srcx')).toBeDefined()
+    const kickD = await q.getJob('revive-kick-tierd-srcx')
+    expect(kickD?.opts.priority).toBe(2)
   })
 })
