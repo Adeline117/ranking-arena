@@ -9,15 +9,16 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { logger } from '@/lib/logger'
 import { SSR_QUERY_TIMEOUT_MS, ssrRace } from '@/lib/constants/timeouts'
-import { PRODUCT_FACTS } from '@/lib/config/product-facts'
 
-// 默认值 - 当缓存和数据库都不可用时的回退
-// MUST be close to the actual 90D ranked count — this value is the DENOMINATOR for
-// CrossExchangePercentileBadge, so an inflated fallback (was 17000; real 90D pop is
-// ~9,600) makes "beats X% of N traders" wrong by ~1.8× if the RPC ever fails.
+// Returned when the cache and the database are both unavailable. These are
+// placeholders, not facts: every result built from them carries
+// `isDefault: true`, and consumers must render no number at all (see
+// `buildProductFactsSnapshot` / CrossExchangePercentileBadge). They are zero
+// on purpose so that a consumer that forgets the flag cannot display an
+// invented figure.
 const DEFAULT_STATS = {
-  sourceBoardCount: PRODUCT_FACTS.fallbackSourceBoardCount,
-  traderCount: PRODUCT_FACTS.fallbackRankedTraderCount,
+  sourceBoardCount: 0,
+  traderCount: 0,
 }
 
 // v3: the RPC now reports live ranking source boards instead of guessing an

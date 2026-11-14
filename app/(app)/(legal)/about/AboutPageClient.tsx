@@ -60,7 +60,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export default function AboutPageClient() {
   const { t, language } = useLanguage()
   const productFacts = useProductFacts()
-  const fallbackPrefix = productFacts.isFallback ? '≈' : ''
 
   const features = [
     { title: t('aboutFeature1Title'), desc: t('aboutFeature1Desc') },
@@ -191,17 +190,23 @@ export default function AboutPageClient() {
             }}
           >
             {[
-              {
-                value: `${fallbackPrefix}${formatRankedTraderCount(
-                  productFacts.rankedTraderCount,
-                  language
-                )}`,
-                label: t('aboutStatTradersLabel'),
-              },
-              {
-                value: `${fallbackPrefix}${productFacts.sourceBoardCount.toLocaleString(language)}`,
-                label: t('heroStatSourceBoards'),
-              },
+              // Counts are shown only as live facts; no approximated fallback.
+              ...(productFacts.rankedTraderCount === null
+                ? []
+                : [
+                    {
+                      value: formatRankedTraderCount(productFacts.rankedTraderCount, language),
+                      label: t('aboutStatTradersLabel'),
+                    },
+                  ]),
+              ...(productFacts.sourceBoardCount === null
+                ? []
+                : [
+                    {
+                      value: productFacts.sourceBoardCount.toLocaleString(language),
+                      label: t('heroStatSourceBoards'),
+                    },
+                  ]),
               { value: t('aboutStatResources'), label: t('aboutStatResourcesLabel') },
               { value: t('aboutStatInstitutions'), label: t('aboutStatInstitutionsLabel') },
             ].map((stat, i) => (

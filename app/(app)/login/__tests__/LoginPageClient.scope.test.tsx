@@ -96,8 +96,12 @@ jest.mock('@/app/components/ui/Toast', () => ({
   useToast: () => ({ showToast: jest.fn() }),
 }))
 
+let mockProductFacts: { rankedTraderCount: number | null; sourceBoardCount: number | null } = {
+  rankedTraderCount: 1000,
+  sourceBoardCount: 12,
+}
 jest.mock('@/lib/hooks/useProductFacts', () => ({
-  useProductFacts: () => ({ rankedTraderCount: 1000, sourceBoardCount: 12 }),
+  useProductFacts: () => mockProductFacts,
 }))
 
 jest.mock('@/lib/analytics/track', () => ({ trackEvent: jest.fn() }))
@@ -316,6 +320,19 @@ describe('LoginPageClient exact identity boundary', () => {
       expect(screen.queryByText('loginRateLimitRetry')).not.toBeInTheDocument()
     } finally {
       jest.useRealTimers()
+    }
+  })
+
+  it('makes its value promises without numbers when no live count exists', async () => {
+    mockProductFacts = { rankedTraderCount: null, sourceBoardCount: null }
+    try {
+      await renderLogin()
+
+      expect(screen.getByText('loginValueProp1NoCount')).toBeInTheDocument()
+      expect(screen.getByText('loginValueProp2NoCount')).toBeInTheDocument()
+      expect(document.body.textContent).not.toMatch(/9,?600|\bnull\b/)
+    } finally {
+      mockProductFacts = { rankedTraderCount: 1000, sourceBoardCount: 12 }
     }
   })
 

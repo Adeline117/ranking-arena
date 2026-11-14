@@ -16,25 +16,27 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import HomeHeroText from './HomeHeroText'
 import { PRO_FREE_PROMO } from '@/lib/types/premium'
-import { PRODUCT_FACTS } from '@/lib/config/product-facts'
+import { PRODUCT_FACTS, publicCount } from '@/lib/config/product-facts'
 
 interface HomeHeroSSRProps {
-  sourceBoardCount?: number
+  /** Live source-board count. Omitted / null / 0 renders count-free copy. */
+  sourceBoardCount?: number | null
 }
 
-export default async function HomeHeroSSR({
-  sourceBoardCount = PRODUCT_FACTS.fallbackSourceBoardCount,
-}: HomeHeroSSRProps) {
+export default async function HomeHeroSSR({ sourceBoardCount }: HomeHeroSSRProps) {
+  // No invented number: the board count is shown only when it is a live fact.
+  const liveBoardCount = publicCount(sourceBoardCount)
   // 2026-07-12 ISR 根因修复:getServerTranslation 的 cookies() 把 `/` 判为动态
   // (revalidate=300 失效,宣传第一落点零边缘缓存)。服务端仍只输出英文;每段文案
   // 由 HomeHeroText 在水合后切换到访客语言(此前负责切换的客户端 HomeHero 已删除,
   // 导致所有语言的首页英雄区都停在英文)。
-  const sourceBoardCountStr = `${sourceBoardCount}+`
 
   // Trader-count stat intentionally dropped — the hero leads with exchange
   // coverage; the trader total lives in the leaderboard itself.
   const stats = [
-    { value: sourceBoardCountStr, labelKey: 'heroStatSourceBoards' },
+    ...(liveBoardCount === null
+      ? []
+      : [{ value: `${liveBoardCount}+`, labelKey: 'heroStatSourceBoards' }]),
     // Real cadence: the leaderboard recomputes every 2h (worker scheduler
     // SCORE_INTERVALS_MS). "30 min" overstated it (that's only the warm-cache
     // cron, which re-warms Redis but doesn't make data fresher) — a freshness
@@ -116,7 +118,11 @@ export default async function HomeHeroSSR({
               maxWidth: 540,
             }}
           >
-            <HomeHeroText k="heroSubtitle" vars={{ boards: sourceBoardCount }} />
+            {liveBoardCount === null ? (
+              <HomeHeroText k="heroSubtitleNoCount" />
+            ) : (
+              <HomeHeroText k="heroSubtitle" vars={{ boards: liveBoardCount }} />
+            )}
           </p>
           {/* Score legibility + neutrality — the cross-exchange percentile moat.
               True and not number-specific (no contested exchange count). */}
