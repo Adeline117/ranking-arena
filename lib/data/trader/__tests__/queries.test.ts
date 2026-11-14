@@ -586,10 +586,11 @@ describe('getLeaderboard public cohort view', () => {
   )
 })
 
-function traderDetailSupabase(publicRows: unknown[]) {
+function traderDetailSupabase(publicRows: unknown[], freshnessRows: unknown[] = []) {
   const emptyRows = () => detailQuery({ data: [], error: null })
   const queries = new Map<string, Array<ReturnType<typeof detailQuery>>>([
     ['public_ranked_leaderboard', [detailQuery({ data: publicRows, error: null })]],
+    ['leaderboard_source_freshness', [detailQuery({ data: freshnessRows, error: null })]],
     [
       'trader_sources',
       [
@@ -688,6 +689,36 @@ describe('getTraderDetail public profile cohort', () => {
     })
     expect(result?.periods).toEqual({ '7D': null, '30D': null, '90D': null })
     expect(supabase.from).not.toHaveBeenCalledWith('leaderboard_ranks')
+  })
+
+  it('reports when the exchange data was captured, not when Arena re-scored it', async () => {
+    const capturedAt = '2026-08-01T00:00:00.000Z'
+    const supabase = traderDetailSupabase(
+      [publicRankRow({ computed_at: new Date().toISOString() })],
+      [
+        { season_id: '90D', source: 'binance_futures', source_as_of: capturedAt },
+        { season_id: '7D', source: 'binance_futures', source_as_of: new Date().toISOString() },
+      ]
+    )
+
+    const result = await getTraderDetail(supabase as never, {
+      platform: 'binance_futures',
+      traderKey: 'trader-1',
+    })
+
+    expect(supabase.from).toHaveBeenCalledWith('leaderboard_source_freshness')
+    expect(result?.trader.lastUpdated).toBe(capturedAt)
+  })
+
+  it('leaves the update time unknown when the period has no source watermark', async () => {
+    const supabase = traderDetailSupabase([publicRankRow()], [])
+
+    const result = await getTraderDetail(supabase as never, {
+      platform: 'binance_futures',
+      traderKey: 'trader-1',
+    })
+
+    expect(result?.trader.lastUpdated).toBeNull()
   })
 
   it('keeps a non-rankable source profile while skipping its public ranking query', async () => {

@@ -106,17 +106,70 @@ function buildSharedRow(period, nowIso) {
   }
 }
 
-export function buildFixtures(now = new Date()) {
-  const nowIso = now.toISOString()
-  const ranked = PERIODS.flatMap((period) => [
-    ...Array.from({ length: TRADERS_PER_PERIOD }, (_, index) => buildRow(period, index, nowIso)),
-    buildSharedRow(period, nowIso),
-  ])
+// One ranked trader whose source did not publish the optional metrics. Win
+// rate and drawdown are required for publication (see
+// hasConcretePublicRankingMetrics), so only the nullable columns are null here.
+// The page must show these as unknown, never as a computed 0.
+function buildNullMetricsRow(period, nowIso) {
+  return {
+    ...buildRow(period, TRADERS_PER_PERIOD + 1, nowIso),
+    source: 'binance_futures',
+    source_type: 'futures',
+    source_trader_id: 'e2e-null-metrics',
+    handle: 'E2E Null Metrics Trader',
+    trades_count: null,
+    followers: null,
+    copiers: null,
+    sharpe_ratio: null,
+  }
+}
+
+/**
+ * Degraded states a test can switch the fake into (see POST /__e2e/scenario).
+ * Each only changes the ranking relations; auth, profiles and writes stay as
+ * they are, so a test isolates one failure at a time.
+ */
+export const SCENARIOS = [
+  // The default: every period has a fresh, ranked cohort.
+  'normal',
+  // The ranking views answer, but with no rows.
+  'leaderboard-empty',
+  // The ranking views fail as PostgREST does when the database errors.
+  'leaderboard-error',
+  // Scores were recomputed recently, but the exchange data behind them was
+  // captured days ago (source watermark is old).
+  'leaderboard-stale-source',
+  // The scoring job stopped days ago (`computed_at` is old); watermarks are fresh.
+  'leaderboard-stale-computed',
+]
+
+export const STALE_AGE_MS = 3 * 24 * 60 * 60 * 1000
+
+const LEADERBOARD_RELATIONS = new Set([
+  'public_ranked_leaderboard',
+  'leaderboard_ranks',
+  'leaderboard_source_freshness',
+])
+
+export function buildFixtures(now = new Date(), scenario = 'normal') {
+  const staleIso = new Date(now.getTime() - STALE_AGE_MS).toISOString()
+  const computedIso = scenario === 'leaderboard-stale-computed' ? staleIso : now.toISOString()
+  const capturedIso = scenario === 'leaderboard-stale-source' ? staleIso : now.toISOString()
+  const ranked =
+    scenario === 'leaderboard-empty'
+      ? []
+      : PERIODS.flatMap((period) => [
+          ...Array.from({ length: TRADERS_PER_PERIOD }, (_, index) =>
+            buildRow(period, index, computedIso)
+          ),
+          buildSharedRow(period, computedIso),
+          buildNullMetricsRow(period, computedIso),
+        ])
   const freshness = PERIODS.flatMap((season_id) =>
     ['binance_futures', 'hyperliquid'].map((source) => ({
       season_id,
       source,
-      source_as_of: nowIso,
+      source_as_of: capturedIso,
     }))
   )
   return {
@@ -241,6 +294,7 @@ const WRITABLE_RELATIONS = new Set(['trader_watchlist'])
 
 export function startFakeSupabase({ port = 54399, log } = {}) {
   const stored = new Map([...WRITABLE_RELATIONS].map((relation) => [relation, []]))
+  let scenario = 'normal'
   const server = createServer((req, res) => {
     const url = new URL(req.url, 'http://fake-supabase.local')
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -266,7 +320,27 @@ export function startFakeSupabase({ port = 54399, log } = {}) {
       req.on('end', () => handler(body ? JSON.parse(body) : null))
     }
 
+    // Test control: `POST /__e2e/scenario {"name":"leaderboard-empty"}`. The
+    // app never calls this path; a hermetic test switches it and resets it.
+    if (url.pathname === '/__e2e/scenario') {
+      if (req.method === 'GET') return send(200, { name: scenario })
+      return readBody((body) => {
+        const name = body?.name ?? 'normal'
+        if (!SCENARIOS.includes(name)) return send(400, { error: `unknown scenario ${name}` })
+        scenario = name
+        send(200, { name })
+      })
+    }
+
     const rest = url.pathname.match(/^\/rest\/v1\/([^/]+)$/)
+    if (rest && scenario === 'leaderboard-error' && LEADERBOARD_RELATIONS.has(rest[1])) {
+      return send(500, {
+        code: 'XX000',
+        message: 'e2e scenario: leaderboard database error',
+        details: null,
+        hint: null,
+      })
+    }
     if (rest && stored.has(rest[1])) {
       const rows = stored.get(rest[1])
       if (req.method === 'POST') {
@@ -294,7 +368,7 @@ export function startFakeSupabase({ port = 54399, log } = {}) {
     if (rest && (req.method === 'GET' || req.method === 'HEAD')) {
       // Fixtures are rebuilt per request so `computed_at` never ages out of
       // the app's freshness window during a long run.
-      const source = stored.get(rest[1]) ?? buildFixtures()[rest[1]] ?? []
+      const source = stored.get(rest[1]) ?? buildFixtures(new Date(), scenario)[rest[1]] ?? []
       const rows = queryRelation(source, url.searchParams)
       res.setHeader('Content-Range', `0-${Math.max(rows.length - 1, 0)}/${rows.length}`)
       const wantsObject = (req.headers.accept ?? '').includes('vnd.pgrst.object')
