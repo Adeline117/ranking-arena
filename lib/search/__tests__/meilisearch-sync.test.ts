@@ -20,7 +20,7 @@ function rankRow(season: string, rank: number, overrides: Record<string, unknown
     followers: '3',
     rank: String(rank),
     trader_type: null,
-    source_as_of: '2026-11-12T00:00:00.000000Z',
+    computed_at: '2026-11-12T00:00:00.000000Z',
     ...overrides,
   }
 }
@@ -67,6 +67,12 @@ describe('toMeilisearchTraderDocument', () => {
     )
     expect(doc.id).toBe('binance_futures--0xAb_c--90D')
     expect(doc).toMatchObject({ rank: 1, roi: 12.5, arena_score: 70.1, max_drawdown: null })
+  })
+
+  it('labels the rank computation time as computed_at, never as a display-time key', () => {
+    const doc = toMeilisearchTraderDocument(rankRow('90D', 1), '90D')
+    expect(doc.computed_at).toBe('2026-11-12T00:00:00.000000Z')
+    expect(doc).not.toHaveProperty('updated_at')
   })
 
   it('refuses a row from another season or without a rank', () => {
