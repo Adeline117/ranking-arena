@@ -13,6 +13,7 @@ PNL_MIGRATION="$ROOT_DIR/supabase/migrations/20260722052000_leaderboard_score_in
 V5_SCORER_MIGRATION="$ROOT_DIR/supabase/migrations/20260729070000_pure_arena_score_v5_zero_metric_scorer.sql"
 V2_MIGRATION="$ROOT_DIR/supabase/migrations/20260729070500_leaderboard_score_input_manifest_v2.sql"
 UNKNOWN_TRADES_MIGRATION="$ROOT_DIR/supabase/migrations/20261113014105_arena_score_unknown_trades_confidence.sql"
+TRUE_ZERO_TRADES_MIGRATION="$ROOT_DIR/supabase/migrations/20261114101514_arena_score_true_zero_trades_confidence.sql"
 FIXTURE="$ROOT_DIR/supabase/migrations/__tests__/fixtures/leaderboard-score-input-manifest-v1.json"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
@@ -1712,6 +1713,106 @@ BEGIN
   END IF;
 END
 $unknown_trades_proof$;
+SQL
+
+# ── 20261114101514: unknown trades → 1-trade confidence, self-computed 0 is real ──
+psql_cmd -q <<'SQL'
+CREATE TABLE public.true_zero_trades_before AS
+SELECT stored.manifest_id
+FROM arena.leaderboard_score_input_manifests AS stored
+WHERE stored.manifest->>'contract' = 'leaderboard-score-input-manifest@1'
+  AND stored.valid_until > pg_catalog.statement_timestamp()
+ORDER BY stored.manifest_id
+LIMIT 1;
+SQL
+PGOPTIONS="-c client_min_messages=warning" psql_cmd -q -f "$TRUE_ZERO_TRADES_MIGRATION"
+PGOPTIONS="-c client_min_messages=warning" psql_cmd -q -f "$TRUE_ZERO_TRADES_MIGRATION"
+
+psql_cmd -q <<'SQL'
+DO $true_zero_trades_proof$
+DECLARE
+  v_fixture jsonb := (SELECT payload FROM public.manifest_fixture);
+  v_inputs jsonb := '[
+    {"source":"cex","source_trader_id":"unknown","roi":50,"pnl":5000,"max_drawdown":10,"win_rate":55,"sharpe_ratio":1,"profit_factor":1.5,"trades_count":null},
+    {"source":"cex","source_trader_id":"zero","roi":50,"pnl":5000,"max_drawdown":10,"win_rate":55,"sharpe_ratio":1,"profit_factor":1.5,"trades_count":0},
+    {"source":"cex","source_trader_id":"one","roi":50,"pnl":5000,"max_drawdown":10,"win_rate":55,"sharpe_ratio":1,"profit_factor":1.5,"trades_count":1},
+    {"source":"hyperliquid","source_trader_id":"zero","roi":50,"pnl":5000,"max_drawdown":10,"win_rate":55,"sharpe_ratio":1,"profit_factor":1.5,"trades_count":0}
+  ]'::jsonb;
+  v_scorer text;
+  v_result jsonb;
+  v_conf jsonb;
+  v_sealed jsonb;
+  v_verified jsonb;
+  v_manifest jsonb;
+  v_old_id uuid := (SELECT manifest_id FROM public.true_zero_trades_before);
+BEGIN
+  FOREACH v_scorer IN ARRAY ARRAY['v4', 'v5']::text[] LOOP
+    EXECUTE pg_catalog.format(
+      'SELECT arena.compute_arena_scores_%s_json($1, $2)', v_scorer
+    ) INTO v_result USING '30D', v_inputs;
+    SELECT pg_catalog.jsonb_object_agg(
+      (o.value->>'source') || ':' || (o.value->>'sourceTraderId'), o.value->'confidence'
+    )
+    INTO v_conf
+    FROM pg_catalog.jsonb_array_elements(v_result->'outputs') AS o(value);
+    -- unknown (null, or a CEX 0) scores exactly like 1 real trade; a
+    -- self-computed true 0 scores strictly below it.
+    IF v_conf->'cex:one' IS NULL OR v_conf->'hyperliquid:zero' IS NULL
+       OR v_conf->'cex:unknown' IS DISTINCT FROM v_conf->'cex:one'
+       OR v_conf->'cex:zero' IS DISTINCT FROM v_conf->'cex:one'
+       OR (v_conf->>'hyperliquid:zero')::numeric >= (v_conf->>'cex:one')::numeric THEN
+      RAISE EXCEPTION '% true-zero-trades confidence drifted: %', v_scorer, v_conf;
+    END IF;
+  END LOOP;
+
+  v_sealed := arena.seal_leaderboard_score_input_manifest_v1(
+    v_fixture->>'period', v_fixture->>'sourceBundleDigest', v_fixture->>'scoreRowsDigest',
+    v_fixture->>'physicalBoardsDigest', v_fixture->'sourceEvidence',
+    v_fixture->>'enrichmentContract', v_fixture->'enrichmentEvidence',
+    v_fixture->>'eligibilityContract', v_fixture->'eligibilityEvidence',
+    v_fixture->'inputs', pg_catalog.statement_timestamp() + interval '1 hour'
+  );
+  SELECT stored.manifest INTO STRICT v_manifest
+  FROM arena.leaderboard_score_input_manifests AS stored
+  WHERE stored.manifest_id = (v_sealed->>'manifestId')::uuid;
+  v_verified := arena.verify_leaderboard_score_input_manifest_v1((v_sealed->>'manifestId')::uuid);
+  IF v_manifest->'scorer'->>'definitionDigest' IS DISTINCT FROM
+       'e9b7df87cd33d5c63aebd733f34b57cc0d4b19006c3db2421ddd298e376d4f3c'
+     OR (v_verified->>'valid')::boolean IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'v1 manifest does not bind the true-zero v4 definition: %, %',
+      v_manifest->'scorer', v_verified;
+  END IF;
+
+  v_sealed := arena.seal_leaderboard_score_input_manifest_v2(
+    v_fixture->>'period', v_fixture->>'sourceBundleDigest', v_fixture->>'scoreRowsDigest',
+    v_fixture->>'physicalBoardsDigest', v_fixture->'sourceEvidence',
+    v_fixture->>'enrichmentContract', v_fixture->'enrichmentEvidence',
+    v_fixture->>'eligibilityContract', v_fixture->'eligibilityEvidence',
+    v_fixture->'inputs', pg_catalog.statement_timestamp() + interval '1 hour'
+  );
+  SELECT stored.manifest INTO STRICT v_manifest
+  FROM arena.leaderboard_score_input_manifests AS stored
+  WHERE stored.manifest_id = (v_sealed->>'manifestId')::uuid;
+  v_verified := arena.verify_leaderboard_score_input_manifest_v2((v_sealed->>'manifestId')::uuid);
+  IF v_manifest->'scorer'->>'definitionDigest' IS DISTINCT FROM
+       '88a12a95d593e26a96f421a1269605147f79481e751aa8f82c30dc69747a1450'
+     OR (v_verified->>'valid')::boolean IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'v2 manifest does not bind the true-zero v5 definition: %, %',
+      v_manifest->'scorer', v_verified;
+  END IF;
+
+  IF v_old_id IS NOT NULL THEN
+    BEGIN
+      v_verified := arena.verify_leaderboard_score_input_manifest_v1(v_old_id);
+      IF (v_verified->>'valid')::boolean IS DISTINCT FROM false THEN
+        RAISE EXCEPTION 'old-definition manifest still verifies after the scorer change: %', v_verified;
+      END IF;
+    EXCEPTION
+      WHEN SQLSTATE '55000' THEN NULL;
+    END;
+  END IF;
+END
+$true_zero_trades_proof$;
 SQL
 
 echo "leaderboard score-input manifest PostgreSQL 17 proof passed"

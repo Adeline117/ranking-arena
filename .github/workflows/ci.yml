@@ -247,6 +247,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:bingx-rank-quarantine-pg17
 
+      - name: Prove Arena Score v4 PG17 golden vectors
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:score-v4-pg17
+
       - name: Prove Arena Score v5 trusted-zero semantics
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin

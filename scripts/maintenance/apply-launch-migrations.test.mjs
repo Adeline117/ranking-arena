@@ -146,7 +146,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     ...superseded,
   ]
 
-  assert.equal(predeploy.length, 151)
+  assert.equal(predeploy.length, 152)
   // Season publication follow-ups stay last; 011058 must follow the Bitget-bot
   // freshness-authority rewrite slot (20261111134416, #415's replacement for 20260728124000).
   assert.deepEqual(predeploy.slice(-6), [
@@ -223,9 +223,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260817060000_trader_series_publication_isolation.sql',
     '20260817061000_legacy_raw_metric_publication_isolation.sql',
   ])
-  assert.equal(new Set(all).size, 184)
+  assert.equal(new Set(all).size, 185)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-110), [
+  assert.deepEqual(predeploy.slice(-111), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -327,6 +327,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260817134214_quarantine_legacy_platform_stats_rpc.sql',
     '20261013094743_retire_v2_partition_cron_extend_arena_partitions.sql',
     '20261113014105_arena_score_unknown_trades_confidence.sql',
+    '20261114101514_arena_score_true_zero_trades_confidence.sql',
     '20261113104533_trader_follows_hard_cap_lock.sql',
     '20261113151848_sync_user_profile_email_from_auth.sql',
     '20261113151849_auth_user_has_password_rpc.sql',
@@ -425,7 +426,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes('20260729070500_leaderboard_score_input_manifest_v2.sql'))
   assert.ok(predeploy.includes('20260729071000_leaderboard_metric_trust_projection_v2.sql'))
   assert.ok(predeploy.includes('20260729071500_tier_a_one_phase_commit_guard.sql'))
-  assert.deepEqual(predeploy.slice(-38, -6), [
+  assert.deepEqual(predeploy.slice(-39, -6), [
     '20260729223000_rerank_public_eligible_rows_only.sql',
     '20260729224000_rank_eligible_leaderboard_count_cache.sql',
     '20260729225000_token_trader_rank_authority.sql',
@@ -455,6 +456,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260817134214_quarantine_legacy_platform_stats_rpc.sql',
     '20261013094743_retire_v2_partition_cron_extend_arena_partitions.sql',
     '20261113014105_arena_score_unknown_trades_confidence.sql',
+    '20261114101514_arena_score_true_zero_trades_confidence.sql',
     '20261113104533_trader_follows_hard_cap_lock.sql',
     '20261113151848_sync_user_profile_email_from_auth.sql',
     '20261113151849_auth_user_has_password_rpc.sql',
@@ -1301,9 +1303,14 @@ test('every superseded migration names a superseder and forward replacements tak
   ]) {
     before(pinned, '20261113014105_arena_score_unknown_trades_confidence.sql')
   }
+  before(
+    '20261113014105_arena_score_unknown_trades_confidence.sql',
+    '20261114101514_arena_score_true_zero_trades_confidence.sql'
+  )
   // The scoring-definition change and the follow cap are predeploy, never
   // postdeploy: the pre-change application stays correct under both.
   assert.ok(!postdeploy.includes('20261113014105_arena_score_unknown_trades_confidence.sql'))
+  assert.ok(!postdeploy.includes('20261114101514_arena_score_true_zero_trades_confidence.sql'))
   assert.ok(!postdeploy.includes('20261113104533_trader_follows_hard_cap_lock.sql'))
   // 192134 allowlists raw-object guards that later predeploy files install.
   assert.equal(
