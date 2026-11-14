@@ -179,6 +179,8 @@ PREDEPLOY_MIGRATIONS=(
   20261013094743_retire_v2_partition_cron_extend_arena_partitions.sql
   20261113014105_arena_score_unknown_trades_confidence.sql
   20261113104533_trader_follows_hard_cap_lock.sql
+  20261113151848_sync_user_profile_email_from_auth.sql
+  20261113151849_auth_user_has_password_rpc.sql
   20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql
   20261113011058_leaderboard_publication_source_isolation.sql
   20261113012028_public_snapshot_readers_sealed_freshness.sql
@@ -202,6 +204,10 @@ readonly -a PREDEPLOY_MIGRATIONS
 # manifest substrate created earlier in this same run never seals a manifest
 # under the old definition digest, and a failure stops the release before the
 # new scorer ships instead of leaving TS and PG17 diverged after it.
+# 20261113151848/151849 (#422, additive email-sync trigger + backfill and a
+# service_role-only password-status RPC) are predeploy: the new account routes
+# call auth_user_has_password, and without it they fail closed (require a
+# password, the old behavior) rather than break.
 # 20261113104533 (trader-follow hard-cap trigger) is predeploy because the
 # follow route from before 896ebfec3 stays correct under it: that route already
 # rejects at >= 100, and a raced insert surfaces as a 500 (no extra row)

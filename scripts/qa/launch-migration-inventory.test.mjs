@@ -62,7 +62,7 @@ test('exports a deterministic, hash-attested read-only launch inventory', () => 
   assert.match(first.inventorySha256, /^[a-f0-9]{64}$/u)
   const predeploy = first.phases.find((phase) => phase.name === 'predeploy')
   const postdeploy = first.phases.find((phase) => phase.name === 'postdeploy')
-  assert.equal(predeploy.count, 149)
+  assert.equal(predeploy.count, 151)
   assert.equal(postdeploy.count, 4)
   const firstMigration = predeploy.migrations[0]
   assert.equal(firstMigration.sha256, sha256(readFileSync(resolve(ROOT, firstMigration.path))))
@@ -511,7 +511,10 @@ test('CLI emits only deterministic inventory JSON and rejects arguments', () => 
   const report = JSON.parse(result.stdout)
   assert.equal(report.contract, LAUNCH_MIGRATION_INVENTORY_CONTRACT)
   assert.equal(result.stdout.includes('postgres://'), false)
-  assert.equal(result.stdout.includes('password'), false)
+  // No credential values. The bare word is not checked: migration file names
+  // such as 20261113151849_auth_user_has_password_rpc.sql legitimately contain it.
+  assert.doesNotMatch(result.stdout, /password\s*[=:]|:[^/@\s"]+@/iu)
+  assert.doesNotMatch(result.stdout, /PGPASSWORD|service_role_key|eyJhbGci/u)
 
   const invalid = spawnSync(process.execPath, [SCRIPT, '--live'], { encoding: 'utf8' })
   assert.equal(invalid.status, 2)
