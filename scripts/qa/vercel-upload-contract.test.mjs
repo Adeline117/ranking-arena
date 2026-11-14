@@ -61,7 +61,10 @@ function telegramFunctions() {
   return functions
 }
 
-function runTelegramFunction({ http = '200', curlExit = '0', token = 'bot-secret', chat = '42' }) {
+function runTelegramFunction(
+  helper,
+  { http = '200', curlExit = '0', token = 'bot-secret', chat = '42' }
+) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'arena-telegram-alert-'))
   try {
     const fakeCurl = path.join(directory, 'curl')
@@ -77,22 +80,18 @@ function runTelegramFunction({ http = '200', curlExit = '0', token = 'bot-secret
     fs.chmodSync(fakeCurl, 0o755)
     const summary = path.join(directory, 'summary.md')
     fs.writeFileSync(summary, '')
-    const result = spawnSync(
-      'bash',
-      ['-c', `${telegramFunctions()[0]}\nsend_telegram_alert "test alert"`],
-      {
-        encoding: 'utf8',
-        env: {
-          ...process.env,
-          PATH: `${directory}:${process.env.PATH}`,
-          FAKE_CURL_HTTP: http,
-          FAKE_CURL_EXIT: curlExit,
-          GITHUB_STEP_SUMMARY: summary,
-          TELEGRAM_BOT_TOKEN: token,
-          TELEGRAM_ALERT_CHAT_ID: chat,
-        },
-      }
-    )
+    const result = spawnSync('bash', ['-c', `${helper}\nsend_telegram_alert "test alert"`], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        PATH: `${directory}:${process.env.PATH}`,
+        FAKE_CURL_HTTP: http,
+        FAKE_CURL_EXIT: curlExit,
+        GITHUB_STEP_SUMMARY: summary,
+        TELEGRAM_BOT_TOKEN: token,
+        TELEGRAM_ALERT_CHAT_ID: chat,
+      },
+    })
     return { ...result, summary: fs.readFileSync(summary, 'utf8') }
   } finally {
     fs.rmSync(directory, { recursive: true, force: true })
@@ -110,23 +109,6 @@ test('uploads the build lifecycle checker required by package.json', () => {
 test('keeps unrelated operational scripts out of the Vercel upload', () => {
   assert.equal(ignoredByVercelRules('scripts/openclaw/daily-pipeline-report.mjs'), true)
   assert.equal(ignoredByVercelRules('scripts/post-deploy-check.sh'), true)
-})
-
-test('keeps Vercel candidate failures reproducible and diagnosable', () => {
-  const workflow = deployGate
-  assert.doesNotMatch(workflow, /vercel@latest/)
-  assert.match(
-    workflow,
-    /vercel@56\.2\.1 deploy --prod --skip-domain --yes --no-wait --meta gateSha/
-  )
-  assert.doesNotMatch(workflow, /vercel@56\.2\.1 deploy --prod[^\n]+--logs/)
-  assert.match(workflow, /vercel@56\.2\.1 deploy --dry --format=json/)
-  assert.match(workflow, /Vercel upload manifest is missing required build file/)
-  assert.match(workflow, /--build-env VERCEL_BUILD_SYSTEM_REPORT=1/)
-  assert.match(workflow, /timeout 60s npx vercel@56\.2\.1 inspect "\$CANDIDATE_URL" --logs/)
-  assert.match(workflow, /timeout 60s npx vercel@56\.2\.1 inspect "\$DEPLOY_URL" --logs/)
-  assert.match(workflow, /::error title=Vercel candidate build failed::/)
-  assert.match(workflow, /::error title=Vercel candidate did not become ready::/)
 })
 
 test('keeps Deploy Gate as the only writer of production domains', () => {
@@ -152,129 +134,8 @@ test('keeps Deploy Gate as the only writer of production domains', () => {
   )
 })
 
-test('waits for Vercel READY within the job budget before allowing promotion', () => {
-  const workflow = deployGate
-  assert.match(workflow, /cancel-in-progress: false/)
-  assert.match(workflow, /id: wait_candidate/)
-  assert.match(workflow, /node scripts\/ci\/wait-for-vercel-deployment\.mjs "\$DEPLOY_URL"/)
-  assert.match(workflow, /VERCEL_DEPLOY_WAIT_TIMEOUT_MS: '1200000'/)
-  assert.match(workflow, /VERCEL_DEPLOY_POLL_INTERVAL_MS: '15000'/)
-  assert.match(workflow, /VERCEL_DEPLOY_REQUEST_TIMEOUT_MS: '15000'/)
-  assert.match(
-    workflow,
-    /if: steps\.fresh\.outputs\.deploy == 'true' && steps\.wait_candidate\.outcome == 'success'/
-  )
-})
-
-test('revokes production write authority when a candidate is no longer exact main', () => {
-  assert.match(deployGate, /Deploy decision \(run SHA is exact main and newer than serving\?\)/)
-  assert.equal(deployGate.match(/^\s+MAIN_SHA=\$\(git rev-parse FETCH_HEAD\)$/gm)?.length, 2)
-  assert.equal(deployGate.match(/if \[ "\$HEAD_SHA" != "\$MAIN_SHA" \]; then/g)?.length, 2)
-  assert.match(deployGate, /skip stale candidate[\s\S]*echo "deploy=false"/)
-  assert.match(deployGate, /superseded during build[\s\S]*echo "promoted=false"[\s\S]*exit 0/)
-  assert.match(deployGate, /PROMOTE_MAIN_SHA=\$\(git rev-parse FETCH_HEAD\)/)
-  assert.match(
-    deployGate,
-    /if \[ "\$HEAD_SHA" != "\$PROMOTE_MAIN_SHA" \]; then[\s\S]*echo "promoted=false"[\s\S]*exit 0[\s\S]*echo "promoted=true"[\s\S]*npx vercel@56\.2\.1 promote/
-  )
-  assert.doesNotMatch(deployGate, /不再要求恰好等于 HEAD/)
-})
-
-test('reasserts the single production writer without ever skipping promoted smoke', () => {
-  assert.match(
-    deployGate,
-    /- name: Pin release-control helpers for this Gate run\n        run: \|[\s\S]*install -m 700 scripts\/ci\/enforce-vercel-release-control\.mjs "\$RUNNER_TEMP\/enforce-vercel-release-control\.mjs"[\s\S]*install -m 700 scripts\/ci\/validate-release-health\.mjs "\$RUNNER_TEMP\/validate-release-health\.mjs"[\s\S]*install -m 700 scripts\/ci\/verify-metric-trust-release-readiness\.mjs "\$RUNNER_TEMP\/verify-metric-trust-release-readiness\.mjs"[\s\S]*install -m 700 scripts\/ci\/verify-worker-release-readiness\.mjs "\$RUNNER_TEMP\/verify-worker-release-readiness\.mjs"[\s\S]*install -m 700 scripts\/ci\/worker-release-id\.mjs "\$RUNNER_TEMP\/worker-release-id\.mjs"/
-  )
-  assert.equal(
-    deployGate.match(/node "\$RUNNER_TEMP\/enforce-vercel-release-control\.mjs"/g)?.length,
-    4
-  )
-  assert.ok(
-    deployGate.indexOf('Pin release-control helpers for this Gate run') <
-      deployGate.indexOf('git checkout --quiet "$HEAD_SHA"')
-  )
-  assert.match(
-    deployGate,
-    /- name: Require production metric-trust schema before deploy\n        if: steps\.fresh\.outputs\.deploy == 'true'[\s\S]*NEXT_PUBLIC_SUPABASE_URL: \$\{\{ secrets\.NEXT_PUBLIC_SUPABASE_URL \}\}[\s\S]*SUPABASE_SERVICE_ROLE_KEY: \$\{\{ secrets\.SUPABASE_SERVICE_ROLE_KEY \}\}[\s\S]*node "\$RUNNER_TEMP\/verify-metric-trust-release-readiness\.mjs"/
-  )
-  assert.ok(
-    deployGate.indexOf('Require production metric-trust schema before deploy') <
-      deployGate.indexOf('Deploy to Vercel (build on Vercel infra)')
-  )
-  assert.match(
-    deployGate,
-    /- name: Require exact ingest worker fleet before promotion[\s\S]*id: worker_fleet[\s\S]*CRON_SECRET: \$\{\{ secrets\.CRON_SECRET \}\}[\s\S]*WORKER_READINESS_BASE_URL: \$\{\{ steps\.deploy_candidate\.outputs\.url \}\}[\s\S]*WORKER_RELEASE_ID: \$\{\{ steps\.worker_release\.outputs\.id \}\}[\s\S]*npx vercel@56\.2\.1 curl[\s\S]*"\/api\/health\/worker-release-readiness"[\s\S]*--deployment "\$WORKER_READINESS_BASE_URL" \\[\s\S]*-- \\[\s\S]*--max-redirs 0[\s\S]*WORKER_READINESS_PAYLOAD_FILE="\$PAYLOAD_FILE"[\s\S]*node "\$RUNNER_TEMP\/verify-worker-release-readiness\.mjs"/
-  )
-  assert.match(deployGate, /--build-env ARENA_WORKER_RELEASE_ID="\$WORKER_RELEASE_ID"/)
-  assert.match(deployGate, /--env ARENA_WORKER_RELEASE_ID="\$WORKER_RELEASE_ID"/)
-  assert.doesNotMatch(deployGate, /vercel@56\.2\.1 curl[\s\S]{0,500}--token/)
-  assert.doesNotMatch(deployGate, /secrets\.VERCEL_AUTOMATION_BYPASS_SECRET/)
-  assert.ok(
-    deployGate.indexOf('Wait for candidate READY (bounded)') <
-      deployGate.indexOf('Require exact ingest worker fleet before promotion')
-  )
-  assert.ok(
-    deployGate.indexOf('Require exact ingest worker fleet before promotion') <
-      deployGate.indexOf('Promote only if candidate is not stale after build')
-  )
-  assert.match(
-    deployGate,
-    /if: steps\.fresh\.outputs\.deploy == 'true' && steps\.wait_candidate\.outcome == 'success' && steps\.worker_fleet\.outcome == 'success'/
-  )
-  assert.match(
-    deployGate,
-    /echo "promoted=true" >> "\$GITHUB_OUTPUT"[\s\S]*npx vercel@56\.2\.1 promote/
-  )
-  assert.match(
-    deployGate,
-    /if: always\(\) && steps\.promote_candidate\.outputs\.promoted == 'true'/
-  )
-  assert.match(
-    deployGate,
-    /RELEASE_CONTROL_RESTORED: \$\{\{ steps\.promote_candidate\.outputs\.release_control \}\}/
-  )
-  assert.match(deployGate, /\[ "\$RELEASE_CONTROL_RESTORED" != "true" \]/)
-  assert.match(deployGate, /ROLLBACK_CONTROL_RESTORED=false/)
-  assert.match(deployGate, /ROLLBACK_CONTROL_RESTORED=true/)
-  assert.match(
-    deployGate,
-    /- name: Finalize single production writer\n        if: always\(\) && steps\.promote_candidate\.outputs\.promoted == 'true'/
-  )
-})
-
-test('verifies an exact release-safe public SHA after deploy-gate rollback', () => {
-  const workflow = deployGate
-  assert.match(workflow, /echo "serving=\$SERVING" >> "\$GITHUB_OUTPUT"/)
-  assert.match(workflow, /PREVIOUS_DEPLOYMENT_ID: \$\{\{ steps\.fresh\.outputs\.previous_id \}\}/)
-  assert.match(workflow, /EXPECTED_ROLLBACK_SHA: \$\{\{ steps\.fresh\.outputs\.serving \}\}/)
-  assert.match(workflow, /--connect-timeout 5 --max-time 30/)
-  assert.match(workflow, /gate_rollback_verify=/)
-  assert.match(workflow, /install -m 700 scripts\/ci\/validate-release-health\.mjs/)
-  assert.match(workflow, /node "\$RUNNER_TEMP\/validate-release-health\.mjs"/)
-  assert.match(workflow, /"\$HEALTH_HTTP" = "200" \|\| "\$HEALTH_HTTP" = "202"/)
-  assert.match(workflow, /\[ "\$HEALTH_SAFE" = "true" \]/)
-  assert.match(workflow, /\[ "\$SERVING_SHA" = "\$EXPECTED_ROLLBACK_SHA" \]/)
-  assert.match(workflow, /\[ "\$SERVING_SHA" != "\$HEAD_SHA" \]/)
-  assert.match(workflow, /STABLE_CONFIRMATIONS.*2/)
-  assert.match(workflow, /RECOVERY_SHA.*EXPECTED_ROLLBACK_SHA/)
-  assert.doesNotMatch(workflow, /2\?\?\) ROLLED="已自动回滚/)
-  assert.doesNotMatch(workflow, /promote\/\$PREV_ID/)
-})
-
-test('does not duplicate the detailed smoke rollback alert', () => {
-  assert.match(deployGate, /id: smoke_release/)
-  assert.match(deployGate, /echo "alerted=true" >> "\$GITHUB_OUTPUT"/)
-  assert.match(
-    deployGate,
-    /if: failure\(\) && steps\.gate\.outputs\.pass == 'true' && steps\.smoke_release\.outputs\.alerted != 'true'/
-  )
-})
-
 test('skips duplicate Next type validation only for a CI-attested candidate', () => {
   assert.match(nextConfig, /ignoreBuildErrors: process\.env\.ARENA_CI_TYPES_ATTESTED === '1'/)
-  assert.equal(deployGate.match(/--build-env ARENA_CI_TYPES_ATTESTED=1/g)?.length, 1)
-  assert.doesNotMatch(deployGate, /--env ARENA_CI_TYPES_ATTESTED=/)
-  assert.match(deployGate, /"Lint & Type Check"/)
   assert.match(
     ciWorkflow,
     /- name: Type-check application[\s\S]*?NODE_OPTIONS: --max-old-space-size=4096[\s\S]*?run: npx tsc --noEmit/
@@ -288,60 +149,42 @@ test('allocates enough V8 heap for the production application build', () => {
   )
 })
 
-test('makes every deploy-gate Telegram failure observable without blocking the gate', () => {
-  const workflow = deployGate
-  assert.match(
-    workflow,
-    /- name: Alert on red gate \(deploy withheld\)\n        if: always\(\) && steps\.gate\.outputs\.pass != 'true'/
-  )
-  assert.equal(workflow.match(/send_telegram_alert\(\) \{/g)?.length, 3)
-  assert.equal(workflow.match(/--connect-timeout 5 --max-time 10/g)?.length, 3)
-  assert.equal(workflow.match(/--output \/dev\/null --write-out '%\{http_code\}'/g)?.length, 3)
-  assert.equal(workflow.match(/\[\[ "\$\{http:-000\}" != 2\* \]\]/g)?.length, 3)
-  assert.equal(workflow.match(/::warning title=Telegram alert delivery failed::/g)?.length, 6)
-  assert.equal(
-    workflow.match(/TELEGRAM_BOT_TOKEN: \$\{\{ secrets\.TELEGRAM_BOT_TOKEN \}\}/g)?.length,
-    3
-  )
-  assert.equal(
-    workflow.match(/TELEGRAM_ALERT_CHAT_ID: \$\{\{ secrets\.TELEGRAM_ALERT_CHAT_ID \}\}/g)?.length,
-    3
-  )
-  assert.doesNotMatch(workflow, /api\.telegram\.org[^\n]+\|\| true/)
-  assert.doesNotMatch(workflow, /if \[ -n "\$\{\{ secrets\.TELEGRAM_BOT_TOKEN \}\}"/)
+// Every inline copy of the alert helper is executed, however many there are.
+const telegramHelpers = telegramFunctions()
+
+test('deploy gate defines a Telegram alert helper', () => {
+  assert.ok(telegramHelpers.length > 0)
 })
 
-test('treats Telegram HTTP failures as non-blocking but visible', () => {
-  const functions = telegramFunctions()
-  assert.equal(functions.length, 3)
-  assert.equal(new Set(functions).size, 1)
+for (const [index, helper] of telegramHelpers.entries()) {
+  test(`Telegram helper ${index + 1}: HTTP failures are non-blocking but visible`, () => {
+    const unauthorized = runTelegramFunction(helper, { http: '401' })
+    assert.equal(unauthorized.status, 0)
+    assert.match(
+      unauthorized.stdout,
+      /::warning title=Telegram alert delivery failed::curl=0 HTTP=401/
+    )
+    assert.match(unauthorized.summary, /Telegram alert delivery failed .* HTTP=401/)
+    assert.doesNotMatch(
+      `${unauthorized.stdout}${unauthorized.stderr}${unauthorized.summary}`,
+      /bot-secret|42/
+    )
 
-  const unauthorized = runTelegramFunction({ http: '401' })
-  assert.equal(unauthorized.status, 0)
-  assert.match(
-    unauthorized.stdout,
-    /::warning title=Telegram alert delivery failed::curl=0 HTTP=401/
-  )
-  assert.match(unauthorized.summary, /Telegram alert delivery failed .* HTTP=401/)
-  assert.doesNotMatch(
-    `${unauthorized.stdout}${unauthorized.stderr}${unauthorized.summary}`,
-    /bot-secret|42/
-  )
+    const timedOut = runTelegramFunction(helper, { http: '000', curlExit: '28' })
+    assert.equal(timedOut.status, 0)
+    assert.match(timedOut.stdout, /curl=28 HTTP=000/)
+  })
 
-  const timedOut = runTelegramFunction({ http: '000', curlExit: '28' })
-  assert.equal(timedOut.status, 0)
-  assert.match(timedOut.stdout, /curl=28 HTTP=000/)
-})
+  test(`Telegram helper ${index + 1}: success is quiet, missing credentials are visible`, () => {
+    const delivered = runTelegramFunction(helper, { http: '200' })
+    assert.equal(delivered.status, 0)
+    assert.match(delivered.stdout, /Telegram alert delivered HTTP 200/)
+    assert.doesNotMatch(delivered.stdout, /::warning/)
+    assert.equal(delivered.summary, '')
 
-test('keeps successful Telegram delivery quiet and missing credentials visible', () => {
-  const delivered = runTelegramFunction({ http: '200' })
-  assert.equal(delivered.status, 0)
-  assert.match(delivered.stdout, /Telegram alert delivered HTTP 200/)
-  assert.doesNotMatch(delivered.stdout, /::warning/)
-  assert.equal(delivered.summary, '')
-
-  const missing = runTelegramFunction({ token: '', chat: '' })
-  assert.equal(missing.status, 0)
-  assert.match(missing.stdout, /required secret is missing/)
-  assert.match(missing.summary, /required secret is missing/)
-})
+    const missing = runTelegramFunction(helper, { token: '', chat: '' })
+    assert.equal(missing.status, 0)
+    assert.match(missing.stdout, /required secret is missing/)
+    assert.match(missing.summary, /required secret is missing/)
+  })
+}

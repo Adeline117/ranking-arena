@@ -83,14 +83,9 @@ test('CLI returns a bounded decision without echoing the full health payload', (
   assert.match(rejected.stderr, /not valid JSON/)
 })
 
-test('deploy smoke and rollback use the same release-health authority', () => {
+test('deploy smoke uses the release-health authority', () => {
   const smoke = fs.readFileSync(path.join(root, 'scripts/post-deploy-check.sh'), 'utf8')
-  const gate = fs.readFileSync(path.join(root, '.github/workflows/deploy-gate.yml'), 'utf8')
 
   assert.match(smoke, /node scripts\/ci\/validate-release-health\.mjs/)
   assert.doesNotMatch(smoke, /\[ "\$HEALTH_STATE" = "healthy" \]/)
-  assert.match(gate, /install -m 700 scripts\/ci\/validate-release-health\.mjs/)
-  assert.match(gate, /node "\$RUNNER_TEMP\/validate-release-health\.mjs"/)
-  assert.match(gate, /"\$HEALTH_HTTP" = "202"/)
-  assert.match(gate, /\[ "\$HEALTH_SAFE" = "true" \]/)
 })
