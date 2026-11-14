@@ -3,11 +3,14 @@ import SSRRankingTable from '../SSRRankingTable'
 import type { InitialTrader } from '@/lib/getInitialTraders'
 import { getCriticalCss } from '@/lib/performance/critical-css'
 
-jest.mock('@/lib/i18n/server', () => ({
-  getStaticTranslation: () => ({
-    t: (key: string) => (key === 'holderBadge' ? 'Holder' : key),
-  }),
-}))
+jest.mock('@/lib/i18n/server', () => {
+  const en = jest.requireActual('@/lib/i18n/en').default as Record<string, string>
+  return {
+    getStaticTranslation: () => ({
+      t: (key: string) => (key === 'holderBadge' ? 'Holder' : (en[key] ?? key)),
+    }),
+  }
+})
 
 const traders: InitialTrader[] = [
   {

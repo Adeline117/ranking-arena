@@ -21,7 +21,7 @@ function CopyButton({ text }: { text: string }) {
           setTimeout(() => setCopied(false), 1500)
         })
       }}
-      aria-label={copied ? 'Copied' : 'Copy trader ID'}
+      aria-label={copied ? t('copied') : t('copyTraderIdAria')}
       title={t('copy')}
       style={{
         background: 'none',
@@ -80,7 +80,8 @@ function TopTraderCard({ trader, rank }: { trader: Trader; rank: number }) {
       : roi >= 0
         ? tokens.colors.accent.success
         : tokens.colors.accent.error
-  const roiAria = roi != null ? `ROI ${formatROI(roi)}` : t('roiUnknown')
+  const roiAria =
+    roi != null ? t('roiValueAria').replace('{value}', formatROI(roi)) : t('roiUnknown')
   const href = `/trader/${encodeURIComponent(trader.id)}${trader.source ? `?platform=${encodeURIComponent(trader.source)}` : ''}`
   const medalColor = MEDAL_COLORS[rank - 1] || tokens.colors.text.tertiary
 

@@ -222,7 +222,10 @@ export const TraderRow = memo(
     const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}${href}` : href
     const roiAria =
       trader.roi != null && Number.isFinite(trader.roi)
-        ? `ROI ${trader.roi >= 0 ? '+' : ''}${trader.roi.toFixed(2)}%`
+        ? t('roiValueAria').replace(
+            '{value}',
+            `${trader.roi >= 0 ? '+' : ''}${trader.roi.toFixed(2)}%`
+          )
         : t('roiUnknown')
 
     return (

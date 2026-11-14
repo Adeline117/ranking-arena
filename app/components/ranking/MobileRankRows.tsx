@@ -234,8 +234,14 @@ export const TraderMobileRow = memo(
     }
 
     const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}${href}` : href
-    const roiAria = roi != null ? `ROI ${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%` : t('roiUnknown')
-    const scoreAria = score != null ? `Arena Score ${score.toFixed(0)}` : 'Arena Score unknown'
+    const roiAria =
+      roi != null
+        ? t('roiValueAria').replace('{value}', `${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%`)
+        : t('roiUnknown')
+    const scoreAria =
+      score != null
+        ? t('arenaScoreAria').replace('{score}', score.toFixed(0))
+        : t('arenaScoreUnknownAria')
 
     return (
       <TraderRowSwipeActions
