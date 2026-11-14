@@ -22,6 +22,8 @@ const nullableNumber = z.number().nullable()
 const nullableString = z.string().nullable()
 
 export const PeriodSchema = z.enum(['7D', '30D', '90D'])
+/** /api/rankings also serves the 90D/30D/7D composite (`window=composite`). */
+export const RankingsWindowSchema = z.enum(['7D', '30D', '90D', 'COMPOSITE'])
 
 const SourceFreshnessSchema = z.object({
   source: z.string().min(1),
@@ -111,7 +113,7 @@ export const RankingsResponseSchema = envelope(
         max_drawdown: nullableNumber,
       })
     ),
-    window: PeriodSchema,
+    window: RankingsWindowSchema,
     hasMore: z.boolean(),
     is_stale: z.boolean(),
     as_of: nullableString,
@@ -190,18 +192,7 @@ export type TradersListContractCheck = Satisfies<
 >
 
 type RankingsContract = z.infer<typeof RankingsResponseSchema>['data']
-/**
- * KNOWN DIVERGENCE (reported, not fixed here): `window=composite` answers with
- * `window: 'COMPOSITE'`, which PeriodSchema rejects. RankingsContractCheck
- * covers every other field; the expect-error line fails once route and
- * contract agree on `window`, and the narrowing can then be dropped.
- */
-type RankingsPeriodData = Omit<PublicRankingsData, 'window'> & {
-  window: z.infer<typeof PeriodSchema>
-}
-export type RankingsContractCheck = Satisfies<RankingsPeriodData, RankingsContract>
-// @ts-expect-error -- known divergence on `window`, see above
-export type RankingsCompositeCheck = Satisfies<PublicRankingsData, RankingsContract>
+export type RankingsContractCheck = Satisfies<PublicRankingsData, RankingsContract>
 
 type TraderDetailContract = z.infer<typeof TraderDetailResponseSchema>['data']
 /**

@@ -415,21 +415,6 @@ export async function reconcileSchedulers(): Promise<void> {
         if (overdueMs < Math.max(2 * every, 45 * 60_000) || state === 'active') continue
         reason = `iteration stuck in ${state}`
       }
-      // take-7b: remove the superseded iteration BEFORE rebuilding. The rebuild
-      // (removeJobScheduler + upsertJobScheduler) detaches the old iteration
-      // job but leaves it IN the queue — each revive wave stacked one more
-      // orphan per source (295 prio-9 zombies by 07-09, oldest 9h; the clog
-      // lengthened queue latency, which made more schedulers look stuck, which
-      // revived more: the same feedback shape as take-6's kick wedge). Never
-      // remove an ACTIVE job (guarded above); remove() on a just-started one
-      // throws and is caught — the orphan then drains normally.
-      if (iterationJob) {
-        try {
-          await iterationJob.remove()
-        } catch {
-          /* just-started or already gone — the orphan then drains normally */
-        }
-      }
       const tmplData = scheduler.template?.data ?? {}
       // take-6 (2026-07-03): preserve the template OPTS on rebuild. The old
       // rebuild passed only {name, data}, silently dropping opts.priority —
@@ -449,6 +434,25 @@ export async function reconcileSchedulers(): Promise<void> {
       const tmplOpts = (scheduler.template?.opts ?? {}) as { priority?: number }
       const tierPriority = PRIORITY_BY_PREFIX[key.split(':')[0]] ?? tmplOpts.priority ?? 1
       await q.removeJobScheduler(key)
+      // take-7b: drop the superseded iteration before rebuilding. The rebuild
+      // detaches the old iteration job but leaves it IN the queue — each
+      // revive wave stacked one more orphan per source (295 prio-9 zombies by
+      // 07-09, oldest 9h; the clog made more schedulers look stuck, which
+      // revived more). BullMQ refuses to remove a scheduler's current
+      // iteration while the scheduler exists, so this must run AFTER
+      // removeJobScheduler (before it, the remove always threw and was
+      // swallowed). Never an ACTIVE job (guarded above); a just-started one
+      // throws and is caught — that orphan then drains normally.
+      if (iterationJob) {
+        try {
+          await iterationJob.remove()
+        } catch (err) {
+          console.warn(
+            `[ingest-scheduler] could not remove superseded iteration of ${key}: ` +
+              (err instanceof Error ? err.message : String(err))
+          )
+        }
+      }
       await q.upsertJobScheduler(
         key,
         { every },

@@ -9,7 +9,10 @@
  *      (latest passed / sealed-publication board / trust / Tier-A receipt)
  *   7. open positions of traders that left the Tier-D cohort dropped
  * Runs every 6h; each step is independent — one failure doesn't block the
- * rest, and failures land in the daily digest (never page).
+ * rest, and failures land in the daily digest. A partitions failure also
+ * pages: without the month's child partition every write to that table fails
+ * (there is deliberately no DEFAULT partition — a row parked there would make
+ * creating its month's child fail forever).
  */
 
 import type { Job } from 'bullmq'
@@ -103,21 +106,29 @@ export async function processMaintenance(_job: Job): Promise<Record<string, unkn
     ],
   ]
 
+  let undeliveredPage: unknown
   for (const [name, fn] of steps) {
     try {
       report[name] = await fn()
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       report[name] = `ERROR: ${message}`
-      await alert(redis, {
-        sourceSlug: 'framework',
-        phase: 0,
-        tier: 'maint',
-        message: `maintenance step ${name} failed: ${message}`,
-      })
+      try {
+        await alert(redis, {
+          sourceSlug: 'framework',
+          phase: 0,
+          tier: 'maint',
+          message: `maintenance step ${name} failed: ${message}`,
+          page: name === 'partitions',
+        })
+      } catch (alertError) {
+        // Run the remaining steps, then fail the job so the miss is visible.
+        undeliveredPage = alertError
+      }
     }
   }
 
   console.log('[maintenance]', JSON.stringify(report))
+  if (undeliveredPage !== undefined) throw undeliveredPage
   return report
 }

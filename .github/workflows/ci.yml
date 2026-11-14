@@ -489,6 +489,17 @@ jobs:
           --health-interval 2s
           --health-timeout 2s
           --health-retries 15
+      # Separate server: the ownership test requires an empty Redis, and jest
+      # runs the two files in parallel workers.
+      ingest-scheduler-redis:
+        image: redis:7.4.9-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -501,6 +512,7 @@ jobs:
       - name: Run tests with coverage
         env:
           WORKER_OWNERSHIP_REDIS_TEST_URL: redis://127.0.0.1:6379/15
+          INGEST_SCHEDULER_REDIS_TEST_URL: redis://127.0.0.1:6380/15
         # Keep jsdom/webpack transforms inside the hosted-runner memory budget.
         # Unbounded CPU-derived workers caused deterministic 10s RTL timeouts
         # under coverage despite the same files passing alone.

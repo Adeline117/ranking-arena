@@ -1,6 +1,9 @@
 import type { RawPage, SourceRow } from '../../../core/types'
 import type { FetchSession, ReplayRequestTemplate } from '../../../fetch/types'
-import { HistoryPageCapReachedError } from '../../../core/history-page-cap'
+import {
+  CopierPageCapReachedError,
+  HistoryPageCapReachedError,
+} from '../../../core/history-page-cap'
 import { gateAdapter } from '../index'
 
 const src = {
@@ -99,6 +102,42 @@ describe('gate orders/transfers history page budget', () => {
     )
     expect(error).toBeNull()
     expect(pages).toHaveLength(1)
+  })
+})
+
+describe('gate cfd copier page budget', () => {
+  const cfd = {
+    ...src,
+    slug: 'gate_cfd',
+    meta: { boardKey: 'cfd', history_max_pages: 2 },
+  } as unknown as SourceRow
+  const followers = (count: number, pagecount?: number) => ({
+    code: 0,
+    data: {
+      pagecount,
+      list: Array.from({ length: count }, (_, i) => ({ nick_name: `f${i}` })),
+    },
+  })
+  const copiers = (fetchSession: FetchSession) =>
+    collect(gateAdapter.getHistory(fetchSession, cfd, 'leader-1', 'copiers', null))
+
+  it('raises CopierPageCapReachedError when the budget ends while the source has more', async () => {
+    const { pages, error } = await copiers(session(() => followers(10, 5)))
+    expect(pages).toHaveLength(2)
+    expect(error).toBeInstanceOf(CopierPageCapReachedError)
+    expect(error).toMatchObject({ sourceSlug: 'gate_cfd', pageCap: 2 })
+  })
+
+  it('a full last page that pagecount marks as the end is complete', async () => {
+    const { pages, error } = await copiers(session(() => followers(10, 2)))
+    expect(error).toBeNull()
+    expect(pages).toHaveLength(2)
+  })
+
+  it('fails on a business error instead of treating it as an empty follower list', async () => {
+    const { pages, error } = await copiers(session(() => ({ code: 40001, data: null })))
+    expect(pages).toHaveLength(0)
+    expect(String(error)).toMatch(/non-success API envelope/)
   })
 })
 

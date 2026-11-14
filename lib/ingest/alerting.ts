@@ -1,6 +1,8 @@
 /**
  * Alerting discipline for a solo operator (spec §15):
- *   - ONLY Tier-A failures on phase<=1 sources page in real time (Telegram)
+ *   - ONLY Tier-A failures on phase<=1 sources page in real time (Telegram),
+ *     plus the few framework failures a caller marks `page: true` (partition
+ *     maintenance: a missing month partition stops every write)
  *   - everything else accumulates in a Redis list, flushed once a day by
  *     the daily-digest processor
  * A solo founder cannot be woken by 31 sources; the system degrades
@@ -143,15 +145,15 @@ export function pageCooldownKey(sourceSlug: string, tier: IngestAlert['tier']): 
   return `arena:ingest:page-cooldown:${sourceSlug}:${tier}`
 }
 
-/** Route an alert: page now (phase<=1 Tier A, cooldown-gated) or queue for
+/** Route an alert: page now (phase<=1 Tier A or `page`, cooldown-gated) or queue for
  *  the digest. Throws AlertDeliveryError when a page reached no channel. */
 export async function alert(
   redis: IORedis,
-  a: Omit<IngestAlert, 'at'>,
+  { page = false, ...a }: Omit<IngestAlert, 'at'> & { page?: boolean },
   sendOpts?: TelegramSendOptions
 ): Promise<void> {
   const full: IngestAlert = { ...a, at: new Date().toISOString() }
-  const pages = a.tier === 'A' && a.phase <= 1
+  const pages = page || (a.tier === 'A' && a.phase <= 1)
   // Everything (paged, cooled-down, or digest-tier) lands in the daily
   // digest — queued FIRST so a paging failure can never drop the record.
   await redis.rpush(DIGEST_KEY, JSON.stringify(full))
