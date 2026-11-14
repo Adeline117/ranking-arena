@@ -6,8 +6,17 @@
  * blocking commands — keeping it to 1 queue = 2 connections total.
  */
 
-import { Queue } from 'bullmq'
+import { Queue, type ConnectionOptions } from 'bullmq'
 import { getRankingCommandChainConnection } from './connection'
+
+/**
+ * The ranking-chain ioredis client typed for BullMQ. bullmq bundles its own
+ * ioredis copy, so the two Redis types differ only nominally (same pattern as
+ * ingestConnection in ./ingest/queues).
+ */
+export function rankingCommandChainBullConnection(): ConnectionOptions {
+  return getRankingCommandChainConnection() as unknown as ConnectionOptions
+}
 
 export const QUEUE_NAME = 'arena-pipeline'
 
@@ -17,7 +26,7 @@ export function getQueue(): Queue {
   if (queue) return queue
   queue = new Queue(QUEUE_NAME, {
     // Ranking command-chain queue: gated by the ranking constant, not ingest.
-    connection: getRankingCommandChainConnection(),
+    connection: rankingCommandChainBullConnection(),
     defaultJobOptions: {
       attempts: 3,
       backoff: { type: 'exponential', delay: 10_000 },
