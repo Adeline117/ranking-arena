@@ -24,6 +24,12 @@ export interface NativeIngestAuthorityStatus {
 
 export interface NativeIngestServingStartupSteps {
   clearServingTimer?: (timer: NodeJS.Timeout) => void
+  /**
+   * Monthly partition pre-creation, run once before any consumer starts
+   * (2026-11 audit P1-6): the scheduled housekeeping first fires only after
+   * its full 6h interval, while consumers write immediately.
+   */
+  ensurePartitions: () => Promise<unknown>
   lifecycle: NativeIngestAuthorityStatus
   markReady: () => unknown
   reconcileSchedulers: () => Promise<void>
@@ -67,6 +73,7 @@ function assertRuntimeState(
  */
 export async function startNativeIngestServing({
   clearServingTimer = (timer) => clearInterval(timer),
+  ensurePartitions,
   lifecycle,
   markReady,
   reconcileSchedulers,
@@ -103,6 +110,9 @@ export async function startNativeIngestServing({
     assertAuthorityActive(lifecycle)
 
     reconcileTimer = startReconcileTimer()
+    assertAuthorityActive(lifecycle)
+
+    await ensurePartitions()
     assertAuthorityActive(lifecycle)
 
     await runtime.start()
