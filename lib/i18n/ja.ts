@@ -6523,8 +6523,6 @@ const ja = {
   rankingFilteredByExchange: '{exchange} で絞り込み中',
   rankingClearExchangeFilter: '取引所の絞り込みを解除',
   rankingSearchElsewhereTitle: 'このページに一致なし。Arena 全体で一致したトレーダー：',
-  rankingFiltersCurrentPageOnly:
-    '絞り込みはこのページの 50 名のみに適用されます。他のページにも該当者がいる可能性があります。',
   roiUnknown: 'ROI 不明',
   timeRangeAria: '期間',
   showRangeRankingsAria: '{range} のランキングを表示',

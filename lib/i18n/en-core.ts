@@ -451,8 +451,6 @@ const enCore = {
   rankingNoMatchCriteria: 'No traders match your criteria',
   rankingBroadenFilters: 'Try broadening your filters',
   rankingSearchElsewhereTitle: 'No match on this page. Matching traders across Arena:',
-  rankingFiltersCurrentPageOnly:
-    'Filters apply to the 50 traders on this page only; other pages may have more matches.',
   roiUnknown: 'ROI unknown',
   timeRangeAria: 'Time range',
   showRangeRankingsAria: 'Show {range} rankings',

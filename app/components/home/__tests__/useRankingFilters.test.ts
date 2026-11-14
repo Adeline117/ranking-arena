@@ -190,18 +190,18 @@ describe('URL / localStorage 状态恢复', () => {
     expect(result.current.filteredTraders).toHaveLength(FIXTURES.length)
   })
 
-  it('preset 无匹配时如实为空（不静默放行全部），并标记为当前页筛选', () => {
+  it('preset 无匹配时如实为空（不静默放行全部），并标记为有效筛选', () => {
     window.history.replaceState(null, '', '/?preset=onchain_dex')
     const { result } = setup([trader('fut-only', { source: 'binance_futures' })])
     expect(result.current.filteredTraders).toHaveLength(0)
-    expect(result.current.hasClientPageFilters).toBe(true)
+    expect(result.current.hasCohortFilters).toBe(true)
   })
 
   it('旧 UI 存下的 preset 偏好被忽略并清理（无可见入口时不得隐形筛选）', () => {
     window.localStorage.setItem('ranking-preset', 'cex_spot')
     const { result } = setup()
     expect(result.current.filteredTraders).toHaveLength(FIXTURES.length)
-    expect(result.current.hasClientPageFilters).toBe(false)
+    expect(result.current.hasCohortFilters).toBe(false)
     expect(window.localStorage.getItem('ranking-preset')).toBeNull()
   })
 
@@ -232,6 +232,7 @@ describe('URL / localStorage 状态恢复', () => {
       sortBy: 'arena_score',
       sortDir: 'desc',
       exchange: 'binance_futures',
+      filters: null,
     })
   })
 
@@ -364,6 +365,86 @@ describe('高级筛选 handleFilterChange', () => {
 })
 
 // ---------------------------------------------------------------------------
+describe('server-side filters (audit P2-5)', () => {
+  it('sends advanced filters to the API for page 0 (debounced) and never re-filters the page', async () => {
+    const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    mockFetchPage.mockClear()
+
+    act(() => result.current.handleFilterChange({ roi_min: 6 }))
+    act(() => result.current.handleFilterChange({ roi_min: 60, exchange: ['binance-futures'] }))
+    expect(mockFetchPage).not.toHaveBeenCalled()
+    await act(async () => {
+      jest.advanceTimersByTime(400)
+      await Promise.resolve()
+    })
+    // One request, for the final state, in canonical form (alias resolved).
+    expect(mockFetchPage).toHaveBeenCalledTimes(1)
+    expect(mockFetchPage).toHaveBeenCalledWith(0, { filters: 'fex=binance_futures&roi_min=60' })
+    // The API rows are the filtered cohort: no client-side narrowing of them.
+    expect(result.current.filteredTraders).toHaveLength(FIXTURES.length)
+    expect(result.current.hasCohortFilters).toBe(true)
+    expect(result.current.currentPage).toBe(1)
+  })
+
+  it('keeps the filters on sort and page requests so later pages stay filtered', async () => {
+    const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+    act(() => result.current.handleFilterChange({ min_win_rate: 55 }))
+    await act(async () => {
+      jest.advanceTimersByTime(400)
+      await Promise.resolve()
+    })
+    await act(async () => {
+      result.current.handlePageChange(3)
+      await Promise.resolve()
+    })
+    expect(mockFetchPage).toHaveBeenLastCalledWith(2, {
+      category: undefined,
+      sortBy: 'arena_score',
+      sortDir: 'desc',
+      filters: 'min_wr=55',
+    })
+    await act(async () => {
+      result.current.handleSortChange('roi', 'desc')
+      await Promise.resolve()
+    })
+    expect(mockFetchPage).toHaveBeenLastCalledWith(0, {
+      category: undefined,
+      sortBy: 'roi',
+      sortDir: 'desc',
+      filters: 'min_wr=55',
+    })
+  })
+
+  it('a ?preset= link loads the preset cohort from the API instead of filtering 50 rows', async () => {
+    window.history.replaceState(null, '', '/?preset=high_pnl')
+    const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(mockFetchPage).toHaveBeenCalledWith(0, {
+      category: undefined,
+      sortBy: 'arena_score',
+      sortDir: 'desc',
+      exchange: undefined,
+      filters: 'preset=high_pnl',
+    })
+    expect(result.current.filteredTraders).toHaveLength(FIXTURES.length)
+  })
+
+  it('drops a stored exchange the API does not accept instead of failing the page', async () => {
+    window.history.replaceState(null, '', '/?fex=not_a_source,bybit')
+    setup(FIXTURES, { fetchPage: mockFetchPage })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(mockFetchPage).toHaveBeenCalledWith(0, expect.objectContaining({ filters: 'fex=bybit' }))
+  })
+})
+
+// ---------------------------------------------------------------------------
 describe('排序 / 分页 / 搜索', () => {
   it('handleSortChange 成功后更新状态、重置页码，并把列名映射为 API 字段', async () => {
     const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
@@ -379,6 +460,7 @@ describe('排序 / 分页 / 搜索', () => {
       category: undefined,
       sortBy: 'win_rate',
       sortDir: 'asc',
+      filters: null,
     })
   })
 
@@ -409,6 +491,7 @@ describe('排序 / 分页 / 搜索', () => {
       category: undefined,
       sortBy: 'roi',
       sortDir: 'desc',
+      filters: null,
     })
   })
 
@@ -486,6 +569,7 @@ describe('排序 / 分页 / 搜索', () => {
       sortBy: 'roi',
       sortDir: 'asc',
       exchange: undefined,
+      filters: null,
     })
     expect(settled).toHaveBeenLastCalledWith(false)
 
@@ -506,6 +590,7 @@ describe('排序 / 分页 / 搜索', () => {
       sortBy: 'roi',
       sortDir: 'asc',
       exchange: undefined,
+      filters: null,
     })
     expect(settled).toHaveBeenLastCalledWith(true)
     expect(result.current.currentPage).toBe(3)
@@ -529,6 +614,7 @@ describe('排序 / 分页 / 搜索', () => {
       sortBy: 'arena_score',
       sortDir: 'desc',
       exchange: undefined,
+      filters: null,
     })
     expect(new URLSearchParams(window.location.search).get('sort')).toBe('score')
   })
@@ -703,6 +789,7 @@ describe('重置与外部事件', () => {
       category: undefined,
       sortBy: 'arena_score',
       sortDir: 'desc',
+      filters: null,
     })
   })
 
@@ -728,6 +815,7 @@ describe('重置与外部事件', () => {
       category: undefined,
       sortBy: 'arena_score',
       sortDir: 'desc',
+      filters: null,
     })
   })
 
@@ -794,6 +882,7 @@ describe('重置与外部事件', () => {
       sortBy: 'arena_score',
       sortDir: 'desc',
       exchange: 'bybit',
+      filters: null,
     })
   })
 

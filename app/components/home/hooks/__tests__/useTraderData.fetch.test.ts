@@ -120,6 +120,7 @@ describe('挂载与加载态', () => {
           sortBy: 'arena_score',
           sortDir: 'desc',
           exchange: null,
+          filters: null,
         },
       })
     )
@@ -282,6 +283,32 @@ describe('sticky filters（交易所页 bug 的根因防回归）', () => {
       await result.current.fetchPage(0, { exchange: undefined })
     })
     expect(fetchUrls()[2]).not.toContain('exchange=')
+  })
+
+  it('server filters (P2-5) go to the API, stay sticky across pages, clear with null', async () => {
+    const { result } = setup({ initialTraders: [ssrTrader], initialTotalCount: 1 })
+
+    mockPayloadOnce({ traders: [apiTrader('a')], hasMore: true })
+    await act(async () => {
+      await result.current.fetchPage(0, { filters: 'min_wr=55&preset=high_pnl' })
+    })
+    expect(fetchUrls()[0]).toContain('page=0')
+    expect(fetchUrls()[0]).toContain('&min_wr=55&preset=high_pnl')
+
+    // Page 2 of the FILTERED cohort: the caller does not repeat the filters.
+    mockPayloadOnce({ traders: [apiTrader('b')] })
+    await act(async () => {
+      await result.current.fetchPage(1)
+    })
+    expect(fetchUrls()[1]).toContain('page=1')
+    expect(fetchUrls()[1]).toContain('&min_wr=55&preset=high_pnl')
+
+    mockPayloadOnce({ traders: [apiTrader('c')] })
+    await act(async () => {
+      await result.current.fetchPage(0, { filters: null })
+    })
+    expect(fetchUrls()[2]).not.toContain('min_wr')
+    expect(fetchUrls()[2]).not.toContain('preset')
   })
 
   it('category=all 与默认排序 arena_score 不进 URL（保持 API 缓存 key 干净）', async () => {
