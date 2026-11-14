@@ -2,11 +2,11 @@ import { render, screen } from '@testing-library/react'
 import RankingSection from '../RankingSection'
 
 /**
- * P2-5: /api/traders has no filter params (zod whitelist: timeRange/exchange/
- * category/sortBy/order/cursor/limit/page), so advanced filters and presets
- * stay client-side over the loaded page. The UI must say so.
+ * P2-5: advanced filters and presets are /api/traders params applied to the
+ * whole cohort, so the old "this page only" disclosure no longer applies and
+ * must not come back.
  */
-let mockHasClientPageFilters = false
+let mockHasCohortFilters = false
 
 jest.mock('../useRankingFilters', () => ({
   useRankingFilters: () => ({
@@ -21,8 +21,8 @@ jest.mock('../useRankingFilters', () => ({
     setShowMobileFilter: jest.fn(),
     filterConfig: {},
     savedFilters: [],
-    hasActiveFilters: mockHasClientPageFilters,
-    hasClientPageFilters: mockHasClientPageFilters,
+    hasActiveFilters: mockHasCohortFilters,
+    hasCohortFilters: mockHasCohortFilters,
     selectedExchange: null,
     clearExchange: jest.fn(),
     sortColumn: 'score',
@@ -61,16 +61,11 @@ const baseProps = {
   onTimeRangeChange: jest.fn(),
 }
 
-describe('RankingSection current-page filter disclosure', () => {
-  it('states that filters only cover the loaded page when one is active', () => {
-    mockHasClientPageFilters = true
-    render(<RankingSection {...baseProps} />)
-    expect(screen.getByRole('note')).toHaveTextContent('rankingFiltersCurrentPageOnly')
-  })
-
-  it('shows no disclosure without an active client-side filter', () => {
-    mockHasClientPageFilters = false
+describe('RankingSection filter disclosure', () => {
+  it('shows no "current page only" note while server-side filters are active', () => {
+    mockHasCohortFilters = true
     render(<RankingSection {...baseProps} />)
     expect(screen.queryByRole('note')).toBeNull()
+    expect(screen.queryByTestId('filters-current-page-only')).toBeNull()
   })
 })

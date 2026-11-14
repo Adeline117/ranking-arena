@@ -11,12 +11,14 @@ import { useSubscription } from './hooks/useSubscription'
 import { useLanguage } from '../Providers/LanguageProvider'
 import type { FilterConfig, SavedFilter } from '../premium/AdvancedFilter'
 import { getScoreGradeLetter } from '@/lib/utils/score-explain'
-import { resolveExchangeSlug } from '@/lib/constants/exchanges'
+import { parsePublicActiveRankingSource, resolveExchangeSlug } from '@/lib/constants/exchanges'
+import { isPublicRankingSourceQuarantined } from '@/lib/rankings/publication-policy'
 import { type PresetId, PRESETS, isValidPresetId } from '../ranking/FilterPresets'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { trackEvent } from '@/lib/analytics/track'
 import type { SortColumn, SortDir } from '../ranking/RankingTableTypes'
+import { leaderboardFilterQuery } from '@/lib/rankings/leaderboard-filters'
 
 // localStorage keys for user preferences
 const LS_KEY_SORT_COLUMN = 'ranking-sort-column'
@@ -24,6 +26,20 @@ const LS_KEY_SORT_DIR = 'ranking-sort-dir'
 const LS_KEY_PRESET = 'ranking-preset'
 const LS_KEY_EXCHANGE = 'ranking-exchange'
 const LS_KEY_FILTER_CONFIG = 'ranking-filter-config'
+/** Typing in a filter input waits this long before the server cohort request. */
+const FILTER_FETCH_DEBOUNCE_MS = 400
+
+/** Canonical `/api/traders` filter params for this filter state (null = none). */
+function serverFilterQuery(config: FilterConfig, preset: PresetId | null): string | null {
+  // The API takes exact public source ids only; a stale stored exchange is
+  // dropped rather than failing the whole page with a 400.
+  return leaderboardFilterQuery(config, preset, (slug) => {
+    const source = resolveExchangeSlug(slug)
+    return parsePublicActiveRankingSource(source) || isPublicRankingSourceQuarantined(source)
+      ? source
+      : null
+  })
+}
 
 const URL_SORT_COLUMNS: readonly SortColumn[] = ['score', 'roi', 'pnl', 'winrate', 'mdd', 'sortino']
 const SORT_BY: Record<SortColumn, string> = {
@@ -207,7 +223,13 @@ interface UseRankingFiltersOptions {
   onInitialCohortSettled?: (succeeded: boolean) => void
   fetchPage?: (
     page: number,
-    opts?: { category?: string; sortBy?: string; sortDir?: string; exchange?: string }
+    opts?: {
+      category?: string
+      sortBy?: string
+      sortDir?: string
+      exchange?: string
+      filters?: string | null
+    }
   ) => Promise<boolean>
 }
 
@@ -391,10 +413,13 @@ export function useRankingFilters({
       ? resolveExchangeSlug(targetExchange.split(',')[0])
       : undefined
 
+    let restoredConfig: FilterConfig = {}
     if (Object.keys(config).length > 0) {
+      restoredConfig = config
       setFilterConfig(config)
       setShowAdvancedFilter(true)
     } else if (storedPrefs.filterConfig && Object.keys(storedPrefs.filterConfig).length > 0) {
+      restoredConfig = storedPrefs.filterConfig
       setFilterConfig(storedPrefs.filterConfig)
       setShowAdvancedFilter(true)
     }
@@ -432,7 +457,9 @@ export function useRankingFilters({
     // Presets have no on-page picker any more, so a value persisted by an
     // older UI would filter the board invisibly. Honour only an explicit
     // `?preset=` link and drop the legacy stored preference.
-    if (urlPreset && isValidPresetId(urlPreset)) setActivePreset(urlPreset)
+    const restoredPreset = urlPreset && isValidPresetId(urlPreset) ? urlPreset : null
+    if (restoredPreset) setActivePreset(restoredPreset)
+    const initialFilters = serverFilterQuery(restoredConfig, restoredPreset)
     try {
       localStorage.removeItem(LS_KEY_PRESET)
     } catch {
@@ -447,6 +474,7 @@ export function useRankingFilters({
     const shouldFetchInitialCohort =
       requiresInitialCohortFetch ||
       resolvedExchange !== undefined ||
+      initialFilters !== null ||
       (!hasServerPage &&
         (urlPageIndex !== null ||
           urlSortRaw !== null ||
@@ -459,6 +487,7 @@ export function useRankingFilters({
         sortBy: SORT_BY[requestedSort],
         sortDir: requestedSortDir,
         exchange: resolvedExchange,
+        filters: initialFilters,
       }).then((succeeded) => onInitialCohortSettled?.(succeeded))
     } else if (requiresInitialCohortFetch) {
       onInitialCohortSettled?.(false)
@@ -587,22 +616,18 @@ export function useRankingFilters({
     []
   ) // Stable — never recreates, reads current state from stateRef
 
-  const syncFilterToUrl = useCallback(
-    (config: FilterConfig) => {
-      syncStateToUrl({ config })
-    },
-    [syncStateToUrl]
+  // Current filter params for a server request, read from the latest state so
+  // a sort/page/category request never drops a just-changed filter.
+  const currentFilterQuery = useCallback(
+    () => serverFilterQuery(stateRef.current.filterConfig, stateRef.current.activePreset),
+    []
   )
 
-  // Filter change handler
-  const handleFilterChange = useCallback(
+  const commitFilterConfig = useCallback(
     (config: FilterConfig) => {
-      trackEvent('ranking_filter', {
-        kind: 'advanced',
-        active_count: Object.keys(config).length,
-      })
       setFilterConfig(config)
-      syncFilterToUrl(config)
+      stateRef.current = { ...stateRef.current, filterConfig: config }
+      syncStateToUrl({ config })
       try {
         if (Object.keys(config).length > 0) {
           localStorage.setItem(LS_KEY_FILTER_CONFIG, JSON.stringify(config))
@@ -613,7 +638,38 @@ export function useRankingFilters({
         /* ignore */
       }
     },
-    [syncFilterToUrl]
+    [syncStateToUrl]
+  )
+
+  const filterFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    return () => {
+      if (filterFetchTimerRef.current) clearTimeout(filterFetchTimerRef.current)
+    }
+  }, [])
+
+  // Filter change handler. With server paging the filters are API params:
+  // page 0 of the filtered cohort is fetched (debounced while typing), so
+  // every page and `hasMore` describe the filtered board.
+  const handleFilterChange = useCallback(
+    (config: FilterConfig) => {
+      trackEvent('ranking_filter', {
+        kind: 'advanced',
+        active_count: Object.keys(config).length,
+      })
+      commitFilterConfig(config)
+      if (!fetchPage) return
+      if (filterFetchTimerRef.current) clearTimeout(filterFetchTimerRef.current)
+      filterFetchTimerRef.current = setTimeout(() => {
+        filterFetchTimerRef.current = null
+        void fetchPage(0, { filters: currentFilterQuery() }).then((succeeded) => {
+          if (!succeeded) return
+          setCurrentPage(1)
+          syncStateToUrl({ page: 1 })
+        })
+      }, FILTER_FETCH_DEBOUNCE_MS)
+    },
+    [commitFilterConfig, currentFilterQuery, fetchPage, syncStateToUrl]
   )
 
   // Sort/page/search handlers — trigger server-side fetch when fetchPage is available
@@ -628,6 +684,7 @@ export function useRankingFilters({
           category: apiCategoryFor(category),
           sortBy: SORT_BY[col],
           sortDir: dir,
+          filters: currentFilterQuery(),
         }).then((succeeded) => {
           if (!succeeded) return
           setSortColumn(col)
@@ -642,7 +699,7 @@ export function useRankingFilters({
         syncStateToUrl({ sort: col, order: dir, page: 1 })
       }
     },
-    [syncStateToUrl, fetchPage, category]
+    [syncStateToUrl, fetchPage, category, currentFilterQuery]
   )
 
   const handlePageChange = useCallback(
@@ -654,6 +711,7 @@ export function useRankingFilters({
           category: apiCategoryFor(category),
           sortBy: SORT_BY[sortColumn],
           sortDir: sortDir,
+          filters: currentFilterQuery(),
         }).then((succeeded) => {
           if (!succeeded) return
           setCurrentPage(safePage)
@@ -664,7 +722,7 @@ export function useRankingFilters({
         syncStateToUrl({ page: safePage })
       }
     },
-    [syncStateToUrl, fetchPage, category, sortColumn, sortDir]
+    [syncStateToUrl, fetchPage, category, sortColumn, sortDir, currentFilterQuery]
   )
 
   const handleSearchChange = useCallback(
@@ -746,10 +804,9 @@ export function useRankingFilters({
     [filterConfig]
   )
 
-  // Client-side filters that only see the loaded server page (50 rows):
-  // advanced filters and URL presets. Drives the "current page only" hint
-  // and the filtered empty state.
-  const hasClientPageFilters = hasActiveFilters || (!!activePreset && activePreset !== 'all')
+  // Advanced filters or a URL preset narrow the cohort. With server paging the
+  // API applies them to the whole board; drives the filtered empty state.
+  const hasCohortFilters = hasActiveFilters || (!!activePreset && activePreset !== 'all')
 
   const source = useMemo(() => (traders.length > 0 ? traders[0].source : 'all'), [traders])
 
@@ -797,8 +854,10 @@ export function useRankingFilters({
     return categoryFiltered.filter((trader) => trader.source === selectedExchange)
   }, [categoryFiltered, selectedExchange, fetchPage])
 
+  // With server paging, presets and advanced filters are API params (the rows
+  // already are the filtered cohort); only a client-only list filters here.
   const presetFiltered = useMemo(() => {
-    if (!activePreset || activePreset === 'all') return exchangeFiltered
+    if (fetchPage || !activePreset || activePreset === 'all') return exchangeFiltered
     const presetConfig = PRESETS.find((p) => p.id === activePreset)
     if (!presetConfig) return exchangeFiltered
     // 传完整 trader(2026-07-03 修复):此前只传 { source },low_risk/high_pnl/
@@ -809,11 +868,14 @@ export function useRankingFilters({
     // this page renders the honest empty state (with a reset action) instead
     // of pretending the preset applied. It only ever filters the loaded page.
     return exchangeFiltered.filter((trader) => presetConfig.filter(trader))
-  }, [activePreset, exchangeFiltered])
+  }, [activePreset, exchangeFiltered, fetchPage])
 
   const advancedFiltered = useMemo(
-    () => (hasActiveFilters ? applyAdvancedFilter(presetFiltered, filterConfig) : presetFiltered),
-    [hasActiveFilters, presetFiltered, filterConfig]
+    () =>
+      hasActiveFilters && !fetchPage
+        ? applyAdvancedFilter(presetFiltered, filterConfig)
+        : presetFiltered,
+    [hasActiveFilters, presetFiltered, filterConfig, fetchPage]
   )
 
   // P1-13: Server-side search fallback when client-side search returns 0 results
@@ -828,9 +890,12 @@ export function useRankingFilters({
       lastServerQueryRef.current = ''
       return
     }
+    // Same fields RankingTable searches, so "no match on this page" never
+    // appears above rows the table is showing.
     const clientMatches = advancedFiltered.filter((t) => {
       const handle = (t.handle || t.id || '').toLowerCase()
-      return handle.includes(q) || t.id.toLowerCase().includes(q)
+      const displayName = (t.display_name || '').toLowerCase()
+      return handle.includes(q) || t.id.toLowerCase().includes(q) || displayName.includes(q)
     })
     if (clientMatches.length > 0) {
       if (serverSearchResults.length > 0) setServerSearchResults([])
@@ -844,7 +909,11 @@ export function useRankingFilters({
       lastServerQueryRef.current = q
       fetch(`/api/search?q=${encodeURIComponent(q)}&limit=20`, { signal: controller.signal })
         .then((r) => (r.ok ? r.json() : null))
-        .then((data) => {
+        .then((json) => {
+          // /api/search answers with the `success()` envelope: { success, data }.
+          // Reading `results` off the envelope itself found nothing, so the
+          // fallback never showed (audit P2-4).
+          const data = json?.data
           if (!data?.results?.traders?.length) {
             setServerSearchResults([])
             return
@@ -919,7 +988,9 @@ export function useRankingFilters({
       // Commit all labels together only after the matching all-board/score
       // response has landed. This prevents old ROI/exchange rows from being
       // displayed as Score/all rows during a failed reset request.
-      handleFilterChange({})
+      if (filterFetchTimerRef.current) clearTimeout(filterFetchTimerRef.current)
+      filterFetchTimerRef.current = null
+      commitFilterConfig({})
       setShowAdvancedFilter(false)
       setSortColumn('score')
       setSortDir('desc')
@@ -950,13 +1021,14 @@ export function useRankingFilters({
         exchange: undefined,
         sortBy: 'arena_score',
         sortDir: 'desc',
+        filters: null,
       }).then((succeeded) => {
         if (succeeded) commitReset()
       })
       return
     }
     commitReset()
-  }, [fetchPage, handleFilterChange, syncStateToUrl])
+  }, [fetchPage, commitFilterConfig, syncStateToUrl])
 
   const handleFilterToggle = useCallback(() => {
     if (window.matchMedia('(max-width: 768px)').matches) {
@@ -982,7 +1054,7 @@ export function useRankingFilters({
     filterConfig,
     savedFilters,
     hasActiveFilters,
-    hasClientPageFilters,
+    hasCohortFilters,
     selectedExchange,
     clearExchange,
     // Sort/page/search

@@ -81,6 +81,8 @@ interface LeaderboardCohort {
   sortBy: string
   sortDir: string
   exchange: string | null
+  /** Canonical server filter query (leaderboardFilterQuery), null = unfiltered. */
+  filters?: string | null
 }
 
 interface RankingBroadcastPayload extends TraderDataPayload {
@@ -104,6 +106,7 @@ function cohortKey(cohort: LeaderboardCohort): string {
     cohort.sortBy,
     cohort.sortDir,
     cohort.exchange,
+    cohort.filters ?? null,
   ])
 }
 
@@ -167,7 +170,8 @@ function isLeaderboardCohort(value: unknown): value is LeaderboardCohort {
     (record.category === null || typeof record.category === 'string') &&
     typeof record.sortBy === 'string' &&
     typeof record.sortDir === 'string' &&
-    (record.exchange === null || typeof record.exchange === 'string')
+    (record.exchange === null || typeof record.exchange === 'string') &&
+    (record.filters === undefined || record.filters === null || typeof record.filters === 'string')
   )
 }
 
@@ -447,6 +451,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     sortBy: 'arena_score',
     sortDir: 'desc',
     exchange: null,
+    filters: null,
   }
   // This ref describes the page currently on screen; refresh paths must use
   // it rather than silently returning the user to page 0.
@@ -516,6 +521,8 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         sortDir?: string
         timeRange?: TimeRange
         exchange?: string
+        /** Canonical filter query (leaderboardFilterQuery); omitted = keep the loaded one. */
+        filters?: string | null
         /** Atomically reveal this range only with its successful response. */
         commitTimeRange?: boolean
         /** Background auto-refresh: skip LOAD_START so the table never dims/spins.
@@ -561,6 +568,8 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
       const sortDir = opts && 'sortDir' in opts ? opts.sortDir || 'desc' : loadedCohort.sortDir
       const rawExchange = opts && 'exchange' in opts ? opts.exchange || null : loadedCohort.exchange
       const exchange = rawExchange ? resolveExchangeSlug(rawExchange) : null
+      const filters =
+        opts && 'filters' in opts ? opts.filters || null : (loadedCohort.filters ?? null)
       const requestCohort: LeaderboardCohort = {
         timeRange,
         pageIndex,
@@ -568,6 +577,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         sortBy,
         sortDir,
         exchange,
+        filters,
       }
       const requestSequence = requestSequenceRef.current + 1
       requestSequenceRef.current = requestSequence
@@ -669,6 +679,11 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         // 方向被静默丢弃,服务端按默认 desc 返回;API 本就支持 sortBy=arena_score&order=asc)
         if (sortBy !== 'arena_score' || sortDir !== 'desc') {
           url += `&sortBy=${sortBy}&order=${sortDir}`
+        }
+        // Advanced filters / presets are applied by the API to the whole
+        // cohort, so pages and hasMore describe the filtered board.
+        if (filters) {
+          url += `&${filters}`
         }
 
         // 8s timeout prevents indefinite hang if API is slow

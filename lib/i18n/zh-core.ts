@@ -385,8 +385,6 @@ const zhCore = {
   rankingNoMatchCriteria: '没有符合条件的交易员',
   rankingBroadenFilters: '试试放宽筛选条件',
   rankingSearchElsewhereTitle: '当前页没有匹配，以下是全站匹配的交易员：',
-  rankingFiltersCurrentPageOnly:
-    '筛选仅作用于当前页的 50 名交易员，其他页可能还有符合条件的交易员。',
   roiUnknown: 'ROI 未知',
   timeRangeAria: '时间范围',
   showRangeRankingsAria: '查看 {range} 排名',
