@@ -335,8 +335,11 @@ export default async function ApiDocsPage() {
             margin: '0 auto',
           }}
         >
-          Crypto trader rankings across {productFacts.sourceBoardCount}+ live source boards.
-          Risk-adjusted scores, equity curves, and performance data — leaderboard recomputed every{' '}
+          Crypto trader rankings across{' '}
+          {productFacts.sourceBoardCount === null
+            ? 'live public source boards'
+            : `${productFacts.sourceBoardCount}+ live source boards`}
+          . Risk-adjusted scores, equity curves, and performance data — leaderboard recomputed every{' '}
           {productFacts.leaderboardRefreshLabel}.
         </p>
       </div>

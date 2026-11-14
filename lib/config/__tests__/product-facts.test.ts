@@ -4,18 +4,43 @@ import {
   buildProductFactsSnapshot,
   formatRankedTraderCount,
   formatLiveSourceBoardCoverage,
+  publicCount,
 } from '../product-facts'
 
 describe('product facts', () => {
-  it('uses one operational fallback when live facts are unavailable', () => {
-    expect(buildProductFactsSnapshot()).toEqual({
-      sourceBoardCount: PRODUCT_FACTS.fallbackSourceBoardCount,
-      rankedTraderCount: PRODUCT_FACTS.fallbackRankedTraderCount,
+  it('states no count at all when live facts are unavailable', () => {
+    const unavailable = {
+      sourceBoardCount: null,
+      rankedTraderCount: null,
       leaderboardRefreshHours: 2,
       leaderboardRefreshLabel: '2h',
       sourceRefreshLabel: '3-6h',
       isFallback: true,
+    }
+    expect(buildProductFactsSnapshot()).toEqual(unavailable)
+    // Lookup defaults are placeholders whatever numbers they carry.
+    expect(
+      buildProductFactsSnapshot({ sourceBoardCount: 28, traderCount: 9_600, isDefault: true })
+    ).toEqual(unavailable)
+    expect(PRODUCT_FACTS).not.toHaveProperty('fallbackSourceBoardCount')
+    expect(PRODUCT_FACTS).not.toHaveProperty('fallbackRankedTraderCount')
+  })
+
+  it('does not invent a number for a genuinely empty public board', () => {
+    // After the launch migrations the boards are empty until the pipeline
+    // refills them; the live answer is 0, which must not become "9,600".
+    expect(buildProductFactsSnapshot({ sourceBoardCount: 0, traderCount: 0 })).toMatchObject({
+      sourceBoardCount: null,
+      rankedTraderCount: null,
+      isFallback: false,
     })
+  })
+
+  it('only treats a positive integer as a publishable count', () => {
+    expect(publicCount(21)).toBe(21)
+    for (const value of [0, -3, 1.5, Number.NaN, Number.POSITIVE_INFINITY, '21', null, undefined]) {
+      expect(publicCount(value)).toBeNull()
+    }
   })
 
   it('prefers valid live counts without changing the scheduler cadence', () => {

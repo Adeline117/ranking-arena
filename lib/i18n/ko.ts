@@ -1965,7 +1965,9 @@ const ko = {
   loginCreateAccount: '계정 만들기',
   loginSubtitle: 'Arena는 암호화폐의 모든 것을 순위화합니다',
   loginValueProp1: '현재 90일 순위에 트레이더 {count}명',
+  loginValueProp1NoCount: '현재 90일 순위에 오른 트레이더',
   loginValueProp2: '현재 운영 중인 랭킹 소스 보드 {count}개의 성과 비교',
+  loginValueProp2NoCount: '현재 운영 중인 랭킹 소스 보드의 성과 비교',
   loginValueProp3: '트레이딩 커뮤니티 참여',
   discoverMore: 'Arena 더 알아보기',
   loginConnectWallet: '지갑 연결',
@@ -3086,6 +3088,8 @@ const ko = {
   heroHeadline: '세계 최고의 암호화폐 트레이더를 추적하세요',
   heroSubtitle:
     '현재 운영 중인 랭킹 소스 보드 {boards}개의 순위를 최신 가용 데이터로 2시간마다 재계산',
+  heroSubtitleNoCount:
+    '현재 운영 중인 공개 랭킹 소스 보드의 순위를 최신 가용 데이터로 2시간마다 재계산',
   heroScoreExplainer:
     'Arena Score는 현재 운영 중인 모든 소스 보드의 트레이더를 같은 기준으로 순위화합니다.',
   heroNeutrality:

@@ -154,7 +154,6 @@ PREDEPLOY_MIGRATIONS=(
   20260729225000_token_trader_rank_authority.sql
   20261111133259_token_ranking_generation_barrier_cron_api.sql
   20261111133300_retire_legacy_token_rankings_cron_api.sql
-  20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20261111135302_quarantine_bingx_rank_authority_blocked_spot.sql
   20260804050000_harden_serving_trader_resolver.sql
   20260804051000_harden_serving_source_capabilities.sql
@@ -252,7 +251,15 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # cleans. It therefore runs only after the ingest-worker release carrying both
 # fixes has replaced every old writer, and before the next derive-boards run
 # and publication. It touches no table 192134 guards, so 192134 stays last.
+# 040440 forward replacement. V1_EXECUTION_STATUS requires the RAW-only
+# bridge SHA to be deployed and legacy callers drained before the legacy
+# position-history relations are frozen. Current main never reads or writes
+# them (only database.types.ts declares them), so freezing after the deploy
+# breaks no caller, while freezing before it could break the old release
+# still serving during predeploy. No predeploy or later postdeploy file
+# references these relations or create_next_tph_partition.
 POSTDEPLOY_MIGRATIONS=(
+  20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
   20260717120000_trader_follows_composite_identity.sql
   20261113150757_clean_derived_formal_win_rate.sql

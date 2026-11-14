@@ -8,8 +8,8 @@
 
 2026-11-13 起，2026-08-04 之后新增的迁移已全部分类，`scripts/qa/launch-inventory-gap.json` 为空列表。`launch-inventory-gap.test.mjs` 保证以后新增的迁移也必须先分类。分类写在 `scripts/maintenance/apply-launch-migrations.sh` 里：
 
-- **predeploy**（149 个）：部署前，按清单顺序逐文件应用。
-- **postdeploy**（4 个）：目标版本上线后才应用。
+- **predeploy**（150 个）：部署前，按清单顺序逐文件应用。
+- **postdeploy**（5 个）：目标版本上线后才应用。
 - **ADR-023 单文件**（`ADR023_SINGLE_FILE_MIGRATIONS`，2 个）：已分类，但执行脚本不会输出它们，`render-predeploy-one` 也会拒绝。每个都必须走 ADR-023 单文件通道，在下文规定的位置、各自的操作窗口里单独应用。
 - **superseded**：永不重放。
 
@@ -27,13 +27,13 @@
 
 **2. 记录/发布链：插在 predeploy 中间**
 
-- 时机：predeploy 应用到 `20261111133300_retire_legacy_token_rankings_cron_api.sql` 且 exact 之后、`20261111135144` 之前。
+- 时机：predeploy 应用到 `20261111133300_retire_legacy_token_rankings_cron_api.sql` 且 exact 之后、`20261111135302` 之前。
 - 按顺序逐文件应用：`20261111134937_record_provenance_clocks_prod_reader.sql`（取代 `20260803090000`，原文件已标为 superseded）→ `20260803100000_record_surface_publication_substrate.sql` → `20260803101000_verified_position_history_publication_writer.sql`。
 - 硬约束：predeploy 里的 `20260804052000_fail_closed_unbound_copier_aggregates.sql`，其 preflight 只认 134937 写入的 copier aggregate 函数体。134937 没有 exact 时，052000 一定失败。
 - 依据：`V1_EXECUTION_STATUS_2026-08-03.md` 第 112、114、120 条规定这条链必须单文件执行，不能批量重放，并且要和 bridge 部署交替进行。
 - postdeploy 的 `20261111192134` 把 `20260803100000` 安装的 raw-object 守卫列入允许清单。这条链跑或不跑，192134 都能通过。
 
-**仍需 owner 定的冲突**：`V1_EXECUTION_STATUS` 要求先部署 RAW-only bridge SHA 并排空 legacy 调用，再冻结 `040440`。但它的前向替代 `20261111135144` 目前在 predeploy 里紧跟 `133300`（#415 的排序）。另外，`20260804041000`、`20260804042000` 和五个较晚的 `20260803*` 文件（activation、authorization、Portfolio、Claim A/B）早于清单的分类起点，不在任何阵列里，仍按 V1_EXECUTION_STATUS 的单文件流程处理。
+**040440 的位置（2026-11-14 已定，owner 授权代为决定）**：按 `V1_EXECUTION_STATUS`（先部署 RAW-only bridge SHA 并排空 legacy 调用，再冻结），前向替代 `20261111135144` 已从 predeploy 移到 **postdeploy 第一个**。依据：当前 main 不读写 `trader_position_history`、`tph_*`、`create_next_tph_partition`（只有 `database.types.ts` 声明），部署后冻结不会破坏任何调用方；predeploy 其余文件和其他 postdeploy 文件都不引用这些对象。**上线前必须**在恢复出的生产备份上按新顺序完整重排练一次（11-11 排练的是旧顺序）。另外，`20260804041000`、`20260804042000` 和五个较晚的 `20260803*` 文件（activation、authorization、Portfolio、Claim A/B）早于清单的分类起点，不在任何阵列里，仍按 V1_EXECUTION_STATUS 的单文件流程处理。
 
 ### postdeploy 的数据修复
 
@@ -56,7 +56,7 @@
 
 ## 执行顺序
 
-1. **数据安全**：完成备份并恢复验证；处理 R2 公开桶。
+1. **数据安全**：完成备份并恢复验证；处理 R2 公开桶。_关键数据层（账号、内容、订阅）已于 2026-11-14 完成加密备份并通过恢复演练，见 `BACKUP_CRITICAL_TIER.md`；行情数据的整库备份和 R2 公开桶仍未处理。_
 2. **托管恢复**：确认 Supabase 恢复；轮换数据库密码和其他 provider 凭据。
 3. **恢复环境**：准备约 100GB 的隔离 PG17，认证旧备份和新备份。
 4. **迁移顺序**：分类已完成；解决上一节"仍需 owner 定的冲突"，按上一节的位置安排两段 ADR-023 单文件迁移。
@@ -67,8 +67,16 @@
 9. **解除 NO-GO**：核心接口和数据新鲜度连续 24 小时正常，由 owner 决定。
 10. **Beta**：分批邀请真实用户。
 
+## 榜单空窗期（2026-11-14 已定，owner 授权代为决定）
+
+迁移应用后，公开榜单只显示通过新鲜度校验的已封存数据。数据自 8 月起没有更新，所以从部署到 worker 恢复、首个周期发布之间，榜单为空。
+
+- **不展示过期数据**：空窗期不回退到 8 月的旧排名，也不放宽新鲜度闸门。显示现有的如实空状态（`rankingsRefreshingTitle` / `rankingsRefreshingDesc`："Rankings are being refreshed… We only publish rankings after the latest exchange data passes verification"）。
+- **不对外宣传，直到有数据**：执行顺序第 7–9 步完成之前（worker 单实例金丝雀跑完整调度周期，首个周期通过校验并发布，核心接口和新鲜度连续 24 小时正常），不做公开宣传，也不解除 NO-GO。
+- **缩短空窗**：生产迁移和部署完成后，立即按第 8 步恢复 worker；它是空窗长短的唯一决定因素。
+
 ## 上线前要确认的产品问题
 
-- `lib/config/product-facts.ts` 写死了回退值 9,600 名交易员和 28 个榜单。接口取不到数据时，登录页和关于页会照常显示这些数字。V1 文档要求公开数字来自带时间戳的事实源，是否保留由 owner 决定。
+- ~~`lib/config/product-facts.ts` 写死回退值 9,600 名交易员和 28 个榜单~~ **已解决（2026-11-14）**：回退值已删除。公开数字只在来自实时数据且大于 0 时显示，否则首页、登录页、价格页、关于页、API 文档页改用不带数字的文案；榜单为空时不再显示虚构数字。
 - `Pro` 限时免费开关（`PRO_FREE_PROMO`）和 Stripe 正式环境何时切换。
 - `hold` 档页面 `portfolio`、`tip`、`wrapped` 的去留。

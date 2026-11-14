@@ -309,6 +309,8 @@ const enCore = {
   heroHeadline: "Track the World's Best Crypto Traders",
   heroSubtitle:
     'Rankings from {boards} live source boards, recomputed every 2 hours from the latest available data.',
+  heroSubtitleNoCount:
+    'Rankings from live public source boards, recomputed every 2 hours from the latest available data.',
   heroScoreExplainer:
     'Arena Score ranks traders across every live source board — see exactly where you stand.',
   heroNeutrality: 'No source can pay for placement — every live board follows the same rules.',

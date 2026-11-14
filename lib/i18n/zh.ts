@@ -2002,7 +2002,9 @@ const zh = {
   loginCreateAccount: '创建账号',
   loginSubtitle: 'Arena — 加密世界的全面排行',
   loginValueProp1: '当前 90 天榜单覆盖 {count} 名交易员',
+  loginValueProp1NoCount: '当前 90 天榜单上的交易员排名',
   loginValueProp2: '跨 {count} 个当前有数据的排名来源板对比绩效与风控',
+  loginValueProp2NoCount: '跨当前有数据的排名来源板对比绩效与风控',
   loginValueProp3: '加入交易社区，发现投资机会',
   discoverMore: '探索 Arena 更多内容',
   loginConnectWallet: '连接钱包',
@@ -3102,6 +3104,7 @@ const zh = {
   // Hero section
   heroHeadline: '追踪全球最优秀的加密交易员',
   heroSubtitle: '汇总 {boards} 个当前有排名数据的来源板，每 2 小时使用最新可用数据重新计算',
+  heroSubtitleNoCount: '汇总当前有排名数据的公开来源板，每 2 小时使用最新可用数据重新计算',
   heroScoreExplainer: 'Arena Score 按同一规则对所有当前来源板的交易员排名——一眼看清你的真实位置。',
   heroNeutrality: '任何来源都不能付费买排名——所有当前榜单使用同一套规则。',
   heroNeutralityShort: '任何来源都不能付费买排名。',

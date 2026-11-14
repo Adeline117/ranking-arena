@@ -217,6 +217,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Hom
     },
     heroStats,
   ] = await Promise.all([getInitialTraders(timeRange, PER_PAGE, pageIndex), getHeroStats()])
+  // Lookup defaults are placeholders, not facts — never state them publicly.
+  const liveSourceBoardCount = heroStats?.isDefault ? null : (heroStats?.sourceBoardCount ?? null)
 
   // ItemList for the 90D leaderboard — the actual ranking users land on. Built
   // from the SSR-fetched traders (no extra query); top 20 keeps the payload lean.
@@ -246,7 +248,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Hom
           nav. SkipLink uses useLanguage()'s hydration-safe fallback, so it works
           without Providers (homepage deliberately omits them for LCP). */}
       <SkipLink targetId="main-content" />
-      <JsonLd data={buildOrganizationJsonLd(heroStats?.sourceBoardCount)} />
+      <JsonLd data={buildOrganizationJsonLd(liveSourceBoardCount)} />
       {itemListJsonLd && <JsonLd data={itemListJsonLd} />}
 
       {/* SSR TopNav — stays visible permanently (see HomePage.tsx). Outside
@@ -264,7 +266,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Hom
           Phase 2 hiding the table doesn't affect it. Shares .home-container
           with the nav, source strip and three-column grid (one left edge). */}
         <div id="ssr-hero-shell" className="home-container home-hero-shell">
-          <HomeHeroSSR sourceBoardCount={heroStats?.sourceBoardCount} />
+          <HomeHeroSSR sourceBoardCount={liveSourceBoardCount} />
         </div>
 
         {/* Keep the final desktop information architecture visible from the

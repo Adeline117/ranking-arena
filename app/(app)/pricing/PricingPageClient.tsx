@@ -500,14 +500,19 @@ export default function PricingPageClient({
           }}
         >
           {[
-            {
-              value: `${productFacts.sourceBoardCount}+`,
-              label: resolved(
-                t('pricingStatExchangesTracked'),
-                'pricingStatExchangesTracked',
-                'Live Ranking Boards'
-              ),
-            },
+            // The board count is a live fact or it is not shown at all.
+            ...(productFacts.sourceBoardCount === null
+              ? []
+              : [
+                  {
+                    value: `${productFacts.sourceBoardCount}+`,
+                    label: resolved(
+                      t('pricingStatExchangesTracked'),
+                      'pricingStatExchangesTracked',
+                      'Live Ranking Boards'
+                    ),
+                  },
+                ]),
             {
               value: productFacts.leaderboardRefreshLabel,
               label: resolved(

@@ -15,7 +15,6 @@ jest.mock('@/lib/logger', () => ({
 }))
 
 import { getHeroStats } from '../hero-stats'
-import { PRODUCT_FACTS } from '@/lib/config/product-facts'
 
 function rpcReturns(data: unknown, error: unknown = null) {
   mockRpc.mockReturnValue({
@@ -44,8 +43,9 @@ describe('getHeroStats', () => {
   it('flags a malformed payload as default and never caches it as real data', async () => {
     rpcReturns({ exchange_count: null })
     await expect(getHeroStats()).resolves.toEqual({
-      sourceBoardCount: PRODUCT_FACTS.fallbackSourceBoardCount,
-      traderCount: PRODUCT_FACTS.fallbackRankedTraderCount,
+      // Placeholders, not facts: zero, and flagged so no page states them.
+      sourceBoardCount: 0,
+      traderCount: 0,
       isDefault: true,
     })
     expect(mockTieredSet).not.toHaveBeenCalledWith(

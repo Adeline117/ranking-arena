@@ -132,7 +132,6 @@ describe('token ranking generation barrier', () => {
     ).toEqual([
       replacementName,
       '20261111133300_retire_legacy_token_rankings_cron_api.sql',
-      '20261111135144_freeze_legacy_position_history_relations_prod_creator.sql',
       '20261111135302_quarantine_bingx_rank_authority_blocked_spot.sql',
       '20260804050000_harden_serving_trader_resolver.sql',
       '20260804051000_harden_serving_source_capabilities.sql',
@@ -140,6 +139,7 @@ describe('token ranking generation barrier', () => {
       '20260804053000_copier_snapshot_publication_substrate.sql',
       '20260804054000_publish_copier_snapshot_atomically.sql',
       '20260808010000_copier_snapshot_trust_raw_role.sql',
+      '20260808020000_copier_snapshot_trust_publication_substrate.sql',
     ])
     expect(generatedTypes).toContain('get_token_ranking_publication_head: {')
     expect(generatedTypes).toContain('window_through_date: string | null')

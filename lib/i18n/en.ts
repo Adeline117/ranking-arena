@@ -2048,7 +2048,9 @@ const en = {
   loginCreateAccount: 'Create Account',
   loginSubtitle: 'Arena ranks everything in crypto',
   loginValueProp1: '{count} traders in the current 90-day ranking',
+  loginValueProp1NoCount: 'Traders ranked across the current 90-day leaderboard',
   loginValueProp2: 'Compare performance across {count} live ranking source boards',
+  loginValueProp2NoCount: 'Compare performance across live ranking source boards',
   loginValueProp3: 'Join trading communities',
   discoverMore: 'Discover more on Arena',
   loginConnectWallet: 'Connect Wallet',
@@ -3205,6 +3207,8 @@ const en = {
   heroHeadline: "Track the World's Best Crypto Traders",
   heroSubtitle:
     'Rankings from {boards} live source boards, recomputed every 2 hours from the latest available data.',
+  heroSubtitleNoCount:
+    'Rankings from live public source boards, recomputed every 2 hours from the latest available data.',
   heroScoreExplainer:
     'Arena Score ranks traders across every live source board — see exactly where you stand.',
   heroNeutrality: 'No source can pay for placement — every live board follows the same rules.',

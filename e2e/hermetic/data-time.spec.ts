@@ -11,7 +11,13 @@ test.describe('data time honesty', () => {
     page,
   }) => {
     await page.goto('/')
-    const asOf = page.locator('time', { hasText: /^Data as of / }).first()
+    // Two "Data as of" times exist: the SSR shell's copy (hidden once the client
+    // ranking hydrates) and the client footer's. Which one is first in the DOM
+    // says nothing about what the visitor sees, so assert on the visible one.
+    const asOf = page
+      .locator('time', { hasText: /^Data as of / })
+      .filter({ visible: true })
+      .first()
     await expect(asOf).toBeVisible()
     const dateTime = await asOf.getAttribute('datetime')
     expect(dateTime).not.toBeNull()
