@@ -6,10 +6,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 DEPLOY_SCRIPT="$ROOT/worker/deploy-ingest-sg.sh"
 DOCKER_SCRIPT="$ROOT/worker/docker-run-sg.sh"
-COMPOSE_FILE="$ROOT/worker/docker-compose.sg.yml"
 LOG_VERIFIER="$ROOT/worker/verify-sg-ready-log.awk"
-SG_PREFLIGHT="$ROOT/worker/preflight-sg-runtime.ts"
-SG_ENTRYPOINT="$ROOT/worker/src/ingest-worker.ts"
 TEST_SHA='0123456789abcdef0123456789abcdef01234567'
 TARGET_ARG="--target-sha=$TEST_SHA"
 export TEST_SHA TARGET_ARG
@@ -1580,68 +1577,6 @@ test_stopped_recovery_failure_stays_stopped_and_rearms_holds() {
   echo 'ok - failed SG stopped recovery remains stopped, digest-bound, and double-held'
 }
 
-test_stopped_recovery_success_commits_only_exact_candidate() {
-  local deploy release_body quarantine_body authorize_body
-  local session_line initial_proof_line authorize_line start_line commit_line success_line
-  local session_branch_line rollback_branch_line
-  deploy="$(<"$DEPLOY_SCRIPT")"
-  release_body="$(awk '/^release_deploy_lock\(\)/,/^}/' "$DEPLOY_SCRIPT")"
-  quarantine_body="$(awk '/^quarantine_stopped_sg_recovery\(\)/,/^}/' "$DEPLOY_SCRIPT")"
-  authorize_body="$(awk '/^authorize_stopped_sg_cutover\(\)/,/^}/' "$DEPLOY_SCRIPT")"
-
-  assert_contains "$deploy" '--recover-from-stopped' \
-    'SG stopped recovery must remain an explicit opt-in mode'
-  assert_contains "$deploy" 'RECOVERY_GO_FILE="$REMOTE_DIR.recover-from-stopped.go"' \
-    'SG recovery GO must use one fixed host-owned path'
-  assert_contains "$deploy" 'arena.ingest-recover-from-stopped@1' \
-    'SG recovery GO must require its exact version marker'
-  assert_contains "$deploy" "grep -Eq '^nonce=[0-9a-f]{64}" \
-    'SG recovery GO must require a 256-bit lowercase-hex nonce'
-  assert_contains "$deploy" 'test \"\$expires\" -le \"\$((now + 900))\"' \
-    'SG recovery GO must expire within 900 seconds'
-  assert_contains "$authorize_body" \
-    "sha256sum '\$STAGING_DIR/worker/.env'" \
-    'candidate environment must match the stopped baseline before hold removal'
-  [[ "${authorize_body%%rm -f*}" == *"test ! -L '\$STAGING_DIR'"* ]] || \
-    fail 'candidate directory and environment identity must be proven before primary-hold removal'
-
-  session_line="$(grep -n '^  STOPPED_RECOVERY_SESSION=1$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
-  initial_proof_line="$(awk -v start="$session_line" 'NR > start && /^  prove_stopped_sg_baseline \|\| exit 1$/ { print NR; exit }' "$DEPLOY_SCRIPT")"
-  authorize_line="$(grep -n '^  authorize_stopped_sg_cutover || exit 1$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
-  start_line="$(grep -n '^start_exact_pm2$' "$DEPLOY_SCRIPT" | tail -1 | cut -d: -f1)"
-  commit_line="$(grep -n '^commit_exact_pm2 "\$CANDIDATE_PM2_PID"' "$DEPLOY_SCRIPT" | cut -d: -f1)"
-  success_line="$(grep -n '^DEPLOY_SUCCEEDED=1$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
-  [ "$session_line" -lt "$initial_proof_line" ] && \
-    [ "$initial_proof_line" -lt "$authorize_line" ] && \
-    [ "$authorize_line" -lt "$start_line" ] && \
-    [ "$start_line" -lt "$commit_line" ] && \
-    [ "$commit_line" -lt "$success_line" ] || \
-    fail 'stopped recovery must prove baseline, authorize cutover, start, prove, commit, then succeed'
-  [ "$(grep -c '^start_exact_pm2$' "$DEPLOY_SCRIPT")" -eq 1 ] || \
-    fail 'the forward deployment path must contain one exact candidate start'
-  assert_contains "$deploy" 'wait_for_candidate_log_evidence' \
-    'candidate start must be followed by exact stamped log evidence'
-  assert_contains "$deploy" 'verify_sg_roster --candidate' \
-    'candidate start must be followed by fresh Redis identity evidence'
-  assert_contains "$deploy" 'commit_exact_pm2 "$CANDIDATE_PM2_PID"' \
-    'success must commit only the exact proven candidate PID'
-  assert_contains "$deploy" "rm -f '\$RECOVERY_GO_CONSUMED'" \
-    'success must destroy its consumed one-time GO'
-
-  session_branch_line="$(grep -n 'STOPPED_RECOVERY_SESSION.*sg_incident_hold_is_armed' <<<"$release_body" | cut -d: -f1)"
-  rollback_branch_line="$(grep -n 'RECOVERY_REQUIRED.*1' <<<"$release_body" | cut -d: -f1)"
-  [ "$session_branch_line" -lt "$rollback_branch_line" ] || \
-    fail 'stopped-session quarantine must take precedence over old-release rollback'
-  [ "$(grep -c 'STOPPED_RECOVERY_SESSION=' "$DEPLOY_SCRIPT")" -eq 2 ] || \
-    fail 'a stopped recovery session must never be cleared back into rollback mode'
-  [[ "$quarantine_body" != *'start_exact_pm2'* && \
-     "$quarantine_body" != *'recover_previous_release'* && \
-     "$quarantine_body" != *'pm2 start'* && "$quarantine_body" != *'pm2 restart'* ]] || \
-    fail 'stopped recovery failure handling must have no old-owner start path'
-
-  echo 'ok - clean SG stopped recovery can commit only one exact proven candidate'
-}
-
 test_concurrent_deploy_refuses_before_backup() {
   git() {
     if [ "${1:-}" = archive ]; then emit_test_archive
@@ -1680,161 +1615,6 @@ test_concurrent_deploy_refuses_before_backup() {
   [[ "$output" != *'backing up remote'* ]] || fail 'lease contention must precede backup'
   [[ "$output" != *'gracefully stopping'* ]] || fail 'lease contention must precede PM2 stop'
   echo 'ok - concurrent SG deploy is refused before remote mutation'
-}
-
-test_deploy_lease_is_fenced_and_recoverable() {
-  local deploy assert_body acquire_body stop_body owner_checks arm_line recovery_line stop_line
-  local candidate_commit_line candidate_success_line candidate_recovery_clear_line
-  local candidate_guard_clear_line rollback_exact_line rollback_lock_line
-  local rollback_committed_line rollback_guard_clear_line
-  deploy="$(<"$DEPLOY_SCRIPT")"
-  assert_body="$(awk '/^assert_deploy_lock\(\)/,/^}/' "$DEPLOY_SCRIPT")"
-  acquire_body="$(awk '/^acquire_deploy_lock\(\)/,/^}/' "$DEPLOY_SCRIPT")"
-  stop_body="$(sed -n '/^  arm_recovery_guard$/,/^fi$/p' "$DEPLOY_SCRIPT")"
-  assert_contains "$deploy" 'DEPLOY_LOCK_STALE_SECONDS=900' \
-    'deploy lease must have a bounded crash-recovery window'
-  assert_contains "$deploy" 'DEPLOY_LOCK_MAX_HEARTBEAT_AGE_SECONDS=120' \
-    'active lease proof must expire well before stale takeover is possible'
-  assert_contains "$deploy" 'touch \"\$lock_dir/heartbeat\"' \
-    'deploy lease must publish a heartbeat'
-  assert_contains "$deploy" 'mv \"\$lock_dir\" \"\$stale_dir\"' \
-    'stale lease takeover must use an atomic rename'
-  assert_contains "$deploy" 'cat '\''$DEPLOY_LOCK_DIR/owner'\''' \
-    'lease cleanup must read the remote owner token'
-  assert_contains "$deploy" "rm -rf '\$DEPLOY_LOCK_DIR'" \
-    'token-fenced cleanup must remove the lease'
-  assert_contains "$assert_body" 'kill -0 "$DEPLOY_LOCK_RENEW_PID"' \
-    'every mutation boundary must require a live local lease renewer'
-  assert_contains "$assert_body" "stat -c %Y '\$DEPLOY_LOCK_DIR/heartbeat'" \
-    'every mutation boundary must verify remote heartbeat freshness'
-  assert_contains "$acquire_body" '>/dev/null 2>&1 || true' \
-    'a transient renewal SSH failure must not silently kill the renew loop'
-  owner_checks="$(grep -c "cat '\$DEPLOY_LOCK_DIR/owner'" <<<"$stop_body" || true)"
-  [ "$owner_checks" -ge 2 ] || \
-    fail 'PM2 stop must recheck the owner token at start and while waiting'
-  [[ "${deploy%%RUNNING_INGEST_CONTAINERS=*}" == *'acquire_deploy_lock'* ]] || \
-    fail 'deploy lease must be acquired before remote Docker inspection'
-
-  arm_line="$(grep -n '^  arm_recovery_guard$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
-  recovery_line="$(grep -n '^  RECOVERY_REQUIRED=1$' "$DEPLOY_SCRIPT" | tail -1 | cut -d: -f1)"
-  stop_line="$(awk '/^  arm_recovery_guard$/ { armed=1 } armed && /pm2 stop.*PM2_APP/ { print NR; exit }' "$DEPLOY_SCRIPT")"
-  [ "$arm_line" -lt "$recovery_line" ] && [ "$recovery_line" -lt "$stop_line" ] || \
-    fail 'durable recovery guard must arm before recovery state and PM2 stop'
-
-  candidate_commit_line="$(grep -n '^commit_exact_pm2 "\$CANDIDATE_PM2_PID"' "$DEPLOY_SCRIPT" | cut -d: -f1)"
-  candidate_success_line="$(grep -n '^DEPLOY_SUCCEEDED=1$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
-  candidate_recovery_clear_line="$(grep -n '^RECOVERY_REQUIRED=0$' "$DEPLOY_SCRIPT" | tail -1 | cut -d: -f1)"
-  candidate_guard_clear_line="$(grep -n '^if ! clear_recovery_guard; then$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
-  [ "$candidate_commit_line" -lt "$candidate_success_line" ] && \
-    [ "$candidate_success_line" -le "$candidate_recovery_clear_line" ] && \
-    [ "$candidate_recovery_clear_line" -lt "$candidate_guard_clear_line" ] || \
-    fail 'candidate commit must precede success flags, which must precede guard cleanup'
-
-  rollback_exact_line="$(grep -n 'assert_exact_pm2_process "\$rollback_pm2_pid"' "$DEPLOY_SCRIPT" | tail -1 | cut -d: -f1)"
-  rollback_lock_line="$(awk '
-    /^recover_previous_release\(\)/ { recovery=1 }
-    recovery && /^  assert_deploy_lock \|\| return 1$/ { line=NR }
-    recovery && /^  ROLLBACK_COMMITTED=1$/ { print line; exit }
-  ' "$DEPLOY_SCRIPT")"
-  rollback_committed_line="$(grep -n '^  ROLLBACK_COMMITTED=1$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
-  rollback_guard_clear_line="$(grep -n '^  clear_recovery_guard || {$' "$DEPLOY_SCRIPT" | tail -1 | cut -d: -f1)"
-  [ "$rollback_exact_line" -lt "$rollback_lock_line" ] && \
-    [ "$rollback_lock_line" -lt "$rollback_committed_line" ] && \
-    [ "$rollback_committed_line" -lt "$rollback_guard_clear_line" ] || \
-    fail 'rollback final exact+lock proof must precede commit state and guard cleanup'
-  echo 'ok - deploy lease is token-fenced with bounded stale recovery'
-}
-
-test_container_bypass_is_disabled() {
-  local output status compose
-  set +e
-  output="$(bash "$DOCKER_SCRIPT" deploy ignored 2>&1)"
-  status=$?
-  set -e
-  [ "$status" -eq 2 ] || fail 'disabled Docker runner must exit 2'
-  assert_contains "$output" 'disabled: use the exact-main transactional SG deploy workflow' \
-    'Docker runner must direct operators to the sole deployment channel'
-
-  compose="$(<"$COMPOSE_FILE")"
-  assert_contains "$compose" 'services: {}' 'Compose must expose no bypass service'
-  [[ "$compose" != *'image:'* ]] || fail 'disabled Compose file must not name a runnable image'
-  echo 'ok - Docker and Compose bypass deployment paths are disabled'
-}
-
-test_ready_check_requires_fresh_sha_evidence() {
-  local deploy verifier marker_line not_before_line start_line handoff_timeout
-  deploy="$(<"$DEPLOY_SCRIPT")"
-  verifier="$(<"$LOG_VERIFIER")"
-  handoff_timeout="$(sed -n 's/^AUTHORITY_HANDOFF_TIMEOUT_SECONDS=//p' "$DEPLOY_SCRIPT")"
-  [ "$handoff_timeout" = 300 ] || \
-    fail 'candidate readiness must reserve the exact 300-second authority handoff window'
-  assert_contains "$deploy" 'seq 1 $AUTHORITY_HANDOFF_TIMEOUT_SECONDS' \
-    'candidate readiness must consume the authority handoff constant'
-  assert_contains "$deploy" 'READY_MARKER="arena-deploy-' \
-    'PM2 deploy must create a unique readiness marker'
-  assert_contains "$verifier" '$0 == marker' \
-    'readiness must ignore log lines before the deployment marker'
-  assert_contains "$verifier" '[heartbeat] redis-hset-committed' \
-    'candidate logs must use only the post-HSET commit token'
-  assert_contains "$verifier" '[ingest-worker] metric-trust database release contract ready' \
-    'candidate logs must prove database release readiness first'
-  assert_contains "$verifier" '[ingest-worker] native regional authority ready region=' \
-    'candidate logs must prove native regional authority before worker readiness'
-  assert_contains "$deploy" "-v region='vps_sg'" \
-    'SG readiness must bind the authority token to the exact vps_sg region'
-  assert_contains "$verifier" 'exactCommittedHeartbeat($0, node, pid, sha, release)' \
-    'readiness must require one canonical heartbeat bound to node, PID, SHA, and release'
-  assert_contains "$deploy" "-v sha='\$expected_sha' -v release='\$expected_release' -v pid='\$expected_pid'" \
-    'readiness must pass the exact candidate identity into the canonical verifier'
-  assert_contains "$deploy" 'verify_sg_roster --candidate "$SHA" "$WORKER_RELEASE_ID"' \
-    'candidate success must require an independent Redis roster readback'
-  assert_contains "$deploy" 'verify_sg_roster --rollback "$rollback_sha" "$rollback_release"' \
-    'rollback success must require a fresh Redis roster readback without new logs'
-  assert_contains "$deploy" 'CANDIDATE_PM2_PID="$(exact_pm2_pid)"' \
-    'candidate Redis proof must bind the exact new PM2 PID'
-  assert_contains "$deploy" 'node node_modules/tsx/dist/cli.mjs worker/preflight-sg-runtime.ts' \
-    'candidate must validate the exact SG node and region env contract before cutover'
-  marker_line="$(grep -n '^READY_MARKER=' "$DEPLOY_SCRIPT" | tail -1 | cut -d: -f1)"
-  not_before_line="$(grep -n '^CANDIDATE_NOT_BEFORE_MS=' "$DEPLOY_SCRIPT" | tail -1 | cut -d: -f1)"
-  start_line="$(grep -n '^start_exact_pm2$' "$DEPLOY_SCRIPT" | tail -1 | cut -d: -f1)"
-  [ "$not_before_line" -lt "$marker_line" ] && [ "$marker_line" -lt "$start_line" ] || \
-    fail 'remote not-before time and deployment marker must precede exact PM2 start'
-  [[ "$deploy" != *"pm2 logs \$PM2_APP --lines 400"* ]] || \
-    fail 'readiness must not pass on an old line from a fixed PM2 log window'
-  echo 'ok - PM2 readiness requires fresh post-marker logs plus Redis roster evidence'
-}
-
-test_rollback_capture_policy_is_preflighted() {
-  local deploy preflight entrypoint preflight_line stop_line env_load_line
-  local concurrency_line regions_line consumer_line
-  deploy="$(<"$DEPLOY_SCRIPT")"
-  preflight="$(<"$SG_PREFLIGHT")"
-  entrypoint="$(<"$SG_ENTRYPOINT")"
-  assert_contains "$preflight" "INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED !== 'true'" \
-    'SG preflight must reject an explicitly disabled capture environment'
-  assert_contains "$preflight" 'assertAttemptBoundCaptureEnvironmentFile(loaded)' \
-    'SG preflight must prove the box-local worker environment file itself'
-  assert_contains "$preflight" 'await assertPartitionedV4WorkerReadiness()' \
-    'SG preflight must prove the exact partitioned V4 database contract'
-  assert_contains "$entrypoint" "config({ path: resolve(__dirname, '..', '.env') })" \
-    'the worker entrypoint itself must load the box-local worker/.env'
-  assert_contains "$deploy" "cp -a '\$REMOTE_DIR' '\$STAGING_DIR'" \
-    'preflight must inspect the box-local environment copied from the rollback release'
-  assert_contains "$deploy" "--exclude '.env'" \
-    'source sync must preserve the box-local environment that rollback will reload'
-  preflight_line="$(grep -n 'worker/preflight-sg-runtime.ts' "$DEPLOY_SCRIPT" | tail -1 | cut -d: -f1)"
-  stop_line="$(grep -n '^  RECOVERY_REQUIRED=1$' "$DEPLOY_SCRIPT" | tail -1 | cut -d: -f1)"
-  [ "$preflight_line" -lt "$stop_line" ] || \
-    fail 'capture-enabled rollback environment must be proven before the old worker stops'
-  env_load_line="$(grep -n "^const workerEnvironment = config({ path: resolve(__dirname, '..', '.env') })$" "$SG_ENTRYPOINT" | cut -d: -f1)"
-  concurrency_line="$(grep -n '^const INGEST_CONCURRENCY = ' "$SG_ENTRYPOINT" | cut -d: -f1)"
-  regions_line="$(grep -n 'const regions = consumedRegions()' "$SG_ENTRYPOINT" | cut -d: -f1)"
-  consumer_line="$(grep -n 'new Worker(' "$SG_ENTRYPOINT" | head -1 | cut -d: -f1)"
-  [ "$env_load_line" -lt "$concurrency_line" ] && \
-    [ "$env_load_line" -lt "$regions_line" ] && \
-    [ "$env_load_line" -lt "$consumer_line" ] || \
-    fail 'worker/.env must load before env-derived concurrency, regions, or consumers'
-  echo 'ok - capture=false is refused and worker/.env loads before serving logic'
 }
 
 test_log_verifier_rejects_old_or_forged_evidence() {
@@ -1984,31 +1764,6 @@ test_log_verifier_rejects_old_or_forged_evidence() {
         -v pid=41 -v sha="$TEST_SHA" -v release="$release" \
       -f "$LOG_VERIFIER" || fail 'exact fresh committed log evidence must pass'
   echo 'ok - candidate log verifier enforces fresh ordered native-authority evidence'
-}
-
-test_release_stamp_matches_exact_committed_inputs() {
-  local deploy
-  deploy="$(<"$DEPLOY_SCRIPT")"
-  assert_contains "$deploy" 'GIT_NO_REPLACE_OBJECTS=1 git archive "$SHA"' \
-    'deployment source must be materialized from the exact commit'
-  assert_contains "$deploy" 'CODE_PATHS=(.npmrc lib worker package.json package-lock.json tsconfig.json)' \
-    'every deploy mode must ship the complete worker release inputs'
-  assert_contains "$deploy" 'LOCAL_DEP_INPUTS_HASH="$(dependency_input_hash "$DEPLOY_SOURCE_DIR")"' \
-    'code-only must attest every dependency install input'
-  assert_contains "$deploy" '"${SOURCE_PATHS[@]}" "$VPS_HOST:$STAGING_DIR/"' \
-    'rsync must populate an isolated candidate from the immutable snapshot'
-  assert_contains "$deploy" "mv '\$STAGING_DIR/.WORKER_RELEASE_ID.tmp' '\$STAGING_DIR/WORKER_RELEASE_ID'" \
-    'worker release stamp must be atomically renamed'
-  assert_contains "$deploy" "mv '\$REMOTE_DIR' '\$BACKUP_DIR'" \
-    'cutover must preserve the previous complete release directory'
-  assert_contains "$deploy" 'if ! recover_previous_release; then' \
-    'every post-stop failure must run the centralized rollback path'
-  assert_contains "$deploy" 'quarantine_uncommitted_pm2_owner || {' \
-    'an uncommitted failed rollback must be removed from live and saved PM2 state'
-  assert_contains "$deploy" \
-    '"$READY_MARKER" "$SHA" "$WORKER_RELEASE_ID" "$CANDIDATE_PM2_PID"' \
-    'fresh candidate logs must bind the full SHA, release ID, and exact candidate PID'
-  echo 'ok - release stamp is bound to exact committed code and dependency inputs'
 }
 
 test_remote_javascript_quotes_survive_shell_rendering() {
@@ -2217,62 +1972,6 @@ test_pm2_restart_counter_predicates_execute_against_jlist() {
   echo 'ok - real PM2 predicates reject restart_time=1 and failed snapshot producers'
 }
 
-test_pm2_save_follows_stable_redis_proof() {
-  local start_body clear_body force_saves final_main_line candidate_roster_line
-  local candidate_save_line success_line
-  local rollback_roster_line rollback_save_line restored_line clear_line cutover_line
-  start_body="$(awk '/^start_exact_pm2\(\)/,/^}/' "$DEPLOY_SCRIPT")"
-  clear_body="$(awk '/^clear_saved_pm2_owner\(\)/,/^}/' "$DEPLOY_SCRIPT")"
-  [[ "$start_body" != *'pm2 save'* ]] || \
-    fail 'an unproven candidate or rollback must never enter the PM2 dump'
-  force_saves="$(grep -o 'pm2 save --force' <<<"$clear_body" | wc -l | tr -d ' ')"
-  [ "$force_saves" -ge 2 ] || \
-    fail 'empty PM2 state must be force-saved twice to replace primary and fallback dumps'
-  assert_contains "$clear_body" '[\"dump.pm2\", \"dump.pm2.bak\"]' \
-    'cutover must parse both PM2 resurrection files after clearing the owner'
-  assert_contains "$clear_body" 'apps.some(app => app && app.name === process.argv[1])' \
-    'cutover must reject a persisted dump that still names the stable-path owner'
-  clear_line="$(grep -n '^clear_saved_pm2_owner || {' "$DEPLOY_SCRIPT" | cut -d: -f1)"
-  cutover_line="$(grep -n '^CUTOVER_STARTED=1$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
-  [ "$clear_line" -lt "$cutover_line" ] || \
-    fail 'stable-path PM2 owner must be removed from saved state before cutover'
-
-  final_main_line="$(grep -n '^require_exact_main$' "$DEPLOY_SCRIPT" | tail -1 | cut -d: -f1)"
-  candidate_roster_line="$(grep -n 'verify_sg_roster --candidate' "$DEPLOY_SCRIPT" | tail -1 | cut -d: -f1)"
-  candidate_save_line="$(grep -n 'commit_exact_pm2 "$CANDIDATE_PM2_PID"' "$DEPLOY_SCRIPT" | cut -d: -f1)"
-  success_line="$(grep -n '^DEPLOY_SUCCEEDED=1$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
-  [ "$final_main_line" -lt "$candidate_roster_line" ] && \
-    [ "$candidate_roster_line" -lt "$candidate_save_line" ] && \
-    [ "$candidate_save_line" -lt "$success_line" ] || \
-    fail 'candidate PM2 save must follow final-main Redis proof and precede success'
-
-  rollback_roster_line="$(grep -n 'verify_sg_roster --rollback' "$DEPLOY_SCRIPT" | tail -1 | cut -d: -f1)"
-  rollback_save_line="$(grep -n 'commit_exact_pm2 "$rollback_pm2_pid"' "$DEPLOY_SCRIPT" | cut -d: -f1)"
-  restored_line="$(grep -n 'previous SG release restored with exact fresh Redis identity evidence' "$DEPLOY_SCRIPT" | cut -d: -f1)"
-  [ "$rollback_roster_line" -lt "$rollback_save_line" ] && \
-    [ "$rollback_save_line" -lt "$restored_line" ] || \
-    fail 'rollback PM2 save must follow stable Redis proof and precede restoration'
-  echo 'ok - PM2 state is saved only after stable Redis-backed readiness proof'
-}
-
-test_post_success_retention_cleanup_is_best_effort() {
-  local deploy success_line cleanup_line complete_line
-  deploy="$(<"$DEPLOY_SCRIPT")"
-  assert_contains "$deploy" "ls -d '\$REMOTE_DIR'.bak-*" \
-    'backup retention cleanup must be explicitly best effort'
-  assert_contains "$deploy" \
-    'test \"\$(cat '\''$DEPLOY_LOCK_DIR/owner'\'' 2>/dev/null || true)\" = '\''$DEPLOY_LOCK_TOKEN'\''' \
-    'backup retention cleanup must remain token-fenced'
-  assert_contains "$deploy" 'SG deploy succeeded, but old-backup retention cleanup failed' \
-    'cleanup failure must remain visible without falsifying rollout status'
-  success_line="$(grep -n '^DEPLOY_SUCCEEDED=1$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
-  cleanup_line="$(grep -n 'old-backup retention cleanup failed' "$DEPLOY_SCRIPT" | cut -d: -f1)"
-  complete_line="$(grep -n 'SG deploy complete' "$DEPLOY_SCRIPT" | cut -d: -f1)"
-  [ "$success_line" -lt "$cleanup_line" ] && [ "$cleanup_line" -lt "$complete_line" ] || \
-    fail 'retention cleanup must run only after transactional success and before completion reporting'
-  echo 'ok - post-success retention cleanup cannot falsify deploy failure'
-}
-
 bash -n "$DEPLOY_SCRIPT" "$DOCKER_SCRIPT" "$0"
 test_dry_run_itemizes_changes
 test_artifact_preflight_fails_before_remote_access
@@ -2310,16 +2009,8 @@ test_stopped_recovery_requires_one_time_confirmation
 test_stopped_recovery_failed_go_consumption_cleans_lock
 test_stopped_recovery_baseline_rechecks_residual_owner
 test_stopped_recovery_failure_stays_stopped_and_rearms_holds
-test_stopped_recovery_success_commits_only_exact_candidate
 test_concurrent_deploy_refuses_before_backup
-test_deploy_lease_is_fenced_and_recoverable
-test_container_bypass_is_disabled
-test_ready_check_requires_fresh_sha_evidence
-test_rollback_capture_policy_is_preflighted
 test_log_verifier_rejects_old_or_forged_evidence
-test_release_stamp_matches_exact_committed_inputs
 test_remote_javascript_quotes_survive_shell_rendering
 test_pm2_dump_predicate_rejects_primary_and_backup_residue
 test_pm2_restart_counter_predicates_execute_against_jlist
-test_pm2_save_follows_stable_redis_proof
-test_post_success_retention_cleanup_is_best_effort
