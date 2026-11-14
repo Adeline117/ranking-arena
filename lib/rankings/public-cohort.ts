@@ -70,3 +70,66 @@ export function isInPublicCohort(
   const computedAtMs = Date.parse(row.computed_at)
   return Number.isFinite(computedAtMs) && computedAtMs >= nowMs - PUBLIC_COHORT_MAX_COMPUTED_AGE_MS
 }
+
+type CohortMembershipResult = { data: unknown[] | null; error: { message: string } | null }
+
+interface CohortMembershipQuery extends PromiseLike<CohortMembershipResult> {
+  select(columns: string): CohortMembershipQuery
+  eq(column: string, value: string): CohortMembershipQuery
+  in(column: string, values: string[]): CohortMembershipQuery
+  gt(column: string, value: number): CohortMembershipQuery
+  gte(column: string, value: number | string): CohortMembershipQuery
+  lte(column: string, value: number): CohortMembershipQuery
+}
+
+type CohortMembershipClient = {
+  from(relation: 'public_ranked_leaderboard'): CohortMembershipQuery
+}
+
+function isCohortMembershipClient(value: unknown): value is CohortMembershipClient {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'from' in value &&
+    typeof value.from === 'function'
+  )
+}
+
+/**
+ * Whether every cached row is still a member of the live public cohort.
+ *
+ * A database-level withdrawal (source isolation by migration, serving-head /
+ * season fence invalidation) removes rows from `public_ranked_leaderboard`
+ * without advancing the shared Redis write fence, so a cached page cannot see
+ * it. One indexed membership read per cache hit makes the withdrawal visible
+ * at once instead of after the cache TTL. Throws when the read fails: an
+ * unverifiable cached page must not be served as current.
+ */
+export async function cachedRowsStillInPublicCohort(
+  supabase: unknown,
+  season: string,
+  rows: ReadonlyArray<{ source?: unknown; source_trader_id?: unknown }>
+): Promise<boolean> {
+  if (rows.length === 0) return true
+  if (!isCohortMembershipClient(supabase)) {
+    throw new TypeError('Supabase client does not expose a public view reader')
+  }
+  const key = (source: unknown, id: unknown) => `${String(source)}\u0000${String(id)}`
+  const ids = [...new Set(rows.map((row) => String(row.source_trader_id)))]
+  const { data, error } = await applyPublicCohortFilters(
+    supabase
+      .from('public_ranked_leaderboard')
+      .select('source, source_trader_id')
+      .eq('season_id', season)
+      .in('source_trader_id', ids)
+  )
+  if (error) throw new Error(`public cohort membership read failed: ${error.message}`)
+  const live = new Set(
+    (data ?? []).flatMap((row) =>
+      typeof row === 'object' && row !== null && 'source' in row && 'source_trader_id' in row
+        ? [key(row.source, row.source_trader_id)]
+        : []
+    )
+  )
+  return rows.every((row) => live.has(key(row.source, row.source_trader_id)))
+}

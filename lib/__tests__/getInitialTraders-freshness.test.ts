@@ -54,10 +54,9 @@ describe('SSR leaderboard source freshness', () => {
     expect(summary.sources.map((source) => source.source)).toEqual(['binance_futures'])
   })
 
-  it('epochs both SSR cache keys with the verified view proof shape', () => {
+  it('epochs the SSR cache key with the verified view proof shape', () => {
     expect(homeInitialTradersCacheKeys('90D', 2)).toEqual({
       cacheKey: 'public-rank-policy-v7:home-initial-traders-v7:90D:n50:p2',
-      fallbackKey: 'public-rank-policy-v7:home-initial-traders-fallback-v7:90D:n50:p2',
     })
   })
 })

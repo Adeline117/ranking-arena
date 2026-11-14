@@ -473,14 +473,15 @@ async function getBufferedWarnings(): Promise<
 export interface DailyDigestData {
   alertCount24h: number
   pipelineSuccessRate: number
-  platformFreshness: Array<{ name: string; hoursAgo: number; status: 'ok' | 'stale' | 'critical' }>
-  activeUsers?: number
   topErrors?: Array<{ job: string; count: number }>
-  snapshotCount24h?: number
-  snapshotCountYesterday?: number
-  enrichmentCompletionRate?: number
 }
 
+/**
+ * Web-side daily digest: Vercel cron outcomes (pipeline_logs) and the
+ * buffered web WARNING alerts. Data freshness is NOT reported here — the
+ * ingest worker digest (maint:daily-digest) covers source coverage and the
+ * public /api/health covers sealed publication.
+ */
 export async function sendDailyDigest(data: DailyDigestData): Promise<boolean> {
   const statusIcon =
     data.pipelineSuccessRate >= 95
@@ -489,59 +490,11 @@ export async function sendDailyDigest(data: DailyDigestData): Promise<boolean> {
         ? '\u{1F7E1}'
         : '\u{1F534}'
 
-  // Count platforms by status
-  const okCount = data.platformFreshness.filter((p) => p.status === 'ok').length
-  const totalCount = data.platformFreshness.length
-
-  let text = `\u{1F4CA} <b>Arena 每日报告</b>\n`
+  let text = `\u{1F4CA} <b>Arena Web 每日报告</b>\n`
   text += `<i>${new Date().toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Shanghai' })}</i>\n\n`
 
-  // Pipeline overview
-  text += `${statusIcon} Pipeline 成功率: ${data.pipelineSuccessRate.toFixed(1)}%\n`
-  text += `正常管道: ${okCount}/${totalCount}\n`
+  text += `${statusIcon} Web cron 成功率: ${data.pipelineSuccessRate.toFixed(1)}%\n`
   text += `告警数 (24h): ${data.alertCount24h}\n`
-
-  // Snapshot counts
-  if (data.snapshotCount24h != null) {
-    text += `新增 Snapshot: ${data.snapshotCount24h.toLocaleString()}`
-    if (data.snapshotCountYesterday != null && data.snapshotCountYesterday > 0) {
-      const change = (
-        ((data.snapshotCount24h - data.snapshotCountYesterday) / data.snapshotCountYesterday) *
-        100
-      ).toFixed(1)
-      text += ` (${Number(change) >= 0 ? '+' : ''}${change}% vs 昨天)`
-    }
-    text += '\n'
-  }
-
-  // Enrichment
-  if (data.enrichmentCompletionRate != null) {
-    text += `Enrichment 完成率: ${data.enrichmentCompletionRate.toFixed(1)}%\n`
-  }
-
-  if (data.activeUsers != null) text += `活跃用户: ${data.activeUsers}\n`
-
-  // Problem platforms
-  const criticals = data.platformFreshness.filter((p) => p.status === 'critical')
-  const stales = data.platformFreshness.filter((p) => p.status === 'stale')
-
-  if (criticals.length > 0) {
-    text += '\n<b>\u{1F534} CRITICAL 管道:</b>\n'
-    for (const p of criticals) {
-      text += `  ${p.name}: ${p.hoursAgo.toFixed(1)}h 未更新\n`
-    }
-  }
-
-  if (stales.length > 0) {
-    text += '\n<b>\u{1F7E1} WARNING 管道:</b>\n'
-    for (const p of stales) {
-      text += `  ${p.name}: ${p.hoursAgo.toFixed(1)}h 未更新\n`
-    }
-  }
-
-  if (criticals.length === 0 && stales.length === 0) {
-    text += '\n\u{2705} 所有平台数据正常\n'
-  }
 
   // Buffered warnings from past 24h
   const warnings = await getBufferedWarnings()
@@ -570,7 +523,7 @@ export async function sendDailyDigest(data: DailyDigestData): Promise<boolean> {
   return sendTelegramAlert({
     level: 'report',
     source: '每日摘要',
-    title: 'Arena 每日报告',
+    title: 'Arena Web 每日报告',
     message: text,
   })
 }

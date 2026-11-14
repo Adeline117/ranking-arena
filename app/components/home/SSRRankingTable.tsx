@@ -55,7 +55,7 @@ export default async function SSRRankingTable({ traders }: Props) {
   }
 
   return (
-    <section className="ssr-ranking-table" aria-label="Trader rankings">
+    <section className="ssr-ranking-table" aria-label={t('traderRankingsAria')}>
       {/* Reserves the client RankingFilters bar (category tabs + tools: 61px,
           +2px for the client container's border offset — measured) so the
           rows do not drop when the interactive table replaces this shell.
@@ -112,7 +112,24 @@ export default async function SSRRankingTable({ traders }: Props) {
               key={`${trader.source}-${trader.id}`}
               href={href}
               className={`ssr-ranking-entry ssr-ranking-grid mrow${rank <= 3 ? ` ssr-ranking-entry-rank-${rank} mrow-top mrow-top-${rank}` : ''}`}
-              aria-label={`Rank ${rank}: ${trader.handle}. Arena Score ${score != null ? score.toFixed(0) : 'unknown'}, ROI ${roi != null ? `${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%` : 'unknown'}`}
+              aria-label={t('rankingEntryAria')
+                .replace('{rank}', String(rank))
+                .replace('{name}', trader.handle)
+                .replace(
+                  '{score}',
+                  score != null
+                    ? t('arenaScoreAria').replace('{score}', score.toFixed(0))
+                    : t('arenaScoreUnknownAria')
+                )
+                .replace(
+                  '{roi}',
+                  roi != null
+                    ? t('roiValueAria').replace(
+                        '{value}',
+                        `${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%`
+                      )
+                    : t('roiUnknown')
+                )}
             >
               <div className="ssr-rank-cell mrow-rank">
                 <RankBadge rank={rank} />
@@ -158,7 +175,17 @@ export default async function SSRRankingTable({ traders }: Props) {
                 <span className="ssr-score-badge mrow-score">
                   {score != null ? score.toFixed(0) : '—'}
                 </span>
-                {score != null && <ScoreMiniBar score={score} width={50} height={4} />}
+                {score != null && (
+                  <ScoreMiniBar
+                    score={score}
+                    width={50}
+                    height={4}
+                    ariaLabel={t('arenaScoreOfHundredAria').replace(
+                      '{score}',
+                      String(Math.round(score))
+                    )}
+                  />
+                )}
               </div>
 
               <div className="ssr-roi-cell mrow-m mrow-m-roi">

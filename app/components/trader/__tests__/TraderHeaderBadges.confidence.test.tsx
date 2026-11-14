@@ -1,7 +1,11 @@
 import { render, screen } from '@testing-library/react'
 import { TraderHeaderBadges } from '../TraderHeaderBadges'
 
-jest.mock('next/dynamic', () => () => () => null)
+jest.mock(
+  'next/dynamic',
+  () => () => (props: { rank?: number }) =>
+    props.rank != null ? <span data-testid="percentile-badge">{props.rank}</span> : null
+)
 
 const t = (key: string) => key
 
@@ -35,4 +39,18 @@ describe('TraderHeaderBadges score confidence', () => {
       expect(container).toBeEmptyDOMElement()
     }
   )
+})
+
+describe('TraderHeaderBadges cross-exchange percentile', () => {
+  it('shows the 90D-denominator percentile for a 90D (or legacy default) rank', () => {
+    const { rerender } = render(<TraderHeaderBadges rank={12} headlineWindow="90d" t={t} />)
+    expect(screen.getByTestId('percentile-badge')).toHaveTextContent('12')
+    rerender(<TraderHeaderBadges rank={12} t={t} />)
+    expect(screen.getByTestId('percentile-badge')).toBeInTheDocument()
+  })
+
+  it.each(['7d', '30d'])('hides it when the rank comes from the %s board', (headlineWindow) => {
+    render(<TraderHeaderBadges rank={12} headlineWindow={headlineWindow} t={t} />)
+    expect(screen.queryByTestId('percentile-badge')).toBeNull()
+  })
 })

@@ -9,6 +9,7 @@ import type { Job } from 'bullmq'
 import { getConnection } from '../../connection'
 import { getIngestPool } from '@/lib/ingest/db'
 import { alert } from '@/lib/ingest/alerting'
+import { alertUncoveredRegions } from '../region-coverage'
 
 interface StaleSurface {
   slug: string
@@ -20,8 +21,10 @@ interface StaleSurface {
 
 export async function processFreshness(
   _job: Job
-): Promise<{ stale: number; pendingShifts: number }> {
+): Promise<{ stale: number; pendingShifts: number; uncoveredRegions: string[] }> {
   const redis = getConnection()
+  // Before the DB query: region coverage must not depend on it.
+  const uncoveredRegions = await alertUncoveredRegions(redis)
   const { rows } = await getIngestPool().query<StaleSurface>(
     `WITH expected AS (
        SELECT s.id, s.slug, s.phase,
@@ -82,7 +85,7 @@ export async function processFreshness(
     console.warn(`[freshness] ${rows.length} stale Tier-A surfaces`)
   }
   const pendingShifts = await alertPendingCountShifts(redis)
-  return { stale: rows.length, pendingShifts }
+  return { stale: rows.length, pendingShifts, uncoveredRegions }
 }
 
 interface PendingCountShift {
@@ -94,9 +97,8 @@ interface PendingCountShift {
 }
 
 /**
- * A sustained downward count level-shift beyond the automatic floor
- * (lib/ingest/staging/count-check.ts SHIFT_MAX_AUTO_DROP_PCT) keeps failing the
- * count check until an operator confirms the new level. Surface every
+ * A sustained downward count level-shift (lib/ingest/staging/count-check.ts)
+ * keeps failing the count check until an operator confirms the new level. Surface every
  * (source, timeframe) whose latest snapshot is waiting, on its own cooldown key.
  */
 export async function alertPendingCountShifts(redis: Parameters<typeof alert>[0]): Promise<number> {

@@ -56,27 +56,37 @@ function stats(overrides: Record<string, unknown> = {}): NonNullable<TraderDetai
 
 const perf = (d: TraderDetail) => toTraderPageData(d).performance as Record<string, unknown>
 
-describe('overall_score 70/25/5 综合', () => {
-  it('三期齐全 → 精确加权', () => {
-    const d = detail({
-      periods: {
-        '90D': { arenaScore: 80 },
-        '30D': { arenaScore: 60 },
-        '7D': { arenaScore: 40 },
-      },
-    })
-    // 80*0.7 + 60*0.25 + 40*0.05 = 56+15+2 = 73
-    expect(perf(d).overall_score).toBe(73)
+describe('overall_score 70/25/5 综合（calculateOverallScore，与 window=composite 同一规则）', () => {
+  const score = (s90: number | null, s30: number | null, s7: number | null) =>
+    perf(
+      detail({
+        periods: {
+          '90D': s90 == null ? null : { arenaScore: s90 },
+          '30D': s30 == null ? null : { arenaScore: s30 },
+          '7D': s7 == null ? null : { arenaScore: s7 },
+        },
+      })
+    ).overall_score
+
+  it('三期齐全 → 70/25/5 加权（7D 与 30D 持平时无动量项）', () => {
+    expect(score(80, 60, 60)).toBe(74) // 56 + 15 + 3
   })
 
-  it('缺 30D/7D → 回退用 90D 值(不惩罚数据缺失)', () => {
-    const d = detail({ periods: { '90D': { arenaScore: 80 }, '30D': null, '7D': null } })
-    expect(perf(d).overall_score).toBe(80) // 80*(0.7+0.25+0.05)
+  it('三期齐全时 7D 相对 30D 的动量项计入（下限 −1）', () => {
+    expect(score(80, 60, 40)).toBe(72) // 73 − 1
   })
 
-  it('无 90D 分且 trader.arenaScore null → null', () => {
-    const d = detail({ trader: { arenaScore: null } })
-    expect(perf(d).overall_score).toBeNull()
+  it('缺 30D/7D 不借 90D：只有 90D → 0.9 × S90', () => {
+    expect(score(80, null, null)).toBe(72)
+  })
+
+  it('缺 7D → 0.70 × S90 + 0.30 × S30；缺 30D → 0.70 × S90 + 0.30 × S7', () => {
+    expect(score(80, 60, null)).toBe(74)
+    expect(score(80, null, 50)).toBe(71)
+  })
+
+  it('没有 90D → null（综合分需要 90D）', () => {
+    expect(score(null, 60, 40)).toBeNull()
   })
 })
 

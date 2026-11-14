@@ -9,10 +9,12 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260722041000_pure_arena_score_v4_scorer.sql"
 # The golden vectors encode the CURRENT scoring definition: the reviewed v4
-# scorer plus 20261113014105 (unknown trade count -> 5/(5+50) confidence),
-# which requires the v5 scorer it also rewrites.
+# scorer plus 20261113014105 and 20261114101514 (unknown trade count -> 1/(1+50)
+# confidence, true 0 from self-computed sources -> 0), which require the v5
+# scorer they also rewrite.
 V5_MIGRATION="$ROOT_DIR/supabase/migrations/20260729070000_pure_arena_score_v5_zero_metric_scorer.sql"
 UNKNOWN_TRADES_MIGRATION="$ROOT_DIR/supabase/migrations/20261113014105_arena_score_unknown_trades_confidence.sql"
+TRUE_ZERO_TRADES_MIGRATION="$ROOT_DIR/supabase/migrations/20261114101514_arena_score_true_zero_trades_confidence.sql"
 GOLDEN_FIXTURE="$ROOT_DIR/supabase/migrations/__tests__/fixtures/arena-score-v4-golden-vectors.json"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
@@ -81,6 +83,7 @@ SQL
 psql_cmd -q -f "$MIGRATION"
 psql_cmd -q -f "$V5_MIGRATION"
 PGOPTIONS="-c client_min_messages=warning" psql_cmd -q -f "$UNKNOWN_TRADES_MIGRATION"
+PGOPTIONS="-c client_min_messages=warning" psql_cmd -q -f "$TRUE_ZERO_TRADES_MIGRATION"
 
 psql_cmd -q -v golden_json="$(<"$GOLDEN_FIXTURE")" <<'SQL'
 CREATE TEMP TABLE golden_fixture (payload jsonb NOT NULL);

@@ -28,7 +28,7 @@ import { TraderRowSwipeActions } from './TraderRowSwipeActions'
 import { formatDisplayName } from './utils'
 import type { SourceInfo } from './utils'
 import type { Trader } from './RankingTable'
-import { normalizeFiniteScore } from './RankingTableTypes'
+import { normalizeFiniteScore, type SortColumn, type SortDir } from './RankingTableTypes'
 import { getScoreColor } from '@/lib/utils/score-colors'
 import { formatDrawdown, NULL_DISPLAY } from '@/lib/utils/format'
 import { useComparisonStore } from '@/lib/stores/comparisonStore'
@@ -51,9 +51,34 @@ const METRIC_LABEL_KEYS: Record<MobileMetric, string> = {
   mdd: 'mdd',
 }
 
-// ── Header (column labels + metric picker) ───────────────────────────────────
+const SORT_LABEL_KEYS: Record<SortColumn, string> = {
+  score: 'score',
+  roi: 'roi',
+  pnl: 'pnl',
+  winrate: 'winRatePercent',
+  mdd: 'mdd',
+  sortino: 'sortino',
+}
+const MOBILE_SORT_COLUMNS: readonly SortColumn[] = ['score', 'roi', 'pnl', 'winrate', 'mdd']
 
-export function MobileRankHeader() {
+function sortOptionLabel(t: (key: string) => string, col: SortColumn, dir: SortDir): string {
+  return `${t(SORT_LABEL_KEYS[col])} ${dir === 'desc' ? '↓' : '↑'}`
+}
+
+// ── Header (sort picker + column labels + metric picker) ─────────────────────
+
+export interface MobileRankHeaderProps {
+  sortColumn?: SortColumn
+  sortDir?: SortDir
+  /** Server-side re-sort. Without it the header shows a static "Trader" label. */
+  onSortChange?: (column: SortColumn, dir: SortDir) => void
+}
+
+export function MobileRankHeader({
+  sortColumn = 'score',
+  sortDir = 'desc',
+  onSortChange,
+}: MobileRankHeaderProps = {}) {
   const { t } = useLanguage()
   const [metric, setMetric] = useState<MobileMetric>('roi')
 
@@ -75,10 +100,47 @@ export function MobileRankHeader() {
     }
   }, [])
 
+  const sortColumns = MOBILE_SORT_COLUMNS.includes(sortColumn)
+    ? MOBILE_SORT_COLUMNS
+    : [...MOBILE_SORT_COLUMNS, sortColumn]
+
+  const handleSortSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const [col, dir] = e.target.value.split(':') as [SortColumn, SortDir]
+    if (!SORT_LABEL_KEYS[col] || (dir !== 'asc' && dir !== 'desc')) return
+    onSortChange?.(col, dir)
+  }
+
   return (
     <div className="mrow-head" data-testid="mobile-rank-header">
       <span>#</span>
-      <span>{t('trader')}</span>
+      {onSortChange ? (
+        <span className="mrow-head-sort">
+          {/* Same transparent-native-select pattern as the metric picker. */}
+          <span className="mrow-head-metric-label" aria-hidden="true">
+            {sortOptionLabel(t, sortColumn, sortDir)}
+            <svg width={8} height={8} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M4 8h16l-8 10z" />
+            </svg>
+          </span>
+          <select
+            className="mrow-head-select"
+            aria-label={t('rankingMobileSortLabel')}
+            value={`${sortColumn}:${sortDir}`}
+            onChange={handleSortSelect}
+            data-testid="mobile-rank-sort-select"
+          >
+            {sortColumns.flatMap((col) =>
+              (['desc', 'asc'] as const).map((dir) => (
+                <option key={`${col}:${dir}`} value={`${col}:${dir}`}>
+                  {sortOptionLabel(t, col, dir)}
+                </option>
+              ))
+            )}
+          </select>
+        </span>
+      ) : (
+        <span>{t('trader')}</span>
+      )}
       <span className="mrow-head-score">{t('score')}</span>
       <span className="mrow-head-metric">
         {/* Visible label follows html[data-rank-metric] like the rows do; the
@@ -172,8 +234,14 @@ export const TraderMobileRow = memo(
     }
 
     const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}${href}` : href
-    const roiAria = roi != null ? `ROI ${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%` : t('roiUnknown')
-    const scoreAria = score != null ? `Arena Score ${score.toFixed(0)}` : 'Arena Score unknown'
+    const roiAria =
+      roi != null
+        ? t('roiValueAria').replace('{value}', `${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%`)
+        : t('roiUnknown')
+    const scoreAria =
+      score != null
+        ? t('arenaScoreAria').replace('{score}', score.toFixed(0))
+        : t('arenaScoreUnknownAria')
 
     return (
       <TraderRowSwipeActions

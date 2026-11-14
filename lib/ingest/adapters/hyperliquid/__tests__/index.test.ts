@@ -43,7 +43,22 @@ function session(): FetchSession {
 
 function mockInfoApi(options: { failFills?: boolean } = {}) {
   const bodies: Array<Record<string, unknown>> = []
-  const fetchMock = jest.fn(async (_url: string, init?: RequestInit) => {
+  const fetchMock = jest.fn(async (url: string, init?: RequestInit) => {
+    if (url.includes('/leaderboard')) {
+      const board = {
+        leaderboardRows: [
+          {
+            ethAddress: ADDRESS,
+            accountValue: '1',
+            windowPerformances: [
+              ['month', { pnl: '5', roi: '0.5', vlm: '0' }],
+              ['allTime', { pnl: '42', roi: '0.6', vlm: '0' }],
+            ],
+          },
+        ],
+      }
+      return { ok: true, status: 200, json: async () => board } as Response
+    }
     const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>
     bodies.push(body)
     if (options.failFills && body.type === 'userFillsByTime') {
@@ -146,6 +161,24 @@ describe('hyperliquid profile fetch intent', () => {
         },
       })
     }
+  })
+
+  it('attaches the native allTime board window to the scheduled 90D profile only', async () => {
+    const { fetchMock } = mockInfoApi()
+    const fetchSession = session()
+    const [p30, p90] = await Promise.all([
+      profile(fetchSession, 'scheduled_full', 30),
+      profile(fetchSession, 'scheduled_full', 90),
+    ])
+    expect(p90.pages[0].payload).toMatchObject({ boardAllTime: { pnl: '42', roi: '0.6' } })
+    expect(p30.pages[0].payload).toMatchObject({ boardAllTime: null })
+
+    const deferred = await profile(session(), 'series_only', 90)
+    expect(deferred.pages[0].payload).toMatchObject({ boardAllTime: null })
+    const boardDownloads = fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes('/leaderboard')
+    )
+    expect(boardDownloads).toHaveLength(1) // series_only never pays for the board
   })
 
   it('reuses scheduled fills for history without another API request', async () => {

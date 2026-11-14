@@ -126,41 +126,8 @@ interface TopTrader {
   rank: number
 }
 
-type PublicRankedLeaderboardQueryResult = {
-  data: unknown[] | null
-  error: { message: string } | null
-  count?: number | null
-}
-
-type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
-  select(
-    columns: string,
-    options?: { count?: 'exact'; head?: boolean }
-  ): PublicRankedLeaderboardQuery
-  eq(column: string, value: string): PublicRankedLeaderboardQuery
-  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
-  order(
-    column: string,
-    options: { ascending: boolean; nullsFirst: boolean }
-  ): PublicRankedLeaderboardQuery
-  limit(count: number): PublicRankedLeaderboardQuery
-}
-
-type PublicRankedLeaderboardClient = {
-  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
-  // The public view is additive and may land before generated Supabase types.
-  // Keep the narrow bridge at this public rendering boundary.
-  if (!isRecord(value) || typeof value.from !== 'function') {
-    throw new TypeError('Supabase client does not expose the public ranking cohort')
-  }
-  return value as PublicRankedLeaderboardClient
 }
 
 function finiteOrNull(value: unknown): number | null {
@@ -182,7 +149,7 @@ function hasPositivePublishedRank(row: unknown, exchange: string): row is Record
 }
 
 function exactCountOrUnknown(
-  result: PublicRankedLeaderboardQueryResult,
+  result: { count: number | null; error: unknown },
   minimumVisibleRows: number
 ): number | null {
   const count = result.count
@@ -201,7 +168,7 @@ function exactCountOrUnknown(
 async function fetchExchangeData(
   exchange: string
 ): Promise<{ traders: TopTrader[]; total: number | null }> {
-  const publicCohort = publicRankedLeaderboardClient(getSupabaseAdmin())
+  const publicCohort = getSupabaseAdmin()
 
   const [topResult, countResult] = await Promise.all([
     publicCohort

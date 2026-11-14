@@ -1,38 +1,26 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { META_MONITOR_EXPECTED_INTERVALS } from '@/lib/cron/meta-monitor-policy'
 
-const root = process.cwd()
-const source = readFileSync(join(root, 'app/api/cron/meta-monitor/route.ts'), 'utf8')
-
-function expectedJobs(): string[] {
-  const start = source.indexOf('const EXPECTED_INTERVALS')
-  const end = source.indexOf('\n}\n', start)
-  const block = source.slice(start, end)
-  return [...block.matchAll(/^\s*'([a-z0-9-]+)':\s*\d+,/gm)].map((m) => m[1])
-}
+const jobs = Object.keys(META_MONITOR_EXPECTED_INTERVALS)
 
 describe('meta-monitor expected intervals', () => {
-  it('parses a non-empty job list', () => {
-    expect(expectedJobs().length).toBeGreaterThan(5)
-  })
-
   it('only expects jobs that still have a cron route (no permanent NEVER alarms)', () => {
-    const missing = expectedJobs().filter(
-      (job) => !existsSync(join(root, 'app/api/cron', job, 'route.ts'))
+    const missing = jobs.filter(
+      (job) => !existsSync(join(process.cwd(), 'app/api/cron', job, 'route.ts'))
     )
     expect(missing).toEqual([])
   })
 
-  it.each([
-    'batch-fetch-traders',
-    'batch-enrich',
-    'fetch-details',
-    'backfill-data',
-    'link-entities',
-    'verify-fetchers',
-    'snapshot-positions',
-    'auto-post-insights',
-  ])('no longer expects removed job %s', (job) => {
-    expect(expectedJobs()).not.toContain(job)
+  // 410 tombstones whose work moved into the worker never write pipeline_logs.
+  it.each(['compute-leaderboard', 'precompute-composite', 'sync-meilisearch'])(
+    'does not expect the tombstoned job %s',
+    (job) => {
+      expect(jobs).not.toContain(job)
+    }
+  )
+
+  it('watches the worker liveness checker that reads the progress watermarks', () => {
+    expect(META_MONITOR_EXPECTED_INTERVALS['worker-heartbeat-check']).toBe(15)
   })
 })

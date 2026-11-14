@@ -27,6 +27,7 @@ import type {
   RankingTimeframe,
   Timeframe,
 } from '../../core/types'
+import { positionEnvelopeRows } from '../../core/position-snapshot'
 import { parseToobitCopiersV1 } from './copier-parser-v1'
 
 type Dict = Record<string, unknown>
@@ -264,7 +265,14 @@ export function parseToobitProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
 // ── Positions (current-lead-orders, mask-aware) ──
 
 export function parseToobitPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const list = objects(((raw ?? {}) as { data?: unknown }).data)
+  // getPositions wraps fetchData's payload (code 200 already enforced) as
+  // { data }; a non-array data is still a failed fetch, not a flat book.
+  const list = positionEnvelopeRows(
+    'toobit',
+    raw,
+    (e) => e.code === undefined || e.code === 200,
+    (e) => e.data
+  )
   const out: ParsedPosition[] = []
   for (const item of list) {
     const symbol = str(item.symbolId) ?? str(item.symbolName)

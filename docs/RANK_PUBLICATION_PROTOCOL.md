@@ -177,7 +177,10 @@ persistLeaderboardRanks` 已于 2026-11-13 删除；`scripts/qa/public-ranking-s
 - 只接受本事务刚封存的 cohort、与封存 proof 完全一致的来源集合、该来源自己的已通过板。
 - 公开视图 `public.public_ranked_leaderboard_source_evidence`（anon 可读）给出当前在服务季每个来源的
   `evidence_grade` 与 `source_as_of`，前端可据此区分证据等级。
-- 快照保留策略（20261113110021）同时保留被证据绑定的快照。
+- 快照保留策略（20261113110021）同时保留被证据绑定的快照：窗口（默认 180 天）外，被信任
+  run/observation、Tier-A receipt、发布来源证据、发布 proofs 或当前 freshness 引用的快照，以及每个
+  (source, timeframe) 最新通过的榜永久保留（这些证据行按设计只追加，不能删）；其余过期快照连同
+  entries 删除。快照存在期间其 raw_object_id 不被 RAW GC 回收。
 
 ## 其他公开读取入口（直读快照的 anon RPC）
 
@@ -187,9 +190,11 @@ persistLeaderboardRanks` 已于 2026-11-13 删除；`scripts/qa/public-ranking-s
 - 周榜（7D）和交易所榜（7/30/90D）只读**当前正在服务的封存发布**里的来源
   （`arena.public_sealed_rank_sources()`：head 当前有效、witness 属于该 head 的 cohort），
   且只用非空、count-check 通过、不晚于封存水位、48 小时内的板；被隔离/未封存的来源不再出现。
-- 详情首屏的排名条目只显示 48 小时内的非空通过板（不要求封存，因为详情也覆盖非排名来源）。
-- `arena_core_modules` 只新增 `stale` 标记（as_of 为空或超过 48 小时）。在修好 trader_stats 的
-  as_of 冻结问题之前硬过滤会让大部分详情页变空，所以暂不过滤。
+- 详情首屏的排名条目（`20261114101605` 起）只来自该周期当前封存季里的来源、且不晚于封存水位的
+  48 小时内非空通过板；被隔离/拒发/未封存的来源只显示身份信息，不显示排名和 ROI/PnL。
+- `arena_core_modules`（`20261114101605` 起）对 as_of 为空或超过 48 小时的统计返回 NULL
+  （trader_stats.as_of 冻结已在 3a8d02667 修好）。
+- `get_hero_stats`（`20261114103025` 起）只数 `public_ranked_leaderboard` 的 90D 行。
 - PG17 证明在 `public-ranking-season-publication.pg17.sh` 末尾。
 
 ## 迁移回放顺序（20261111140053 的文件名陷阱）

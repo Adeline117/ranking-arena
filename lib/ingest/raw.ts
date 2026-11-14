@@ -3204,6 +3204,10 @@ export const METRIC_TRUST_EVIDENCE_PRESENT_SQL = `SELECT
  * (run population/manifest, observation artifacts) are pinned: deleting them
  * used to CASCADE away the trust runs and observations, breaking the
  * audit/replay chain after 30 days (20261113* makes those FKs RESTRICT).
+ * The board payload a snapshot soft-references (leaderboard_snapshots.
+ * raw_object_id, the only RAW evidence of a no-trust-path board) is pinned
+ * while the snapshot exists, and retires with it (snapshot retention,
+ * 20261113110021).
  */
 export function rawObjectRetentionCandidateSql(trustEvidencePresent: boolean): string {
   const pinned = trustEvidencePresent
@@ -3221,7 +3225,11 @@ export function rawObjectRetentionCandidateSql(trustEvidencePresent: boolean): s
   return `SELECT raw_candidate.id, raw_candidate.storage_path, raw_candidate.content_hash
            FROM arena.raw_objects AS raw_candidate
           WHERE NOT raw_candidate.quarantined
-            AND raw_candidate.fetched_at < now() - ($1 || ' days')::interval${pinned}
+            AND raw_candidate.fetched_at < now() - ($1 || ' days')::interval
+            AND NOT EXISTS (
+              SELECT 1 FROM arena.leaderboard_snapshots AS snapshot
+               WHERE snapshot.raw_object_id = raw_candidate.id
+            )${pinned}
           ORDER BY raw_candidate.fetched_at, raw_candidate.id
           FOR UPDATE OF raw_candidate SKIP LOCKED
           LIMIT 500`

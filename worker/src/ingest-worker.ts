@@ -481,6 +481,11 @@ async function main(): Promise<void> {
     }
 
     await startNativeIngestServing({
+      // Same idempotent call as maint:housekeeping; fail-closed before consumers.
+      ensurePartitions: async () => {
+        const { ensurePartitions } = await import('@/lib/ingest/serving/series')
+        return ensurePartitions()
+      },
       lifecycle,
       markReady: () => {
         processCoordinator.assertStartupOpen()

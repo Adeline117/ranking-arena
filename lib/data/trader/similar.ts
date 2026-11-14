@@ -4,7 +4,7 @@
  * projection, but no raw rank table is read here.
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { TypedSupabaseClient } from '@/lib/supabase/typed-client'
 import type { UnifiedTrader } from './types'
 import { mapLeaderboardRow } from './mappers'
 import { LR } from '@/lib/types/schema-mapping'
@@ -17,42 +17,11 @@ import {
 const PUBLIC_SIMILAR_COLUMNS =
   'source,source_trader_id,handle,avatar_url,arena_score,roi,pnl,win_rate,max_drawdown,followers,rank,season_id,source_type,trader_type,computed_at,score_completeness,metrics_estimated,is_outlier'
 
-type PublicRankedLeaderboardQueryResult = {
-  data: unknown[] | null
-  error: { message: string } | null
-}
-
-type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
-  select(columns: string): PublicRankedLeaderboardQuery
-  eq(column: string, value: string): PublicRankedLeaderboardQuery
-  neq(column: string, value: string): PublicRankedLeaderboardQuery
-  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
-  gte(column: string, value: number): PublicRankedLeaderboardQuery
-  lte(column: string, value: number): PublicRankedLeaderboardQuery
-  order(
-    column: string,
-    options: { ascending: boolean; nullsFirst?: boolean }
-  ): PublicRankedLeaderboardQuery
-  limit(count: number): PublicRankedLeaderboardQuery
-  abortSignal(signal: AbortSignal): PublicRankedLeaderboardQuery
-}
-
 /** Recommendation card is best-effort: never hold a profile render longer. */
 export const SIMILAR_TRADERS_QUERY_TIMEOUT_MS = 2_000
 
-type PublicRankedLeaderboardClient = {
-  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
-  if (!isRecord(value) || typeof value.from !== 'function') {
-    throw new TypeError('Supabase client does not expose the public ranking cohort')
-  }
-  return value as PublicRankedLeaderboardClient
 }
 
 function hasPositiveScopedRank(row: unknown, source: string): row is Record<string, unknown> {
@@ -68,7 +37,7 @@ function hasPositiveScopedRank(row: unknown, source: string): row is Record<stri
 }
 
 export async function fetchSimilarTraders(
-  supabase: SupabaseClient,
+  supabase: TypedSupabaseClient,
   platform: string,
   traderKey: string,
   arenaScore: number | null,
@@ -82,7 +51,7 @@ export async function fetchSimilarTraders(
 }
 
 async function fetchSimilarTradersUncached(
-  supabase: SupabaseClient,
+  supabase: TypedSupabaseClient,
   platform: string,
   traderKey: string,
   arenaScore: number | null,
@@ -96,7 +65,7 @@ async function fetchSimilarTradersUncached(
     // cannot promote a raw/partial row merely because it looks similar.
     if (arenaScore != null) {
       const scoreRange = Math.max(arenaScore * 0.25, 10)
-      const result = await publicRankedLeaderboardClient(supabase)
+      const result = await supabase
         .from('public_ranked_leaderboard')
         .select(PUBLIC_SIMILAR_COLUMNS)
         .eq(LR.source, platform)
@@ -114,7 +83,7 @@ async function fetchSimilarTradersUncached(
       data = result.data as Record<string, unknown>[] | null
     } else if (roi != null) {
       const roiRange = Math.max(Math.abs(roi) * 0.3, 20)
-      const result = await publicRankedLeaderboardClient(supabase)
+      const result = await supabase
         .from('public_ranked_leaderboard')
         .select(PUBLIC_SIMILAR_COLUMNS)
         .eq(LR.source, platform)

@@ -231,6 +231,7 @@ export async function scoreTraders(
       sharpeRatio: t.sharpe_ratio,
       profitFactor: t.profit_factor,
       tradesCount: t.trades_count,
+      source: t.source,
     })),
     season
   )

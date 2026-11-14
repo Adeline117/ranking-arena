@@ -120,7 +120,6 @@ export default function RankingSection({
     handleLoadFilter,
     handleDeleteFilter,
     handleProRequired,
-    handleCopyLink: _handleCopyLink,
     handleResetFilters,
     handleFilterToggle,
     formatLastUpdated,

@@ -80,6 +80,14 @@ export class Circuit {
     }
   }
 
+  /** A response already counted by recordSuccess() turned out to be an
+   *  HTTP-200 business error or unparseable: move it to the failure side of
+   *  the cycle rate. Breaker state is unaffected (it is not a block). */
+  recordParseFailure(): void {
+    if (this.cycleSuccesses > 0) this.cycleSuccesses -= 1
+    this.cycleFailures += 1
+  }
+
   /** Failure rate of the current cycle; call endCycle() to reset. */
   cycleFailureRate(): number {
     const total = this.cycleSuccesses + this.cycleFailures

@@ -11,6 +11,31 @@ export interface StuckCronJob {
   actualMinutes: number
 }
 
+/**
+ * Expected max interval (minutes) per Vercel cron job group, read from
+ * pipeline_logs. Every key MUST be a live (non-tombstone) app/api/cron/<name>
+ * route: a job with no producer can only ever report "NEVER" and trains
+ * everyone to ignore this alert (2026-11 audit P2-1).
+ *
+ * The worker pipeline is NOT tracked here: the workers do not write
+ * pipeline_logs. Its single source of truth is the Redis output watermarks
+ * (arena:worker:progress:*, lib/ingest/worker-progress.ts) read by
+ * worker-heartbeat-check; meta-monitor watches that checker instead.
+ */
+export const META_MONITOR_EXPECTED_INTERVALS: Readonly<Record<string, number>> = Object.freeze({
+  'worker-heartbeat-check': 15,
+  'generate-profiles': 720,
+  'flash-news-fetch': 60,
+  'cleanup-deleted-accounts': 1440,
+  'snapshot-ranks': 1440,
+  'auto-post-market-summary': 1440,
+  'auto-post-twitter': 1440,
+  'daily-digest': 1440,
+  'subscription-expiry': 1440,
+  'reconcile-subscriptions': 1440,
+  'stripe-readiness': 1440,
+})
+
 export const META_MONITOR_FUTURE_TOLERANCE_MS = 5 * 60_000
 
 /**

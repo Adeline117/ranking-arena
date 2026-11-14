@@ -8,6 +8,12 @@ jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: () => ({ from: mockFrom }),
 }))
 
+const mockClaimedKeys = jest.fn(async () => new Set<string>())
+jest.mock('@/lib/data/claimed-trader-badges', () => ({
+  ...jest.requireActual('@/lib/data/claimed-trader-badges'),
+  getClaimedTraderBadgeKeys: () => mockClaimedKeys(),
+}))
+
 jest.mock('@/lib/data/avatar-mirrors', () => ({
   attachAvatarMirrors: (...args: unknown[]) => mockAttachAvatarMirrors(...args),
 }))
@@ -86,6 +92,19 @@ function cohortQuery(rows: Array<Record<string, unknown>>, error: unknown = null
     }
   )
   return Object.assign(proxy, methods) as unknown as QueryProxy
+}
+
+/** A cache hit may read only row membership in the live view, nothing else. */
+function membershipOnly(ids: string[]) {
+  mockFrom.mockImplementation((relation: string) => {
+    if (relation === 'public_ranked_leaderboard') {
+      const query = resultQuery(
+        ids.map((id) => ({ source: 'binance_futures', source_trader_id: id }))
+      )
+      return query
+    }
+    throw new Error('a valid primary cache hit must avoid database work')
+  })
 }
 
 function cohortRow(
@@ -219,6 +238,33 @@ describe('SSR public ranking cohort', () => {
     expect(scoreFloorCalls).toEqual([['arena_score', PUBLIC_COHORT_MIN_ARENA_SCORE_EXCLUSIVE]])
   })
 
+  it('carries the same claimed / verified-data badges as /api/traders on the SSR rows', async () => {
+    mockClaimedKeys.mockResolvedValueOnce(new Set(['binance_futures|safe-2']))
+    const cohort = cohortQuery([cohortRow('safe-1', 1), cohortRow('safe-2', 2)])
+    mockFrom.mockImplementation((relation: string) => {
+      if (relation === 'public_ranked_leaderboard') return cohort
+      if (relation === 'leaderboard_source_freshness') {
+        return resultQuery([
+          { source: 'binance_futures', source_as_of: '2026-07-24T11:00:00.000Z' },
+        ])
+      }
+      throw new Error(`unexpected relation ${relation}`)
+    })
+
+    const result = await fetchLeaderboardFromDB('90D', 2, 0)
+
+    expect(
+      result.traders.map(({ id, is_verified, is_verified_data }) => ({
+        id,
+        is_verified,
+        is_verified_data,
+      }))
+    ).toEqual([
+      { id: 'safe-1', is_verified: false, is_verified_data: false },
+      { id: 'safe-2', is_verified: true, is_verified_data: false },
+    ])
+  })
+
   it('keeps totals unknown even on terminal pages until a same-predicate count authority exists', async () => {
     const cohort = cohortQuery([
       cohortRow('safe-1', 1),
@@ -256,7 +302,7 @@ describe('SSR public ranking cohort', () => {
       totalCountIsExact: true,
       hasMore: true,
     }
-    mockCacheGet.mockResolvedValueOnce(partial).mockResolvedValueOnce(null)
+    mockCacheGet.mockResolvedValueOnce(partial)
     const cohort = cohortQuery([cohortRow('safe-after-cache', 1)])
     mockFrom.mockImplementation((relation: string) => {
       if (relation === 'public_ranked_leaderboard') return cohort
@@ -278,9 +324,7 @@ describe('SSR public ranking cohort', () => {
 
   it('does not reuse a cached hasMore claim after its SQL look-ahead witness was discarded', async () => {
     mockCacheGet.mockResolvedValueOnce(validCachedResult('cached-visible-row'))
-    mockFrom.mockImplementation(() => {
-      throw new Error('a valid primary cache hit must avoid database work')
-    })
+    membershipOnly(['cached-visible-row'])
 
     const result = await getInitialTraders('90D', 20, 0)
 
@@ -289,7 +333,7 @@ describe('SSR public ranking cohort', () => {
     // omitted look-ahead row, so it must be reproved by a fresh cohort query
     // rather than survive the cache TTL by itself.
     expect(result.hasMore).toBe(false)
-    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockFrom).toHaveBeenCalledTimes(1)
   })
 
   it('re-proves a cached hasMore from the stored look-ahead witness', async () => {
@@ -297,15 +341,13 @@ describe('SSR public ranking cohort', () => {
       ...validCachedResult('cached-visible-row'),
       lookaheadWitness: { ...cachedTrader('witness-row'), rank: 2 },
     })
-    mockFrom.mockImplementation(() => {
-      throw new Error('a valid primary cache hit must avoid database work')
-    })
+    membershipOnly(['cached-visible-row'])
 
     const result = await getInitialTraders('90D', 20, 0)
 
     expect(result.traders.map((trader) => trader.id)).toEqual(['cached-visible-row'])
     expect(result.hasMore).toBe(true)
-    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockFrom).toHaveBeenCalledTimes(1)
   })
 
   it.each([
@@ -323,9 +365,7 @@ describe('SSR public ranking cohort', () => {
         ...validCachedResult('cached-visible-row'),
         lookaheadWitness: { ...cachedTrader('witness-row'), rank: 2, ...patch },
       })
-      mockFrom.mockImplementation(() => {
-        throw new Error('a valid primary cache hit must avoid database work')
-      })
+      membershipOnly(['cached-visible-row'])
 
       const result = await getInitialTraders('90D', 20, 0)
 
@@ -357,35 +397,46 @@ describe('SSR public ranking cohort', () => {
     expect(freshness.in).toHaveBeenCalledWith('source', ['binance_futures', 'bybit'])
   })
 
-  it('serves a valid fallback cache as stale only after the DB fails, and rejects old source-only shapes', async () => {
-    const legacySourceOnly = {
-      traders: [{ id: 'legacy', source: 'binance_futures', rank: 1 }],
-      lastUpdated: '2026-07-24T11:00:00.000Z',
-      isStale: false,
-      totalCount: 1,
-      categoryCounts: { all: 1, futures: 1, spot: 0, onchain: 0 },
-    }
-    const fallback = validCachedResult('fallback-safe')
-    mockCacheGet.mockResolvedValueOnce(legacySourceOnly).mockResolvedValueOnce(fallback)
+  it('has no stale fallback tier: a DB failure is the explicit unknown state', async () => {
+    mockCacheGet
     mockFrom.mockImplementation(() => {
       throw new Error('database unavailable')
     })
 
     const result = await getInitialTraders('90D', 20, 0)
 
-    expect(result.traders.map((trader) => trader.id)).toEqual(['fallback-safe'])
+    expect(result.traders).toEqual([])
     expect(result.isStale).toBe(true)
     expect(result.totalCount).toBeNull()
-    expect(result.totalCountIsExact).toBe(false)
-    expect(result.categoryCounts).toEqual({ all: null, futures: null, spot: null, onchain: null })
-    // The DB is tried first: a DB-level withdrawal must not hide behind the fallback TTL.
-    expect(mockFrom).toHaveBeenCalled()
+    expect(mockCacheGet).toHaveBeenCalledTimes(1)
   })
 
-  it('prefers fresh DB rows over a still-valid fallback cache on a primary miss', async () => {
-    mockCacheGet
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(validCachedResult('fallback-row'))
+  it('reloads from the DB when a cached row has been withdrawn from the live view', async () => {
+    mockCacheGet.mockResolvedValueOnce(validCachedResult('withdrawn-row'))
+    const membership = resultQuery([])
+    mockFrom.mockImplementation((relation: string) => {
+      if (relation === 'public_ranked_leaderboard') {
+        // first read = membership (row gone), then the page reload
+        return mockFrom.mock.calls.length === 1
+          ? membership
+          : cohortQuery([cohortRow('live-row', 1)])
+      }
+      if (relation === 'leaderboard_source_freshness') {
+        return resultQuery([
+          { source: 'binance_futures', source_as_of: '2026-07-24T11:00:00.000Z' },
+        ])
+      }
+      throw new Error(`unexpected relation ${relation}`)
+    })
+
+    const result = await getInitialTraders('90D', 20, 0)
+
+    expect(membership.in).toHaveBeenCalledWith('source_trader_id', ['withdrawn-row'])
+    expect(result.traders.map((trader) => trader.id)).toEqual(['live-row'])
+  })
+
+  it('reads fresh DB rows on a primary miss and caches them for 300s', async () => {
+    mockCacheGet.mockResolvedValueOnce(null)
     mockFrom.mockImplementation((relation: string) => {
       if (relation === 'public_ranked_leaderboard') return cohortQuery([cohortRow('db-row', 1)])
       if (relation === 'leaderboard_source_freshness') {
@@ -416,7 +467,7 @@ describe('SSR public ranking cohort', () => {
         },
       ],
     }
-    mockCacheGet.mockResolvedValueOnce(staleByHomepageWindow).mockResolvedValueOnce(null)
+    mockCacheGet.mockResolvedValueOnce(staleByHomepageWindow)
     mockFrom.mockImplementation((relation: string) => {
       if (relation === 'public_ranked_leaderboard')
         return cohortQuery([cohortRow('fresh-after-cache', 1)])
@@ -439,7 +490,7 @@ describe('SSR public ranking cohort', () => {
       ...validCachedResult('source-expired'),
       sourceFreshness: [{ source: 'binance_futures', source_as_of: '2026-07-22T11:59:59.999Z' }],
     }
-    mockCacheGet.mockResolvedValueOnce(staleSourceCache).mockResolvedValueOnce(null)
+    mockCacheGet.mockResolvedValueOnce(staleSourceCache)
     mockFrom.mockImplementation((relation: string) => {
       if (relation === 'public_ranked_leaderboard')
         return cohortQuery([cohortRow('fresh-after-source', 1)])
@@ -506,14 +557,12 @@ describe('SSR public ranking cohort', () => {
   it('epochs cache entries that lack the view proof fields', () => {
     expect(homeInitialTradersCacheKeys('90D', 2)).toEqual({
       cacheKey: 'public-rank-policy-v7:home-initial-traders-v7:90D:n50:p2',
-      fallbackKey: 'public-rank-policy-v7:home-initial-traders-fallback-v7:90D:n50:p2',
     })
   })
 
   it('keeps cache pages isolated by their normalized page size', () => {
     expect(homeInitialTradersCacheKeys('90D', 2, 20)).toEqual({
       cacheKey: 'public-rank-policy-v7:home-initial-traders-v7:90D:n20:p2',
-      fallbackKey: 'public-rank-policy-v7:home-initial-traders-fallback-v7:90D:n20:p2',
     })
   })
 })

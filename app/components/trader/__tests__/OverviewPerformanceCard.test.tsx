@@ -225,4 +225,15 @@ describe('OverviewPerformanceCard period switching', () => {
     expect(screen.getByTestId('period-scores')).toHaveAttribute('data-profitability', 'unknown')
     expect(screen.getByTestId('period-scores')).toHaveAttribute('data-risk', 'unknown')
   })
+
+  it('never shows pnl_score as the 90D risk-control score', () => {
+    render(
+      <OverviewPerformanceCard
+        performance={{ profitability_score: 30, risk_control_score: null, pnl_score: 40 }}
+      />
+    )
+
+    expect(screen.getByTestId('period-scores')).toHaveAttribute('data-profitability', '30')
+    expect(screen.getByTestId('period-scores')).toHaveAttribute('data-risk', 'unknown')
+  })
 })

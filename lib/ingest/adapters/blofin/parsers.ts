@@ -36,6 +36,7 @@ import type {
   ParsedStats,
   RankingTimeframe,
 } from '../../core/types'
+import { positionEnvelopeRows } from '../../core/position-snapshot'
 import { parseBlofinCopiersV1 } from './copier-parser-v1'
 
 type Dict = Record<string, unknown>
@@ -276,7 +277,13 @@ export function parseBlofinPositions(raw: unknown, _ctx: ParseCtx): ParsedPositi
       rows: Dict[]
     }
   >()
-  for (const r of dataRows(raw)) {
+  const rows = positionEnvelopeRows(
+    'blofin',
+    raw,
+    (e) => e.code === 200,
+    (e) => e.data
+  )
+  for (const r of rows) {
     if (r.close_time !== null && r.close_time !== undefined) continue // closed → history surface
     const symbol = typeof r.symbol === 'string' ? r.symbol : null
     if (!symbol) continue

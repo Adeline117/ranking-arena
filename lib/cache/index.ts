@@ -677,9 +677,13 @@ async function getOrSetWithLockAttempt<T>(
     await new Promise((resolve) => setTimeout(resolve, backoffMs + jitter))
   }
 
-  // 超时：执行兜底获取（避免完全失败）
+  // 超时：执行兜底获取（避免完全失败）。锁等待超时说明有慢查询正在跑:先用本实例
+  // 刚兜底取到的值,避免每个超时请求都无锁打一次库(踩踏)。
   dataLogger.warn(`[Cache] Lock timeout for ${key}, executing without lock`)
+  const local = readDegradedLocal<T>(key)
+  if (local !== null) return local
   const data = await fetcher()
+  writeDegradedLocal(key, data)
   const timeoutWrite = set(key, data, { ...guardedOptions, ttl: actualTtl, writeLock: null })
   if (options.writeFenceKey) {
     const written = await timeoutWrite

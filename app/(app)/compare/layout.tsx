@@ -12,21 +12,6 @@ import {
 const PUBLIC_COMPARE_RANKING_COLUMNS =
   'handle,source,source_trader_id,season_id,rank,roi,arena_score,pnl,win_rate,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at'
 
-type PublicCompareRankingQueryResult = {
-  data: unknown | null
-  error: { message: string } | null
-}
-
-type PublicCompareRankingQuery = {
-  select(columns: string): PublicCompareRankingQuery
-  eq(column: string, value: string): PublicCompareRankingQuery
-  maybeSingle(): Promise<PublicCompareRankingQueryResult>
-}
-
-type PublicCompareRankingClient = {
-  from(relation: 'public_ranked_leaderboard'): PublicCompareRankingQuery
-}
-
 type VerifiedCompareRanking = {
   handle: string
   source: string
@@ -40,13 +25,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /** Narrow bridge while generated Supabase types catch up with the public view. */
-function publicCompareRankingClient(value: unknown): PublicCompareRankingClient {
-  if (!isRecord(value) || typeof value.from !== 'function') {
-    throw new TypeError('Supabase client does not expose the public ranking cohort')
-  }
-  return value as PublicCompareRankingClient
-}
-
 function finiteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
 }
@@ -119,7 +97,7 @@ async function buildCompareOgUrl(accounts: CompareAccountRef[]): Promise<string>
           platform: account.source,
         })
         if (!resolved) return null
-        const { data, error } = await publicCompareRankingClient(supabase)
+        const { data, error } = await supabase
           .from('public_ranked_leaderboard')
           .select(PUBLIC_COMPARE_RANKING_COLUMNS)
           .eq('source', resolved.platform)

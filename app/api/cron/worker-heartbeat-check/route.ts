@@ -245,22 +245,14 @@ export const GET = withCron(
         (d) =>
           `🔴 ${d.node} (regions: ${d.regions.join(',') || '?'}) — no heartbeat for ${d.age_min}min`
       )
-      // The regions that just lost their only consumer — what a standby worker
-      // should fail over to. (Dedup across downed nodes.)
       const downRegions = [...new Set(down.flatMap((d) => d.regions))].filter(Boolean)
-      const failoverHint =
-        downRegions.length > 0
-          ? `\n\nFailover (standby worker takes over from cloud Redis):\n` +
-            `  redis SET arena:failover:regions "${downRegions.join(',')}"\n` +
-            `Auto-stands-down when the primary's heartbeat returns; clear the key after recovery.`
-          : ''
       await sendRateLimitedAlert(
         {
           title: `Ingest worker DOWN: ${down.map((d) => d.node).join(', ')}`,
           message:
             `${down.length} worker node(s) stopped heart-beating — crawling for their ` +
-            `regions has stalled.\n${lines.join('\n')}\n\nHealthy: ${healthy.join(', ') || 'none'}` +
-            failoverHint,
+            `regions has stalled.\n${lines.join('\n')}\n\nHealthy: ${healthy.join(', ') || 'none'}\n` +
+            `Cross-region failover is disabled: restart the down node.`,
           level: 'critical',
           details: { down, healthy, downRegions },
         },

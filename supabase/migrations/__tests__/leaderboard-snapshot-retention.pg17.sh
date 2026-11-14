@@ -149,4 +149,37 @@ psql_db -Atqc "SELECT arena.prune_leaderboard_snapshots(90, 100)" >/dev/null
 assert_equal "evidence-bound snapshot stays, superseded latest goes" "2,3,4,6,8,9" \
   "$(psql_db -Atqc "SELECT string_agg(id::text, ',' ORDER BY id) FROM arena.leaderboard_snapshots")"
 
+
+# Bounded part of the policy: every expired snapshot that no append-only
+# evidence row binds is deleted with its entries; one bound only by a
+# metric-trust observation (immutable, no cascade path) survives. Nothing left
+# points at a deleted snapshot.
+psql_db -q <<'SQL'
+INSERT INTO arena.leaderboard_snapshots VALUES
+  (10, 1, 90, '2025-02-01 00:00:00+00', false),
+  (11, 1, 90, '2025-02-02 00:00:00+00', false),
+  (12, 2, 90, '2025-02-03 00:00:00+00', false);
+INSERT INTO arena.leaderboard_entries
+SELECT snapshot.scraped_at, snapshot.id, trader.id
+FROM arena.leaderboard_snapshots AS snapshot CROSS JOIN (VALUES (100), (101)) AS trader(id)
+WHERE snapshot.id IN (10, 11, 12);
+INSERT INTO arena.metric_trust_observations VALUES (31, 10);
+SQL
+assert_equal "unbound expired snapshots and their entries go" \
+  '{"contract": "leaderboard-snapshot-retention@1", "retention_days": 90, "deleted_entries": 4, "deleted_snapshots": 2}' \
+  "$(psql_db -Atqc "SELECT arena.prune_leaderboard_snapshots(90, 100)")"
+assert_equal "evidence-bound snapshots survive" "2,3,4,6,8,9,10" \
+  "$(psql_db -Atqc "SELECT string_agg(id::text, ',' ORDER BY id) FROM arena.leaderboard_snapshots")"
+assert_equal "no evidence row points at a deleted snapshot" "0" "$(psql_db -Atqc "
+  SELECT (SELECT count(*) FROM arena.metric_trust_runs AS r
+           WHERE NOT EXISTS (SELECT 1 FROM arena.leaderboard_snapshots s WHERE s.id = r.snapshot_id))
+       + (SELECT count(*) FROM arena.metric_trust_observations AS o
+           WHERE NOT EXISTS (SELECT 1 FROM arena.leaderboard_snapshots s WHERE s.id = o.snapshot_id))
+       + (SELECT count(*) FROM arena.tier_a_execution_window_receipts AS t
+           WHERE NOT EXISTS (SELECT 1 FROM arena.leaderboard_snapshots s WHERE s.id = t.snapshot_id))
+       + (SELECT count(*) FROM arena.leaderboard_rank_publication_source_evidence AS e
+           WHERE NOT e.snapshot_ids <@ ARRAY(SELECT id FROM arena.leaderboard_snapshots))
+       + (SELECT count(*) FROM arena.leaderboard_entries AS en
+           WHERE NOT EXISTS (SELECT 1 FROM arena.leaderboard_snapshots s WHERE s.id = en.snapshot_id))")"
+
 echo "leaderboard snapshot retention PostgreSQL 17 proof passed"

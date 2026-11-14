@@ -25,9 +25,6 @@ const LS_KEY_PRESET = 'ranking-preset'
 const LS_KEY_EXCHANGE = 'ranking-exchange'
 const LS_KEY_FILTER_CONFIG = 'ranking-filter-config'
 
-// Free users: show up to 1000 traders (beta — showcase platform depth)
-export const FREE_LEADERBOARD_LIMIT = 1000
-
 const URL_SORT_COLUMNS: readonly SortColumn[] = ['score', 'roi', 'pnl', 'winrate', 'mdd', 'sortino']
 const SORT_BY: Record<SortColumn, string> = {
   score: 'arena_score',
@@ -793,35 +790,12 @@ export function useRankingFilters({
 
   // With server-side pagination (fetchPage available), exchange is already filtered by the API.
   // Skip client-side exchange filter to avoid double-filtering.
+  // No silent "show everything" fallback: a scoped exchange with no rows on
+  // this page renders the honest empty state, like presets do.
   const exchangeFiltered = useMemo(() => {
-    if (fetchPage) return categoryFiltered
-    const raw = selectedExchange
-      ? categoryFiltered.filter((trader) => trader.source === selectedExchange)
-      : categoryFiltered
-    return selectedExchange && raw.length === 0 && categoryFiltered.length > 0
-      ? categoryFiltered
-      : raw
+    if (fetchPage || !selectedExchange) return categoryFiltered
+    return categoryFiltered.filter((trader) => trader.source === selectedExchange)
   }, [categoryFiltered, selectedExchange, fetchPage])
-
-  // Auto-clear exchange filter when no traders match (avoids stale filter)
-  // NOTE: syncStateToUrl intentionally excluded from deps to prevent infinite loop
-  // (calling syncStateToUrl changes its deps → recreates → re-triggers this effect)
-  // Skip when fetchPage is available — server already filters by exchange.
-  useEffect(() => {
-    if (fetchPage) return
-    if (selectedExchange && categoryFiltered.length > 0) {
-      const hasMatch = categoryFiltered.some((trader) => trader.source === selectedExchange)
-      if (!hasMatch) {
-        setSelectedExchange(null)
-        try {
-          localStorage.removeItem(LS_KEY_EXCHANGE)
-        } catch {
-          /* ignore */
-        }
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedExchange, categoryFiltered])
 
   const presetFiltered = useMemo(() => {
     if (!activePreset || activePreset === 'all') return exchangeFiltered
@@ -915,16 +889,8 @@ export function useRankingFilters({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, advancedFiltered])
 
-  const filteredTraders = useMemo(
-    () =>
-      // With server-side pagination, the API returns one page at a time — no need to slice
-      fetchPage
-        ? advancedFiltered
-        : isPro
-          ? advancedFiltered
-          : advancedFiltered.slice(0, FREE_LEADERBOARD_LIMIT),
-    [fetchPage, isPro, advancedFiltered]
-  )
+  // The API returns one server page at a time, so there is nothing to cap.
+  const filteredTraders = advancedFiltered
 
   // Site-wide `/api/search` matches for a query with no match on this page.
   // They carry no published rank for this cohort, so they must never be
@@ -947,18 +913,6 @@ export function useRankingFilters({
     // no CTA, no funnel continuation); this handler only tracks.
     trackEvent('paywall_blocked', { source: 'home_ranking_filters' })
   }, [])
-
-  const handleCopyLink = useCallback(() => {
-    const url = window.location.href
-    navigator.clipboard
-      .writeText(url)
-      .then(() => {
-        showToast(t('linkCopied'), 'success')
-      })
-      .catch(() => {
-        showToast(t('copyFailed'), 'error')
-      })
-  }, [showToast, t])
 
   const handleResetFilters = useCallback(() => {
     const commitReset = () => {
@@ -1050,7 +1004,6 @@ export function useRankingFilters({
     handleLoadFilter,
     handleDeleteFilter,
     handleProRequired,
-    handleCopyLink,
     handleResetFilters,
     handleFilterToggle,
     formatLastUpdated,

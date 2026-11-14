@@ -171,9 +171,8 @@ export default function OverviewPerformanceCard({
           profitabilityScore: only90(
             resolveValidScoreFallback(performance.profitability_score, performance.return_score)
           ),
-          riskControlScore: only90(
-            resolveValidScoreFallback(performance.risk_control_score, performance.pnl_score)
-          ),
+          // pnl_score is a PnL dimension, not risk control: no fallback (unknown = —).
+          riskControlScore: only90(resolveValidScoreFallback(performance.risk_control_score)),
           scoreConfidence: only90(performance.score_confidence),
           // V3 Metrics
           sortinoRatio: only90(performance.sortino_ratio),

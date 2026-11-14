@@ -312,6 +312,7 @@ footer,.sidebar-contained{content-visibility:auto;contain-intrinsic-size:auto 30
   .mrow-head,.mrow{display:grid;grid-template-columns:24px minmax(0,1fr) 44px 84px;column-gap:10px;align-items:center;width:100%;max-width:100%;padding:0 12px}
   .mrow-head{height:32px;border-bottom:1px solid var(--color-border-primary);color:var(--color-text-tertiary);font-size:11px;font-weight:600;letter-spacing:.04em;line-height:1;text-transform:uppercase;white-space:nowrap}
   .mrow-head>span:first-child,.mrow-head-score{text-align:center}
+  .mrow-head-sort{position:relative;display:flex;align-items:center;min-width:0;height:100%}
   .mrow-head-metric{position:relative;display:flex;align-items:center;justify-content:flex-end;height:100%}
   .mrow-head-metric-label{display:inline-flex;align-items:center;gap:4px;color:var(--color-text-secondary)}
   .mrow-head-select{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;border:0;opacity:0;font-size:16px;cursor:pointer;-webkit-appearance:none;appearance:none}

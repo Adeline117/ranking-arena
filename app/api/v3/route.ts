@@ -55,27 +55,6 @@ const PUBLIC_V3_SEARCH_COLUMNS =
 const PUBLIC_V3_PLATFORM_COUNT_COLUMNS =
   'source,source_trader_id,season_id,rank,arena_score,roi,pnl,win_rate,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at'
 
-interface PublicRankedLeaderboardQueryResult {
-  data: unknown[] | null
-  error: { message: string } | null
-}
-
-type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
-  select(columns: string): PublicRankedLeaderboardQuery
-  eq(column: string, value: string): PublicRankedLeaderboardQuery
-  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
-  or(expression: string): PublicRankedLeaderboardQuery
-  order(
-    column: string,
-    options: { ascending: boolean; nullsFirst: boolean }
-  ): PublicRankedLeaderboardQuery
-  limit(count: number): PublicRankedLeaderboardQuery
-}
-
-type PublicRankedLeaderboardClient = {
-  from(relation: typeof PUBLIC_RANKED_LEADERBOARD): PublicRankedLeaderboardQuery
-}
-
 type V3RankingVisibility = 'partial' | 'unknown'
 
 interface V3HandlerResult {
@@ -92,13 +71,6 @@ interface V3HandlerResult {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
-  if (!isRecord(value) || typeof value.from !== 'function') {
-    throw new TypeError('Supabase client does not expose the public ranking cohort')
-  }
-  return value as PublicRankedLeaderboardClient
 }
 
 function isPositivePublishedRank(row: unknown): row is Record<string, unknown> {
@@ -476,7 +448,7 @@ async function handleSearch(params: URLSearchParams) {
     // Search identity and ranking fields in the same sealed 90D cohort. Do
     // not route through the legacy fuzzy RPC: it joins the retained raw cohort
     // and can return a rank/score outside the published population.
-    let query = publicRankedLeaderboardClient(supabase)
+    let query = supabase
       .from(PUBLIC_RANKED_LEADERBOARD)
       .select(PUBLIC_V3_SEARCH_COLUMNS)
       .eq('season_id', V3_PUBLIC_SEARCH_PERIOD)
@@ -545,7 +517,7 @@ async function handlePlatforms() {
     // source-freshness lease. Do not cache this derivative: a cache hit cannot
     // independently prove those authorities are still live.
     const supabase = getSupabaseAdmin()
-    const { data, error } = await publicRankedLeaderboardClient(supabase)
+    const { data, error } = await supabase
       .from(PUBLIC_RANKED_LEADERBOARD)
       .select(PUBLIC_V3_PLATFORM_COUNT_COLUMNS)
       .eq('season_id', V3_PLATFORM_COUNT_PERIOD)

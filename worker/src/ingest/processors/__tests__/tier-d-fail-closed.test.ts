@@ -15,8 +15,10 @@ jest.mock('@/lib/ingest/sources', () => ({
 jest.mock('@/lib/ingest/core/adapter', () => ({
   getAdapter: (...args: unknown[]) => mockGetAdapter(...args),
 }))
+const mockRecordParseFailure = jest.fn()
 jest.mock('@/lib/ingest/fetch/fetcher', () => ({
   openSession: (...args: unknown[]) => mockOpenSession(...args),
+  getCircuit: () => ({ recordParseFailure: mockRecordParseFailure }),
 }))
 jest.mock('@/lib/ingest/db', () => ({
   getIngestPool: jest.fn(() => ({ query: (...args: unknown[]) => mockDbQuery(...args) })),
@@ -98,12 +100,16 @@ describe('Tier-D fails closed on unusable position captures', () => {
       errors: 1,
     })
     expect(mockPublishPositions).not.toHaveBeenCalled()
+    // An HTTP-200 business error counts toward the cycle failure rate.
+    expect(mockRecordParseFailure).toHaveBeenCalledTimes(1)
   })
 
   it('does not replace positions when the capture has no pages', async () => {
     mockGetAdapter.mockReturnValue(adapterReturning(null, false))
     await expect(processTierD(job)).resolves.toMatchObject({ errors: 1 })
     expect(mockPublishPositions).not.toHaveBeenCalled()
+    // No response arrived, so the fetch layer already did the accounting.
+    expect(mockRecordParseFailure).not.toHaveBeenCalled()
   })
 
   it('publishes a genuine empty book from a success envelope', async () => {
@@ -114,6 +120,7 @@ describe('Tier-D fails closed on unusable position captures', () => {
       errors: 0,
     })
     expect(mockPublishPositions).toHaveBeenCalledWith(bitgetSource, 7, [], expect.any(String))
+    expect(mockRecordParseFailure).not.toHaveBeenCalled()
   })
 
   it('selects targets only from fresh, native, deterministically ordered PASSED snapshots', async () => {

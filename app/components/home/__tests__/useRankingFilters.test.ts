@@ -50,7 +50,7 @@ jest.mock('@/lib/hooks/useAuthSession', () => ({
 jest.mock('@/lib/api/client', () => ({ getCsrfHeaders: () => ({}) }))
 jest.mock('@/lib/analytics/track', () => ({ trackEvent: jest.fn() }))
 
-import { useRankingFilters, FREE_LEADERBOARD_LIMIT } from '../useRankingFilters'
+import { useRankingFilters } from '../useRankingFilters'
 import { trackEvent } from '@/lib/analytics/track'
 
 // ---------------------------------------------------------------------------
@@ -210,6 +210,13 @@ describe('URL / localStorage 状态恢复', () => {
     const { result } = setup()
     expect(result.current.selectedExchange).toBe('binance_futures')
     expect(result.current.filteredTraders.map((t) => t.id)).toEqual(['fut-1'])
+  })
+
+  it('交易所在本页无匹配时如实为空，不静默回退成全部', () => {
+    window.history.replaceState(null, '', '/?ex=gate')
+    const { result } = setup()
+    expect(result.current.selectedExchange).toBe('gateio')
+    expect(result.current.filteredTraders).toEqual([])
   })
 
   it('legacy ?exchange=binance 走服务端通道：成功后才设置 selectedExchange', async () => {
@@ -585,18 +592,12 @@ describe('排序 / 分页 / 搜索', () => {
 })
 
 // ---------------------------------------------------------------------------
-describe('Pro 门控与免费上限', () => {
-  it('免费用户客户端榜单截断到 FREE_LEADERBOARD_LIMIT；Pro 不截断', () => {
-    const many = Array.from({ length: FREE_LEADERBOARD_LIMIT + 1 }, (_, i) =>
-      trader(`t-${i}`, { source: 'bybit' })
-    )
+describe('Pro 门控', () => {
+  it('免费用户也看到完整的服务端页（无客户端截断）', () => {
+    const many = Array.from({ length: 60 }, (_, i) => trader(`t-${i}`, { source: 'bybit' }))
     mockIsPro = false
-    const free = setup(many)
-    expect(free.result.current.filteredTraders).toHaveLength(FREE_LEADERBOARD_LIMIT)
-
-    mockIsPro = true
-    const pro = setup(many)
-    expect(pro.result.current.filteredTraders).toHaveLength(FREE_LEADERBOARD_LIMIT + 1)
+    const free = setup(many, { fetchPage: mockFetchPage })
+    expect(free.result.current.filteredTraders).toHaveLength(60)
   })
 
   it('handleProRequired 只埋点不弹 toast（漏斗从 paywall_blocked 开始）', () => {

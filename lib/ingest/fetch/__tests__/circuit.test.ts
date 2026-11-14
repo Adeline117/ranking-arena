@@ -55,4 +55,12 @@ describe('Circuit', () => {
     expect(cycle.shouldAlert).toBe(true)
     expect(c.cycleFailureRate()).toBe(0) // reset
   })
+
+  it('reclassifies a counted success as a failure when its body was a business error', () => {
+    const c = new Circuit('x', { blockThreshold: 1, failureRateAlert: 0.2 })
+    for (let i = 0; i < 5; i++) c.recordSuccess()
+    for (let i = 0; i < 5; i++) c.recordParseFailure()
+    expect(c.getState()).toBe('closed') // never a block
+    expect(c.endCycle()).toMatchObject({ samples: 5, failures: 5, shouldAlert: true })
+  })
 })

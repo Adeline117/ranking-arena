@@ -36,6 +36,7 @@ import type {
   ParsedStats,
   Timeframe,
 } from '../../core/types'
+import { positionEnvelopeRows } from '../../core/position-snapshot'
 
 type Dict = Record<string, unknown>
 
@@ -293,8 +294,12 @@ export function parseBitmartProfile(raw: unknown, ctx: ParseCtx): ParsedProfile 
  * PnL (`pnl`) and margin metrics are public.
  */
 export function parseBitmartPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const d = data(raw)
-  const list = Array.isArray(d?.list) ? (d.list as Dict[]) : []
+  const list = positionEnvelopeRows(
+    'bitmart',
+    raw,
+    (e) => e.success === true && e.errno === 'OK',
+    (e) => (e.data as Dict | null)?.list
+  )
   const out: ParsedPosition[] = []
   for (const item of list) {
     if (!item.contract_name) continue

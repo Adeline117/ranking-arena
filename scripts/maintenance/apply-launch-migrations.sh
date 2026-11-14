@@ -177,15 +177,19 @@ PREDEPLOY_MIGRATIONS=(
   20260817134214_quarantine_legacy_platform_stats_rpc.sql
   20261013094743_retire_v2_partition_cron_extend_arena_partitions.sql
   20261113014105_arena_score_unknown_trades_confidence.sql
+  20261114101514_arena_score_true_zero_trades_confidence.sql
   20261113104533_trader_follows_hard_cap_lock.sql
   20261113151848_sync_user_profile_email_from_auth.sql
   20261113151849_auth_user_has_password_rpc.sql
+  20261114104438_sealed_publication_data_gap_summary.sql
   20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql
   20261113011058_leaderboard_publication_source_isolation.sql
   20261113012028_public_snapshot_readers_sealed_freshness.sql
   20261113105605_retention_preserves_metric_trust_evidence.sql
   20261113110021_leaderboard_snapshot_retention.sql
   20261113110430_rank_publication_source_evidence_binding.sql
+  20261114101605_first_screen_core_modules_sealed_only.sql
+  20261114103025_hero_stats_sealed_public_cohort.sql
 )
 readonly -a PREDEPLOY_MIGRATIONS
 # The final six (season publication follow-ups, PR #419) must stay LAST: they
@@ -193,9 +197,15 @@ readonly -a PREDEPLOY_MIGRATIONS
 # rewrites the freshness authority after the Bitget-bot quarantine
 # (20261111134416, which replaces 20260728124000 in its slot). They follow
 # #415's reordered manifest (2026-11-11 whole-database rehearsal order).
+# 20261114101605 (profile readers: sealed boards only, no stale stats) follows
+# them: it replaces the two readers 20261113012028 rewrote and needs its
+# arena.public_sealed_rank_sources().
+# 20261114103025 (hero stats from the sealed cohort) keeps the RPC's return
+# shape, so either app version reads it; it needs the public serving view.
 #
-# 20261113014105 (unknown-trade-count sample confidence, issue #435) is
-# predeploy and must follow every migration whose pre/postflight pins the old
+# 20261113014105 (unknown-trade-count sample confidence, issue #435) and its
+# follow-up 20261114101514 (true-zero trade counts, audit P1-2), in that order,
+# are predeploy and must follow every migration whose pre/postflight pins the old
 # v4/v5 scorer or manifest-encoder prosrc digests (latest: 20260729071000),
 # otherwise those preflights abort. Public publication (protocol plan A,
 # docs/RANK_PUBLICATION_PROTOCOL.md) scores in TypeScript and never calls the
@@ -212,6 +222,10 @@ readonly -a PREDEPLOY_MIGRATIONS
 # rejects at >= 100, and a raced insert surfaces as a 500 (no extra row)
 # instead of the new route's 429. Both sit before the final six, which do not
 # depend on them.
+# 20261114104438 (data gap summary judged on sealed publication, audit P2-2)
+# only replaces the body of a cron/admin-only reader; it needs the public
+# serving view (20260816151614/184500) and sits before the final six, which do
+# not depend on it.
 
 # 054 is retained as immutable history but is never an ordered candidate. 055
 # accepts it only when its exact reviewed ledger and complete object contract

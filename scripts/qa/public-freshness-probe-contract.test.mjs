@@ -28,16 +28,20 @@ test('probe is secret-free, checkout-free and independent of the V1 kill switche
   for (const step of job.steps) {
     assert.equal(step.uses, undefined, 'probe runs no third-party action or checkout')
   }
-  // The only secret is the job-scoped GITHUB_TOKEN.
-  const secrets = [...source.matchAll(/secrets\.([A-Z_]+)/g)].map((m) => m[1])
-  assert.deepEqual([...new Set(secrets)], ['GITHUB_TOKEN'])
+  // The job-scoped GITHUB_TOKEN plus the external dead-man ping URL only.
+  const step = job.steps.find((s) => s.name === 'Probe public health and publication watermark')
+  assert.deepEqual(step.env, {
+    GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}',
+    GH_REPO: '${{ github.repository }}',
+    DEADMAN_PING_URL: '${{ secrets.FRESHNESS_PROBE_DEADMAN_URL }}',
+  })
   assert.equal(job.env.HEALTH_URL, 'https://www.arenafi.org/api/health')
   const script = probeScript()
   assert.match(script, /--request GET/)
   assert.doesNotMatch(script, /Authorization|CRON_SECRET|--data/)
 })
 
-function runScenario({ http = '200', body, curlExit = '0', issues = '[]' }) {
+function runScenario({ http = '200', body, curlExit = '0', issues = '[]', deadman = '' }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arena-public-freshness-'))
   try {
     const bin = path.join(dir, 'bin')
@@ -46,13 +50,14 @@ function runScenario({ http = '200', body, curlExit = '0', issues = '[]' }) {
       path.join(bin, 'curl'),
       [
         '#!/usr/bin/env bash',
-        'output=""',
+        'output=""; last=""',
         'while [ "$#" -gt 0 ]; do',
         '  case "$1" in',
         '    --output) output="$2"; shift 2 ;;',
-        '    *) shift ;;',
+        '    *) last="$1"; shift ;;',
         '  esac',
         'done',
+        'case "$last" in https://deadman.example.test/*) printf "%s\\n" "$last" >> "$FAKE_PING_LOG"; exit 0 ;; esac',
         'printf "%s" "$FAKE_BODY" > "$output"',
         'printf "%s" "$FAKE_HTTP"',
         'exit "$FAKE_CURL_EXIT"',
@@ -72,6 +77,8 @@ function runScenario({ http = '200', body, curlExit = '0', issues = '[]' }) {
     fs.chmodSync(path.join(bin, 'curl'), 0o755)
     fs.chmodSync(path.join(bin, 'gh'), 0o755)
     const ghLog = path.join(dir, 'gh.log')
+    const pingLog = path.join(dir, 'ping.log')
+    fs.writeFileSync(pingLog, '')
     const summary = path.join(dir, 'summary.md')
     fs.writeFileSync(ghLog, '')
     fs.writeFileSync(summary, '')
@@ -90,9 +97,15 @@ function runScenario({ http = '200', body, curlExit = '0', issues = '[]' }) {
         FAKE_CURL_EXIT: curlExit,
         FAKE_ISSUES: issues,
         FAKE_GH_LOG: ghLog,
+        FAKE_PING_LOG: pingLog,
+        DEADMAN_PING_URL: deadman,
       },
     })
-    return { ...result, ghLog: fs.readFileSync(ghLog, 'utf8') }
+    return {
+      ...result,
+      ghLog: fs.readFileSync(ghLog, 'utf8'),
+      pings: fs.readFileSync(pingLog, 'utf8').split('\n').filter(Boolean),
+    }
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })
   }
@@ -153,4 +166,25 @@ test('edits the existing issue instead of opening a duplicate', () => {
   assert.equal(result.status, 1)
   assert.match(result.ghLog, /issue edit 9/)
   assert.doesNotMatch(result.ghLog, /issue create/)
+})
+
+const DEADMAN = 'https://deadman.example.test/ping/abc'
+
+test('pings the external dead-man check with exit code 0 on a healthy run', () => {
+  const result = runScenario({ body: health(hoursAgo(1)), deadman: DEADMAN })
+  assert.equal(result.status, 0, result.stdout + result.stderr)
+  assert.deepEqual(result.pings, [`${DEADMAN}/0`])
+})
+
+test('pings the dead-man check with the failing exit code on a stale run', () => {
+  const result = runScenario({ body: health(hoursAgo(72)), deadman: DEADMAN })
+  assert.equal(result.status, 1)
+  assert.deepEqual(result.pings, [`${DEADMAN}/1`])
+})
+
+test('warns on every run while the dead-man ping URL is not configured', () => {
+  const result = runScenario({ body: health(hoursAgo(1)) })
+  assert.equal(result.status, 0)
+  assert.deepEqual(result.pings, [])
+  assert.match(result.stdout, /FRESHNESS_PROBE_DEADMAN_URL not set/)
 })

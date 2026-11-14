@@ -43,6 +43,7 @@ import {
   parseMexcPositions,
   parseMexcProfile,
 } from './parsers'
+import { fetchPositionPages } from '../../core/position-snapshot'
 
 const BASE = 'https://www.mexc.com/api/platform/futures/copyFutures/api/v1'
 
@@ -263,13 +264,33 @@ const mexcAdapter: SourceAdapter = {
   ): Promise<RawBundle> {
     await warmSession(session, src)
     const url = endpoint(src, 'positions', `${BASE}/trader/orders/v2`)
-    const payload = await replayJson(session, pageFetcher(session), {
-      url: `${url}?limit=20&orderListType=ORDER&page=1&uid=${encodeURIComponent(exchangeTraderId)}`,
-      method: 'GET',
-      headers: HEADERS,
-    })
+    const fetcher = pageFetcher(session)
     const fetchedAt = new Date().toISOString()
-    return { pages: [{ pageIndex: 1, payload, url, fetchedAt }], fetchedAt }
+    // 20 = the site's own page size. data.totalPage is not reliable here
+    // (orders-p1.json: totalPage 0 with one row), so page until a short page.
+    const pages = await fetchPositionPages({
+      source: 'mexc',
+      pageSize: 20,
+      maxPages: Number(src.meta.positions_max_pages ?? 20) || 20,
+      fetchPage: async (pageNo) => ({
+        url,
+        payload: await replayJson(session, fetcher, {
+          url: `${url}?limit=20&orderListType=ORDER&page=${pageNo}&uid=${encodeURIComponent(exchangeTraderId)}`,
+          method: 'GET',
+          headers: HEADERS,
+        }),
+      }),
+      rowsOf: (payload) => {
+        const content = (
+          (payload as Record<string, unknown> | null)?.data as
+            | Record<string, unknown>
+            | null
+            | undefined
+        )?.content
+        return Array.isArray(content) ? content.length : 0
+      },
+    })
+    return { pages, fetchedAt }
   },
 
   /**

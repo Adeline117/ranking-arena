@@ -326,4 +326,22 @@ describe('getOrSetWithLock degraded-Redis protection', () => {
 
     expect(fetcher).toHaveBeenCalledTimes(2)
   })
+
+  it('reuses a lock-timeout fallback load instead of re-running the fetcher unlocked', async () => {
+    // The lock is held elsewhere (slow query) and never released.
+    const redis = {
+      get: jest.fn().mockResolvedValue(null),
+      set: jest.fn().mockResolvedValue(null),
+      eval: jest.fn().mockResolvedValue(1),
+      del: jest.fn().mockResolvedValue(1),
+    }
+    mockGetSharedRedis.mockResolvedValue(redis)
+    const fetcher = jest.fn().mockResolvedValue('db-value')
+    const opts = { ttl: 300, skipMemory: true, maxWaitMs: 5, retryDelayMs: 1 }
+
+    await expect(getOrSetWithLock('timeout-key', fetcher, opts)).resolves.toBe('db-value')
+    await expect(getOrSetWithLock('timeout-key', fetcher, opts)).resolves.toBe('db-value')
+
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
 })

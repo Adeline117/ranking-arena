@@ -301,7 +301,7 @@ const gmxAdapter: SourceAdapter = {
         {
           pageIndex: 1,
           payload: {
-            positions: data.positions ?? [],
+            positions: data.positions,
             markets: maps.markets,
             tokens: maps.tokens,
           },

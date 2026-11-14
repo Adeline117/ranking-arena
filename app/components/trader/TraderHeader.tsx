@@ -364,6 +364,7 @@ export default function TraderHeader({
               scoreConfidence={scoreConfidence}
               tradesCount={tradesCount}
               rank={rank}
+              headlineWindow={headlineWindow}
               tradingStyle={tradingStyle}
               isAuthorized={isAuthorized}
               dataSource={dataSource}

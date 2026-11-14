@@ -1,9 +1,4 @@
-import {
-  ARENA_V4_CONFIG,
-  computeArenaScoresV4,
-  computeArenaScoresV5,
-  type TraderScoreInputV4,
-} from '../arena-score'
+import { computeArenaScoresV4, computeArenaScoresV5, type TraderScoreInputV4 } from '../arena-score'
 
 // Deterministic 200-trader cohort (no Math.random) around which a probe trader
 // with fixed metrics varies only its trade count.
@@ -30,41 +25,44 @@ const probeBase: Omit<TraderScoreInputV4, 'tradesCount'> = {
 
 function probe(
   scorer: typeof computeArenaScoresV5,
-  tradesCount: number | null
+  tradesCount: number | null,
+  source?: string
 ): { score: number; confidence: number } {
-  const results = scorer([...cohort(), { ...probeBase, tradesCount }], '30D')
+  const results = scorer([...cohort(), { ...probeBase, tradesCount, source }], '30D')
   const r = results[results.length - 1]
   return { score: r.totalScore, confidence: r.confidence }
 }
 
-describe('Arena Score V4/V5 — unknown/zero trade counts never out-rank small real samples', () => {
-  it('unknown (0/null) confidence equals the ~5-trade equivalent', () => {
-    const zero = probe(computeArenaScoresV5, 0)
-    const unknown = probe(computeArenaScoresV5, null)
-    const five = probe(computeArenaScoresV5, ARENA_V4_CONFIG.UNKNOWN_TRADES_EQUIV)
-    expect(zero).toEqual(unknown)
-    expect(zero.confidence).toBe(five.confidence)
-    expect(zero.score).toBe(five.score)
-  })
-
-  it('audit probes: t=0 scores below t=10 and t=21 (was 60.6 > 47.7 / 59.9 under 0.3)', () => {
-    const s0 = probe(computeArenaScoresV5, 0).score
-    const s1 = probe(computeArenaScoresV5, 1).score
-    const s10 = probe(computeArenaScoresV5, 10).score
-    const s21 = probe(computeArenaScoresV5, 21).score
-    expect(s1).toBeLessThan(s0) // 1 real trade is a smaller sample than the 5-trade floor
-    expect(s0).toBeLessThan(s10)
-    expect(s10).toBeLessThan(s21)
-  })
-
-  it('V4 uses the same unknown-trades confidence (PG17 migration 20261113014105 + golden vectors)', () => {
-    for (const t of [0, 1, 10, 21]) {
-      expect(probe(computeArenaScoresV4, t).confidence).toBe(
-        probe(computeArenaScoresV5, t).confidence
-      )
+describe('Arena Score V4/V5 — unknown/zero trade counts never out-rank real samples', () => {
+  it.each([computeArenaScoresV4, computeArenaScoresV5])(
+    'unknown (null, or a CEX 0) scores exactly like 1 real trade',
+    (scorer) => {
+      const one = probe(scorer, 1, 'binance_futures')
+      expect(probe(scorer, null, 'binance_futures')).toEqual(one)
+      expect(probe(scorer, 0, 'binance_futures')).toEqual(one)
+      expect(probe(scorer, null, 'hyperliquid')).toEqual(one)
     }
-    expect(probe(computeArenaScoresV4, 0).score).toBeLessThan(probe(computeArenaScoresV4, 10).score)
-  })
+  )
+
+  it.each([computeArenaScoresV4, computeArenaScoresV5])(
+    'unknown never beats 1–4 real trades (audit probe: 5-trade floor beat them)',
+    (scorer) => {
+      const unknown = probe(scorer, null).score
+      for (const t of [2, 3, 4]) expect(unknown).toBeLessThan(probe(scorer, t).score)
+    }
+  )
+
+  it.each(['gmx', 'gtrade', 'hyperliquid'])(
+    '%s: a self-computed 0 is a real 0 and ranks below 1 real trade',
+    (source) => {
+      for (const scorer of [computeArenaScoresV4, computeArenaScoresV5]) {
+        const zero = probe(scorer, 0, source)
+        const one = probe(scorer, 1, source)
+        expect(zero.confidence).toBeLessThan(one.confidence)
+        expect(zero.score).toBeLessThan(one.score)
+      }
+    }
+  )
 })
 
 describe('Arena Score V4/V5 — large cohorts', () => {

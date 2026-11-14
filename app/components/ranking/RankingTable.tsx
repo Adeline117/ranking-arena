@@ -352,8 +352,9 @@ function RankingTableInner(props: {
     return attrs
   }, [visibleColumns])
 
-  const handleSort = (col: SortColumn) => {
-    const newDir = sortColumn === col ? (sortDir === 'desc' ? 'asc' : 'desc') : 'desc'
+  const handleSort = (col: SortColumn, dirOverride?: SortDir) => {
+    const newDir =
+      dirOverride ?? (sortColumn === col ? (sortDir === 'desc' ? 'asc' : 'desc') : 'desc')
     setJustSortedColumn(col)
     setSortAnimationKey((prev) => prev + 1)
     clearTimeout(sortTimeoutRef.current)
@@ -364,13 +365,6 @@ function RankingTableInner(props: {
       setInternalSortColumn(col)
       setInternalSortDir(newDir)
     }
-    setCurrentPage(1)
-    setCardVisibleCount(50)
-  }
-
-  const _handleSearchInput = (value: string) => {
-    if (onSearchChange) onSearchChange(value)
-    else setInternalSearchQuery(value)
     setCurrentPage(1)
     setCardVisibleCount(50)
   }
@@ -1186,7 +1180,11 @@ function RankingTableInner(props: {
                 {/* Mobile: compact ~56px rows (owner 2026-11-13). Geometry is
                     the shared .mrow block in critical CSS, also used by the
                     SSR shell, so the hand-off cannot jump. */}
-                <MobileRankHeader />
+                <MobileRankHeader
+                  sortColumn={sortColumn}
+                  sortDir={sortDir}
+                  onSortChange={handleSort}
+                />
                 <div className="mrow-list">
                   {sortedTraders.slice(0, cardVisibleCount).map((trader, idx) => {
                     const rank = trader.rank

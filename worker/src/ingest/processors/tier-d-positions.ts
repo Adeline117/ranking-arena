@@ -12,7 +12,7 @@ import { getSourceBySlug } from '@/lib/ingest/sources'
 import { getAdapter } from '@/lib/ingest/core/adapter'
 import { supportsSourceSurface } from '@/lib/ingest/core/surface-capabilities'
 import type { ParseCtx } from '@/lib/ingest/core/types'
-import { openSession } from '@/lib/ingest/fetch/fetcher'
+import { getCircuit, openSession } from '@/lib/ingest/fetch/fetcher'
 import { writeRawObject } from '@/lib/ingest/raw'
 import { publishPositions } from '@/lib/ingest/serving/publish'
 import { parsePositionSnapshot } from '@/lib/ingest/core/position-snapshot'
@@ -156,11 +156,19 @@ export async function processTierD(
         }
         // Fail closed: a failed/blocked/malformed capture throws here and the
         // trader's previous snapshot stays (publishPositions DELETEs first).
-        const positions = parsePositionSnapshot(
-          (raw, parseCtx) => adapter.parsePositions(raw, parseCtx),
-          bundle.pages,
-          ctx
-        )
+        let positions: ReturnType<typeof parsePositionSnapshot>
+        try {
+          positions = parsePositionSnapshot(
+            (raw, parseCtx) => adapter.parsePositions(raw, parseCtx),
+            bundle.pages,
+            ctx
+          )
+        } catch (parseErr) {
+          // The fetch counted these pages as successes; an HTTP-200 business
+          // error must still count toward the cycle failure rate.
+          if (bundle.pages.length > 0) getCircuit(src.slug).recordParseFailure()
+          throw parseErr
+        }
 
         // Source-disclosed staleness (spec §5.7): Bitget −1h.
         const asOf = new Date(scrapedAt.getTime() - delayHours * 3_600_000).toISOString()
