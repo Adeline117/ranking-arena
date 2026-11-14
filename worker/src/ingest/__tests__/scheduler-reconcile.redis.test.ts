@@ -160,8 +160,13 @@ describeRedis('reconcileSchedulers against real BullMQ', () => {
     const stuckTierD = `repeat:tierd:srcx:${tierD.next}`
     expect(await pendingIds(q, 'repeat:tierd:srcx:')).toEqual([stuckTierD])
 
-    // Broken chain: the Tier-A iteration is gone.
-    await (await q.getJob(`repeat:tiera:srcx:${tierA.next}`))!.remove()
+    // Broken chain: the Tier-A iteration is gone. BullMQ will not remove a
+    // scheduler's current iteration through its API, so drop it the way a
+    // lost key would look: out of the prioritized set, hash deleted.
+    const lostId = `repeat:tiera:srcx:${tierA.next}`
+    await mockRedis!.zrem('bull:arena-ingest:prioritized', lostId)
+    await mockRedis!.del(`bull:arena-ingest:${lostId}`)
+    expect(await q.getJob(lostId)).toBeUndefined()
 
     // Two hours later: Tier-A (1h) has no iteration, Tier-D (30min) has sat
     // queued for more than twice its cadence.
