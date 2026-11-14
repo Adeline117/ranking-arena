@@ -94,9 +94,8 @@ interface PendingCountShift {
 }
 
 /**
- * A sustained downward count level-shift beyond the automatic floor
- * (lib/ingest/staging/count-check.ts SHIFT_MAX_AUTO_DROP_PCT) keeps failing the
- * count check until an operator confirms the new level. Surface every
+ * A sustained downward count level-shift (lib/ingest/staging/count-check.ts)
+ * keeps failing the count check until an operator confirms the new level. Surface every
  * (source, timeframe) whose latest snapshot is waiting, on its own cooldown key.
  */
 export async function alertPendingCountShifts(redis: Parameters<typeof alert>[0]): Promise<number> {

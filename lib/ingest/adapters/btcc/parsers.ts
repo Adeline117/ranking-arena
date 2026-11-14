@@ -36,6 +36,7 @@ import type {
   ParsedStats,
   Timeframe,
 } from '../../core/types'
+import { positionEnvelopeRows } from '../../core/position-snapshot'
 import { parseBtccCopiersV1 } from './copier-parser-v1'
 
 type Dict = Record<string, unknown>
@@ -274,8 +275,14 @@ export function parseBtccProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
  * NULL-collapse (spec §6). closeVolume is the contract qty.
  */
 export function parseBtccPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
+  const list = positionEnvelopeRows(
+    'btcc',
+    raw,
+    (e) => e.code === 200,
+    (e) => e.rows
+  )
   const out: ParsedPosition[] = []
-  for (const item of rows(raw)) {
+  for (const item of list) {
     if (!item.tradePair) continue
     out.push({
       symbol: String(item.tradePair),

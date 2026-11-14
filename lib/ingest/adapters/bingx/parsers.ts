@@ -27,6 +27,7 @@ import type {
   ParsedPosition,
   RankingTimeframe,
 } from '../../core/types'
+import { positionEnvelopeRows } from '../../core/position-snapshot'
 import { parseBingxCopiersV1 } from './copier-parser-v1'
 
 type Dict = Record<string, unknown>
@@ -274,8 +275,14 @@ export function bingxPerTfExtras(rankStat: Dict, tf: RankingTimeframe): Record<s
 
 /** Current open positions → ParsedPosition[] (data.result[]). */
 export function parseBingxPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
+  const list = positionEnvelopeRows(
+    'bingx',
+    raw,
+    (e) => e.code === 0,
+    (e) => (e.data as Dict | null)?.result
+  )
   const out: ParsedPosition[] = []
-  for (const item of recordRows(raw)) {
+  for (const item of list) {
     const symbol = typeof item.symbol === 'string' ? item.symbol : null
     if (!symbol) continue
     out.push({

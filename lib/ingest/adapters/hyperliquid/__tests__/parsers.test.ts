@@ -151,53 +151,32 @@ describe('parseHyperliquidProfile', () => {
     expect(profile.series.find((s) => s.metric === 'account_value')?.points).toHaveLength(47)
   })
 
-  it('90d: derived via allTime lerp — disclosed in extras, series rebased', () => {
-    const profile = parseHyperliquidProfile({ ...bundle, timeframe: 90 }, ctx)
+  // Board allTime window for the fixture account (HL native, plan A basis).
+  const boardAllTime = { pnl: '902168.845403', roi: '0.0658', vlm: '0' }
+
+  it('90d: ROI/PnL are the board native allTime values; series/risk stay trailing 90d', () => {
+    const profile = parseHyperliquidProfile({ ...bundle, timeframe: 90, boardAllTime }, ctx)
     const st = profile.stats[0]
     expect(st.timeframe).toBe(90)
-    // precomputed against the fixture: pnl_now 902168.85 − lerp(t−90d) −245246.04
-    expect(st.pnl).toBeCloseTo(1147414.886682, 3)
-    expect(st.roi).toBeCloseTo(85.1734484, 4) // ÷ equity lerp 1347150.91 × 100
-    expect(st.volume).toBeNull() // only allTime vlm exists — no honest 90d vlm
-    expect(st.extras).toMatchObject({ derivation: 'portfolio_alltime_lerp' })
+    // Same basis as the 90D board row (headlineRoi = roi × 100), so the
+    // Tier-B ROI cross-check compares like with like.
+    expect(st.roi).toBeCloseTo(6.58, 6)
+    expect(st.pnl).toBeCloseTo(902168.845403, 6)
+    expect(st.volume).toBeNull()
+    expect(st.extras).toMatchObject({
+      derivation: 'board_native_alltime',
+      roi_basis: 'native_alltime',
+    })
     const pnlSeries = profile.series.find((s) => s.metric === 'pnl')
     expect(pnlSeries?.points).toHaveLength(21) // allTime points inside 90d
-    // rebased: last point equals the 90d window PnL
+    // rebased: pnl_now 902168.85 − lerp(t−90d) −245246.04
     expect(pnlSeries?.points[pnlSeries.points.length - 1].value).toBeCloseTo(1147414.886682, 3)
   })
 
-  it('90d ROI: young whale uses aum basis, NOT the tiny-eqAnchor explosion (2026-07-07 fix)', () => {
-    // Account younger than 90d: allTime history starts at a tiny initial deposit,
-    // so lerpAt(t−90d) clamps to that first point → eqAnchor ≈ $100. The old code
-    // did pnl/eqAnchor = $20M/$100 → 10000% clamp (the ">10K%" leaderboard bug).
-    // The fix uses aum − pnl (= $27M start equity) → a sane ~74%.
-    const T = 1781214420993
-    const DAY = 86400000
-    const synthetic = {
-      timeframe: 90,
-      clearinghouse: { marginSummary: { accountValue: '47000000' } }, // aum $47M
-      portfolio: [
-        [
-          'allTime',
-          {
-            pnlHistory: [
-              [T - 10 * DAY, '0'],
-              [T, '20000000'],
-            ],
-            accountValueHistory: [
-              [T - 10 * DAY, '100'], // tiny initial deposit → eqAnchor trap
-              [T, '47000000'],
-            ],
-            vlm: '0',
-          },
-        ],
-      ],
-    }
-    const st = parseHyperliquidProfile(synthetic, ctx).stats[0]
-    expect(st.pnl).toBeCloseTo(20000000, 0)
-    // aum − pnl = 27M → 20M/27M×100 = 74.07%, NOT the 10000% clamp
-    expect(st.roi).toBeCloseTo(74.074, 1)
-    expect(st.roi).toBeLessThan(200) // the whole point: no ">10K%" garbage
+  it('90d without the board window publishes no stats block (never another basis)', () => {
+    const profile = parseHyperliquidProfile({ ...bundle, timeframe: 90 }, ctx)
+    expect(profile.stats).toHaveLength(0)
+    expect(profile.series.find((s) => s.metric === 'pnl')?.points).toHaveLength(21)
   })
 
   it('fills replay fills winRate/positions/holding + pnl_ratio (M3-3a)', () => {
@@ -425,7 +404,10 @@ describe('parseHyperliquidProfile', () => {
   })
 
   it('timeframe 0 (inception) falls back to the 90d derivation', () => {
-    const profile = parseHyperliquidProfile({ ...bundle, timeframe: 0 }, ctx)
+    const profile = parseHyperliquidProfile(
+      { ...bundle, timeframe: 0, boardAllTime: { pnl: '1', roi: '0.1' } },
+      ctx
+    )
     expect(profile.stats[0].timeframe).toBe(90)
   })
 

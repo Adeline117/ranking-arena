@@ -291,17 +291,43 @@ describe('getCountBaseline — 独立观测周期', () => {
       })
     })
 
-    it('下降不超过 30% 的持续水位仍自动采纳（不查确认）', async () => {
-      mockQuery.mockResolvedValueOnce({ rows: passingBaseline }).mockResolvedValueOnce({
-        rows: [
-          { actual_count: 75, cycle_id: 'drop-b', explicit_cycle: true },
-          { actual_count: 75, cycle_id: 'drop-a', explicit_cycle: true },
-        ],
+    it('10%–30% 的持续下降（如丢一页）同样不自动采纳，需运维确认', async () => {
+      mockQuery
+        .mockResolvedValueOnce({ rows: passingBaseline })
+        .mockResolvedValueOnce({
+          rows: [
+            { actual_count: 80, cycle_id: 'drop-b', explicit_cycle: true },
+            { actual_count: 80, cycle_id: 'drop-a', explicit_cycle: true },
+          ],
+        })
+        .mockResolvedValueOnce({ rows: [{ ack: null }] })
+      const result = await getCountBaseline(19, 30, 100, { actualCount: 80, cycleId: 'drop-c' })
+      expect(result).toEqual({
+        baseline: 100,
+        isBootstrap: false,
+        shiftPendingConfirmation: { proposedBaseline: 80, currentBaseline: 100 },
       })
+      expect(evaluateCount(80, result.baseline).passed).toBe(false)
+    })
+
+    it('确认 10%–30% 的下降后采纳', async () => {
+      mockQuery
+        .mockResolvedValueOnce({ rows: passingBaseline })
+        .mockResolvedValueOnce({
+          rows: [
+            { actual_count: 80, cycle_id: 'drop-b', explicit_cycle: true },
+            { actual_count: 80, cycle_id: 'drop-a', explicit_cycle: true },
+          ],
+        })
+        .mockResolvedValueOnce({ rows: [{ ack: 80 }] })
       await expect(
-        getCountBaseline(19, 30, 100, { actualCount: 75, cycleId: 'drop-c' })
-      ).resolves.toEqual({ baseline: 75, isBootstrap: false, shifted: true })
-      expect(mockQuery).toHaveBeenCalledTimes(2)
+        getCountBaseline(19, 30, 100, { actualCount: 80, cycleId: 'drop-c' })
+      ).resolves.toEqual({
+        baseline: 80,
+        isBootstrap: false,
+        shifted: true,
+        shiftAcknowledged: true,
+      })
     })
   })
 

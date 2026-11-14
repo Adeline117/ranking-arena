@@ -27,6 +27,7 @@ import type {
   ParsedStats,
   Timeframe,
 } from '../../core/types'
+import { positionEnvelopeRows } from '../../core/position-snapshot'
 import { parseBinanceCopiersV1 } from './copier-parser-v1'
 
 type Dict = Record<string, unknown>
@@ -278,12 +279,19 @@ function side(v: unknown): string | null {
  *     remainAmount, avgBuyPrice, lastPrice, unrealizedPnl } → long-only.
  */
 export function parseBinancePositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const data = (raw as Dict)?.data
+  // HTTP-200 business errors must never parse as a flat book (Tier-D
+  // replaces the stored set).
+  const futures = Array.isArray((raw as Dict | null)?.data)
+  const rows = positionEnvelopeRows(
+    'binance',
+    raw,
+    (e) => e.code === '000000' && e.success === true,
+    (e) => (futures ? e.data : (e.data as Dict | null)?.list)
+  )
   const out: ParsedPosition[] = []
 
-  if (Array.isArray(data)) {
-    // futures
-    for (const item of data as Dict[]) {
+  if (futures) {
+    for (const item of rows) {
       const amount = num(item.positionAmount)
       if (!item.symbol || amount === null || amount === 0) continue
       const ps = typeof item.positionSide === 'string' ? item.positionSide : 'BOTH'
@@ -302,7 +310,7 @@ export function parseBinancePositions(raw: unknown, _ctx: ParseCtx): ParsedPosit
   }
 
   // spot holdings
-  for (const item of listOf(raw)) {
+  for (const item of rows) {
     if (!item.symbol && !item.asset) continue
     out.push({
       symbol: String(item.symbol ?? item.asset),

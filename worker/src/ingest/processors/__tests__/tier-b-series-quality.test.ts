@@ -9,6 +9,7 @@ const mockGetProfile = jest.fn()
 const mockParseProfile = jest.fn()
 const mockValidateProfile = jest.fn()
 const mockOpenSession = jest.fn()
+const mockRecordParseFailure = jest.fn()
 const mockSessionClose = jest.fn()
 const mockWriteRawObject = jest.fn()
 const mockRecordStagingRejects = jest.fn()
@@ -28,6 +29,7 @@ jest.mock('@/lib/ingest/core/adapter', () => ({
 }))
 jest.mock('@/lib/ingest/fetch/fetcher', () => ({
   openSession: (...args: unknown[]) => mockOpenSession(...args),
+  getCircuit: () => ({ recordParseFailure: mockRecordParseFailure }),
 }))
 jest.mock('@/lib/ingest/raw', () => ({
   writeRawObject: (...args: unknown[]) => mockWriteRawObject(...args),

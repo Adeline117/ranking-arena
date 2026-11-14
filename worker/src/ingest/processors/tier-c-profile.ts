@@ -50,6 +50,10 @@ import {
 } from '@/lib/ingest/serving/publish'
 import { getIngestPool } from '@/lib/ingest/db'
 import { parsePositionSnapshot } from '@/lib/ingest/core/position-snapshot'
+import {
+  CopierPageCapReachedError,
+  HistoryPageCapReachedError,
+} from '@/lib/ingest/core/history-page-cap'
 import { tierCResultKey, type TierCJobData } from '../queues'
 import { runHistoryTransaction } from '../history-transaction'
 
@@ -492,7 +496,13 @@ async function processHeavySurface(
             }
           }
         } catch (error) {
-          fetchError = error
+          // A page-budget cut leaves valid newest pages; this view is
+          // caller-limited anyway (bingx can only ever reach page 1).
+          const cut =
+            error instanceof HistoryPageCapReachedError ||
+            error instanceof CopierPageCapReachedError
+          if (cut && pages.length > 0) callerLimited = true
+          else fetchError = error
         }
         rawPayload = pages
         observedAt = pages.at(-1)?.fetchedAt ?? null

@@ -35,6 +35,7 @@ import type {
 } from '../../core/types'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { HistoryContinuationCapability } from '../../core/history-continuation'
+import { CopierPageCapReachedError, HistoryPageCapReachedError } from '../../core/history-page-cap'
 import type { FetchSession, ReplayRequestTemplate } from '../../fetch/types'
 import { apiFetcher, replayPaged } from '../../fetch/capture'
 import { parseBingxLeaderboardPage, parseBingxHistory, parseBingxPositions } from './parsers'
@@ -279,6 +280,19 @@ const bingxAdapter: SourceAdapter = {
     )
     if (payload === null) return
     yield { pageIndex: 1, payload, url, fetchedAt }
+    // Only the browser's first page is reachable (the sign covers the query).
+    // Copiers report no total, so the snapshot can never be proven complete;
+    // trades/transfers are complete only when data.total fits on this page.
+    if (kind === 'copiers') throw new CopierPageCapReachedError(src.slug, 1)
+    const data = (payload as Record<string, unknown> | null)?.data as
+      | Record<string, unknown>
+      | null
+      | undefined
+    const rows = Array.isArray(data?.result) ? data.result.length : 0
+    const total = Number(data?.total)
+    if (!Number.isSafeInteger(total) || total > rows) {
+      throw new HistoryPageCapReachedError(src.slug, kind, 1)
+    }
   },
 
   parseLeaderboard: parseBingxLeaderboardPage,
