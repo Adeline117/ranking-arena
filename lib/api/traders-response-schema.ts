@@ -4,37 +4,20 @@
  */
 
 import { z } from 'zod'
+import { TradersListRowSchema } from '@/lib/contracts/core-api'
 
-export const traderOutputSchema = z.object({
-  id: z.string(),
-  handle: z.string().nullable(),
-  roi: z.number(),
-  pnl: z.number().nullable(),
-  win_rate: z.number().nullable(),
-  max_drawdown: z.number().nullable(),
-  trades_count: z.number().nullable(),
-  followers: z.number().nullable(),
-  source: z.string(),
+/**
+ * Row shape = the core-api contract row (single source of truth shared with
+ * the homepage mapper) plus the fields this route always emits. `roi` and
+ * `arena_score` are nullable there: null is "unknown", which the route does
+ * return — the former non-null copy reported drift on every dev request.
+ */
+export const traderOutputSchema = TradersListRowSchema.extend({
   source_type: z.string(),
-  avatar_url: z.string().nullable(),
-  arena_score: z.number(),
-  rank: z.number(),
-  profitability_score: z.number().nullable(),
-  risk_control_score: z.number().nullable(),
-  execution_score: z.number().nullable(),
-  score_completeness: z.string().nullable(),
-  trading_style: z.string().nullable(),
-  avg_holding_hours: z.number().nullable(),
-  style_confidence: z.number().nullable(),
-  sharpe_ratio: z.number().nullable(),
   is_bot: z.boolean(),
-  trader_type: z.string().nullable(),
-  anti_gaming_flags: z.array(z.string()).optional(),
-  is_verified_data: z.boolean().optional(),
-  rank_change: z.number().nullable().optional(),
-  is_new: z.boolean().optional(),
   updated_at: z.string().nullable().optional(),
   is_stale: z.boolean().optional(),
+  is_outlier: z.boolean().optional(),
   computed_at: z.string().nullable().optional(),
 })
 

@@ -22,6 +22,7 @@ import type {
 import type { RejectedRow } from '../staging/validate'
 import { deriveMissingRatios, deriveRiskFromBlocks } from '../core/series-risk'
 import { ensureHistoryPartitions } from './history-partitions'
+import { HEADLINE_STATS_UPSERT_SQL } from './headline-stats-sql'
 import { LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT } from '../acquisition-manifest'
 
 /** PURE-DEX sources the spec authorizes to self-compute risk from chain data
@@ -348,7 +349,7 @@ async function publishLeaderboardSnapshotTransactionInternal(
   // Count evidence must be read only after the source publication lock and
   // on this same transaction client. Concurrent publishers can no longer
   // evaluate against a baseline that changed before their own commit.
-  const { baseline, isBootstrap, shifted } = await getCountBaseline(
+  const { baseline, isBootstrap, shifted, shiftPendingConfirmation } = await getCountBaseline(
     src.id,
     timeframe,
     expectedCount,
@@ -364,6 +365,13 @@ async function publishLeaderboardSnapshotTransactionInternal(
     baseline,
     isBootstrap ? BOOTSTRAP_DEVIATION_PCT : ROLLING_DEVIATION_PCT
   )
+  if (shiftPendingConfirmation) {
+    console.error(
+      `[publish] ${src.slug} tf${timeframe}: sustained DOWNWARD level-shift to ` +
+        `${shiftPendingConfirmation.proposedBaseline} (baseline ${shiftPendingConfirmation.currentBaseline}) ` +
+        `held for manual confirmation; set arena.sources.meta.count_shift_ack.${timeframe} to accept`
+    )
+  }
 
   const { rows: snap } = await client.query<{ id: number; scraped_at: string }>(
     `INSERT INTO arena.leaderboard_snapshots
@@ -390,6 +398,15 @@ async function publishLeaderboardSnapshotTransactionInternal(
           ? { observation_cycle_id: input.observationCycleId.trim() }
           : {}),
         ...(countBaselineGeneration ? { count_baseline_generation: countBaselineGeneration } : {}),
+        // Read by the freshness sentinel, which alerts for manual confirmation.
+        ...(shiftPendingConfirmation
+          ? {
+              count_shift_pending: {
+                proposed_baseline: shiftPendingConfirmation.proposedBaseline,
+                current_baseline: shiftPendingConfirmation.currentBaseline,
+              },
+            }
+          : {}),
         ...(preparedTrust
           ? {
               source_run_id: preparedTrust.sourceRunId,
@@ -460,80 +477,30 @@ async function publishLeaderboardSnapshotTransactionInternal(
     // COALESCE(EXCLUDED, existing) keeps any richer profile-crawl value — so
     // this never clobbers profile sources, but backfills profile-less ones.
     if (!input.isDerived) {
-      const stats = await client.query(
-        `INSERT INTO arena.trader_stats
-           (trader_id, timeframe, as_of, currency, roi, pnl, win_rate, mdd, sharpe, aum, copier_count, copier_pnl, volume,
-            win_positions, total_positions, holding_duration_avg, extras)
-         SELECT t.id, $1, $2, $3, r.roi, r.pnl, r.win_rate, r.mdd, r.sharpe, r.aum, r.copier_count, r.copier_pnl, r.volume,
-                r.win_positions, r.total_positions,
-                CASE WHEN r.holding_hours IS NOT NULL THEN make_interval(secs => r.holding_hours * 3600) ELSE NULL END,
-                COALESCE(r.extras, '{}'::jsonb)
-           FROM jsonb_to_recordset($4::jsonb) AS r(
-             exchange_trader_id text, roi numeric, pnl numeric, win_rate numeric,
-             mdd numeric, sharpe numeric, aum numeric, copier_count integer, copier_pnl numeric, volume numeric,
-             win_positions integer, total_positions integer, holding_hours numeric, extras jsonb)
-           JOIN arena.traders t
-             ON t.source_id = $5 AND t.exchange_trader_id = r.exchange_trader_id
-         ON CONFLICT (trader_id, timeframe) DO UPDATE SET
-           as_of           = CASE WHEN
-             (EXCLUDED.roi IS NULL AND arena.trader_stats.roi IS NOT NULL) OR
-             (EXCLUDED.pnl IS NULL AND arena.trader_stats.pnl IS NOT NULL) OR
-             (EXCLUDED.win_rate IS NULL AND arena.trader_stats.win_rate IS NOT NULL) OR
-             (EXCLUDED.mdd IS NULL AND arena.trader_stats.mdd IS NOT NULL) OR
-             (EXCLUDED.sharpe IS NULL AND arena.trader_stats.sharpe IS NOT NULL) OR
-             (EXCLUDED.aum IS NULL AND arena.trader_stats.aum IS NOT NULL) OR
-             (EXCLUDED.copier_count IS NULL AND arena.trader_stats.copier_count IS NOT NULL) OR
-             (EXCLUDED.copier_pnl IS NULL AND arena.trader_stats.copier_pnl IS NOT NULL) OR
-             (EXCLUDED.volume IS NULL AND arena.trader_stats.volume IS NOT NULL) OR
-             (EXCLUDED.win_positions IS NULL AND arena.trader_stats.win_positions IS NOT NULL) OR
-             (EXCLUDED.total_positions IS NULL AND arena.trader_stats.total_positions IS NOT NULL) OR
-             (EXCLUDED.holding_duration_avg IS NULL AND arena.trader_stats.holding_duration_avg IS NOT NULL) OR
-             arena.trader_stats.profit_share_rate IS NOT NULL OR
-             arena.trader_stats.trading_preferences IS NOT NULL OR
-             COALESCE(arena.trader_stats.extras, '{}'::jsonb) <> '{}'::jsonb
-             THEN LEAST(arena.trader_stats.as_of, EXCLUDED.as_of)
-             ELSE EXCLUDED.as_of
-           END,
-           currency        = EXCLUDED.currency,
-           roi             = COALESCE(EXCLUDED.roi, arena.trader_stats.roi),
-           pnl             = COALESCE(EXCLUDED.pnl, arena.trader_stats.pnl),
-           win_rate        = COALESCE(EXCLUDED.win_rate, arena.trader_stats.win_rate),
-           mdd             = COALESCE(EXCLUDED.mdd, arena.trader_stats.mdd),
-           sharpe          = COALESCE(EXCLUDED.sharpe, arena.trader_stats.sharpe),
-           aum             = COALESCE(EXCLUDED.aum, arena.trader_stats.aum),
-           copier_count    = COALESCE(EXCLUDED.copier_count, arena.trader_stats.copier_count),
-           copier_pnl      = COALESCE(EXCLUDED.copier_pnl, arena.trader_stats.copier_pnl),
-           volume          = COALESCE(EXCLUDED.volume, arena.trader_stats.volume),
-           win_positions   = COALESCE(EXCLUDED.win_positions, arena.trader_stats.win_positions),
-           total_positions = COALESCE(EXCLUDED.total_positions, arena.trader_stats.total_positions),
-           holding_duration_avg = COALESCE(EXCLUDED.holding_duration_avg, arena.trader_stats.holding_duration_avg),
-           extras          = CASE WHEN EXCLUDED.extras = '{}'::jsonb THEN arena.trader_stats.extras
-                                  ELSE COALESCE(arena.trader_stats.extras, '{}'::jsonb) || EXCLUDED.extras END`,
-        [
-          timeframe,
-          scrapedAt,
-          src.currency,
-          JSON.stringify(
-            rows.map((r) => ({
-              exchange_trader_id: r.exchangeTraderId,
-              roi: r.headlineRoi,
-              pnl: r.headlinePnl,
-              win_rate: r.headlineWinRate,
-              mdd: r.headlineMdd ?? null,
-              sharpe: r.headlineSharpe ?? null,
-              aum: r.headlineAum ?? null,
-              copier_count: r.headlineCopierCount ?? null,
-              copier_pnl: r.headlineCopierPnl ?? null,
-              volume: r.headlineVolume ?? null,
-              win_positions: r.headlineWinPositions ?? null,
-              total_positions: r.headlineTotalPositions ?? null,
-              holding_hours: r.headlineHoldingDurationHours ?? null,
-              extras: r.headlineExtras ?? null,
-            }))
-          ),
-          src.id,
-        ]
-      )
+      const stats = await client.query(HEADLINE_STATS_UPSERT_SQL, [
+        timeframe,
+        scrapedAt,
+        src.currency,
+        JSON.stringify(
+          rows.map((r) => ({
+            exchange_trader_id: r.exchangeTraderId,
+            roi: r.headlineRoi,
+            pnl: r.headlinePnl,
+            win_rate: r.headlineWinRate,
+            mdd: r.headlineMdd ?? null,
+            sharpe: r.headlineSharpe ?? null,
+            aum: r.headlineAum ?? null,
+            copier_count: r.headlineCopierCount ?? null,
+            copier_pnl: r.headlineCopierPnl ?? null,
+            volume: r.headlineVolume ?? null,
+            win_positions: r.headlineWinPositions ?? null,
+            total_positions: r.headlineTotalPositions ?? null,
+            holding_hours: r.headlineHoldingDurationHours ?? null,
+            extras: r.headlineExtras ?? null,
+          }))
+        ),
+        src.id,
+      ])
       if (stats.rowCount !== rows.length) {
         throw new Error(
           `[publish] headline stats upsert count mismatch: expected=${rows.length}, actual=${stats.rowCount ?? 'unknown'}`

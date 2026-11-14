@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { formatTimeAgo } from '@/lib/utils/date'
+import { describeDataTime, formatDataClock, newestDataTimestamp } from '@/lib/utils/data-time'
 import { Box, Text } from '@/app/components/base'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { useToast } from '@/app/components/ui/Toast'
@@ -195,7 +196,6 @@ export default function FlashNewsPageClient() {
         }
         setPagination(pag)
         setHasMore(pag.hasNext)
-        if (!append) setLastUpdated(new Date())
         return true
       } catch {
         if (!isCurrentInitialRequest()) return false
@@ -218,7 +218,12 @@ export default function FlashNewsPageClient() {
     [showToast, t]
   )
 
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  // "Last updated" = the newest news item's publish time. The fetch/render
+  // time would claim the feed is current even when ingestion has stopped.
+  const latestNews = useMemo(
+    () => describeDataTime(newestDataTimestamp(news.map((item) => item.published_at))),
+    [news]
+  )
 
   // Keep the id ref in sync with the rendered list for the poll dedup.
   useEffect(() => {
@@ -274,7 +279,6 @@ export default function FlashNewsPageClient() {
       })
       return []
     })
-    setLastUpdated(new Date())
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
 
@@ -607,8 +611,10 @@ export default function FlashNewsPageClient() {
           >
             {t('flashNewsDesc')}
           </Text>
-          {lastUpdated && (
+          {latestNews.timestampMs !== null && (
             <Text
+              data-testid="flash-news-latest"
+              suppressHydrationWarning
               style={{
                 color: tokens.colors.text.tertiary,
                 fontSize: tokens.typography.fontSize.xs,
@@ -616,10 +622,19 @@ export default function FlashNewsPageClient() {
               }}
             >
               {t('flashNewsLastUpdated')}
-              {lastUpdated.toLocaleTimeString(
-                ({ zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' } as Record<string, string>)[language] ||
-                  'en-US',
-                { hour: '2-digit', minute: '2-digit', second: '2-digit' }
+              <time dateTime={latestNews.iso ?? undefined}>
+                {formatDataClock(
+                  latestNews.timestampMs,
+                  Date.now(),
+                  ({ zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' } as Record<string, string>)[language] ||
+                    'en-US'
+                )}
+              </time>
+              {latestNews.isStale && (
+                <span style={{ color: tokens.colors.accent.warning }}>
+                  {' · '}
+                  {t('dataStaleWarning')}
+                </span>
               )}
             </Text>
           )}

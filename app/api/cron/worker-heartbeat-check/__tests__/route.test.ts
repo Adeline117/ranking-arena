@@ -3,16 +3,22 @@
 const mockSendAlert = jest.fn()
 const mockHdel = jest.fn()
 const mockHgetall = jest.fn()
+let mockRedisUnavailable = false
 
 jest.mock('@/lib/api/with-cron', () => ({
   withCron: (_name: string, handler: Function) => async (request: unknown) => {
-    const result = await handler(request, {})
-    return Response.json({ ok: true, ...result })
+    try {
+      const result = await handler(request, {})
+      return Response.json({ ok: true, ...result })
+    } catch (err) {
+      return Response.json({ ok: false, error: String(err) }, { status: 500 })
+    }
   },
 }))
 
 jest.mock('@/lib/cache/redis-client', () => ({
-  getSharedRedis: async () => ({ hdel: mockHdel, hgetall: mockHgetall }),
+  getSharedRedis: async () =>
+    mockRedisUnavailable ? null : { hdel: mockHdel, hgetall: mockHgetall },
 }))
 
 jest.mock('@/lib/alerts/send-alert', () => ({
@@ -116,6 +122,7 @@ describe('GET /api/cron/worker-heartbeat-check topology invariant', () => {
     const response = await run({
       mac: beat(['local']),
       sg: beat(['vps_sg'], { sha: OTHER_SHA }),
+      'scoring@mac': beat(['scoring'], { attemptBoundCapture: false }),
     })
     const body = await response.json()
 
@@ -125,5 +132,103 @@ describe('GET /api/cron/worker-heartbeat-check topology invariant', () => {
     })
     expect(topologyAlert()).toBeUndefined()
     expect(mockSendAlert).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET /api/cron/worker-heartbeat-check scoring process coverage', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    jest.spyOn(Date, 'now').mockReturnValue(NOW)
+    mockHdel.mockResolvedValue(1)
+    mockSendAlert.mockResolvedValue({ channels: [], rateLimited: false, sent: true })
+  })
+  afterEach(() => jest.restoreAllMocks())
+
+  const scoringAlert = () =>
+    mockSendAlert.mock.calls.find((c) => c[1] === 'worker-heartbeat:scoring')
+
+  test('pages when no scoring heartbeat exists even though crawlers are healthy', async () => {
+    await run({ mac: beat(['local']), sg: beat(['vps_sg']) })
+    expect(scoringAlert()?.[0]).toMatchObject({ level: 'critical' })
+  })
+
+  test('pages with the stale scoring node and keeps it out of crawl coverage', async () => {
+    const response = await run({
+      mac: beat(['local']),
+      sg: beat(['vps_sg']),
+      'scoring@mac': beat(['scoring'], { ts: NOW - 30 * 60_000 }),
+    })
+    const body = await response.json()
+    expect(scoringAlert()?.[0].message).toContain('scoring@mac')
+    expect(body.down).toEqual([])
+    expect(body.scoring.down).toEqual([{ node: 'scoring@mac', age_min: 30 }])
+  })
+
+  test('a healthy scoring beat with a different release does not trip ingest drift', async () => {
+    const response = await run({
+      mac: beat(['local']),
+      sg: beat(['vps_sg']),
+      'scoring@mac': beat(['scoring'], { releaseId: 'unknown', attemptBoundCapture: false }),
+    })
+    const body = await response.json()
+    expect(scoringAlert()).toBeUndefined()
+    expect(mockSendAlert).not.toHaveBeenCalled()
+    expect(body.topology.scoring_nodes).toEqual(['scoring@mac'])
+    expect(body.topology.ready).toBe(true)
+  })
+})
+
+describe('GET /api/cron/worker-heartbeat-check when blind', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockSendAlert.mockResolvedValue({ channels: [], rateLimited: false, sent: true })
+  })
+  afterEach(() => {
+    mockRedisUnavailable = false
+  })
+
+  test('pages and fails the run when Redis is unavailable', async () => {
+    mockRedisUnavailable = true
+    const response = await GET(new NextRequest('http://localhost/api/cron/worker-heartbeat-check'))
+    expect(response.status).toBe(500)
+    expect(mockSendAlert).toHaveBeenCalledWith(
+      expect.objectContaining({ level: 'critical' }),
+      'worker-heartbeat:blind',
+      expect.any(Number)
+    )
+  })
+
+  test('pages and fails the run when the roster read throws', async () => {
+    mockHgetall.mockRejectedValueOnce(new Error('ECONNRESET'))
+    const response = await GET(new NextRequest('http://localhost/api/cron/worker-heartbeat-check'))
+    expect(response.status).toBe(500)
+    expect(mockSendAlert.mock.calls[0][1]).toBe('worker-heartbeat:blind')
+  })
+})
+
+describe('GET /api/cron/worker-heartbeat-check output watermarks', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    jest.spyOn(Date, 'now').mockReturnValue(NOW)
+    mockHdel.mockResolvedValue(1)
+    mockSendAlert.mockResolvedValue({ channels: [], rateLimited: false, sent: true })
+  })
+  afterEach(() => jest.restoreAllMocks())
+
+  test('pages when a live node has not published Tier-A within the threshold', async () => {
+    mockHgetall
+      .mockResolvedValueOnce({
+        mac: beat(['local']),
+        sg: beat(['vps_sg']),
+        'scoring@mac': beat(['scoring'], { attemptBoundCapture: false }),
+      })
+      .mockResolvedValueOnce({ mac: String(NOW - 48 * 3600_000), sg: String(NOW - 3600_000) })
+      .mockResolvedValueOnce({ mac: String(NOW - 20 * 3600_000), sg: String(NOW - 600_000) })
+      .mockResolvedValueOnce({ 'scoring@mac': String(NOW - 3600_000) })
+    const response = await GET(new NextRequest('http://localhost/api/cron/worker-heartbeat-check'))
+    const body = await response.json()
+    const alert = mockSendAlert.mock.calls.find((c) => c[1] === 'worker-heartbeat:progress')
+    expect(alert?.[0]).toMatchObject({ level: 'critical' })
+    expect(body.progress.stalled.map((p: { node: string }) => p.node)).toEqual(['mac'])
   })
 })

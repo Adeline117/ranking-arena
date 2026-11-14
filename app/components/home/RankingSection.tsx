@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
+import dynamic from 'next/dynamic'
 import type { Trader } from '../ranking/RankingTableTypes'
 import type { TimeRange } from './hooks/useTraderData'
 import type { CategoryCounts } from '@/lib/getInitialTraders'
@@ -13,13 +13,14 @@ import type { CategoryCounts } from '@/lib/getInitialTraders'
 import { RankingTable } from '../ranking/RankingTable'
 
 import TimeRangeSelector from './TimeRangeSelector'
-import { useRankingFilters, FREE_LEADERBOARD_LIMIT } from './useRankingFilters'
+import { useRankingFilters } from './useRankingFilters'
 import CategoryRankingTabs, { type CategoryType } from '../ranking/CategoryRankingTabs'
 import { trackEvent } from '@/lib/analytics/track'
+import ExchangeScopeNotice from './ExchangeScopeNotice'
+import SearchElsewhereMatches from './SearchElsewhereMatches'
 
 const AdvancedFilterPanel = dynamic(() => import('./AdvancedFilterPanel'), { ssr: false })
 const FilterStatusMessages = dynamic(() => import('./FilterStatusMessages'), { ssr: false })
-const ProGate = dynamic(() => import('../ui/ProGate'), { ssr: false })
 const ProUpsellModal = dynamic(
   () => import('../ui/ProGate').then((m) => ({ default: m.ProUpsellModal })),
   { ssr: false }
@@ -100,7 +101,9 @@ export default function RankingSection({
     filterConfig,
     savedFilters,
     hasActiveFilters,
+    hasClientPageFilters,
     selectedExchange,
+    clearExchange,
     sortColumn,
     sortDir,
     currentPage,
@@ -108,6 +111,7 @@ export default function RankingSection({
     source,
     advancedFiltered,
     filteredTraders,
+    searchMatchesElsewhere,
     handleFilterChange,
     handleSortChange,
     handlePageChange,
@@ -150,18 +154,10 @@ export default function RankingSection({
 
   return (
     <section className="home-ranking-section contain-layout-style" style={{ minWidth: 0 }}>
-      {/* Period + Category tabs in one row */}
-      <div
-        className="ranking-controls-bar"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          marginBottom: 8,
-          minHeight: 48,
-          flexWrap: 'wrap',
-        }}
-      >
+      {/* Period + Category tabs in one row. Layout lives in critical CSS
+          (.ranking-controls-bar) so the mobile single-row variant and the SSR
+          shell's reserved height come from one place. */}
+      <div className="ranking-controls-bar">
         <TimeRangeSelector activeRange={activeTimeRange} onChange={onTimeRangeChange} />
         {isRefreshing && (
           <span
@@ -184,9 +180,7 @@ export default function RankingSection({
             <span className="sr-only">{t('refreshing')}</span>
           </span>
         )}
-        <div
-          style={{ width: 1, height: 24, background: 'var(--color-border-primary)', flexShrink: 0 }}
-        />
+        <div className="ranking-controls-divider" aria-hidden="true" />
         <CategoryRankingTabs
           currentCategory={category}
           onCategoryChange={handleCategoryChange}
@@ -196,6 +190,8 @@ export default function RankingSection({
           categoryCountsAreExact={categoryCountsAreExact}
         />
       </div>
+
+      <ExchangeScopeNotice exchange={selectedExchange} onClear={clearExchange} />
 
       <AdvancedFilterPanel
         showAdvancedFilter={showAdvancedFilter}
@@ -216,9 +212,6 @@ export default function RankingSection({
         language={language}
         selectedExchange={selectedExchange}
         advancedFilteredCount={advancedFiltered.length}
-        tradersCount={totalCountIsExact === true ? totalCount : null}
-        hasActiveFilters={hasActiveFilters}
-        onResetFilters={handleResetFilters}
       />
 
       {staleDataWarning && (
@@ -237,108 +230,27 @@ export default function RankingSection({
         </div>
       )}
 
-      {!loading && !premiumLoading && error && filteredTraders.length === 0 && (
-        <div
+      <SearchElsewhereMatches traders={searchMatchesElsewhere} />
+
+      {hasClientPageFilters && (
+        // Advanced filters / presets run client-side over the loaded server
+        // page only. Say so instead of implying a whole-board search.
+        <p
+          role="note"
+          data-testid="filters-current-page-only"
           style={{
-            padding: tokens.spacing[6],
-            textAlign: 'center',
+            margin: `0 0 ${tokens.spacing[2]}`,
+            fontSize: tokens.typography.fontSize.xs,
             color: tokens.colors.text.tertiary,
-            fontSize: 14,
-            lineHeight: 1.6,
           }}
         >
-          <div style={{ marginBottom: 8, color: 'var(--color-error, #e53935)' }}>
-            {t('failedToLoadRankings')}
-          </div>
-          <div style={{ fontSize: 13, marginBottom: 12 }}>{error}</div>
-          {onRetry && (
-            <button
-              onClick={onRetry}
-              className="tap-target"
-              style={{
-                padding: '8px 20px',
-                borderRadius: 6,
-                border: '1px solid var(--color-border-primary)',
-                background: 'var(--color-accent-primary)',
-                color: '#fff',
-                fontSize: 13,
-                cursor: 'pointer',
-              }}
-            >
-              {t('retry')}
-            </button>
-          )}
-        </div>
+          {t('rankingFiltersCurrentPageOnly')}
+        </p>
       )}
 
-      {!loading && !premiumLoading && filteredTraders.length === 0 && !error && (
-        <div
-          style={{
-            padding: tokens.spacing[6],
-            textAlign: 'center',
-            color: tokens.colors.text.tertiary,
-            fontSize: 14,
-            lineHeight: 1.6,
-          }}
-        >
-          {hasActiveFilters ? (
-            t('noTradersMatchFilters')
-          ) : (
-            // No `error` here: the request succeeded but returned an empty
-            // cohort. The API withholds rows (sealed-empty projection) while
-            // source freshness/publication is unverified (`isStale`), so this
-            // is a refresh state — not a load failure.
-            <>
-              <div style={{ color: tokens.colors.text.secondary, marginBottom: 4 }}>
-                {isStale ? t('rankingsRefreshingTitle') : t('rankingsEmptyPeriodTitle')}
-              </div>
-              <div style={{ fontSize: 13 }}>{t('rankingsRefreshingDesc')}</div>
-            </>
-          )}
-          {hasActiveFilters ? (
-            <button
-              onClick={handleResetFilters}
-              className="tap-target"
-              style={{
-                margin: '12px auto 0',
-                padding: '6px 16px',
-                borderRadius: 6,
-                border: '1px solid var(--color-border-primary)',
-                background: 'transparent',
-                color: 'var(--color-accent-primary)',
-                fontSize: 13,
-                cursor: 'pointer',
-              }}
-            >
-              {t('resetFilters')}
-            </button>
-          ) : (
-            onRetry && (
-              // Unfiltered + loaded + empty = the fetch came back empty (a soft
-              // failure). Offer a real retry instead of telling the user to
-              // "refresh shortly" (which read as if it were still loading).
-              <button
-                onClick={onRetry}
-                className="tap-target"
-                style={{
-                  display: 'block',
-                  margin: '12px auto 0',
-                  padding: '8px 20px',
-                  borderRadius: 6,
-                  border: '1px solid var(--color-border-primary)',
-                  background: 'var(--color-accent-primary)',
-                  color: '#fff',
-                  fontSize: 13,
-                  cursor: 'pointer',
-                }}
-              >
-                {t('retry')}
-              </button>
-            )
-          )}
-        </div>
-      )}
-
+      {/* Error + empty states are rendered once, by RankingTable (it was
+          previously duplicated here, producing two messages / two retry
+          buttons and contradictory stale copy). */}
       <RankingTable
         traders={filteredTraders}
         loading={loading || premiumLoading}
@@ -351,7 +263,7 @@ export default function RankingSection({
         onCategoryChange={handleCategoryChange}
         onProRequired={onProRequired}
         onFilterToggle={handleFilterToggle}
-        hasActiveFilters={hasActiveFilters}
+        hasActiveFilters={hasClientPageFilters}
         error={error}
         onRetry={onRetry}
         controlledSortColumn={sortColumn}
@@ -366,25 +278,9 @@ export default function RankingSection({
         hasMore={hasMore}
         categoryCounts={categoryCounts}
         categoryCountsAreExact={categoryCountsAreExact}
+        isStale={isStale}
+        onResetFilters={handleResetFilters}
       />
-
-      <div
-        className="contain-layout-style"
-        style={{
-          minHeight:
-            !isPro && !loading && advancedFiltered.length > FREE_LEADERBOARD_LIMIT ? undefined : 0,
-        }}
-      >
-        {!isPro && !loading && advancedFiltered.length > FREE_LEADERBOARD_LIMIT && (
-          <ProGate
-            variant="inline"
-            description={t('showingTopFreeLimit').replace(
-              '{limit}',
-              String(FREE_LEADERBOARD_LIMIT)
-            )}
-          />
-        )}
-      </div>
 
       <ProUpsellModal
         open={proUpsellOpen}

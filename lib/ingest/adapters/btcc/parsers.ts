@@ -162,13 +162,25 @@ export function parseBtccProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
   if (gain) {
     const totalTrades = int(gain.totalTradeNum)
     const winTrades = int(gain.totalWinTradeNum)
-    const winRate =
+    // Win rate = the exchange's own figure (profitInfo.winRate, already
+    // percent — 93.8 = 93.8%; the board row's winRate is the same number).
+    // BTCC publishes no per-window win rate, only this one; it is what the
+    // exchange shows on board and profile alike. The count-based window ratio
+    // (totalWinTradeNum / totalTradeNum) is OUR derivation, so it stays in
+    // extras with its basis, never in the formal column
+    // (死命令「不自派生交易所提供的字段」).
+    const winRate = profitInfo ? num(profitInfo.winRate) : null
+    const derivedWindowWinRate =
       totalTrades !== null && totalTrades > 0 && winTrades !== null
         ? Math.round((winTrades / totalTrades) * 10000) / 100
         : null
     const lastDay = profitDays.length > 0 ? profitDays[profitDays.length - 1] : null
 
     const extras: Record<string, unknown> = {}
+    if (derivedWindowWinRate !== null) {
+      extras.derived_window_win_rate_pct = derivedWindowWinRate
+      extras.derived_window_win_rate_basis = 'totalWinTradeNum/totalTradeNum (Arena-derived)'
+    }
     if (gain.profitAndCossRate !== undefined) {
       extras.profit_loss_ratio_pct = num(gain.profitAndCossRate) // 972.93 = 9.7293:1
     }

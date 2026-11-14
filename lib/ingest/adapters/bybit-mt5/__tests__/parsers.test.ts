@@ -151,8 +151,22 @@ describe('parseBybitMt5Positions', () => {
   })
 
   it('returns [] for an empty list', () => {
-    expect(parseBybitMt5Positions({ result: { openPositionList: [] } }, ctx)).toEqual([])
-    expect(parseBybitMt5Positions({}, ctx)).toEqual([])
+    expect(parseBybitMt5Positions({ retCode: 0, result: { openPositionList: [] } }, ctx)).toEqual(
+      []
+    )
+  })
+
+  it('throws on business errors / malformed envelopes instead of reporting a flat book', () => {
+    expect(() => parseBybitMt5Positions({ result: { openPositionList: [] } }, ctx)).toThrow(
+      /non-success/
+    )
+    expect(() => parseBybitMt5Positions({ retCode: 10005, result: {} }, ctx)).toThrow(
+      /retCode=10005/
+    )
+    expect(() =>
+      parseBybitMt5Positions({ retCode: 0, result: { openPositionList: null } }, ctx)
+    ).toThrow(/malformed/)
+    expect(() => parseBybitMt5Positions({}, ctx)).toThrow(/non-success/)
   })
 })
 

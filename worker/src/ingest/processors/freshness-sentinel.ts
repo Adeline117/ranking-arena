@@ -18,7 +18,9 @@ interface StaleSurface {
   max_age_hours: number
 }
 
-export async function processFreshness(_job: Job): Promise<{ stale: number }> {
+export async function processFreshness(
+  _job: Job
+): Promise<{ stale: number; pendingShifts: number }> {
   const redis = getConnection()
   const { rows } = await getIngestPool().query<StaleSurface>(
     `WITH expected AS (
@@ -79,5 +81,50 @@ export async function processFreshness(_job: Job): Promise<{ stale: number }> {
   if (rows.length > 0) {
     console.warn(`[freshness] ${rows.length} stale Tier-A surfaces`)
   }
-  return { stale: rows.length }
+  const pendingShifts = await alertPendingCountShifts(redis)
+  return { stale: rows.length, pendingShifts }
+}
+
+interface PendingCountShift {
+  slug: string
+  phase: number
+  timeframe: number
+  proposed_baseline: string | number
+  current_baseline: string | number
+}
+
+/**
+ * A sustained downward count level-shift beyond the automatic floor
+ * (lib/ingest/staging/count-check.ts SHIFT_MAX_AUTO_DROP_PCT) keeps failing the
+ * count check until an operator confirms the new level. Surface every
+ * (source, timeframe) whose latest snapshot is waiting, on its own cooldown key.
+ */
+export async function alertPendingCountShifts(redis: Parameters<typeof alert>[0]): Promise<number> {
+  const { rows } = await getIngestPool().query<PendingCountShift>(
+    `SELECT s.slug, s.phase, latest.timeframe,
+            latest.meta->'count_shift_pending'->>'proposed_baseline' AS proposed_baseline,
+            latest.meta->'count_shift_pending'->>'current_baseline' AS current_baseline
+       FROM arena.sources AS s
+       JOIN LATERAL (
+         SELECT DISTINCT ON (snapshot.timeframe) snapshot.timeframe, snapshot.meta
+           FROM arena.leaderboard_snapshots AS snapshot
+          WHERE snapshot.source_id = s.id
+            AND snapshot.scraped_at > now() - interval '24 hours'
+          ORDER BY snapshot.timeframe, snapshot.scraped_at DESC, snapshot.id DESC
+       ) AS latest ON latest.meta ? 'count_shift_pending'
+      WHERE s.status = 'active'`
+  )
+  for (const row of rows) {
+    await alert(redis, {
+      sourceSlug: `${row.slug}:count-shift:${row.timeframe}`,
+      phase: row.phase,
+      tier: 'A',
+      message:
+        `${row.timeframe}d board held at baseline ${row.current_baseline}: ` +
+        `${row.proposed_baseline} rows for 3 consecutive cycles (possible truncation). ` +
+        `Confirm a genuinely smaller board by setting arena.sources.meta.count_shift_ack.` +
+        `${row.timeframe} = ${row.proposed_baseline}`,
+    })
+  }
+  return rows.length
 }

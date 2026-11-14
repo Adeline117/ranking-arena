@@ -47,6 +47,16 @@ describe('evaluateCount — 发布门', () => {
     expect(v.baselineUsed).toBeNull()
   })
 
+  it('0 行快照永不通过（含 baseline=null 的新源自举期）', () => {
+    expect(evaluateCount(0, null).passed).toBe(false)
+    expect(evaluateCount(0, 0).passed).toBe(false)
+    expect(evaluateCount(0, null, 30).passed).toBe(false)
+    const v = evaluateCount(0, 40)
+    expect(v.passed).toBe(false)
+    expect(v.deviationPct).toBe(100)
+    expect(evaluateCount(Number.NaN, null).passed).toBe(false)
+  })
+
   it('baseline<=0 → pass（无效基线，放行）', () => {
     expect(evaluateCount(100, 0).passed).toBe(true)
     expect(evaluateCount(100, -5).passed).toBe(true)
@@ -226,6 +236,73 @@ describe('getCountBaseline — 独立观测周期', () => {
     expect(sql).toContain('DISTINCT ON (cycle_id)')
     expect(sql).toContain('cycle_id <> $5')
     expect(mockQuery.mock.calls[0][1]).toEqual([19, 30, 7, true, 'current', null])
+  })
+
+  describe('下行 level-shift 下限保护', () => {
+    const truncated = [
+      { actual_count: 60, cycle_id: 'trunc-b', explicit_cycle: true },
+      { actual_count: 60, cycle_id: 'trunc-a', explicit_cycle: true },
+    ]
+
+    it('连续 3 次截断到历史中位数 70% 以下：不自动采纳，按旧基线判并标记待确认', async () => {
+      mockQuery
+        .mockResolvedValueOnce({ rows: passingBaseline })
+        .mockResolvedValueOnce({ rows: truncated })
+        .mockResolvedValueOnce({ rows: [{ ack: null }] })
+
+      const result = await getCountBaseline(19, 30, 100, { actualCount: 60, cycleId: 'trunc-c' })
+      expect(result).toEqual({
+        baseline: 100,
+        isBootstrap: false,
+        shiftPendingConfirmation: { proposedBaseline: 60, currentBaseline: 100 },
+      })
+      expect(evaluateCount(60, result.baseline).passed).toBe(false)
+      expect(String(mockQuery.mock.calls[2][0])).toContain("meta->'count_shift_ack'")
+      expect(mockQuery.mock.calls[2][1]).toEqual([19, 30])
+    })
+
+    it('运维确认（count_shift_ack 与观测水位一致）后才采纳下行新基线', async () => {
+      mockQuery
+        .mockResolvedValueOnce({ rows: passingBaseline })
+        .mockResolvedValueOnce({ rows: truncated })
+        .mockResolvedValueOnce({ rows: [{ ack: '61' }] })
+
+      await expect(
+        getCountBaseline(19, 30, 100, { actualCount: 60, cycleId: 'trunc-c' })
+      ).resolves.toEqual({
+        baseline: 60,
+        isBootstrap: false,
+        shifted: true,
+        shiftAcknowledged: true,
+      })
+    })
+
+    it('确认值与观测水位不符时仍然不采纳', async () => {
+      mockQuery
+        .mockResolvedValueOnce({ rows: passingBaseline })
+        .mockResolvedValueOnce({ rows: truncated })
+        .mockResolvedValueOnce({ rows: [{ ack: 40 }] })
+
+      await expect(
+        getCountBaseline(19, 30, 100, { actualCount: 60, cycleId: 'trunc-c' })
+      ).resolves.toMatchObject({
+        baseline: 100,
+        shiftPendingConfirmation: { proposedBaseline: 60 },
+      })
+    })
+
+    it('下降不超过 30% 的持续水位仍自动采纳（不查确认）', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: passingBaseline }).mockResolvedValueOnce({
+        rows: [
+          { actual_count: 75, cycle_id: 'drop-b', explicit_cycle: true },
+          { actual_count: 75, cycle_id: 'drop-a', explicit_cycle: true },
+        ],
+      })
+      await expect(
+        getCountBaseline(19, 30, 100, { actualCount: 75, cycleId: 'drop-c' })
+      ).resolves.toEqual({ baseline: 75, isBootstrap: false, shifted: true })
+      expect(mockQuery).toHaveBeenCalledTimes(2)
+    })
   })
 
   it('new baseline generation excludes incompatible historical observations', async () => {

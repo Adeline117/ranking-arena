@@ -72,23 +72,16 @@ function categoryFromUrl(value: string | null): CategoryType | null {
   return value === 'web3' || value === 'onchain' ? 'web3' : null
 }
 
-function canApplyPersistedExchange(): boolean {
-  // Local exchange preference is a convenience for the clean landing page,
-  // never an implicit extra filter on a share/deep link. Query URLs must be
-  // reproducible independently of the viewer's browser storage.
-  return (
-    typeof window !== 'undefined' &&
-    window.location.pathname === '/' &&
-    window.location.search === ''
-  )
-}
-
-function commitExchangeCohortUrl(exchange: string, eventTimeRange: unknown): void {
+function commitExchangeCohortUrl(exchange: string | null, eventTimeRange?: unknown): void {
   const params = new URLSearchParams(window.location.search)
   params.delete('exchange')
   params.delete('ex')
   params.delete('page')
-  params.set('ex', exchange)
+  // The API ignores category whenever an exchange is set, so an exchange
+  // cohort is always the all-category board of that exchange. Keep the URL
+  // honest about that instead of carrying a stale category label.
+  params.delete('category')
+  if (exchange) params.set('ex', exchange)
   if (eventTimeRange === '7D' || eventTimeRange === '30D' || eventTimeRange === '90D') {
     params.delete('range')
     if (eventTimeRange !== '90D') params.set('range', eventTimeRange)
@@ -105,6 +98,9 @@ function commitCategoryCohortUrl(category: CategoryType): void {
   const params = new URLSearchParams(window.location.search)
   params.delete('category')
   params.delete('page')
+  // Switching category leaves any exchange scope (see setCategory).
+  params.delete('ex')
+  params.delete('exchange')
   if (category !== 'all') params.set('category', category === 'web3' ? 'onchain' : category)
   const query = params.toString()
   window.history.replaceState(
@@ -128,8 +124,6 @@ function getStoredPreferences() {
       }
     }
     return {
-      preset: localStorage.getItem(LS_KEY_PRESET) as PresetId | null,
-      exchange: localStorage.getItem(LS_KEY_EXCHANGE),
       filterConfig,
     }
   } catch {
@@ -262,15 +256,19 @@ export function useRankingFilters({
           // Keep the currently labelled cohort on screen until the server
           // confirms this exchange page. Otherwise old rows momentarily wear
           // a new filter label.
-          void fetchPage(0, { exchange }).then((succeeded) => {
+          // An exchange cohort is all-category (the API ignores category when
+          // exchange is set), so request and label it that way.
+          void fetchPage(0, { exchange, category: undefined }).then((succeeded) => {
             if (!succeeded) return
             const committedExchange = resolveExchangeSlug(exchange)
             setSelectedExchange(committedExchange)
+            setCategoryRaw('all')
             setCurrentPage(1)
             commitExchangeCohortUrl(committedExchange, timeRange)
           })
         } else {
           setSelectedExchange(exchange)
+          setCategoryRaw('all')
           setCurrentPage(1)
         }
       }
@@ -285,20 +283,49 @@ export function useRankingFilters({
       if (fetchPage) {
         // Do not relabel the current rows as a new category before the API
         // has returned that category's first page.
-        void fetchPage(0, { category: apiCategoryFor(cat) }).then((succeeded) => {
-          if (!succeeded) return
-          setCategoryRaw(cat)
-          setCurrentPage(1)
-          commitCategoryCohortUrl(cat)
-        })
+        // A category tab is a cross-exchange board. The API ignores category
+        // while an exchange is set, so carrying the exchange over would label
+        // one exchange's rows as e.g. "Spot". Leave the exchange scope.
+        void fetchPage(0, { category: apiCategoryFor(cat), exchange: undefined }).then(
+          (succeeded) => {
+            if (!succeeded) return
+            setCategoryRaw(cat)
+            setSelectedExchange(null)
+            setCurrentPage(1)
+            commitCategoryCohortUrl(cat)
+          }
+        )
       } else {
         setCategoryRaw(cat)
+        setSelectedExchange(null)
         setCurrentPage(1)
         commitCategoryCohortUrl(cat)
       }
     },
     [fetchPage]
   )
+
+  // "Filtered by X · Clear" affordance: drop only the exchange scope and keep
+  // sort order. Labels change only after the unscoped page has landed.
+  const clearExchange = useCallback(() => {
+    const commit = () => {
+      setSelectedExchange(null)
+      setCurrentPage(1)
+      try {
+        localStorage.removeItem(LS_KEY_EXCHANGE)
+      } catch {
+        /* ignore */
+      }
+      commitExchangeCohortUrl(null)
+    }
+    if (fetchPage) {
+      void fetchPage(0, { exchange: undefined, category: undefined }).then((succeeded) => {
+        if (succeeded) commit()
+      })
+      return
+    }
+    commit()
+  }, [fetchPage])
 
   // Reset pagination when time range changes
   const prevTimeRange = useRef(activeTimeRange)
@@ -325,6 +352,7 @@ export function useRankingFilters({
     const minScore = searchParams.get('min_score')
     const minWr = searchParams.get('min_wr')
     const fcat = searchParams.get('fcat')
+    const fex = searchParams.get('fex')
     const urlSortRaw = searchParams.get('sort')
     const urlOrderRaw = searchParams.get('order')
     const urlPage = searchParams.get('page')
@@ -350,13 +378,18 @@ export function useRankingFilters({
     if (minScore) config.min_score = Number(minScore)
     if (minWr) config.min_win_rate = Number(minWr)
     if (fcat) config.category = fcat.split(',')
+    if (fex) config.exchange = fex.split(',').filter(Boolean)
 
     const storedPrefs = getStoredPreferences()
-    // A persisted exchange is a real server cohort, not a cosmetic filter.
-    // It must take the same fetch-before-reveal path as an `?ex=` share link;
-    // otherwise default SSR all-exchange rows are falsely labelled as scoped.
-    const persistedExchange = canApplyPersistedExchange() ? storedPrefs.exchange : undefined
-    const targetExchange = requestedExchange || persistedExchange || undefined
+    // The exchange scope comes from the URL only. The legacy `ranking-exchange`
+    // preference (written by a picker that no longer exists) silently scoped a
+    // clean homepage to one exchange with no visible way out; drop it.
+    try {
+      localStorage.removeItem(LS_KEY_EXCHANGE)
+    } catch {
+      /* ignore */
+    }
+    const targetExchange = requestedExchange || undefined
     const resolvedExchange = targetExchange
       ? resolveExchangeSlug(targetExchange.split(',')[0])
       : undefined
@@ -383,7 +416,10 @@ export function useRankingFilters({
     if (!hasServerPage && urlPageIndex !== null) setCurrentPage(urlPageIndex + 1)
     if (urlQ) setSearchQuery(urlQ)
 
-    if (urlCategory) setCategoryRaw(urlCategory)
+    // `?ex=` wins over `?category=`: the API ignores category for an exchange
+    // cohort, so labelling the tab with it would contradict the rows.
+    const effectiveUrlCategory = resolvedExchange ? null : urlCategory
+    if (effectiveUrlCategory) setCategoryRaw(effectiveUrlCategory)
 
     if (urlSortRaw === 'alpha') {
       const canonicalParams = new URLSearchParams(window.location.search)
@@ -396,10 +432,14 @@ export function useRankingFilters({
       )
     }
 
-    if (urlPreset && isValidPresetId(urlPreset)) {
-      setActivePreset(urlPreset)
-    } else if (isValidPresetId(storedPrefs.preset)) {
-      setActivePreset(storedPrefs.preset)
+    // Presets have no on-page picker any more, so a value persisted by an
+    // older UI would filter the board invisibly. Honour only an explicit
+    // `?preset=` link and drop the legacy stored preference.
+    if (urlPreset && isValidPresetId(urlPreset)) setActivePreset(urlPreset)
+    try {
+      localStorage.removeItem(LS_KEY_PRESET)
+    } catch {
+      /* ignore */
     }
 
     if (resolvedExchange) setSelectedExchange(resolvedExchange)
@@ -418,7 +458,7 @@ export function useRankingFilters({
           resolvedExchange !== undefined))
     if (shouldFetchInitialCohort && fetchPage) {
       void fetchPage(targetPageIndex, {
-        category: apiCategoryFor(urlCategory ?? 'all'),
+        category: apiCategoryFor(effectiveUrlCategory ?? 'all'),
         sortBy: SORT_BY[requestedSort],
         sortDir: requestedSortDir,
         exchange: resolvedExchange,
@@ -500,6 +540,7 @@ export function useRankingFilters({
           'exchange',
           'category',
           'fcat',
+          'fex',
           'sort',
           'order',
           'page',
@@ -515,7 +556,10 @@ export function useRankingFilters({
         if (config.min_pnl != null) params.set('min_pnl', String(config.min_pnl))
         if (config.min_score != null) params.set('min_score', String(config.min_score))
         if (config.min_win_rate != null) params.set('min_wr', String(config.min_win_rate))
-        if (config.exchange?.length) params.set('exchange', config.exchange.join(','))
+        // Advanced-filter exchanges are a client-side multi-select over the
+        // loaded page. They get their own key: `exchange`/`ex` mean a single
+        // server exchange cohort and would be re-read with that meaning.
+        if (config.exchange?.length) params.set('fex', config.exchange.join(','))
         if (config.category?.length) params.set('fcat', config.category.join(','))
 
         const urlCategory = overrides.category !== undefined ? overrides.category : s.category
@@ -635,44 +679,6 @@ export function useRankingFilters({
     [syncStateToUrl]
   )
 
-  // Preset change handler
-  const _handlePresetChange = useCallback(
-    (preset: PresetId | null) => {
-      setActivePreset(preset)
-      setCurrentPage(1)
-      syncStateToUrl({ preset, page: 1 })
-      try {
-        if (preset) {
-          localStorage.setItem(LS_KEY_PRESET, preset)
-        } else {
-          localStorage.removeItem(LS_KEY_PRESET)
-        }
-      } catch {
-        /* ignore */
-      }
-    },
-    [syncStateToUrl]
-  )
-
-  // Exchange filter change handler
-  const _handleExchangeChange = useCallback(
-    (exchange: string | null) => {
-      setSelectedExchange(exchange)
-      setCurrentPage(1)
-      syncStateToUrl({ ex: exchange, page: 1 })
-      try {
-        if (exchange) {
-          localStorage.setItem(LS_KEY_EXCHANGE, exchange)
-        } else {
-          localStorage.removeItem(LS_KEY_EXCHANGE)
-        }
-      } catch {
-        /* ignore */
-      }
-    },
-    [syncStateToUrl]
-  )
-
   // Saved filter handlers
   const handleSaveFilter = async (name: string, description?: string) => {
     const authHeaders = getAuthHeaders()
@@ -742,6 +748,11 @@ export function useRankingFilters({
       }),
     [filterConfig]
   )
+
+  // Client-side filters that only see the loaded server page (50 rows):
+  // advanced filters and URL presets. Drives the "current page only" hint
+  // and the filtered empty state.
+  const hasClientPageFilters = hasActiveFilters || (!!activePreset && activePreset !== 'all')
 
   const source = useMemo(() => (traders.length > 0 ? traders[0].source : 'all'), [traders])
 
@@ -820,27 +831,10 @@ export function useRankingFilters({
     // consistent/top_scorers 四个 metric 预设拿到 undefined 全部 false →
     // 空结果回退放行全部 + 下方 effect 自动清除预设 = 4/8 预设彻底失效。
     // Trader 与 FilterableTrader 字段同名(pnl/win_rate/max_drawdown/arena_score/source)。
-    const raw = exchangeFiltered.filter((trader) => presetConfig.filter(trader))
-    return raw.length === 0 && exchangeFiltered.length > 0 ? exchangeFiltered : raw
-  }, [activePreset, exchangeFiltered])
-
-  // Auto-clear preset filter when no traders match
-  // NOTE: syncStateToUrl intentionally excluded from deps to prevent infinite loop
-  useEffect(() => {
-    if (activePreset && activePreset !== 'all' && exchangeFiltered.length > 0) {
-      const presetConfig = PRESETS.find((p) => p.id === activePreset)
-      if (presetConfig) {
-        const hasMatch = exchangeFiltered.some((trader) => presetConfig.filter(trader))
-        if (!hasMatch) {
-          setActivePreset(null)
-          try {
-            localStorage.removeItem(LS_KEY_PRESET)
-          } catch {
-            /* ignore */
-          }
-        }
-      }
-    }
+    // No silent "show everything" fallback: a preset with zero matches on
+    // this page renders the honest empty state (with a reset action) instead
+    // of pretending the preset applied. It only ever filters the loaded page.
+    return exchangeFiltered.filter((trader) => presetConfig.filter(trader))
   }, [activePreset, exchangeFiltered])
 
   const advancedFiltered = useMemo(
@@ -921,26 +915,28 @@ export function useRankingFilters({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, advancedFiltered])
 
-  const filteredTraders = useMemo(() => {
-    // With server-side pagination, the API returns one page at a time — no need to slice
-    const base = fetchPage
-      ? advancedFiltered
-      : isPro
+  const filteredTraders = useMemo(
+    () =>
+      // With server-side pagination, the API returns one page at a time — no need to slice
+      fetchPage
         ? advancedFiltered
-        : advancedFiltered.slice(0, FREE_LEADERBOARD_LIMIT)
-    if (serverSearchResults.length === 0) return base
-    const q = searchQuery.trim().toLowerCase()
-    if (q.length < 2) return base
-    const clientMatches = base.filter((t) => {
-      const handle = (t.handle || t.id || '').toLowerCase()
-      return handle.includes(q) || t.id.toLowerCase().includes(q)
-    })
-    if (clientMatches.length > 0) return base
-    const existingIds = new Set(base.map((t) => t.id))
-    const newResults = serverSearchResults.filter((t) => !existingIds.has(t.id))
-    return [...base, ...newResults]
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPro, advancedFiltered, serverSearchResults, searchQuery])
+        : isPro
+          ? advancedFiltered
+          : advancedFiltered.slice(0, FREE_LEADERBOARD_LIMIT),
+    [fetchPage, isPro, advancedFiltered]
+  )
+
+  // Site-wide `/api/search` matches for a query with no match on this page.
+  // They carry no published rank for this cohort, so they must never be
+  // merged into the ranking table (which only renders persisted ranks — the
+  // old merge was silently filtered out). RankingSection lists them as
+  // profile links instead.
+  const searchMatchesElsewhere = useMemo(() => {
+    if (serverSearchResults.length === 0) return []
+    if (searchQuery.trim().length < 2) return []
+    const existingIds = new Set(filteredTraders.map((t) => t.id))
+    return serverSearchResults.filter((t) => !existingIds.has(t.id))
+  }, [serverSearchResults, searchQuery, filteredTraders])
 
   // Pro required handler — show toast instead of redirecting away (jarring UX)
   const handleProRequired = useCallback(() => {
@@ -1032,7 +1028,9 @@ export function useRankingFilters({
     filterConfig,
     savedFilters,
     hasActiveFilters,
+    hasClientPageFilters,
     selectedExchange,
+    clearExchange,
     // Sort/page/search
     sortColumn,
     sortDir,
@@ -1042,6 +1040,7 @@ export function useRankingFilters({
     source,
     advancedFiltered,
     filteredTraders,
+    searchMatchesElsewhere,
     // Handlers
     handleFilterChange,
     handleSortChange,

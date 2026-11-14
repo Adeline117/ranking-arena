@@ -9,7 +9,17 @@ import TopNavClient from './TopNavClient'
  * Interactive parts (search, user menu, notifications) live in TopNavClient.
  * This split reduces the initial JS bundle and improves TTFB.
  */
-export default function TopNav() {
+export default function TopNav({
+  container = 'content',
+}: {
+  /**
+   * 'content' (default): the 1200px reading width used across the app.
+   * 'home': the homepage container (.home-container width + gutter, see
+   * critical-css containerCss) so the logo shares the hero/grid left edge.
+   */
+  container?: 'content' | 'home'
+} = {}) {
+  const isHome = container === 'home'
   return (
     <header
       className="top-nav glass top-nav-header"
@@ -20,12 +30,16 @@ export default function TopNav() {
       }}
     >
       <div
-        className="top-nav-container top-nav-inner"
-        style={{
-          paddingLeft: tokens.spacing[3],
-          paddingRight: tokens.spacing[3],
-          gap: tokens.spacing[2],
-        }}
+        className={`top-nav-container top-nav-inner${isHome ? ' top-nav-inner--home' : ''}`}
+        style={
+          isHome
+            ? { gap: tokens.spacing[2] }
+            : {
+                paddingLeft: tokens.spacing[3],
+                paddingRight: tokens.spacing[3],
+                gap: tokens.spacing[2],
+              }
+        }
       >
         {/* Left: Logo + Nav (server-rendered, zero JS) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>

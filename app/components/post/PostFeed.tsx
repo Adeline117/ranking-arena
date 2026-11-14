@@ -991,7 +991,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                         height: 28,
                         borderRadius: '50%',
                         background: tokens.colors.bg.tertiary,
-                        animation: 'shimmer 1.5s ease-in-out infinite',
+                        animation: 'skeleton-sweep 1.5s ease-in-out infinite',
                         backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`,
                         backgroundSize: '200% 100%',
                       }}
@@ -1002,7 +1002,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                         height: 14,
                         borderRadius: 4,
                         background: tokens.colors.bg.tertiary,
-                        animation: 'shimmer 1.5s ease-in-out infinite',
+                        animation: 'skeleton-sweep 1.5s ease-in-out infinite',
                         backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`,
                         backgroundSize: '200% 100%',
                       }}
@@ -1015,7 +1015,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                       borderRadius: 4,
                       background: tokens.colors.bg.tertiary,
                       marginBottom: tokens.spacing[2],
-                      animation: 'shimmer 1.5s ease-in-out infinite',
+                      animation: 'skeleton-sweep 1.5s ease-in-out infinite',
                       backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`,
                       backgroundSize: '200% 100%',
                     }}
@@ -1026,7 +1026,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                       height: 12,
                       borderRadius: 4,
                       background: tokens.colors.bg.tertiary,
-                      animation: 'shimmer 1.5s ease-in-out infinite',
+                      animation: 'skeleton-sweep 1.5s ease-in-out infinite',
                       backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`,
                       backgroundSize: '200% 100%',
                     }}

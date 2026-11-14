@@ -220,6 +220,9 @@ const eslintConfig = defineConfig([
       'app/components/utils/ErrorBoundary.tsx',
       'app/components/home/SSRRankingTable.tsx',
       'app/components/home/HomeHeroSSR.tsx',
+      'app/components/home/ExchangeScopeNotice.tsx',
+      'app/components/home/SearchElsewhereMatches.tsx',
+      'app/components/ranking/AllTime90dBadge.tsx',
     ],
     rules: {
       'no-restricted-syntax': ['error', ...baseRestrictedSyntax, ...appRestrictedSyntax],

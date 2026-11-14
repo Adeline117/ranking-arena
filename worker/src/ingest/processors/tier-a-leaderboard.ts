@@ -72,6 +72,7 @@ import {
 import type { TierJobData } from '../queues'
 import { observationCycleId } from '../observation-cycle'
 import { resolveDeployedSha } from '@/worker/src/ingest/heartbeat'
+import { noteTierAPublished } from '../progress'
 import {
   assertSourceMatchesConsumedRegion,
   type AuthorizedConsumedRegionContext,
@@ -1467,6 +1468,11 @@ export async function processTierA(
             `(${rejects.length} rejected, baseline=${result.verdict.baselineUsed}, ` +
             `deviation=${result.verdict.deviationPct?.toFixed(1) ?? '–'}%) → ${status}`
         )
+        if (result.published) {
+          // Output watermark next to the heartbeat (audit P2-8): proves this
+          // node is publishing, not just alive. Best-effort, never throws.
+          noteTierAPublished()
+        }
         if (!result.published) {
           // Keep this window out of serving, but do not sacrifice the other
           // native windows. The aggregate error after the loop still fails the

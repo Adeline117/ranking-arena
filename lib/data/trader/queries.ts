@@ -4,6 +4,11 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import {
+  applyPublicCohortFilters,
+  PUBLIC_COHORT_MAX_COMPUTED_AGE_MS,
+  PUBLIC_COHORT_MIN_ARENA_SCORE_EXCLUSIVE,
+} from '@/lib/rankings/public-cohort'
 import type {
   UnifiedTrader,
   TraderDetail,
@@ -30,13 +35,18 @@ import {
   PUBLIC_PROFILE_RANKING_COLUMNS,
   PUBLIC_PROFILE_RANKING_PERIODS,
 } from './public-profile-ranking'
+import { summarizeSourceFreshness, type SourceFreshnessRow } from '@/lib/rankings/source-freshness'
 
 // Database types are generated after the migration is applied. Keep the one
 // ungenerated relation name isolated here rather than hand-editing generated
 // Supabase types during the rolling migration deployment.
 const PUBLIC_RANKED_LEADERBOARD = 'public_ranked_leaderboard' as const
-/** Default freshness window shared by the homepage cache revalidator. */
-export const PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS = 6 * 60 * 60 * 1000
+/**
+ * Freshness window of the public cohort (= the sealed view's 48h serving
+ * window). Kept as an alias for existing importers; the authority is
+ * lib/rankings/public-cohort.ts.
+ */
+export const PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS = PUBLIC_COHORT_MAX_COMPUTED_AGE_MS
 
 /**
  * Ranking columns required to prove a search result belongs to the current
@@ -153,7 +163,10 @@ export async function getLeaderboard(
     allowedSources?: readonly string[]
     /** Optional source quarantine for ranking callers. */
     excludeSources?: readonly string[]
-    /** Allow data up to 24h old instead of 6h (graceful degradation) */
+    /**
+     * Deprecated no-op: the shared public cohort already uses the sealed
+     * view's full 48h window (lib/rankings/public-cohort.ts).
+     */
     allowStale?: boolean
     /** Share a caller-owned cancellation deadline across related Supabase queries. */
     signal?: AbortSignal
@@ -170,6 +183,11 @@ export async function getLeaderboard(
   totalCountIsExact: boolean
   /** Whether this SQL-filtered cohort has another row after this page. */
   hasMore: boolean
+  /**
+   * The limit+1 row that witnessed `hasMore`, mapped like the page rows.
+   * Callers that cache a page keep it so a cache hit can re-prove `hasMore`.
+   */
+  lookahead?: UnifiedTrader
   error?: string
 }> {
   const {
@@ -219,17 +237,12 @@ export async function getLeaderboard(
     query = query.eq(LR.source, platform)
   }
 
-  if (minScore != null) {
+  // One cohort for every public reader (score floor, ROI bound, 48h window).
+  query = applyPublicCohortFilters(query)
+  // A caller may narrow further, but never widen past the shared floor.
+  if (minScore != null && minScore > PUBLIC_COHORT_MIN_ARENA_SCORE_EXCLUSIVE) {
     query = query.gt('arena_score', minScore)
   }
-
-  // Graceful freshness: prefer data <6h old, but fall back to <24h rather than
-  // showing empty rankings. The UI should indicate staleness for >6h data.
-  const STALE_FALLBACK_HOURS = 24
-  const freshCutoff = new Date(Date.now() - PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS).toISOString()
-  const staleCutoff = new Date(Date.now() - STALE_FALLBACK_HOURS * 3600_000).toISOString()
-  const effectiveCutoff = params.allowStale ? staleCutoff : freshCutoff
-  query = query.gte('computed_at', effectiveCutoff)
 
   // Sorting
   const sortColumn =
@@ -279,7 +292,9 @@ export async function getLeaderboard(
   // future reader revision. Until then `hasMore` is the only paging contract.
   const totalCountIsExact = false
 
-  return { traders, totalCountIsExact, hasMore }
+  const lookahead = hasMore ? mapLeaderboardRow(cohortRows[limit]) : undefined
+
+  return { traders, totalCountIsExact, hasMore, lookahead }
 }
 
 /**
@@ -316,7 +331,7 @@ export async function getTraderDetail(
   // sealed cohort query so an unranked profile can retain its identity.
   // Each query carries AbortSignal so PostgREST requests are cancelled on timeout.
   const phase1Signal = AbortSignal.timeout(SSR_HEAVY_QUERY_TIMEOUT_MS)
-  const [rankingCohort, sourceProfileResult, profileV2Result] = await withTimeout(
+  const [rankingCohort, sourceProfileResult, profileV2Result, freshnessResult] = await withTimeout(
     Promise.all([
       fetchPublicProfileRankingRows(
         supabase,
@@ -348,6 +363,16 @@ export async function getTraderDetail(
           .limit(1)
           .abortSignal(phase1Signal)
           .maybeSingle()
+      ),
+      // When the exchange data behind each period was captured. `computed_at`
+      // is only when Arena re-scored it and must not stand in for this.
+      safeQuery(() =>
+        supabase
+          .from('leaderboard_source_freshness')
+          .select('season_id, source, source_as_of')
+          .eq('source', platform)
+          .in('season_id', [...PUBLIC_PROFILE_RANKING_PERIODS])
+          .abortSignal(phase1Signal)
       ),
     ]),
     SSR_HEAVY_QUERY_TIMEOUT_MS + 1000 // outer fallback: AbortSignal should fire first
@@ -393,6 +418,19 @@ export async function getTraderDetail(
         ? '7D'
         : '90D'
   const primaryData = periods[primaryPeriod] ?? ({} as Partial<UnifiedTrader>)
+
+  // "Updated X ago" must describe the source capture time of the period shown.
+  // A missing, invalid or failed watermark leaves it unknown (null), never the
+  // score recompute time, which can be fresh while the exchange data is days old.
+  const watermarkRows = (unwrap(freshnessResult) ?? []) as Array<
+    SourceFreshnessRow & { season_id: string }
+  >
+  const sourceAsOf = periods[primaryPeriod]
+    ? summarizeSourceFreshness(
+        watermarkRows.filter((row) => row.season_id === primaryPeriod),
+        [platform]
+      ).asOf
+    : null
 
   const trader: UnifiedTrader = {
     platform,
@@ -440,7 +478,7 @@ export async function getTraderDetail(
     avgHoldingHours: primaryData.avgHoldingHours ?? null,
     traderType: primaryData.traderType ?? null,
     isOutlier: primaryData.isOutlier ?? false,
-    lastUpdated: primaryData.lastUpdated ?? null,
+    lastUpdated: sourceAsOf,
   }
 
   // --- Phase 2: Fetch enrichment data in parallel ---

@@ -12,6 +12,7 @@
 
 import type { MetadataRoute } from 'next'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { parseWatermarkRows, watermarkBySource } from '@/lib/rankings/source-watermark'
 import { BASE_URL } from '@/lib/constants/urls'
 // Single source of truth for /learn slugs — same list drives generateStaticParams
 // on the article route. Importing here prevents this sitemap from drifting from
@@ -90,7 +91,6 @@ type SitemapRankedTraderRow = {
   source_trader_id: string | null
   source: string | null
   rank: number | null
-  computed_at: string | null
 }
 
 type SitemapTrader = {
@@ -123,15 +123,30 @@ function asSitemapTrader(row: SitemapRankedTraderRow): SitemapTrader | null {
     return null
   }
 
-  const computedAt =
-    isNonEmptyString(row.computed_at) && Number.isFinite(Date.parse(row.computed_at))
-      ? new Date(row.computed_at).toISOString()
-      : undefined
+  // lastmod is attached later from the source watermark (see getTraderShard).
+  return { handle, source: row.source }
+}
 
-  return {
-    handle,
-    source: row.source,
-    ...(computedAt ? { updated_at: computedAt } : {}),
+async function getSeasonWatermarks(
+  supabase: SupabaseClient,
+  sources: string[]
+): Promise<Map<string, string | null>> {
+  const unique = [...new Set(sources)]
+  if (unique.length === 0) return new Map()
+  try {
+    const { data, error } = await supabase
+      .from('leaderboard_source_freshness')
+      .select('source, source_as_of')
+      .eq('season_id', '90D')
+      .in('source', unique)
+    if (error) {
+      console.error('[sitemap] source watermark query error:', error.message)
+      return new Map()
+    }
+    return watermarkBySource(parseWatermarkRows(data), unique)
+  } catch (error) {
+    console.error('[sitemap] source watermark exception:', error)
+    return new Map()
   }
 }
 
@@ -153,7 +168,7 @@ async function getTraderShard(shardIndex: number): Promise<SitemapTrader[]> {
     // generated schema just to make this public read compile.
     const { data, error } = (await supabase
       .from(PUBLIC_RANKED_LEADERBOARD as never)
-      .select('handle, source_trader_id, source, rank, computed_at')
+      .select('handle, source_trader_id, source, rank')
       .eq('season_id', '90D')
       // Redundant to the view but documents the published-rank contract at
       // this crawler boundary and protects a rolling older-view deployment.
@@ -191,9 +206,21 @@ async function getTraderShard(shardIndex: number): Promise<SitemapTrader[]> {
       return true
     })
 
+    // lastmod = when the exchange data was captured (90D source watermark).
+    // `computed_at` only says when Arena re-scored it; an unknown watermark
+    // omits lastmod rather than claiming the compute or request time.
+    const watermarks = await getSeasonWatermarks(
+      supabase,
+      results.map((trader) => trader.source)
+    )
+    const dated = results.map((trader) => {
+      const asOf = watermarks.get(trader.source)
+      return asOf ? { ...trader, updated_at: asOf } : trader
+    })
+
     // eslint-disable-next-line no-console
-    console.log(`[sitemap] getTraderShard(${shardIndex}): ${results.length} traders fetched`)
-    return results
+    console.log(`[sitemap] getTraderShard(${shardIndex}): ${dated.length} traders fetched`)
+    return dated
   } catch (error) {
     console.error(
       '[sitemap] getTraderShard exception:',

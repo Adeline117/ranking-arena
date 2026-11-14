@@ -340,8 +340,42 @@ export async function checkRateLimitFull(
       }
     }
 
-    // 非敏感操作使用 fail-open 策略，允许请求通过
-    return { response: null, meta: null }
+    // 非敏感操作：不再完全放行。Upstash 运行时故障时退到进程内粗粒度兜底
+    // （每实例计数，横向扩展时上限约为 N×配置，但绝不是"无上限"），避免故障
+    // 叠加缓存绕过形成踩踏。
+    const memResult = checkMemoryRateLimit(identifier, finalConfig)
+    if (!memResult.success) {
+      const retryAfter = Math.max(1, Math.ceil((memResult.reset - Date.now()) / 1000))
+      return {
+        response: new NextResponse(
+          JSON.stringify({
+            success: false,
+            error: '请求过于频繁，请稍后再试',
+            code: 'RATE_LIMIT_EXCEEDED',
+            retryAfter,
+          }),
+          {
+            status: 429,
+            headers: {
+              'Content-Type': 'application/json',
+              'X-RateLimit-Limit': finalConfig.requests.toString(),
+              'X-RateLimit-Remaining': '0',
+              'X-RateLimit-Reset': memResult.reset.toString(),
+              'Retry-After': retryAfter.toString(),
+            },
+          }
+        ),
+        meta: null,
+      }
+    }
+    return {
+      response: null,
+      meta: {
+        limit: finalConfig.requests,
+        remaining: memResult.remaining,
+        reset: memResult.reset,
+      },
+    }
   }
 }
 

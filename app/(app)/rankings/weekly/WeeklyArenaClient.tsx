@@ -20,6 +20,7 @@ import Metric from '@/app/components/ui/Metric'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { formatTimeAgo } from '@/lib/utils/date'
+import { oldestDataTimestamp } from '@/lib/utils/data-time'
 import { getExchangeLogoUrl } from '@/lib/utils/avatar'
 import DerivedBoardBadge from '@/app/components/common/DerivedBoardBadge'
 import ProvenanceFooter from '@/app/components/common/ProvenanceFooter'
@@ -368,6 +369,10 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
     (acc, r) => (acc === null || r.provenance.asOf > acc ? r.provenance.asOf : acc),
     null
   )
+
+  // Footer "as of" is the OLDEST source time so one stale exchange cannot hide
+  // behind a fresher one; the week window below still ends at the freshest.
+  const oldestAsOf = oldestDataTimestamp(rankedRows.map((r) => r.provenance.asOf))
 
   // Pooled week window: the 7-day span ending at the freshest snapshot.
   const weekRange = useMemo(() => formatWeeklyRange(newestAsOf, language), [newestAsOf, language])
@@ -787,8 +792,8 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
         </Box>
       )}
 
-      {newestAsOf && (
-        <ProvenanceFooter provenance={{ source: 'arena', asOf: newestAsOf }} exchangeName="Arena" />
+      {oldestAsOf && (
+        <ProvenanceFooter provenance={{ source: 'arena', asOf: oldestAsOf }} exchangeName="Arena" />
       )}
     </Box>
   )

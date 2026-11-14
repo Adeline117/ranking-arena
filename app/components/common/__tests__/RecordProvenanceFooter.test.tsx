@@ -83,4 +83,42 @@ describe('RecordProvenanceFooter', () => {
     expect(footer.textContent?.match(/recordProvenanceUnknown/g)).toHaveLength(2)
     expect(container.querySelector('time')).not.toBeInTheDocument()
   })
+
+  it('flags a source clock older than 48 hours as possibly delayed', () => {
+    jest.useFakeTimers({ now: Date.parse('2026-11-11T12:00:00.000Z') })
+    try {
+      render(
+        <RecordProvenanceFooter
+          provenance={provenance({ sourceAsOf: '2026-08-01T00:00:00.000Z' })}
+        />
+      )
+      expect(screen.getByTestId('record-provenance-stale')).toHaveTextContent('dataStaleWarning')
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('does not flag a fresh source clock and treats the epoch sentinel as unknown', () => {
+    jest.useFakeTimers({ now: Date.parse('2026-11-11T12:00:00.000Z') })
+    try {
+      const { rerender, container } = render(
+        <RecordProvenanceFooter
+          provenance={provenance({ sourceAsOf: '2026-11-11T11:00:00.000Z' })}
+        />
+      )
+      expect(screen.queryByTestId('record-provenance-stale')).not.toBeInTheDocument()
+
+      rerender(
+        <RecordProvenanceFooter
+          provenance={provenance({ sourceAsOf: '1970-01-01T00:00:00.000Z' })}
+        />
+      )
+      expect(container.querySelector('time')).not.toBeInTheDocument()
+      expect(screen.getByText(/recordProvenanceSourceAsOf/)).toHaveTextContent(
+        'recordProvenanceSourceAsOf recordProvenanceUnknown'
+      )
+    } finally {
+      jest.useRealTimers()
+    }
+  })
 })

@@ -72,6 +72,21 @@ export function pageFetcher(session: FetchSession): JsonFetcher {
   return (template) => session.pageFetch(template)
 }
 
+/**
+ * 404/410 from a replay: the upstream resource (typically a trader profile)
+ * does not exist / is gone. Distinct from transient failures so per-trader
+ * crawlers can back off instead of retrying it every continuation hop.
+ */
+export class UpstreamGoneError extends Error {
+  constructor(
+    public readonly status: 404 | 410,
+    url: string
+  ) {
+    super(`[ingest] replay ${status} for ${url}`)
+    this.name = 'UpstreamGoneError'
+  }
+}
+
 /** One paced replay request; throws BlockedUpstreamError on 401/403/429. */
 export async function replayJson(
   session: FetchSession,
@@ -81,6 +96,7 @@ export async function replayJson(
   return session.paced(async () => {
     const { status, json } = await fetcher(template)
     if (isBlockedStatus(status)) throw new BlockedUpstreamError(status, template.url)
+    if (status === 404 || status === 410) throw new UpstreamGoneError(status, template.url)
     if (status < 200 || status >= 300) {
       throw new Error(`[ingest] replay ${status} for ${template.url}`)
     }

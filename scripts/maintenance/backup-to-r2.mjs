@@ -57,7 +57,7 @@ import {
   preparePostgresConnection,
   unverifiedBackupRecoveryMetadata,
 } from './backup-restore-contract.mjs'
-import { cleanPostgresConnectionEnv } from './postgres-cli-env.mjs'
+import { cleanPostgresConnectionEnv, libpqEnvFromConnectionUrl } from './postgres-cli-env.mjs'
 
 export { assertBackupArtifact, COMPLETE_BACKUP_MIN_BYTES, IMMUTABLE_BACKUP_FILENAME_PATTERN }
 
@@ -394,7 +394,8 @@ export async function attestUploadedBackupArtifact({
 
 /**
  * Keep database credentials out of pg_dump's argv. libpq accepts the password
- * through PGPASSWORD; the sanitized URI is later supplied through PGDATABASE.
+ * through PGPASSWORD; the sanitized URI is later split into libpq variables
+ * (a URI in PGDATABASE would be read as a literal database name).
  */
 export function preparePgDumpConnection(databaseUrl) {
   return preparePostgresConnection(databaseUrl, 'DATABASE_URL')
@@ -402,7 +403,7 @@ export function preparePgDumpConnection(databaseUrl) {
 
 /**
  * Stream pg_dump through Node's gzip implementation without a shell. The
- * sanitized libpq URI is supplied through PGDATABASE, never process argv.
+ * sanitized URI is supplied as individual libpq variables, never process argv.
  * The completion sentinel is emitted only after pg_dump has closed with zero,
  * so a partial producer can never become an upload-eligible gzip.
  */
@@ -416,7 +417,7 @@ export async function runPgDumpPipeline({
   timeoutMs = 1_800_000,
 }) {
   const pgDumpEnv = cleanPostgresConnectionEnv(process.env, {
-    PGDATABASE: connectionUrl,
+    ...libpqEnvFromConnectionUrl(connectionUrl, 'DATABASE_URL'),
     ...(password === undefined ? {} : { PGPASSWORD: password }),
   })
   for (const name of [

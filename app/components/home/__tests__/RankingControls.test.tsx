@@ -13,6 +13,7 @@ jest.mock('@/app/components/Providers/LanguageProvider', () => ({
       (
         ({
           rankingControlsDataAsOf: 'Data as of',
+          dataStaleWarning: 'Data may be delayed',
           rankingControlsPrev: 'Previous',
           rankingControlsNext: 'Next',
         }) as Record<string, string>
@@ -29,7 +30,7 @@ describe('RankingControls data timestamp', () => {
     push.mockClear()
   })
 
-  it('shows the leaderboard compute timestamp instead of the page-load time', async () => {
+  it('shows the source watermark instead of the page-load time', async () => {
     const lastUpdated = '2026-07-17T08:42:00.000Z'
     render(
       <RankingControls
@@ -51,6 +52,66 @@ describe('RankingControls data timestamp', () => {
         minute: '2-digit',
       })
     )
+  })
+
+  it('keeps the date of an old watermark and flags it as possibly delayed', async () => {
+    jest.useFakeTimers({ now: Date.parse('2026-11-11T12:00:00.000Z') })
+    try {
+      const lastUpdated = '2026-08-16T09:30:00.000Z'
+      render(
+        <RankingControls
+          activeRange="90D"
+          page={0}
+          totalCount={50}
+          totalCountIsExact
+          hasMore={false}
+          perPage={50}
+          lastUpdated={lastUpdated}
+        />
+      )
+      const timestamp = screen.getByText(/^Data as of /)
+      // A bare clock time would read as "today"; the date must stay visible.
+      expect(timestamp.textContent).toMatch(/Aug 1[56]/)
+      expect(screen.getByTestId('ranking-data-stale')).toHaveTextContent('Data may be delayed')
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('does not flag a watermark within 48 hours', () => {
+    jest.useFakeTimers({ now: Date.parse('2026-11-11T12:00:00.000Z') })
+    try {
+      render(
+        <RankingControls
+          activeRange="90D"
+          page={0}
+          totalCount={50}
+          totalCountIsExact
+          hasMore={false}
+          perPage={50}
+          lastUpdated="2026-11-11T11:00:00.000Z"
+        />
+      )
+      expect(screen.getByText(/^Data as of /)).toBeInTheDocument()
+      expect(screen.queryByTestId('ranking-data-stale')).not.toBeInTheDocument()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('shows nothing for the epoch unknown sentinel', () => {
+    render(
+      <RankingControls
+        activeRange="90D"
+        page={0}
+        totalCount={50}
+        totalCountIsExact
+        hasMore={false}
+        perPage={50}
+        lastUpdated="1970-01-01T00:00:00.000Z"
+      />
+    )
+    expect(screen.queryByText(/^Data as of /)).not.toBeInTheDocument()
   })
 
   it('does not invent a freshness timestamp when the data source has none', () => {

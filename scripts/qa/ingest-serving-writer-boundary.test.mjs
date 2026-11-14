@@ -82,6 +82,10 @@ const legacyCopierQueryBuilderWriter =
 const REVIEWED_GENERIC_HISTORY_CALLERS = new Set([
   'lib/ingest/serving/publish.ts',
   'worker/src/ingest/processors/tier-b-profiles.ts',
+  // #440 backward continuation: kind is typed ContinuableHistoryKind
+  // ('orders' | 'transfers') and it publishes with a null cursor, so the
+  // forward incremental cursor stays owned by tier-b-profiles.
+  'worker/src/ingest/processors/tier-b-history-continuation.ts',
   'worker/src/ingest/processors/tier-c-profile.ts',
 ])
 const OPERATOR_ONLY_LEGACY_HISTORY_READERS = new Set()

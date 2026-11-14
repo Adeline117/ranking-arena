@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { defineConfig, devices } from '@playwright/test'
 
 /**
@@ -8,6 +9,9 @@ import { defineConfig, devices } from '@playwright/test'
 const PORT = 3111
 const FAKE_SUPABASE_PORT = 54399
 const FAKE_SUPABASE_URL = `http://127.0.0.1:${FAKE_SUPABASE_PORT}`
+const BLOCK_OUTBOUND = path.resolve(__dirname, 'scripts/e2e/block-outbound.cjs')
+// Outside outputDir, which Playwright wipes at startup; .next is git-ignored.
+const BLOCKED_LOG = path.resolve(__dirname, '.next/hermetic-blocked-outbound-hosts.txt')
 
 export default defineConfig({
   testDir: './e2e/hermetic',
@@ -45,6 +49,9 @@ export default defineConfig({
       timeout: 60_000,
       env: {
         NODE_ENV: 'production',
+        // Server-side outbound requests to non-loopback hosts fail fast (see script).
+        NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --require ${BLOCK_OUTBOUND}`.trim(),
+        HERMETIC_BLOCKED_LOG: BLOCKED_LOG,
         NEXT_PUBLIC_SUPABASE_URL: FAKE_SUPABASE_URL,
         NEXT_PUBLIC_SUPABASE_ANON_KEY: 'ci-build-anon-placeholder',
         SUPABASE_URL: FAKE_SUPABASE_URL,

@@ -124,10 +124,14 @@ VALUES
    '00000000-0000-4000-8000-000000000001', '{}', now() - interval '9 days'),
   ('10000000-0000-4000-8000-000000000002', 'save_trader',
    '00000000-0000-4000-8000-000000000001', '{}', now() - interval '8 days'),
+  -- User 2 is anchored to UTC noon: "now() - 9 days" plus one hour crosses a
+  -- UTC date boundary when the proof runs between 23:00 and 24:00 UTC.
   ('10000000-0000-4000-8000-000000000003', 'view_trader',
-   '00000000-0000-4000-8000-000000000002', '{}', now() - interval '9 days'),
+   '00000000-0000-4000-8000-000000000002', '{}',
+   pg_catalog.date_trunc('day', now(), 'UTC') - interval '9 days' + interval '12 hours'),
   ('10000000-0000-4000-8000-000000000004', 'follow_trader',
-   '00000000-0000-4000-8000-000000000002', '{}', now() - interval '9 days' + interval '1 hour'),
+   '00000000-0000-4000-8000-000000000002', '{}',
+   pg_catalog.date_trunc('day', now(), 'UTC') - interval '9 days' + interval '13 hours'),
   ('10000000-0000-4000-8000-000000000005', 'view_trader',
    '00000000-0000-4000-8000-000000000003', '{}', now() - interval '9 days'),
   ('10000000-0000-4000-8000-000000000006', 'create_trader_alert',

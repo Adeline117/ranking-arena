@@ -27,12 +27,12 @@ jest.mock('@/lib/utils/arena-score', () => ({
   computeArenaScoresV4: (inputs: Array<{ pnl: number }>) => mockComputeArenaScoresV4(inputs),
 }))
 
-jest.mock('../scoring-helpers', () => ({
+jest.mock('@/lib/rankings/publication/scoring-helpers', () => ({
   markOutliers: () => 0,
   applyArenaFollowers: async () => ({ applied: 0, uniqueAccounts: 1 }),
 }))
 
-jest.mock('../helpers', () => ({
+jest.mock('@/lib/rankings/publication/helpers', () => ({
   detectTraderType: () => 'human',
 }))
 

@@ -47,12 +47,13 @@ interface AlertDispatchResult {
  *   - repo:  ALERT_GITHUB_REPO | GITHUB_REPOSITORY  (format: "owner/repo")
  */
 async function sendGithubIssueAlert(payload: AlertPayload): Promise<boolean> {
+  const isCritical = payload.level === 'critical'
   const token = process.env.ALERT_GITHUB_TOKEN || process.env.GITHUB_TOKEN || process.env.GH_TOKEN
   const repo = process.env.ALERT_GITHUB_REPO || process.env.GITHUB_REPOSITORY
   if (!token || !repo) return false // env-gated no-op when not configured
 
   try {
-    const title = `🛑 [SEV1] ${payload.title}`
+    const title = isCritical ? `🛑 [SEV1] ${payload.title}` : `⚠️ [WARN] ${payload.title}`
     const detailLines = payload.details
       ? Object.entries(payload.details).map(([k, v]) => `- **${k}**: ${String(v)}`)
       : []
@@ -61,7 +62,9 @@ async function sendGithubIssueAlert(payload: AlertPayload): Promise<boolean> {
       '',
       ...detailLines,
       '',
-      `_Telegram 主通道发送失败，GitHub issue 兜底（SEV1 备份通道）。_`,
+      isCritical
+        ? `_Telegram 主通道发送失败，GitHub issue 兜底（SEV1 备份通道）。_`
+        : `_Telegram 主通道发送失败，warning 级 GitHub issue 兜底（同标题 6h 内只发一次）。_`,
       new Date().toISOString(),
     ].join('\n')
 
@@ -117,6 +120,73 @@ async function sendGithubIssueAlert(payload: AlertPayload): Promise<boolean> {
     )
     return false
   }
+}
+
+// ============================================
+// 主通道失败兜底(warning 也不能消失,2026-11 audit P2-9)
+// ============================================
+
+/** Every alert whose primary channel failed, any level, newest first. Read
+ *  out-of-band (no Telegram needed); bounded so it cannot grow forever. */
+export const UNDELIVERED_ALERTS_KEY = 'alert:undelivered'
+const UNDELIVERED_ALERTS_MAX = 500
+/** Same-title warning fallbacks open/comment a GitHub issue at most once per window. */
+const WARNING_FALLBACK_DEDUP_MS = 6 * 3600_000
+const warningFallbackMemo: Map<string, number> = new Map()
+
+function titleHash(title: string): string {
+  let h = 5381
+  for (let i = 0; i < title.length; i++) h = ((h << 5) + h + title.charCodeAt(i)) | 0
+  return (h >>> 0).toString(36)
+}
+
+async function recordUndeliveredAlert(payload: AlertPayload, reason: string): Promise<void> {
+  try {
+    const redis = await getSharedRedis()
+    if (!redis) return
+    await redis.lpush(
+      UNDELIVERED_ALERTS_KEY,
+      JSON.stringify({
+        level: payload.level,
+        title: payload.title.slice(0, 200),
+        message: payload.message.slice(0, 500),
+        reason,
+        at: new Date().toISOString(),
+      })
+    )
+    await redis.ltrim(UNDELIVERED_ALERTS_KEY, 0, UNDELIVERED_ALERTS_MAX - 1)
+  } catch (err) {
+    logger.error(
+      '[send-alert] could not persist undelivered alert:',
+      err instanceof Error ? err.message : String(err)
+    )
+  }
+}
+
+/** Claim the per-title warning fallback window (Redis SET NX; in-memory when
+ *  Redis is unavailable). Returns false when this title already fell back. */
+async function claimWarningFallback(title: string): Promise<boolean> {
+  const key = `alert:fallback:warning:${titleHash(title)}`
+  try {
+    const redis = await getSharedRedis()
+    if (redis) {
+      const res = await redis.set(key, Date.now(), {
+        nx: true,
+        px: WARNING_FALLBACK_DEDUP_MS,
+      })
+      return res === 'OK'
+    }
+  } catch (err) {
+    logger.error(
+      '[send-alert] warning fallback dedup read failed; using local memo:',
+      err instanceof Error ? err.message : String(err)
+    )
+  }
+  const now = Date.now()
+  const last = warningFallbackMemo.get(key)
+  if (last && now - last < WARNING_FALLBACK_DEDUP_MS) return false
+  warningFallbackMemo.set(key, now)
+  return true
 }
 
 /** Channel registry — add new channels here (Novu-inspired) */
@@ -214,12 +284,23 @@ async function dispatchAlert(payload: AlertPayload): Promise<AlertDispatchResult
   // (a 401-broken token silently swallowed 28 deploys' worth of alerts). For
   // critical alerts, use the independent GitHub channel only for a real
   // Telegram failure. Expected dedup/in-flight suppression is already handled.
-  if (payload.level === 'critical' && telegramResult && !telegramResult.delivery.handled) {
-    try {
-      const ghSent = await sendGithubIssueAlert(payload)
-      if (ghSent) sentChannels.push('github')
-    } catch (err) {
-      logger.warn('[Alert] GitHub issue backup channel failed:', err)
+  //
+  // Warning alerts get the same independent channel (audit P2-9: data gaps,
+  // meta-monitor and disk warnings vanished whenever Telegram was 401),
+  // de-duplicated per title for 6h so a noisy warning cannot spam issues.
+  // Every real primary failure, any level, is also persisted to Redis.
+  if (telegramResult && !telegramResult.delivery.handled) {
+    await recordUndeliveredAlert(payload, 'telegram_failed')
+    const fallback =
+      payload.level === 'critical' ||
+      (payload.level === 'warning' && (await claimWarningFallback(payload.title)))
+    if (fallback) {
+      try {
+        const ghSent = await sendGithubIssueAlert(payload)
+        if (ghSent) sentChannels.push('github')
+      } catch (err) {
+        logger.warn('[Alert] GitHub issue backup channel failed:', err)
+      }
     }
   }
 

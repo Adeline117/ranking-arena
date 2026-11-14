@@ -2,13 +2,28 @@ name = "ranking-arena-proxy"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
-# Route through non-US Cloudflare edge to avoid Binance geo-blocking
-# Smart placement was routing to blocked US regions; disabled.
-# Workers subrequests egress from the colo nearest to the origin server,
-# so Binance (Singapore origin) should egress from a non-US colo.
-# If still blocked, set PROXY_FALLBACK_URL to a VPS-based proxy.
-[placement]
-mode = "smart"
+# Placement: Cloudflare default (run in the colo nearest the caller). Smart
+# placement was removed on purpose (issue #439); do not re-add it.
+#
+# Why: this worker existed to reach exchange APIs that geo-block some regions
+# (Binance/Bybit return 451 to US egress). Smart placement chooses a location
+# by subrequest latency to the back-end, only among colos the worker already
+# ran in, and is blind to jurisdiction, so it can move execution - and the
+# subrequest egress - into a blocked region. Commit a98b5a6b4 (2026-03) saw
+# exactly that ("smart placement was routing to blocked US regions") but only
+# changed the comment, leaving `mode = "smart"` shipped until now.
+#
+# Today src/index.ts is a fixed 410 tombstone with no upstream fetch
+# (scripts/qa/v1-legacy-proxy-import-containment.test.mjs), so smart placement
+# had nothing to optimize and only added an unpredictable hop. Reopening the
+# proxy needs a reviewed source change; that change must also pick an explicit
+# placement (e.g. `[placement] region = "aws:ap-northeast-1"`) and prove the
+# observed egress region against the target exchanges before any deploy.
+# Cloudflare does not document that a region hint fixes egress geolocation.
+# If an exchange is still blocked, PROXY_FALLBACK_URL selects a VPS proxy.
+#
+# Editing this file deploys nothing; V1 agents must not deploy or reconfigure
+# the proxy.
 
 [vars]
 ALLOWED_ORIGINS = "https://www.arenafi.org,https://arenafi.org"

@@ -18,7 +18,8 @@ import type {
   TraderProfileRow,
   SnapshotMetrics,
 } from '@/lib/types/trading-platform'
-import { getStalenessSeconds, STALENESS_THRESHOLDS } from '@/lib/types/trading-platform'
+import type { SourceFreshnessRow } from '@/lib/rankings/source-freshness'
+import { sourceWatermarkForWindows } from '@/lib/rankings/source-watermark'
 import { ALL_SOURCES } from '@/lib/constants/exchanges'
 import {
   fetchPublicProfileRankingRows,
@@ -76,29 +77,40 @@ export async function GET(
       // structurally quarantined below instead of being read. V1 also never
       // exposes legacy refresh-queue state.
       const windows: SnapshotWindow[] = ['7D', '30D', '90D']
-      const [profileResult, sourceIdentityResult, rankingCohort] = await Promise.all([
-        supabase
-          .from('trader_profiles_v2')
-          .select(
-            'id, platform, trader_key, display_name, avatar_url, profile_url, bio, bio_source, tags, updated_at, last_enriched_at, created_at'
-          )
-          .eq('platform', platform)
-          .eq('trader_key', trader_key)
-          .maybeSingle(),
-        // Identity/profile data is not ranking authority and remains visible
-        // when this trader has no published rank.
-        supabase
-          .from('trader_sources')
-          .select('handle, avatar_url')
-          .eq('source', platform)
-          .eq('source_trader_id', trader_key)
-          .maybeSingle(),
-        fetchPublicProfileRankingRows(supabase, {
-          source: platform,
-          sourceTraderId: trader_key,
-          periods: PUBLIC_PROFILE_RANKING_PERIODS,
-        }),
-      ])
+      const [profileResult, sourceIdentityResult, rankingCohort, freshnessResult] =
+        await Promise.all([
+          supabase
+            .from('trader_profiles_v2')
+            .select(
+              'id, platform, trader_key, display_name, avatar_url, profile_url, bio, bio_source, tags, updated_at, last_enriched_at, created_at'
+            )
+            .eq('platform', platform)
+            .eq('trader_key', trader_key)
+            .maybeSingle(),
+          // Identity/profile data is not ranking authority and remains visible
+          // when this trader has no published rank.
+          supabase
+            .from('trader_sources')
+            .select('handle, avatar_url')
+            .eq('source', platform)
+            .eq('source_trader_id', trader_key)
+            .maybeSingle(),
+          fetchPublicProfileRankingRows(supabase, {
+            source: platform,
+            sourceTraderId: trader_key,
+            periods: PUBLIC_PROFILE_RANKING_PERIODS,
+          }),
+          // When the exchange data behind each published window was captured.
+          // `computed_at` (score recompute) and the profile row's `updated_at`
+          // are not data freshness and must never stand in for it.
+          Promise.resolve(
+            supabase
+              .from('leaderboard_source_freshness')
+              .select('season_id, source, source_as_of')
+              .eq('source', platform)
+              .in('season_id', [...PUBLIC_PROFILE_RANKING_PERIODS])
+          ).catch((error: unknown) => ({ data: null, error })),
+        ])
 
       type LrRow = {
         season_id: string
@@ -112,7 +124,6 @@ export async function GET(
         followers: number | null
         arena_score: number | null
         rank: number | null
-        computed_at: string | null
       }
       const lrRows: LrRow[] = rankingCohort.rows.map((row) => ({
         season_id: row.season_id,
@@ -126,7 +137,6 @@ export async function GET(
         followers: finiteOrNull(row.followers),
         arena_score: finiteOrNull(row.arena_score),
         rank: row.rank,
-        computed_at: typeof row.computed_at === 'string' ? row.computed_at : null,
       }))
       const lrByWindow = new Map<string, LrRow>()
       for (const row of lrRows) {
@@ -212,21 +222,24 @@ export async function GET(
         asset_breakdown: null,
       }
 
-      // Determine staleness from the most recent published ranking row.
-      const latestUpdate = getLatestUpdate(
-        profile.updated_at,
-        lrRows.map((r) => r.computed_at).filter((x): x is string => !!x)
+      // Data freshness = the oldest source watermark among the published
+      // windows. A missing/invalid watermark for any of them leaves it unknown
+      // (null, stale) rather than falling back to compute or request time.
+      const freshness = sourceWatermarkForWindows(
+        platform,
+        lrRows.map((r) => r.season_id),
+        Array.isArray(freshnessResult?.data)
+          ? (freshnessResult.data as Array<SourceFreshnessRow & { season_id: unknown }>)
+          : []
       )
-      const stalenessSeconds = getStalenessSeconds(latestUpdate)
-      const isStale = stalenessSeconds > STALENESS_THRESHOLDS.STALE
 
       const response: PublicTraderDetailResponse = {
         profile,
         snapshots,
         timeseries,
-        updated_at: latestUpdate,
-        is_stale: isStale,
-        staleness_seconds: stalenessSeconds,
+        updated_at: freshness.asOf,
+        is_stale: freshness.isStale,
+        staleness_seconds: freshness.ageSeconds,
         // Compatibility field: V1 never exposes legacy refresh queue state.
         refresh_job: null,
         ranking_visibility: rankingCohort.rankingVisibility,
@@ -241,14 +254,4 @@ export async function GET(
   )
 
   return handler(request)
-}
-
-function getLatestUpdate(profileUpdated: string, snapshotDates: string[]): string {
-  const dates = [profileUpdated, ...snapshotDates]
-    .filter(Boolean)
-    .map((d) => new Date(d).getTime())
-    .filter((t) => t > 0)
-
-  if (dates.length === 0) return new Date(0).toISOString()
-  return new Date(Math.max(...dates)).toISOString()
 }

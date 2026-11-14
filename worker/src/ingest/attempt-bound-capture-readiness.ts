@@ -34,8 +34,11 @@ export const TIER_A_ONE_PHASE_COMMIT_HELPER_SHA256 =
   'd06a19a74542804b5a56ba6ecbece173e2b3c651aaca480a38abbada7945a431' as const
 export const TIER_A_EXECUTION_CONSTRAINT_CATALOG_SHA256 =
   '6e9627e5c475035c5e4f17c39754b25f81b16360ab84244b66bb50239d8dc0a9' as const
+// Trigger catalog installed by 20261111192134 (the launch replacement for
+// 20260729061000): the original 21 rows plus the three reviewed raw_objects
+// guards from 20260803100000, 20260804053000, and 20260808010000.
 export const TIER_A_EXECUTION_TRIGGER_CATALOG_SHA256 =
-  '5e77d9f748cdb3993d03724d3f832edbb1087d5fb618d72b62d3fb02f2c12af8' as const
+  '4f0ab9c41b541eabc9ce75973356b567a45a2ad6942a4e327e182bcc43e73100' as const
 
 const LEGACY_START_RPC_SIGNATURE =
   'arena.start_leaderboard_acquisition_attempt(uuid,integer,integer,text,text,integer,text,text,text)'
@@ -913,7 +916,7 @@ export const TIER_A_EXECUTION_ENFORCEMENT_CATALOG_SQL = `WITH marker_identity AS
   ),
   trigger_contract AS (
     SELECT
-      pg_catalog.count(*) = 21
+      pg_catalog.count(*) = 24
       AND pg_catalog.encode(
             pg_catalog.sha256(
               pg_catalog.convert_to(
