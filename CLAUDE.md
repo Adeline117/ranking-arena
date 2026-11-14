@@ -468,6 +468,31 @@ These enforce: (1) fire-and-forget (never blocks response), (2) dedup (same acto
    CI deploy、SSH、`npm ci`、PM2 或任何 host-side recovery。恢复时必须由 owner 用新的
    发布计划重新评估单一通道、exact artifact、writer 排空和回滚 witness。
 
+### 减法纪律 — MANDATORY（防运维/守卫代码只增不减）
+
+**根源教训（2026-11 审计）**：2026 年 6–10 月，工作流 + `scripts/qa` + 两个 worker
+部署脚本及其测试净增约 5.3 万行，净减少超过 30 行的提交只有 6 个。两个部署脚本
+从约 100 行涨到 1395/1719 行，膨胀部分的提交没有正文、对不上任何事故记录；配套
+的 4700 行测试从未接入 CI。根因：所有指示都只要求"加"，没有一条让代码变少；
+源码文本断言把实现钉死，删比加贵；"退役"的做法是留墓碑再加一份测试。
+
+1. **守卫要有事故依据。** 给部署脚本、工作流、钩子、守卫测试加校验前，先指出它
+   防的是哪一次已发生的事故（postmortem 或提交哈希）。审查推演出来的理论竞态只
+   记进文档，不写代码。
+2. **已暂停路径只减不增。** job 为 `if: ${{ false }}` 的工作流、V1 下禁止运行的
+   部署脚本：NO-GO 期间只允许删除或缩减，不得新增步骤、校验或测试。恢复时由
+   owner 的发布计划重新评估。
+3. **测试断言结构或行为，不断言源码文本。** 工作流：解析 YAML 后断言触发器、
+   `if`、`permissions`、`uses`、`secrets`。脚本：真跑。禁止用正则钉步骤名、变量名、
+   shell 语句、注释或出现次数。改到被文本断言钉住的源文件时，把那条断言删掉，
+   不迁移。
+4. **退役就是删除。** 此后停用的脚本直接删文件，git 历史就是存档；不留墓碑，
+   不为"它已经没了"新增 containment 测试。只有外部调用方依赖 410/RETIRED 响应
+   的路由才保留墓碑。
+5. **没接进 CI 的测试不算测试。** 新增测试必须在同一个 PR 里接入 CI；发现没人
+   跑的测试，要么接入，要么删。
+6. **修复类 PR 净增行数要说明理由**：在描述里写清为什么不能靠删除或合并解决。
+
 ### Database Concurrency Safety — MANDATORY
 
 - **Counters**: NEVER use trigger-based `SET count = count + 1`. Use atomic RPC functions (`increment_*_count` / `decrement_*_count` from migration 00021) called explicitly in API handlers.
@@ -572,7 +597,7 @@ See `.claude/conductor.json` for multi-agent parallel orchestration:
 
 All virtual team skills share `.claude/skills/arena-shared-preamble.md`:
 
-- **Boil the Lake**: Always recommend complete implementation (AI makes marginal cost ~0)
+- **Boil the Lake**: Recommend complete implementation for product features (AI makes marginal cost ~0). Does NOT apply to deploy/CI/guard code — see 减法纪律
 - **Unified AskUserQuestion**: Re-ground context → simplify → recommend with score → lettered options with dual effort estimates
 - **Effort Compression**: Show human time vs CC time (100x boilerplate, 50x tests, 30x features)
 - **Review Readiness Dashboard**: Track review completion, Eng Review gates `/ship`
