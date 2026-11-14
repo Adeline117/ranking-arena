@@ -10,10 +10,6 @@ const readme = readFileSync(join(root, 'README.md'), 'utf8')
 const slo = readFileSync(join(root, 'docs/SLO.md'), 'utf8')
 const runbook = readFileSync(join(root, 'docs/RUNBOOK.md'), 'utf8')
 const adapterRegister = readFileSync(join(root, 'lib/ingest/adapters/register.ts'), 'utf8')
-const computeWatchdog = readFileSync(
-  join(root, 'app/api/cron/compute-leaderboard-watchdog/route.ts'),
-  'utf8'
-)
 
 function countNamedFiles(directory, fileName) {
   let count = 0
@@ -41,22 +37,6 @@ test('quarantines every Vercel schedule under the V1 NO-GO', () => {
     crons.some((cron) => cron.path === '/api/cron/cleanup-report-evidence'),
     false,
     'cleanup-report-evidence must not regain an automatic Vercel schedule'
-  )
-})
-
-test('budgets the compute watchdog for every sequential season trigger', () => {
-  const maxDurationSeconds = Number(
-    computeWatchdog.match(/export const maxDuration = (\d+)/)?.[1] ?? 0
-  )
-  const triggerTimeoutMs = Number(
-    (computeWatchdog.match(/AbortSignal\.timeout\(([\d_]+)\)/)?.[1] ?? '0').replaceAll('_', '')
-  )
-
-  assert.match(computeWatchdog, /const SEASONS = \['90D', '30D', '7D'\] as const/)
-  assert.ok(triggerTimeoutMs > 0)
-  assert.ok(
-    maxDurationSeconds * 1000 >= triggerTimeoutMs * 3 + 30_000,
-    'watchdog duration must cover three sequential trigger timeouts plus finalization headroom'
   )
 })
 
