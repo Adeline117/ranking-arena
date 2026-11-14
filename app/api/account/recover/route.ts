@@ -1,6 +1,6 @@
 /** Recover an account during its 30-day deletion grace period. */
 
-import { escapeIlikeValue } from '@/lib/sanitize'
+import { escapeLikePattern } from '@/lib/sanitize'
 import {
   PENDING_DELETION_BAN_DURATION,
   RENEWABLE_SUBSCRIPTION_STATUSES,
@@ -176,7 +176,7 @@ export const POST = withPublic(
           { status: 401 }
         )
       }
-      const emailPattern = escapeIlikeValue(normalizedEmail, 320)
+      const emailPattern = escapeLikePattern(normalizedEmail, 320, { direct: true })
 
       const { data: profile, error } = await admin
         .from('user_profiles')

@@ -4,7 +4,7 @@ import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { socialFeatureGuard } from '@/lib/features'
 import { parseLimit } from '@/lib/utils/safe-parse'
-import { escapeIlikeValue } from '@/lib/sanitize'
+import { escapeLikePattern } from '@/lib/sanitize'
 import { isPublicProfileActive } from '@/lib/profile/public-audience'
 
 const logger = createLogger('api:users-search')
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseAdmin()
 
     // Direct .ilike() filter: keep dots so dotted handles stay searchable.
-    const escapedQ = escapeIlikeValue(q)
+    const escapedQ = escapeLikePattern(q, 200, { direct: true })
 
     const candidateLimit = Math.min(limit * 4, 80)
     const { data: userCandidates, error: userCandidatesError } = await supabase

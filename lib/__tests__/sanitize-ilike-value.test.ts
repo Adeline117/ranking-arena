@@ -1,6 +1,9 @@
-import { escapeIlikeValue, escapeLikePattern } from '../sanitize'
+import { escapeLikePattern } from '../sanitize'
 
-describe('escapeIlikeValue', () => {
+const escapeIlikeValue = (input: string, maxLength?: number) =>
+  escapeLikePattern(input, maxLength, { direct: true })
+
+describe('escapeLikePattern({ direct: true })', () => {
   it('keeps the characters that are only special inside an .or() string', () => {
     expect(escapeIlikeValue('john.doe')).toBe('john.doe')
     expect(escapeIlikeValue('first.last@example.com')).toBe('first.last@example.com')
@@ -18,5 +21,11 @@ describe('escapeIlikeValue', () => {
   it('caps the length', () => {
     expect(escapeIlikeValue('x'.repeat(500))).toHaveLength(200)
     expect(escapeIlikeValue('x'.repeat(500), 10)).toHaveLength(10)
+  })
+})
+
+describe('escapeLikePattern (default, for .or() strings)', () => {
+  it('still strips filter syntax and escapes wildcards', () => {
+    expect(escapeLikePattern('a.b,c(d)%_')).toBe('abcd\\%\\_')
   })
 })
