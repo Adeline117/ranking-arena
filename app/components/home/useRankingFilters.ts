@@ -914,18 +914,6 @@ export function useRankingFilters({
     trackEvent('paywall_blocked', { source: 'home_ranking_filters' })
   }, [])
 
-  const handleCopyLink = useCallback(() => {
-    const url = window.location.href
-    navigator.clipboard
-      .writeText(url)
-      .then(() => {
-        showToast(t('linkCopied'), 'success')
-      })
-      .catch(() => {
-        showToast(t('copyFailed'), 'error')
-      })
-  }, [showToast, t])
-
   const handleResetFilters = useCallback(() => {
     const commitReset = () => {
       // Commit all labels together only after the matching all-board/score
@@ -1016,7 +1004,6 @@ export function useRankingFilters({
     handleLoadFilter,
     handleDeleteFilter,
     handleProRequired,
-    handleCopyLink,
     handleResetFilters,
     handleFilterToggle,
     formatLastUpdated,

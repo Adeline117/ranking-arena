@@ -41,7 +41,6 @@ jest.mock('../useRankingFilters', () => ({
     handleLoadFilter: jest.fn(),
     handleDeleteFilter: jest.fn(),
     handleProRequired: jest.fn(),
-    handleCopyLink: jest.fn(),
     handleResetFilters: jest.fn(),
     handleFilterToggle: jest.fn(),
     formatLastUpdated: () => null,
