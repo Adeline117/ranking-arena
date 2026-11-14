@@ -251,6 +251,7 @@ const ko = {
   na: 'N/A',
   score: '점수',
   rankingMobileMetricLabel: '각 행에 표시할 두 번째 지표',
+  rankingMobileSortLabel: '랭킹 정렬 기준',
   // Group application related
   applyCreateGroup: '그룹 생성 신청',
   groupName: '그룹 이름',

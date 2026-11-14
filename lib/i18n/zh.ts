@@ -246,6 +246,7 @@ const zh = {
   na: '暂无',
   score: '评分',
   rankingMobileMetricLabel: '每行显示的第二指标',
+  rankingMobileSortLabel: '排行榜排序方式',
   // 小组申请相关
   applyCreateGroup: '申请创办小组',
   groupName: '小组名称',

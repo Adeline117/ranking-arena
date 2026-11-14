@@ -252,6 +252,7 @@ const en = {
   na: 'N/A',
   score: 'Score',
   rankingMobileMetricLabel: 'Second metric shown in each row',
+  rankingMobileSortLabel: 'Sort rankings by',
   // Group application related
   applyCreateGroup: 'Apply to Create Group',
   groupName: 'Group Name',

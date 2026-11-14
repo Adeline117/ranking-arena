@@ -196,6 +196,7 @@ const enCore = {
   winRatePercent: 'Win%',
   mdd: 'MDD',
   rankingMobileMetricLabel: 'Second metric shown in each row',
+  rankingMobileSortLabel: 'Sort rankings by',
   source: 'Source',
   allExchanges: 'All',
   exchange: 'Exchange',

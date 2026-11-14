@@ -111,4 +111,15 @@ describe('Desktop metric cells — Score-primary hierarchy', () => {
     expect(roi.innerHTML).toContain('accent-success')
     expect(roi).toHaveTextContent('▲')
   })
+
+  it('without a sort handler (SSR-equivalent) the trader column stays a static label', () => {
+    render(<MobileRankHeader />)
+    expect(screen.queryByTestId('mobile-rank-sort-select')).toBeNull()
+    expect(screen.getByTestId('mobile-rank-header')).toHaveTextContent('trader')
+  })
+
+  it('keeps an off-list current sort (e.g. sortino from a URL) selectable', () => {
+    render(<MobileRankHeader sortColumn="sortino" sortDir="asc" onSortChange={jest.fn()} />)
+    expect(screen.getByTestId('mobile-rank-sort-select')).toHaveValue('sortino:asc')
+  })
 })

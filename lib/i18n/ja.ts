@@ -244,6 +244,7 @@ const ja = {
   na: 'N/A',
   score: 'スコア',
   rankingMobileMetricLabel: '各行に表示する2つ目の指標',
+  rankingMobileSortLabel: 'ランキングの並び順',
   applyCreateGroup: 'グループ作成を申請',
   groupName: 'グループ名',
   groupNameEn: 'グループ名（英語）',

@@ -272,6 +272,7 @@ const zhCore = {
   winRatePercent: '胜率',
   mdd: '最大回撤',
   rankingMobileMetricLabel: '每行显示的第二指标',
+  rankingMobileSortLabel: '排行榜排序方式',
   scrollToTop: '返回顶部',
   search: '搜索',
   searchPlaceholder: '搜索交易员、交易所、工具...',
