@@ -1,3 +1,4 @@
+import { HistoryPageCapReachedError } from '@/lib/ingest/core/history-page-cap'
 import type { ParseCtx, SourceRow } from '../../../core/types'
 import type { FetchSession } from '../../../fetch/types'
 import { gtradeAdapter } from '../index'
@@ -407,5 +408,60 @@ describe('gtrade profile transport', () => {
     expect(failure).toEqual(
       expect.objectContaining({ message: '[gtrade] position history incomplete: page_cap' })
     )
+  })
+
+  it('orders: a page-capped window yields its pages then reports HistoryPageCapReachedError', async () => {
+    const fetchMock = jest.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      const endDate = new URL(url).searchParams.get('endDate')
+      if (!endDate) throw new Error('missing endDate')
+      const end = Date.parse(endDate)
+      return response({
+        data: [
+          {
+            id: 10,
+            date: new Date(end - DAY_MS).toISOString(),
+            action: 'TradeClosedMarket',
+            pair: 'ETH/USD',
+            tradeIndex: 7,
+            pnl_net: 5,
+            collateralPriceUsd: 1,
+            price: 2_100,
+          },
+          {
+            id: 9,
+            date: new Date(end - 2 * DAY_MS).toISOString(),
+            action: 'TradeOpenedMarket',
+            pair: 'ETH/USD',
+            tradeIndex: 7,
+            pnl_net: 0,
+            price: 2_000,
+            long: true,
+          },
+        ],
+        pagination: { hasMore: true, nextCursor: 9, limit: 1_000 },
+      })
+    })
+    global.fetch = fetchMock as unknown as typeof fetch
+
+    const pages = []
+    let failure: unknown = null
+    try {
+      for await (const page of gtradeAdapter.getHistory(
+        session(),
+        { ...src, meta: { ...src.meta, history_max_pages: 1 } },
+        ADDRESS,
+        'orders',
+        null
+      )) {
+        pages.push(page)
+      }
+    } catch (error) {
+      failure = error
+    }
+
+    expect(pages).toHaveLength(1)
+    expect(failure).toBeInstanceOf(HistoryPageCapReachedError)
+    expect(failure).toMatchObject({ sourceSlug: src.slug, kind: 'orders', pageCap: 1 })
   })
 })

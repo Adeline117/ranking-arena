@@ -43,6 +43,7 @@ import type {
 } from '../../core/history-continuation'
 import type { FetchSession } from '../../fetch/types'
 import { BlockedUpstreamError, isBlockedStatus } from '../../fetch/rate-limiter'
+import { HistoryPageCapReachedError } from '../../core/history-page-cap'
 import {
   parseGtradeHistory,
   parseGtradeLeaderboardPage,
@@ -361,6 +362,12 @@ const gtradeAdapter: SourceAdapter = {
     if (outcome.state === 'failed') {
       throw new Error(`[gtrade] orders history fetch failed: ${outcome.reason}`)
     }
+    // The newest pages are valid, but older trades in the 90-day window were not
+    // fetched. Report it like every other capped source so Tier-B records the
+    // truncation instead of the window silently looking complete.
+    if (outcome.snapshot.meta.capHit && outcome.snapshot.rawPages.length > 0) {
+      throw new HistoryPageCapReachedError(src.slug, 'orders', maxPages)
+    }
   },
 
   parseLeaderboard: parseGtradeLeaderboardPage,
@@ -371,8 +378,8 @@ const gtradeAdapter: SourceAdapter = {
   /**
    * Orders come from one frozen 90-day trades-table snapshot shared with the
    * profile and position-history paths (trades-fetch.ts). Its id cursor is
-   * scoped to that snapshot and its cap is reported as snapshot metadata,
-   * not as a resumable HistoryPageCapReachedError. Transfers do not exist.
+   * scoped to that snapshot, so a capped window is reported (and recorded as
+   * truncated) but cannot be resumed backward. Transfers do not exist.
    */
   historyContinuation(
     _src: SourceRow,
