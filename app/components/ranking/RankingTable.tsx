@@ -369,13 +369,6 @@ function RankingTableInner(props: {
     setCardVisibleCount(50)
   }
 
-  const _handleSearchInput = (value: string) => {
-    if (onSearchChange) onSearchChange(value)
-    else setInternalSearchQuery(value)
-    setCurrentPage(1)
-    setCardVisibleCount(50)
-  }
-
   const hasStyleData = React.useMemo(
     () => traders.some((t) => t.trading_style && t.trading_style !== 'unknown'),
     [traders]
