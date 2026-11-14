@@ -21,7 +21,11 @@ import { createLogger } from '@/lib/utils/logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { computeAntiGamingFlags } from '@/lib/scoring/anti-gaming'
 import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
-import { applyPublicCohortFilters, isInPublicCohort } from '@/lib/rankings/public-cohort'
+import {
+  applyPublicCohortFilters,
+  cachedRowsStillInPublicCohort,
+  isInPublicCohort,
+} from '@/lib/rankings/public-cohort'
 import { validateTradersResponse } from '@/lib/api/traders-response-schema'
 import { attachAvatarMirrors } from '@/lib/data/avatar-mirrors'
 import { claimedTraderBadgeKey, getClaimedTraderBadgeKeys } from '@/lib/data/claimed-trader-badges'
@@ -374,7 +378,9 @@ export const GET = withPublic(
     }
     const cacheKey = tradersResponseCacheKey(cacheParams)
 
+    let loadedFresh = false
     const loadCohort = async (): Promise<PublicRankedCohortCacheValue> => {
+      loadedFresh = true
       const fetched = await fetchPublicRankedCohort(supabase, cacheParams)
       const sanitized = sanitizePublicRankedCohort(fetched, cacheParams)
       return {
@@ -395,7 +401,22 @@ export const GET = withPublic(
       : await loadCohort()
     // Revalidate after every cache read. A cached row may cross the six-hour
     // serving boundary while it is still inside the short Redis TTL.
-    const cohort = sanitizePublicRankedCohort(cachedCohort, cacheParams)
+    let cohort = sanitizePublicRankedCohort(cachedCohort, cacheParams)
+    // A DB-level withdrawal does not advance the write fence: re-check that a
+    // cached page's rows are all still in the live cohort, else reload it.
+    if (!loadedFresh && !(await cachedRowsStillInPublicCohort(supabase, timeRange, cohort.rows))) {
+      const fresh = await loadCohort()
+      cohort = sanitizePublicRankedCohort(fresh, cacheParams)
+      const writeFence = await readSharedCacheWriteFence(PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY)
+      if (writeFence) {
+        await setCache(cacheKey, fresh, {
+          ttl: 300,
+          tags: [PUBLIC_RANKING_REDIS_TAG, `season:${timeRange}`],
+          skipMemory: true,
+          writeFence,
+        })
+      }
+    }
     const cachedData = await buildPublicTradersResponse(supabase, cacheParams, cohort)
 
     // Dev-only: validate output shape to catch response drift early (no-op in prod)

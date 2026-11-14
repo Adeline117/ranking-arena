@@ -515,6 +515,12 @@ describe('GET /api/traders public ranked cohort', () => {
           { source: 'binance_futures', source_as_of: '2026-07-18T11:00:00.000Z' },
         ])
       }
+      if (table === 'public_ranked_leaderboard') {
+        return queryResult([
+          { source: 'binance_futures', source_trader_id: 'first' },
+          { source: 'binance_futures', source_trader_id: 'last' },
+        ])
+      }
       if (table === 'verified_traders') return queryResult([])
       throw new Error(`unexpected cache-hit query ${table}`)
     })
@@ -534,6 +540,7 @@ describe('GET /api/traders public ranked cohort', () => {
     expect(body.traders[0]).not.toHaveProperty('season_id')
     expect(body.traders[0]).not.toHaveProperty('source_trader_id')
     expect(mockFrom.mock.calls.map(([table]) => table)).toEqual([
+      'public_ranked_leaderboard',
       'verified_traders',
       'leaderboard_source_freshness',
     ])
@@ -616,6 +623,9 @@ describe('GET /api/traders public ranked cohort', () => {
           { source: 'binance_futures', source_as_of: '2026-07-16T11:59:59.999Z' },
         ])
       }
+      if (table === 'public_ranked_leaderboard') {
+        return queryResult([{ source: 'binance_futures', source_trader_id: 'source-expired' }])
+      }
       if (table === 'verified_traders') return queryResult([])
       throw new Error(`unexpected stale-source cache query ${table}`)
     })
@@ -660,6 +670,41 @@ describe('GET /api/traders public ranked cohort', () => {
       expect(mockFrom).not.toHaveBeenCalled()
     }
   )
+
+  it('reloads a cached page whose rows the database has since withdrawn', async () => {
+    mockGetOrSetWithLock.mockResolvedValue({
+      scope: publicRankedCohortScope(),
+      rows: [
+        publicRankedRow({ source_trader_id: 'kept', rank: 1 }),
+        publicRankedRow({ source_trader_id: 'withdrawn', rank: 2 }),
+      ],
+    })
+    const liveRows = [publicRankedRow({ source_trader_id: 'kept', rank: 1 })]
+    mockFrom.mockImplementation((table: string) => {
+      // The membership read and the reload both see the live view only.
+      if (table === 'public_ranked_leaderboard') return publicRankedPageQuery(liveRows)
+      if (table === 'leaderboard_source_freshness') {
+        return queryResult([
+          { source: 'binance_futures', source_as_of: '2026-07-18T11:00:00.000Z' },
+        ])
+      }
+      if (table === 'verified_traders') return queryResult([])
+      throw new Error(`unexpected table ${table}`)
+    })
+
+    const body = await (
+      await GET({ nextUrl: new URL('http://localhost/api/traders?timeRange=90D') } as never)
+    ).json()
+
+    expect(body.traders.map(({ id }: { id: string }) => id)).toEqual(['kept'])
+    expect(body.ranking_visibility_reasons).toBeUndefined()
+    // The reloaded page replaces the stale entry under the current fence.
+    expect(mockCacheSet).toHaveBeenCalledWith(
+      expect.stringMatching(/^public-rank-policy-v7:leaderboard:v5:public-cohort:/),
+      expect.objectContaining({ rows: [expect.objectContaining({ source_trader_id: 'kept' })] }),
+      expect.objectContaining({ writeFence: expect.objectContaining({ token: '7' }) })
+    )
+  })
 
   it('warms the versioned raw cohort key only after Redis confirms it', async () => {
     mockFrom.mockImplementation((table: string) => {
