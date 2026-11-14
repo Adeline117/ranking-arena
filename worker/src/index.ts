@@ -52,6 +52,7 @@ async function main() {
     { alert: ingestAlert },
     { syncPublicRankingsToMeilisearch },
     { routeRankPublicationAlert },
+    { finalJobFailureAlert },
   ] = await Promise.all([
     import('bullmq'),
     import('./connection'),
@@ -68,6 +69,7 @@ async function main() {
     import('../../lib/ingest/alerting'),
     import('../../lib/search/meilisearch-sync'),
     import('../../lib/rankings/publication/alert-routing'),
+    import('./job-failure-alert'),
   ])
   // An assertion function must carry an explicit type to be callable (TS2775).
   const assertSuccessfulMeilisearchSyncResponse: typeof import('./pipeline-response').assertSuccessfulMeilisearchSyncResponse =
@@ -194,10 +196,18 @@ async function main() {
     }
   })
 
+  // Season publication already pages every refusal through the same path.
+  const publicationJobs = new Set<string>([JOB.COMPUTE_LEADERBOARD])
   worker.on('failed', (job, err) => {
     const attempt = job?.attemptsMade ?? 0
     const maxAttempts = job?.opts?.attempts ?? 3
     console.error(`[worker] ✗ ${job?.name} attempt ${attempt}/${maxAttempts} failed:`, err.message)
+    const page = finalJobFailureAlert(job, err, publicationJobs)
+    if (page) {
+      void ingestAlert(getRankingCommandChainConnection(), page).catch((alertErr) =>
+        console.error(`[worker] failure page for ${job?.name} not delivered:`, alertErr)
+      )
+    }
   })
 
   worker.on('error', (err) => {
