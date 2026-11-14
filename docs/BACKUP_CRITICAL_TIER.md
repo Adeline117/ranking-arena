@@ -14,30 +14,38 @@ ingest pipeline. The excluded tables are listed in
 
 ## Take a backup
 
-The passphrase lives in the macOS Keychain, never in a file or shell history.
-Create it once:
+The passphrase must come from outside the repository. On this machine it is
+kept in a file only the owner can read (the macOS Keychain refuses
+non-interactive access, so it cannot be used from an agent or cron):
 
 ```bash
-security add-generic-password -s arena-critical-backup -a arena \
-  -l "Arena critical-tier backup passphrase" -w "$(openssl rand -base64 48)"
+mkdir -p ~/.config/arena && chmod 700 ~/.config/arena
+( umask 077; openssl rand -base64 48 > ~/.config/arena/critical-backup-passphrase )
 ```
 
-Then, from the repository (uses `DATABASE_URL` from the environment; use the
-direct/session connection on port 5432, not the transaction pooler):
+**Copy that passphrase into a password manager.** A backup whose passphrase is
+lost cannot be recovered, and a passphrase stored only next to the backups
+protects nothing if the disk is lost.
+
+Then, from the repository:
 
 ```bash
-BACKUP_PASSPHRASE="$(security find-generic-password -s arena-critical-backup -a arena -w)" \
+BACKUP_PASSPHRASE="$(cat ~/.config/arena/critical-backup-passphrase)" \
 PG_BIN=/opt/homebrew/opt/postgresql@17/bin \
+DATABASE_URL="<session-mode URL, port 5432>" \
 npm run backup:critical -- --out ~/arena-backups/critical
 ```
 
-The command prints the file path, size, SHA-256 and the number of tables with
-data. It only reports success after decrypting the file again and confirming
-every required relation (`REQUIRED_TABLE_DATA`) is present. Output files are
-mode `0600`; keep the directory outside the repository.
+`pg_dump` needs a **session** connection. The app's `DATABASE_URL` points at
+the transaction pooler (port 6543), which cannot run a dump; use the same
+pooler host on port 5432 (session mode) or the direct database host.
 
-**Keep a second copy of the passphrase** (password manager). A backup whose
-passphrase is lost cannot be recovered.
+The command prints the file path, size, SHA-256 and the number of tables with
+data. It only reports success after decrypting the whole file again and
+confirming every required relation (`REQUIRED_TABLE_DATA`) is present. Output
+files are mode `0600`; keep the directory outside the repository.
+
+First production run (2026-11-14): 9.4 MB, 195 tables with data, ~1 minute.
 
 ## Check or restore a backup
 
@@ -49,6 +57,26 @@ BACKUP_PASSPHRASE=… node scripts/maintenance/backup-critical-tier.mjs verify <
 BACKUP_PASSPHRASE=… node scripts/maintenance/backup-critical-tier.mjs decrypt <file> critical.dump
 pg_restore --no-owner -d <scratch-database-url> critical.dump
 ```
+
+A plain PostgreSQL scratch database needs the Supabase scaffolding the dump
+refers to before `pg_restore` (a Supabase scratch project already has it):
+
+```sql
+DROP SCHEMA public;            -- the dump recreates it
+CREATE SCHEMA extensions;
+CREATE EXTENSION "uuid-ossp" SCHEMA extensions;
+CREATE EXTENSION pgcrypto SCHEMA extensions;
+CREATE EXTENSION pg_trgm SCHEMA extensions;
+CREATE EXTENSION citext SCHEMA extensions;
+CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;
+```
+
+Without the `extensions` schema, tables whose defaults call its functions
+(comments, notifications, likes, …) fail to create. With it, the 2026-11-14
+drill restored all 186 `public` tables and matched production row counts
+exactly for users, profiles, posts, comments, notifications, groups, members
+and subscriptions; the only remaining errors were a missing `postgres` role
+and one reference into the excluded `arena` schema.
 
 Never restore over production directly: restore into a scratch project,
 inspect, and copy the specific rows you need.
