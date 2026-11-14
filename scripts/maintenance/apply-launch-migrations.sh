@@ -188,6 +188,7 @@ PREDEPLOY_MIGRATIONS=(
   20261113110021_leaderboard_snapshot_retention.sql
   20261113110430_rank_publication_source_evidence_binding.sql
   20261114101605_first_screen_core_modules_sealed_only.sql
+  20261114102645_leaderboard_snapshot_bounded_retention.sql
 )
 readonly -a PREDEPLOY_MIGRATIONS
 # The final six (season publication follow-ups, PR #419) must stay LAST: they
@@ -198,6 +199,9 @@ readonly -a PREDEPLOY_MIGRATIONS
 # 20261114101605 (profile readers: sealed boards only, no stale stats) follows
 # them: it replaces the two readers 20261113012028 rewrote and needs its
 # arena.public_sealed_rank_sources().
+# 20261114102645 (bounded snapshot retention) replaces the prune that
+# 20261113110021/110430 define, so it follows them; the worker only calls the
+# prune, and the old worker keeps working against the new body.
 #
 # 20261113014105 (unknown-trade-count sample confidence, issue #435) is
 # predeploy and must follow every migration whose pre/postflight pins the old
