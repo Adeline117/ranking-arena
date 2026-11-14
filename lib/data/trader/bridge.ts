@@ -7,6 +7,7 @@
 import type { TraderDetail, EquityPoint } from './types'
 import { normalizeScoreConfidence } from './mappers'
 import { quarantineLegacyPositionHistory } from './history-quarantine'
+import { compositeArenaScore } from '@/lib/rankings/composite-ranking'
 import type { TraderDetailPageData } from '@/lib/contracts/trader-detail'
 
 /**
@@ -75,16 +76,13 @@ export function toTraderPageData(
     arena_score_90d: p90?.arenaScore ?? null,
     arena_score_30d: p30?.arenaScore ?? null,
     arena_score_7d: p7?.arenaScore ?? null,
-    // Overall composite score (70/25/5 weighting)
-    overall_score: (() => {
-      const s90 = p90?.arenaScore ?? null
-      const s30 = p30?.arenaScore
-      const s7 = p7?.arenaScore
-      if (s90 != null) {
-        return Number((s90 * 0.7 + (s30 ?? s90) * 0.25 + (s7 ?? s90) * 0.05).toFixed(2))
-      }
-      return null
-    })(),
+    // Overall composite (70/25/5): the same rule as /api/rankings?window=composite.
+    // Needs a 90D score; a missing 30D/7D is never borrowed from 90D.
+    overall_score: compositeArenaScore(
+      p90?.arenaScore ?? null,
+      p30?.arenaScore ?? null,
+      p7?.arenaScore ?? null
+    ),
     return_score: t.returnScore,
     return_score_7d: p7?.returnScore ?? null,
     return_score_30d: p30?.returnScore ?? null,
