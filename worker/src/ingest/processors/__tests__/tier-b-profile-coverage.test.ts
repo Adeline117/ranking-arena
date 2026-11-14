@@ -18,6 +18,7 @@ const mockParseProfile = jest.fn()
 const mockValidateProfile = jest.fn()
 const mockOpenSession = jest.fn()
 const mockSessionClose = jest.fn()
+const mockRecordParseFailure = jest.fn()
 const mockWriteRawObject = jest.fn()
 const mockWriteCopierSnapshotRawArtifact = jest.fn()
 const mockWritePositionHistoryRawArtifact = jest.fn()
@@ -58,6 +59,7 @@ jest.mock('@/lib/ingest/core/history-cursor', () => ({
 }))
 jest.mock('@/lib/ingest/fetch/fetcher', () => ({
   openSession: (...args: unknown[]) => mockOpenSession(...args),
+  getCircuit: () => ({ recordParseFailure: mockRecordParseFailure }),
 }))
 jest.mock('@/lib/ingest/raw', () => ({
   writeRawObject: (...args: unknown[]) => mockWriteRawObject(...args),
@@ -1678,6 +1680,16 @@ describe('Tier-B profile coverage accounting', () => {
         String(sql).includes('INSERT INTO arena.ingest_cursors')
       )
     ).toBe(false)
+  })
+
+  it('counts an HTTP-200 business error (parse throw) toward the cycle failure rate', async () => {
+    mockParseProfile.mockImplementation(() => {
+      throw new Error('[src] profile returned a non-success API envelope (code=40001)')
+    })
+
+    await expect(processTierB(job)).resolves.toMatchObject({ tradersCrawled: 0, errors: 2 })
+    expect(mockRecordParseFailure).toHaveBeenCalledTimes(2)
+    expect(mockPublishProfile).not.toHaveBeenCalled()
   })
 
   it('treats a reject-audit write failure as operational and retryable', async () => {

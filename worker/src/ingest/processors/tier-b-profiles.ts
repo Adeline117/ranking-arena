@@ -21,11 +21,12 @@ import type {
   HistoryKind,
   ParseCtx,
   ParsedHistoryRow,
+  ParsedProfile,
   RawPage,
   SourceRow,
 } from '@/lib/ingest/core/types'
 import type { FetchSession } from '@/lib/ingest/fetch/types'
-import { openSession } from '@/lib/ingest/fetch/fetcher'
+import { getCircuit, openSession } from '@/lib/ingest/fetch/fetcher'
 import { UpstreamGoneError } from '@/lib/ingest/fetch/capture'
 import {
   CopierPageCapReachedError,
@@ -565,10 +566,18 @@ export async function processTierB(
           // Parse the complete logical surface before validating or publishing
           // any page. One bad page must quarantine the whole bundle rather than
           // leave a partially-published profile.
-          const parsedPages = bundle.pages.map((page) => ({
-            page,
-            profile: adapter.parseProfile(page.payload, ctx),
-          }))
+          let parsedPages: Array<{ page: RawPage; profile: ParsedProfile }>
+          try {
+            parsedPages = bundle.pages.map((page) => ({
+              page,
+              profile: adapter.parseProfile(page.payload, ctx),
+            }))
+          } catch (parseErr) {
+            // The fetch counted these pages as successes; an HTTP-200 business
+            // error must still count toward the cycle failure rate.
+            getCircuit(src.slug).recordParseFailure()
+            throw parseErr
+          }
           const qualityRejects =
             parsedPages.length === 0
               ? [
