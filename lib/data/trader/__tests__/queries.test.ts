@@ -44,7 +44,7 @@ import {
 
 function chainableQuery(response: { data?: Record<string, unknown>[]; error?: unknown } = {}) {
   const query: Record<string, jest.Mock> = {}
-  for (const method of ['select', 'eq', 'in', 'not', 'or', 'gt', 'gte', 'order', 'range']) {
+  for (const method of ['select', 'eq', 'in', 'not', 'or', 'gt', 'gte', 'lte', 'order', 'range']) {
     query[method] = jest.fn(() => query)
   }
   query.abortSignal = jest.fn().mockResolvedValue({
@@ -520,6 +520,11 @@ describe('getLeaderboard public cohort view', () => {
     )
     expect(leaderboardQuery.in).toHaveBeenCalledWith('source', ['binance_futures'])
     expect(leaderboardQuery.eq).toHaveBeenCalledWith('source', 'binance_futures')
+    // shared public cohort predicate, then the caller's narrower floor
+    expect(leaderboardQuery.gt).toHaveBeenCalledWith('arena_score', 0)
+    expect(leaderboardQuery.gte).toHaveBeenCalledWith('roi', -50_000)
+    expect(leaderboardQuery.lte).toHaveBeenCalledWith('roi', 50_000)
+    expect(leaderboardQuery.gte).toHaveBeenCalledWith('computed_at', expect.any(String))
     expect(leaderboardQuery.gt).toHaveBeenCalledWith('arena_score', 50)
     expect(leaderboardQuery.range).toHaveBeenCalledWith(0, 20)
     expect(leaderboardQuery.abortSignal).toHaveBeenCalledWith(signal)
@@ -534,6 +539,7 @@ describe('getLeaderboard public cohort view', () => {
       ...leaderboardQuery.not.mock.invocationCallOrder,
       ...leaderboardQuery.gt.mock.invocationCallOrder,
       ...leaderboardQuery.gte.mock.invocationCallOrder,
+      ...leaderboardQuery.lte.mock.invocationCallOrder,
     ]
     expect(Math.max(...filterCallOrders)).toBeLessThan(
       leaderboardQuery.range.mock.invocationCallOrder[0]
@@ -580,10 +586,11 @@ describe('getLeaderboard public cohort view', () => {
   )
 })
 
-function traderDetailSupabase(publicRows: unknown[]) {
+function traderDetailSupabase(publicRows: unknown[], freshnessRows: unknown[] = []) {
   const emptyRows = () => detailQuery({ data: [], error: null })
   const queries = new Map<string, Array<ReturnType<typeof detailQuery>>>([
     ['public_ranked_leaderboard', [detailQuery({ data: publicRows, error: null })]],
+    ['leaderboard_source_freshness', [detailQuery({ data: freshnessRows, error: null })]],
     [
       'trader_sources',
       [
@@ -682,6 +689,36 @@ describe('getTraderDetail public profile cohort', () => {
     })
     expect(result?.periods).toEqual({ '7D': null, '30D': null, '90D': null })
     expect(supabase.from).not.toHaveBeenCalledWith('leaderboard_ranks')
+  })
+
+  it('reports when the exchange data was captured, not when Arena re-scored it', async () => {
+    const capturedAt = '2026-08-01T00:00:00.000Z'
+    const supabase = traderDetailSupabase(
+      [publicRankRow({ computed_at: new Date().toISOString() })],
+      [
+        { season_id: '90D', source: 'binance_futures', source_as_of: capturedAt },
+        { season_id: '7D', source: 'binance_futures', source_as_of: new Date().toISOString() },
+      ]
+    )
+
+    const result = await getTraderDetail(supabase as never, {
+      platform: 'binance_futures',
+      traderKey: 'trader-1',
+    })
+
+    expect(supabase.from).toHaveBeenCalledWith('leaderboard_source_freshness')
+    expect(result?.trader.lastUpdated).toBe(capturedAt)
+  })
+
+  it('leaves the update time unknown when the period has no source watermark', async () => {
+    const supabase = traderDetailSupabase([publicRankRow()], [])
+
+    const result = await getTraderDetail(supabase as never, {
+      platform: 'binance_futures',
+      traderKey: 'trader-1',
+    })
+
+    expect(result?.trader.lastUpdated).toBeNull()
   })
 
   it('keeps a non-rankable source profile while skipping its public ranking query', async () => {

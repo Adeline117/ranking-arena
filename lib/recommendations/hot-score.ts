@@ -31,42 +31,8 @@ export interface HotTraderCohortResult {
   ranking_visibility_reasons: [string]
 }
 
-interface PublicRankedLeaderboardQueryResult {
-  data: unknown[] | null
-  error: unknown | null
-}
-
-type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
-  select(columns: string): PublicRankedLeaderboardQuery
-  eq(column: string, value: string): PublicRankedLeaderboardQuery
-  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
-  gt(column: string, value: number): PublicRankedLeaderboardQuery
-  or(expression: string): PublicRankedLeaderboardQuery
-  order(
-    column: string,
-    options: { ascending: boolean; nullsFirst: boolean }
-  ): PublicRankedLeaderboardQuery
-  limit(count: number): PublicRankedLeaderboardQuery
-}
-
-type PublicRankedLeaderboardClient = {
-  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-/**
- * Local bridge until generated Supabase types include the security-barrier
- * view. This intentionally prevents this public code path from selecting a
- * raw ranking relation.
- */
-function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
-  if (!isRecord(value) || typeof value.from !== 'function') {
-    throw new TypeError('Supabase client does not expose the public ranking cohort')
-  }
-  return value as PublicRankedLeaderboardClient
 }
 
 function isCurrentPublicHotProbe(row: unknown): boolean {
@@ -124,7 +90,7 @@ function unavailableHotTraders(
  */
 export async function computeHotTraders(): Promise<HotTraderCohortResult> {
   try {
-    const { data, error } = await publicRankedLeaderboardClient(getSupabaseAdmin())
+    const { data, error } = await getSupabaseAdmin()
       .from('public_ranked_leaderboard')
       .select(PUBLIC_RANKED_HOT_PROBE_COLUMNS)
       .eq('season_id', HOT_TRADER_PERIOD)

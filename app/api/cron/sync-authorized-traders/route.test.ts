@@ -8,7 +8,7 @@ describe('GET /api/cron/sync-authorized-traders V1 compatibility contract', () =
       'utf8'
     )
 
-    expect(source).toContain("withCron('sync-authorized-traders'")
+    expect(source).toMatch(/withCron\(\s*'sync-authorized-traders'/)
     expect(source).toContain('disabled: true')
     expect(source).toContain('queued: 0')
     expect(source).not.toMatch(/enqueueFirstPartySync|trader_authorizations|\.from\(|\.rpc\(/)

@@ -30,6 +30,7 @@ const enCore = {
 
   // ── Common UI ───────────────────────────────────────────────────────
   loading: 'Loading...',
+  signingOut: 'Signing out...',
   refreshing: 'Refreshing...',
   loadingShort: 'Loading',
   retry: 'Retry',
@@ -192,6 +193,9 @@ const enCore = {
   drawdown: 'Drawdown',
   sharpeRatio: 'Sharpe Ratio',
   score: 'Score',
+  winRatePercent: 'Win%',
+  mdd: 'MDD',
+  rankingMobileMetricLabel: 'Second metric shown in each row',
   source: 'Source',
   allExchanges: 'All',
   exchange: 'Exchange',
@@ -307,6 +311,7 @@ const enCore = {
   heroScoreExplainer:
     'Arena Score ranks traders across every live source board — see exactly where you stand.',
   heroNeutrality: 'No source can pay for placement — every live board follows the same rules.',
+  heroNeutralityShort: 'No source can pay for placement.',
   heroHowRanked: 'How ranking works →',
   heroCTABrowse: 'Browse Rankings',
   heroCTASignUp: 'Sign Up Free',
@@ -402,6 +407,8 @@ const enCore = {
   // on every load. Keeping them in core makes SSR and hydration resolve identically.
   rankingControlsOffline: 'You are offline. Rankings data is still visible but cannot be updated.',
   rankingControlsDataAsOf: 'Data as of',
+  // Shown beside any data time older than RANKING_SOURCE_STALE_MS (48h).
+  dataStaleWarning: 'Data may be delayed',
   rankingControlsTakingLong: 'This is taking longer than expected.',
   rankingControlsRetry: 'Retry',
   rankingControlsPrev: 'Prev',
@@ -432,6 +439,32 @@ const enCore = {
   rankingsRefreshingDesc:
     'We only publish rankings after the latest exchange data passes verification. Please check back shortly.',
   rankingsEmptyPeriodTitle: 'No ranked traders for this period yet',
+  rankingFilteredByExchange: 'Filtered by {exchange}',
+  rankingClearExchangeFilter: 'Clear exchange filter',
+  errorTimeout: 'Request timed out, please try again',
+  resetFilters: 'Reset Filters',
+  clearSearch: 'Clear search',
+  failedToLoadRankings: 'Failed to load rankings',
+  rankingNoMatchCriteria: 'No traders match your criteria',
+  rankingBroadenFilters: 'Try broadening your filters',
+  rankingSearchElsewhereTitle: 'No match on this page. Matching traders across Arena:',
+  rankingFiltersCurrentPageOnly:
+    'Filters apply to the 50 traders on this page only; other pages may have more matches.',
+  roiUnknown: 'ROI unknown',
+  timeRangeAria: 'Time range',
+  showRangeRankingsAria: 'Show {range} rankings',
+  arenaScoreAria: 'Arena Score: {score}',
+  arenaScoreOfHundredAria: 'Arena Score {score} of 100',
+  platformTypeAria: 'Platform type: {type}',
+  suspectedBotAria: 'Suspected bot',
+  tradingStyleAria: 'Trading style: {style}',
+  noRankHistoryAria: 'No rank history',
+  rankTrendAria: 'Rank trend: {from} → {to}',
+  traderActionsAria: '{name} actions',
+  botLabel: 'Bot',
+  allTime90dShort: 'All-time',
+  allTime90dTooltip:
+    'This exchange does not provide a native 90-day window. The 90D data shown is actually all-time (lifetime) performance data.',
 } as const
 
 export default enCore

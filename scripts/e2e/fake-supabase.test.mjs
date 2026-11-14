@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { TEST_USER, buildFixtures, queryRelation, startFakeSupabase } from './fake-supabase.mjs'
+import {
+  STALE_AGE_MS,
+  TEST_USER,
+  buildFixtures,
+  queryRelation,
+  startFakeSupabase,
+} from './fake-supabase.mjs'
 
 const rows = buildFixtures(new Date('2026-10-30T00:00:00.000Z')).public_ranked_leaderboard
 
@@ -12,7 +18,8 @@ test('filters by period, so each period has its own traders', () => {
   const week = query('season_id=eq.7D')
   assert.ok(week.length > 0)
   assert.ok(week.every((row) => row.season_id === '7D'))
-  const own = week.filter((row) => row.source_trader_id !== 'e2e-shared')
+  // Shared and null-metrics traders are ranked in every period on purpose.
+  const own = week.filter((row) => row.source_trader_id.startsWith('e2e-7d-'))
   assert.ok(own.length > 0)
   assert.ok(own.every((row) => row.handle.startsWith('E2E 7D ')))
   assert.deepEqual(
@@ -31,7 +38,7 @@ test('honours the source exclusion and allowlist the leaderboard reader sends', 
 })
 
 test('orders and pages like PostgREST range requests', () => {
-  const page = query('season_id=eq.90D&order=rank.desc&offset=1&limit=2')
+  const page = query('season_id=eq.90D&order=rank.desc&offset=2&limit=2')
   assert.deepEqual(
     page.map((row) => row.rank),
     [30, 29]
@@ -111,4 +118,47 @@ test('keeps watchlist writes until they are deleted', async (t) => {
 
   await fetch(`${url}?source_trader_id=eq.t`, { method: 'DELETE' })
   assert.deepEqual(await (await fetch(url)).json(), [])
+})
+
+test('switches into a degraded leaderboard scenario and back', async (t) => {
+  const server = await startFakeSupabase({ port: 0 })
+  t.after(() => server.close())
+  const root = `http://127.0.0.1:${server.address().port}`
+  const board = `${root}/rest/v1/public_ranked_leaderboard?season_id=eq.90D`
+  const freshness = `${root}/rest/v1/leaderboard_source_freshness?season_id=eq.90D`
+  const use = (name) =>
+    fetch(`${root}/__e2e/scenario`, { method: 'POST', body: JSON.stringify({ name }) })
+
+  assert.equal((await use('no-such-scenario')).status, 400)
+
+  await use('leaderboard-empty')
+  assert.deepEqual(await (await fetch(board)).json(), [])
+
+  await use('leaderboard-error')
+  assert.equal((await fetch(board)).status, 500)
+  assert.equal((await fetch(freshness)).status, 500)
+  // Only the ranking relations fail; the rest of the app still answers.
+  assert.equal((await fetch(`${root}/rest/v1/user_profiles`)).status, 200)
+
+  const ageOf = async (url, column) =>
+    Date.now() - Date.parse((await (await fetch(url)).json())[0][column])
+  const old = (age) => age >= STALE_AGE_MS - 60_000
+  await use('leaderboard-stale-source')
+  assert.ok(old(await ageOf(freshness, 'source_as_of')))
+  assert.ok(!old(await ageOf(board, 'computed_at')))
+  await use('leaderboard-stale-computed')
+  assert.ok(!old(await ageOf(freshness, 'source_as_of')))
+  assert.ok(old(await ageOf(board, 'computed_at')))
+
+  await use('normal')
+  assert.equal((await (await fetch(`${root}/__e2e/scenario`)).json()).name, 'normal')
+  assert.ok((await (await fetch(board)).json()).length > 0)
+})
+
+test('has a ranked trader whose source published no optional metrics', () => {
+  const nulls = query('source_trader_id=eq.e2e-null-metrics&season_id=eq.90D')
+  assert.equal(nulls.length, 1)
+  for (const column of ['trades_count', 'followers', 'copiers', 'sharpe_ratio']) {
+    assert.equal(nulls[0][column], null, column)
+  }
 })

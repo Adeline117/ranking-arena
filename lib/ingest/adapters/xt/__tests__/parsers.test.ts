@@ -32,9 +32,8 @@ describe('parseXtLeaderboardPage', () => {
     expect(first.headlinePnl).toBeCloseTo(119279.25, 1)
     // winRate 1 → 100%
     expect(first.headlineWinRate).toBeCloseTo(100, 5)
-    // maxRetraction 0.4257 (already percent) → headlineMdd, so XT captures MDD
-    // (was previously dropped → 0% MDD capture in prod).
-    expect(first.headlineMdd).toBeCloseTo(0.4257, 4)
+    // maxRetraction 0.4257 (decimal, same unit as leader-stats) → 42.57%
+    expect(first.headlineMdd).toBeCloseTo(42.57, 2)
     // 跟单人数 (followerCount) → headlineCopierCount → trader_stats.copier_count
     expect(first.headlineCopierCount).toBe(43)
     // 逐图核对 image63: Lead AUM + copier profit/tenure/growth from the board row
@@ -241,5 +240,66 @@ describe('parseXtProfile', () => {
   it('survives an empty detail payload', () => {
     const profile = parseXtProfile({ detail: {}, timeframe: 7 }, ctx)
     expect(profile.stats).toHaveLength(0)
+  })
+})
+
+describe('XT MDD unit consistency (board vs leader-stats)', () => {
+  it('board maxRetraction equals the decimal peak-to-trough drop of the row chart', () => {
+    const raw = fixture('leaderboard-fut-30.json') as {
+      result: { items?: unknown[]; list?: unknown[] }
+    }
+    const page = parseXtLeaderboardPage(raw, ctx)
+    const tom = page.rows.find(
+      (r) => r.raw && (r.raw as { maxRetraction?: number }).maxRetraction === 0.1611
+    )
+    expect(tom).toBeDefined()
+    const chart = ((tom?.raw as { chart?: Array<{ amount: string }> }).chart ?? []).map((p) =>
+      Number(p.amount)
+    )
+    let peak = -Infinity
+    let drop = 0
+    for (const roi of chart) {
+      peak = Math.max(peak, roi)
+      drop = Math.max(drop, peak - roi)
+    }
+    expect(drop).toBeCloseTo(0.1611, 4) // decimal, not percent
+    expect(tom?.headlineMdd).toBeCloseTo(16.11, 2)
+  })
+
+  it('board and profile scale the same raw maxRetraction identically', () => {
+    const value = 0.130089
+    const board = parseXtLeaderboardPage(
+      {
+        returnCode: 0,
+        result: {
+          total: 1,
+          items: [
+            {
+              accountId: 1,
+              nickName: 'x',
+              incomeRate: '0.1',
+              income: '1',
+              winRate: '0.5',
+              maxRetraction: value,
+            },
+          ],
+        },
+      },
+      ctx
+    )
+    const profile = parseXtProfile(
+      {
+        detail: fixture('detail-fut.json'),
+        stats: {
+          returnCode: 0,
+          result: { maxRetraction: value, recentRate: '0.1', winRate: '0.5' },
+        },
+        timeframe: 30,
+      },
+      ctx
+    )
+    expect(board.rows).toHaveLength(1)
+    expect(board.rows[0].headlineMdd).toBeCloseTo(13.0089, 4)
+    expect(profile.stats[0].mdd).toBeCloseTo(board.rows[0].headlineMdd as number, 6)
   })
 })

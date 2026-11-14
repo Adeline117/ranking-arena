@@ -8,7 +8,7 @@
  * filtered in application code.
  *
  * Query parameters:
- * - window: 7d | 30d | 90d | composite (required)
+ * - window: 7d | 30d | 90d | composite (required; composite is served and labelled as 90D)
  * - category: futures | spot | onchain (optional; platform takes precedence)
  * - platform: canonical active source (optional)
  * - limit: 1..500 (default 100)
@@ -43,13 +43,13 @@ import type {
   PublicRankingsTrader,
   PublicRankingsWindow,
 } from '@/lib/contracts/rankings'
+import { applyPublicCohortFilters } from '@/lib/rankings/public-cohort'
 
 const logger = createLogger('rankings-api')
 const PUBLIC_RANKING_RESPONSE_CACHE_CONTROL = 'private, no-store, max-age=0, must-revalidate'
 const MAX_LIMIT = 500
 const DEFAULT_LIMIT = 100
 const MAX_OFFSET = 20_000_000
-const ROI_ANOMALY_THRESHOLD = 50_000
 
 const VALID_WINDOWS = ['7d', '30d', '90d', 'composite'] as const
 const VALID_CATEGORIES = ['futures', 'spot', 'onchain'] as const
@@ -111,7 +111,7 @@ type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResu
   neq(column: string, value: string): PublicRankedLeaderboardQuery
   not(column: string, operator: string, value: unknown): PublicRankedLeaderboardQuery
   gt(column: string, value: number): PublicRankedLeaderboardQuery
-  gte(column: string, value: number): PublicRankedLeaderboardQuery
+  gte(column: string, value: number | string): PublicRankedLeaderboardQuery
   lte(column: string, value: number): PublicRankedLeaderboardQuery
   or(filters: string): PublicRankedLeaderboardQuery
   order(
@@ -177,8 +177,14 @@ function publicSeason(window: PublicRankingWindow): TradingPeriod {
   return (window === 'composite' ? '90D' : window.toUpperCase()) as TradingPeriod
 }
 
-function responseWindow(window: PublicRankingWindow): PublicRankingsWindow {
-  return window === 'composite' ? 'COMPOSITE' : (window.toUpperCase() as '7D' | '30D' | '90D')
+/**
+ * The response labels the season actually served. There is no published
+ * 70/25/5 composite cohort — `window=composite` is served from the 90D
+ * season — so labelling it `COMPOSITE` claimed a score that was never
+ * computed. lib/contracts/core-api.ts allows only 7D/30D/90D here.
+ */
+function responseWindow(window: PublicRankingWindow): '7D' | '30D' | '90D' {
+  return publicSeason(window)
 }
 
 function sourceTypeForCategory(category: PublicRankingCategory): string {
@@ -382,9 +388,9 @@ export const GET = withPublic(
       // Redundant to the view, but records the persisted-rank contract at this
       // endpoint boundary and protects a rolling migration with an older view.
       .not('rank', 'is', null)
-      .gt('arena_score', 0)
-      .gte('roi', -ROI_ANOMALY_THRESHOLD)
-      .lte('roi', ROI_ANOMALY_THRESHOLD)
+    // Shared public cohort predicate (score floor, ROI bound, 48h window) —
+    // identical to the homepage SSR page and /api/traders.
+    query = applyPublicCohortFilters(query)
 
     if (platform) {
       query = query.eq('source', platform)

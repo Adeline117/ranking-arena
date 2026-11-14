@@ -11,6 +11,7 @@ import { tokens, alpha } from '@/lib/design-tokens'
 import { Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { formatTimeAgo } from '@/lib/utils/date'
+import { describeDataTime } from '@/lib/utils/data-time'
 import type { Provenance } from '@/lib/data/serving/types'
 import DerivedBoardBadge from './DerivedBoardBadge'
 
@@ -37,6 +38,9 @@ export default function ProvenanceFooter({
   const { t, language } = useLanguage()
   const name = exchangeName || provenance.source
   const isVerified = verificationTier === 'verified'
+  // The serving RPCs emit the Unix epoch for an unknown capture time; never
+  // render that (or an invalid value) as a real "as of" age.
+  const dataTime = describeDataTime(provenance.asOf)
 
   return (
     <div
@@ -51,13 +55,27 @@ export default function ProvenanceFooter({
     >
       <Text size="xs" color="tertiary">
         {t('provenanceSource')}: {name} · {t('provenanceAsOf')}{' '}
-        <time
-          dateTime={provenance.asOf}
-          title={new Date(provenance.asOf).toLocaleString()}
-          suppressHydrationWarning
-        >
-          {formatTimeAgo(provenance.asOf, language)}
-        </time>
+        {dataTime.iso ? (
+          <time
+            dateTime={dataTime.iso}
+            title={new Date(dataTime.iso).toLocaleString()}
+            suppressHydrationWarning
+          >
+            {formatTimeAgo(dataTime.iso, language)}
+          </time>
+        ) : (
+          t('unknown')
+        )}
+        {dataTime.isStale && (
+          <span
+            data-testid="provenance-stale"
+            suppressHydrationWarning
+            style={{ color: tokens.colors.accent.warning }}
+          >
+            {' · '}
+            {t('dataStaleWarning')}
+          </span>
+        )}
       </Text>
       {verificationTier && (
         <span

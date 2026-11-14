@@ -345,10 +345,12 @@ export function ArenaScoreBadge({
   const isLegendary = finiteScore >= 90
   const isElite = finiteScore >= 95
 
+  // Static halo only: an opacity-breathing glow + sweeping shimmer on a score
+  // made 90+ numbers flicker (opacity 0.9↔1) and never settle.
   const glowStyle = isElite
-    ? { animation: 'score-legendary-glow-intense 2.5s ease-in-out infinite' }
+    ? { boxShadow: '0 0 10px var(--color-accent-primary-60)' }
     : isLegendary
-      ? { animation: 'score-legendary-glow 3s ease-in-out infinite' }
+      ? { boxShadow: '0 0 8px var(--color-accent-primary-40)' }
       : finiteScore >= 80
         ? { boxShadow: `0 0 6px ${alpha(tokens.colors.accent.primary, 15)}` }
         : {}
@@ -379,21 +381,6 @@ export function ArenaScoreBadge({
         ...glowStyle,
       }}
     >
-      {/* Shimmer overlay for 90+ */}
-      {isLegendary && (
-        <Box
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background:
-              'linear-gradient(90deg, transparent 0%, var(--glass-bg-medium) 40%, var(--glass-border-heavy) 50%, var(--glass-bg-medium) 60%, transparent 100%)',
-            backgroundSize: '200% 100%',
-            animation: 'score-shimmer 3s ease-in-out infinite',
-            borderRadius: 'inherit',
-            pointerEvents: 'none',
-          }}
-        />
-      )}
       <Box
         style={{
           position: 'absolute',
@@ -424,58 +411,8 @@ export function ArenaScoreBadge({
   )
 }
 
-// Metric stat display (for card view)
-export function MetricStat({
-  label,
-  value,
-  color,
-  nullTooltip,
-}: {
-  label: string
-  value: React.ReactNode
-  color?: string
-  nullTooltip?: string
-}) {
-  const isNull = value == null || value === '—'
-  return (
-    <Box
-      style={{
-        textAlign: 'center',
-        padding: `${tokens.spacing[2]} 0`,
-        background: tokens.glass.bg.light,
-        borderRadius: tokens.radius.md,
-        cursor: isNull && nullTooltip ? 'help' : undefined,
-      }}
-      title={isNull && nullTooltip ? nullTooltip : undefined}
-    >
-      <Text
-        size="xs"
-        style={{
-          marginBottom: 2,
-          display: 'block',
-          color: TRADER_TEXT_TERTIARY,
-          opacity: 0.7,
-          textTransform: 'uppercase',
-          letterSpacing: '0.04em',
-          fontSize: 10,
-        }}
-      >
-        {label}
-      </Text>
-      <Text
-        size="sm"
-        weight="medium"
-        style={{
-          color: isNull ? TRADER_TEXT_TERTIARY : color || tokens.colors.text.secondary,
-          fontVariantNumeric: 'tabular-nums',
-          opacity: isNull ? 0.35 : 1,
-        }}
-      >
-        {isNull ? '—' : value}
-      </Text>
-    </Box>
-  )
-}
+/** Score ring diameter — mirrored by .ssr-score-badge in critical CSS. */
+export const SCORE_RING_SIZE = 38
 
 /**
  * Arena Score — Circular Hero Badge (Task 1 & 2)
@@ -536,15 +473,12 @@ export const ArenaScoreCircle = memo(
     // 30-49: below (orange), 0-29: low (gray-red)
     const ringColor = getScoreColor(finiteScore ?? 0)
 
-    // Pre-compute color-mix() expressions — must be before any early return (rules of hooks).
-    // Without this, 50 rows × 2 color-mix string templates per row = 100 allocations per render.
-    // Memoized per ringColor (only 5 possible values), so nearly always returns cached object.
-    const colorMix = useMemo(
-      () => ({
-        bg: `color-mix(in srgb, ${ringColor} 10%, transparent)`,
-        shadow: `0 0 6px color-mix(in srgb, ${ringColor} 12%, transparent)`,
-        shadowHover: `0 0 0 2px color-mix(in srgb, ${ringColor} 25%, transparent), 0 4px 14px color-mix(in srgb, ${ringColor} 20%, transparent)`,
-      }),
+    // Hover halo only — the resting ring is a 1px tier-colored border with no
+    // fill (owner decision 2026-11-13: Score is the row's single primary number;
+    // a tinted disc competed with it). Must stay before any early return (rules
+    // of hooks); memoized per ringColor (5 possible values).
+    const hoverShadow = useMemo(
+      () => `0 0 0 2px color-mix(in srgb, ${ringColor} 25%, transparent)`,
       [ringColor]
     )
 
@@ -654,30 +588,31 @@ export const ArenaScoreCircle = memo(
       >
         {/* Circular badge */}
         <div
+          className="score-ring"
           style={{
-            width: 38,
-            height: 38,
+            width: SCORE_RING_SIZE,
+            height: SCORE_RING_SIZE,
             borderRadius: '50%',
-            border: `2.5px solid ${ringColor}`,
-            background: colorMix.bg,
+            border: `1px solid ${ringColor}`,
+            background: 'transparent',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             position: 'relative',
-            transition: 'box-shadow 0.2s ease, transform 0.2s ease',
-            boxShadow: show ? colorMix.shadowHover : colorMix.shadow,
-            transform: show ? 'scale(1.08)' : 'scale(1)',
+            transition: 'box-shadow 0.2s ease',
+            boxShadow: show ? hoverShadow : 'none',
           }}
         >
           {showConfidence && trader && <ScoreConfidenceIndicator trader={trader} />}
           <span
+            className="score-ring-value"
             style={{
-              fontSize: 13,
-              fontWeight: 900,
+              fontSize: tokens.typography.fontSize.lg,
+              fontWeight: tokens.typography.fontWeight.bold,
               lineHeight: 1,
-              color: ringColor,
+              color: tokens.colors.text.primary,
               fontVariantNumeric: 'tabular-nums',
-              letterSpacing: '-0.5px',
+              letterSpacing: '-0.02em',
             }}
           >
             {Number(finiteScore).toFixed(0)}

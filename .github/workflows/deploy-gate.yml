@@ -138,7 +138,7 @@ jobs:
           fi
           # READY 列表会包含 --skip-domain 的未提升候选，第一条不等于线上。
           # 线上 /api/health 才是 alias 当前真正服务的 release identity。
-          SERVING=$(curl -fsS "https://www.arenafi.org/api/health?release_check=$(date +%s)" \
+          SERVING=$(curl -sS "https://www.arenafi.org/api/health?release_check=$(date +%s)" \
             | jq -r '.commit // empty')
           if [ -z "$SERVING" ]; then
             echo "::error::serving SHA unavailable — refusing blind deployment"
@@ -340,7 +340,7 @@ jobs:
             echo "promoted=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          LIVE_SHA=$(curl -fsS "https://www.arenafi.org/api/health?release_check=$(date +%s)" \
+          LIVE_SHA=$(curl -sS "https://www.arenafi.org/api/health?release_check=$(date +%s)" \
             | jq -r '.commit // empty')
           echo "post-build live=$LIVE_SHA candidate=$HEAD_SHA main=$MAIN_SHA"
           if [ -z "$LIVE_SHA" ]; then
@@ -466,7 +466,7 @@ jobs:
                     /tmp/gate-rollback-health-error.txt 2>/dev/null | tr '\n' ' ')
                   echo "rollback verification $attempt/10: curl=$HEALTH_CURL_EXIT HTTP=${HEALTH_HTTP:-000} status=${HEALTH_STATUS:-missing} safe=$HEALTH_SAFE serving=${SERVING_SHA:-missing} expected=$EXPECTED_ROLLBACK_SHA decision=${HEALTH_DECISION:-missing}"
                   if [ "$HEALTH_CURL_EXIT" -eq 0 ] \
-                    && [[ "$HEALTH_HTTP" = "200" || "$HEALTH_HTTP" = "202" ]] \
+                    && [[ "$HEALTH_HTTP" = "200" || "$HEALTH_HTTP" = "202" || "$HEALTH_HTTP" = "503" ]] \
                     && [ "$HEALTH_SAFE" = "true" ] \
                     && [ "$SERVING_SHA" = "$EXPECTED_ROLLBACK_SHA" ] \
                     && [ "$SERVING_SHA" != "$HEAD_SHA" ]; then

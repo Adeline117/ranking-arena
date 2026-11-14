@@ -7,6 +7,7 @@ import { JsonLd } from '@/app/components/Providers/JsonLd'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import TraderProfileClient, { type UnregisteredTraderData } from './TraderProfileClient'
 import { ErrorBoundary } from '@/app/components/utils/ErrorBoundary'
+import TraderNotFound from './not-found'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
 import { isDeadPlatform } from '@/lib/constants/exchanges'
 import { isRetiredSource } from '@/lib/constants/retired-sources'
@@ -200,6 +201,30 @@ const cachedServingResolve = cache(async (handle: string, source?: string) => {
   }
 })
 
+/**
+ * Whether this handle has no public profile: unknown to both resolvers, or
+ * known only under a retired source with no live serving account. A lookup
+ * that timed out or failed is NOT missing — the page retries client-side.
+ * Shared by generateMetadata and the page so both reach the same answer.
+ */
+const isMissingTrader = cache(async (decoded: string): Promise<boolean> => {
+  const resolved = await cachedResolveTrader(decoded)
+  if (resolved === RESOLVE_UNAVAILABLE) return false
+  if (resolved && !isRetiredSource(resolved.platform)) return false
+  const serving = await cachedServingResolve(decoded)
+  return !serving || (await getDataMode(serving.source)) !== 'serving'
+})
+
+// Metadata for a handle with no public profile. The page renders the
+// not-found view in place (see TraderPage) instead of throwing notFound():
+// metadata streams after the loading.tsx shell has already been sent with
+// HTTP 200, so a late notFound() could only be applied by the browser — the
+// server HTML carried no not-found content and React reported error #419.
+const NOT_FOUND_METADATA: Metadata = {
+  title: 'Trader Not Found',
+  robots: { index: false, follow: false },
+}
+
 // The first-screen helper overlays current sealed rank/ROI authority. It must
 // not sit behind an ISR cache: a withdrawn source has to disappear from the
 // header on the next request instead of replaying a prior cohort.
@@ -342,49 +367,21 @@ export async function generateMetadata({
     )
   }
 
-  // ROOT CAUSE FIX (2026-04-23): calling notFound() in the page component
-  // (inside Suspense) caused Next.js to inject <meta name="robots" content="noindex"/>
-  // alongside the page's own "index, follow" meta tag. Google picks the most
-  // restrictive directive, so ALL 34k trader pages were effectively de-indexed.
-  // Fix: call notFound() HERE in generateMetadata() so it executes BEFORE
-  // Suspense streaming starts, producing a clean 404 without conflicting meta tags.
-  // Only 404 when genuinely not found. Timeout/error → return generic metadata
-  // and let client-side retry. This prevents valid traders from being 404'd
-  // during cron contention and de-indexed by Google.
+  // A missing trader gets noindex metadata and an in-place not-found view
+  // (see NOT_FOUND_METADATA). Timeout/error is not "missing": generic metadata
+  // is returned and the page retries client-side, so a valid trader is never
+  // de-indexed during database contention.
+  if (await isMissingTrader(decoded)) return NOT_FOUND_METADATA
+
   // Serving-only traders (arena.* read path, spec §2.4) may not exist in the
-  // legacy tables — check the serving resolver before 404ing.
-  let servingMeta: Awaited<ReturnType<typeof cachedServingResolve>> = null
-  if (resolved === null) {
-    servingMeta = await cachedServingResolve(decoded)
-    if (!servingMeta || (await getDataMode(servingMeta.source)) !== 'serving') {
-      notFound()
-    }
-  }
+  // legacy tables; their display name comes from the serving resolver.
+  const servingMeta = resolved === null ? await cachedServingResolve(decoded) : null
 
   const isUnavailable = resolved === RESOLVE_UNAVAILABLE
   const resolvedData = (isUnavailable ? null : resolved) as Exclude<
     ResolveResult,
     typeof RESOLVE_UNAVAILABLE
   >
-
-  // Retired sources (spec-dropped, archived to arena_archive) are removed from
-  // the product → 404. Done HERE in generateMetadata (before Suspense streaming)
-  // so the response is a clean 404 without conflicting robots meta — same
-  // rationale as the serving-null notFound above.
-  //
-  // ROOT-CAUSE FIX (2026-06-15): the SAME exchange_trader_id can exist in legacy
-  // trader_sources under MULTIPLE sources — including a RETIRED one (e.g.
-  // okx_web3) alongside a LIVE serving one (okx_futures). The legacy resolver
-  // has no ORDER BY, so under a different query plan (e.g. a browser's concurrent
-  // requests vs a lone curl) it non-deterministically returns the retired row →
-  // this check 404'd a perfectly valid serving trader. So: only 404 a retired
-  // legacy platform if the id does NOT also resolve to a live serving source.
-  if (resolvedData && isRetiredSource(resolvedData.platform)) {
-    const servingFallback = servingMeta ?? (await cachedServingResolve(decoded))
-    if (!servingFallback || (await getDataMode(servingFallback.source)) !== 'serving') {
-      notFound()
-    }
-  }
 
   const name = resolvedData?.handle || servingMeta?.nickname || decoded
   const exchange = resolvedData
@@ -727,15 +724,15 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     )
   }
 
-  // notFound() handled in generateMetadata() — do NOT call here.
-  // Calling notFound() inside a page component triggers Next.js Suspense
-  // to inject <meta name="robots" content="noindex"/> for ALL pages,
-  // even valid ones. generateMetadata runs before streaming starts.
-  if (!resolved || resolved === RESOLVE_UNAVAILABLE) return null
-
-  // Retired source → generateMetadata already issued the 404; render nothing
-  // here (return null, NOT notFound(), to avoid the page-level noindex bug).
-  if (isRetiredSource(resolved.platform)) return null
+  // Do NOT call notFound() here: this page renders inside the loading.tsx
+  // boundary, after the shell has been sent with HTTP 200, so a thrown
+  // notFound() is resolved only in the browser (React error #419) and adds a
+  // conflicting robots meta. Render the not-found view in place instead;
+  // generateMetadata marks the same handles noindex via isMissingTrader.
+  if (resolved === RESOLVE_UNAVAILABLE) return null
+  if (!resolved || isRetiredSource(resolved.platform)) {
+    return (await isMissingTrader(decodedHandle)) ? <TraderNotFound /> : null
+  }
 
   // Phase 2: Fetch trader detail. The rank-bearing projection reads the current
   // public cohort; claim ownership is looked up in parallel by the resolved
@@ -774,7 +771,12 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
           arena_score: (serverTraderData.performance as Record<string, unknown>).arena_score as
             | number
             | null,
-          roi: (serverTraderData.performance as Record<string, unknown>).roi_90d as number | null,
+          // Header ROI = primary period (90D → 30D → 7D), same order as the
+          // unlabelled arena_score/pnl above; roi_90d alone is null without 90D.
+          roi: ((serverTraderData.performance as Record<string, unknown>).roi_90d ??
+            (serverTraderData.performance as Record<string, unknown>).roi_30d ??
+            (serverTraderData.performance as Record<string, unknown>).roi_7d ??
+            null) as number | null,
           pnl: (serverTraderData.performance as Record<string, unknown>).pnl as number | null,
           win_rate: (serverTraderData.performance as Record<string, unknown>).win_rate as
             | number

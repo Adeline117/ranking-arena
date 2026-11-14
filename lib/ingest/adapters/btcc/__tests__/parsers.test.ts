@@ -72,7 +72,9 @@ describe('parseBtccProfile', () => {
     expect(stats.roi).toBe(235.01)
     expect(stats.pnl).toBe(27321.05)
     expect(stats.mdd).toBe(0) // gain.maxBackRate — already percent
-    expect(stats.winRate).toBe(97.92) // 47/48
+    // exchange-provided profitInfo.winRate (percent), not our 47/48 derivation
+    expect(stats.winRate).toBe(93.8)
+    expect(stats.extras.derived_window_win_rate_pct).toBe(97.92)
     expect(stats.winPositions).toBe(47)
     expect(stats.totalPositions).toBe(48)
     expect(stats.copierCount).toBe(2861) // info.followNum

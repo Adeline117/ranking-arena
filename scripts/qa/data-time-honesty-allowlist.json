@@ -1,0 +1,17 @@
+{
+  "_comment": "data-time-honesty-check.mjs 存量允许清单。count 只许减少；修掉一处就同步调低或删除条目。理由见 docs/DATA_TIME_DISPLAY_AUDIT_2026-11.md。",
+  "entries": [
+    {
+      "file": "app/api/admin/observability/route.ts",
+      "rule": "display-key-from-computed-at",
+      "count": 1,
+      "reason": "仅管理员可见的算分活性监控（latestUpdate=最近一次算分时间），不是面向用户的数据新鲜度。"
+    },
+    {
+      "file": "lib/data/trader/mappers.ts",
+      "rule": "display-key-from-computed-at",
+      "count": 1,
+      "reason": "mapLeaderboardRow 的 lastUpdated 承载 computed_at 供发布策略校验（getInitialTraders 回写 computed_at）；展示前由来源水位覆盖（getTraderDetail，PR #406）。改字段语义需与 #406 合并后另行处理。"
+    }
+  ]
+}

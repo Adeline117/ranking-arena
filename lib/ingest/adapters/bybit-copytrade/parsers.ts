@@ -384,10 +384,34 @@ function beehiveSide(v: unknown): 'long' | 'short' | null {
  * The payload has NO mark price / uPnL (the UI computes them client-side
  * from live tickers) — those stay NULL (NULL-collapse, spec §6).
  * Traders with 未结仓位保护 return data:[] + openTradeInfoProtection=1.
+ *
+ * Fail closed (Tier-D replaces the whole open-position set): success is
+ * retCode 0 (every captured bybit fixture); a protected book is HIDDEN, not
+ * flat, so it throws instead of returning []; non-array data throws.
  */
 export function parseBybitCopytradePositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const list = result(raw).data
-  if (!Array.isArray(list)) return []
+  const retCode = (raw as Dict | null)?.retCode
+  if (retCode !== 0 && retCode !== '0') {
+    throw new Error(
+      `[bybit_copytrade] positions returned a non-success API envelope (retCode=${String(retCode)})`
+    )
+  }
+  const res = result(raw)
+  const protection = res.openTradeInfoProtection
+  // Fixtures carry 0 / false for unprotected books; 1 / true = protected.
+  const protectedBook =
+    protection === true ||
+    protection === '1' ||
+    (typeof protection === 'number' && protection !== 0)
+  if (protectedBook) {
+    throw new Error('[bybit_copytrade] positions are hidden by 未结仓位保护 (not an empty book)')
+  }
+  const list = res.data
+  if (!Array.isArray(list)) {
+    throw new Error(
+      '[bybit_copytrade] positions returned a malformed envelope (data is not an array)'
+    )
+  }
   const out: ParsedPosition[] = []
   for (const item of list as Dict[]) {
     if (!item.symbol) continue

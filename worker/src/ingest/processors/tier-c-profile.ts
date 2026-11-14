@@ -49,6 +49,7 @@ import {
   publishProfile,
 } from '@/lib/ingest/serving/publish'
 import { getIngestPool } from '@/lib/ingest/db'
+import { parsePositionSnapshot } from '@/lib/ingest/core/position-snapshot'
 import { tierCResultKey, type TierCJobData } from '../queues'
 import { runHistoryTransaction } from '../history-transaction'
 
@@ -368,7 +369,11 @@ async function processHeavySurface(
       if (observedAt === null) {
         throw new Error('[tier-c] positions capture returned no evidence page')
       }
-      const positions = bundle.pages.flatMap((p) => adapter.parsePositions(p.payload, ctx))
+      const positions = parsePositionSnapshot(
+        (raw, parseCtx) => adapter.parsePositions(raw, parseCtx),
+        bundle.pages,
+        ctx
+      )
       rows = positionRowsForRender(positions, src.currency)
 
       const configuredDelayHours = src.meta.positions_delay_hours

@@ -1,4 +1,9 @@
-export const FRESHNESS_STATUSES = ['fresh', 'stale', 'critical', 'unknown'] as const
+/**
+ * `quarantined`: the publication isolated this source from at least one
+ * season's cohort (not fresh / count-check failed), so it is NOT on the public
+ * leaderboard for that season even though the registry still promises it.
+ */
+export const FRESHNESS_STATUSES = ['fresh', 'stale', 'critical', 'unknown', 'quarantined'] as const
 
 export type FreshnessStatus = (typeof FRESHNESS_STATUSES)[number]
 
@@ -10,6 +15,17 @@ export interface PlatformFreshnessStatus {
   ageHours: number | null
   status: FreshnessStatus
   recordCount: number
+  /** Present when the publication isolated this source from a season. */
+  quarantine?: SourceQuarantine[]
+}
+
+export interface SourceQuarantine {
+  season: string
+  reasons: string[]
+  /** First isolation of the current unbroken run. */
+  since: string
+  /** Last publication that (re)confirmed the isolation. */
+  lastConfirmedAt: string
 }
 
 export interface FreshnessReport {
@@ -21,6 +37,7 @@ export interface FreshnessReport {
     stale: number
     critical: number
     unknown: number
+    quarantined: number
   }
   thresholds: {
     stale_hours: number
@@ -77,6 +94,25 @@ function status(value: unknown, label: string): FreshnessStatus {
   return value as FreshnessStatus
 }
 
+function quarantineList(value: unknown, index: number): SourceQuarantine[] {
+  if (!Array.isArray(value)) {
+    throw new TypeError(`freshness platform ${index} quarantine must be an array`)
+  }
+  return value.map((entry, entryIndex) => {
+    const label = `freshness platform ${index} quarantine ${entryIndex}`
+    const item = record(entry, label)
+    if (!Array.isArray(item.reasons) || !item.reasons.every((r) => typeof r === 'string')) {
+      throw new TypeError(`${label} reasons must be strings`)
+    }
+    return {
+      season: nonEmptyString(item.season, `${label} season`),
+      reasons: item.reasons as string[],
+      since: timestamp(item.since, `${label} since`),
+      lastConfirmedAt: timestamp(item.lastConfirmedAt, `${label} lastConfirmedAt`),
+    }
+  })
+}
+
 /**
  * Validate the authenticated admin response before it can be rendered.
  *
@@ -94,6 +130,11 @@ export function parseFreshnessReport(value: unknown): FreshnessReport {
     stale: nonNegativeInteger(summaryRecord.stale, 'freshness summary stale'),
     critical: nonNegativeInteger(summaryRecord.critical, 'freshness summary critical'),
     unknown: nonNegativeInteger(summaryRecord.unknown, 'freshness summary unknown'),
+    // Older deployments did not report quarantine; absent means none.
+    quarantined:
+      summaryRecord.quarantined === undefined
+        ? 0
+        : nonNegativeInteger(summaryRecord.quarantined, 'freshness summary quarantined'),
   }
 
   const thresholdRecord = record(report.thresholds, 'freshness thresholds')
@@ -141,6 +182,9 @@ export function parseFreshnessReport(value: unknown): FreshnessReport {
         platformRecord.recordCount,
         `freshness platform ${index} recordCount`
       ),
+      ...(platformRecord.quarantine === undefined
+        ? {}
+        : { quarantine: quarantineList(platformRecord.quarantine, index) }),
     }
   })
 
@@ -152,16 +196,22 @@ export function parseFreshnessReport(value: unknown): FreshnessReport {
   ) as Record<FreshnessStatus, number>
   if (
     summary.total !== platforms.length ||
-    summary.total !== summary.fresh + summary.stale + summary.critical + summary.unknown ||
+    summary.total !==
+      summary.fresh + summary.stale + summary.critical + summary.unknown + summary.quarantined ||
     summary.fresh !== statusCounts.fresh ||
     summary.stale !== statusCounts.stale ||
     summary.critical !== statusCounts.critical ||
-    summary.unknown !== statusCounts.unknown
+    summary.unknown !== statusCounts.unknown ||
+    summary.quarantined !== statusCounts.quarantined
   ) {
     throw new TypeError('freshness summary does not match platform statuses')
   }
 
-  const expectedOk = summary.stale === 0 && summary.critical === 0 && summary.unknown === 0
+  const expectedOk =
+    summary.stale === 0 &&
+    summary.critical === 0 &&
+    summary.unknown === 0 &&
+    summary.quarantined === 0
   if (report.ok !== expectedOk) throw new TypeError('freshness ok does not match summary')
 
   return {

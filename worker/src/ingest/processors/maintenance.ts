@@ -5,6 +5,8 @@
  *   3. trader_series >90d downsampled to weekly
  *   4. long-tail histories pruned to 180d (recently-ranked traders exempt)
  *   5. expired profile_cache rows dropped
+ *   6. leaderboard snapshots >180d dropped unless still evidence
+ *      (latest passed / sealed-publication board / trust / Tier-A receipt)
  * Runs every 6h; each step is independent — one failure doesn't block the
  * rest, and failures land in the daily digest (never page).
  */
@@ -17,6 +19,7 @@ import {
   downsampleOldSeries,
   downsampleSnapshotEntries,
   ensurePartitions,
+  pruneLeaderboardSnapshots,
   pruneLongTailHistories,
 } from '@/lib/ingest/serving/series'
 import { alert } from '@/lib/ingest/alerting'
@@ -30,6 +33,7 @@ export async function processMaintenance(_job: Job): Promise<Record<string, unkn
     ['raw_cleanup', () => cleanupRawObjects(30)],
     ['series_downsample', () => downsampleOldSeries(90)],
     ['entries_downsample', () => downsampleSnapshotEntries(7)],
+    ['snapshot_retention', () => pruneLeaderboardSnapshots(180)],
     ['history_retention', () => pruneLongTailHistories(180)],
     [
       'profile_cache_expiry',

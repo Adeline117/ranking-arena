@@ -78,6 +78,17 @@ describe('leaderboard_ranks codec layout rebuild', () => {
     )
   })
 
+  it('refuses file-name-order replay before touching the table (launch-slot guard)', () => {
+    const guard = between(migration, 'DO $launch_slot_guard$', '$launch_slot_guard$;')
+    expect(migration.indexOf('DO $launch_slot_guard$')).toBeLessThan(
+      migration.indexOf('DO $preflight$')
+    )
+    expect(guard).toContain('arena.encode_leaderboard_rank_row_v1(public.leaderboard_ranks)')
+    expect(guard).toContain('arena.leaderboard_rank_season_mutation_fences')
+    expect(guard).toContain('leaderboard\\_rank\\_season\\_%\\_fence')
+    expect(guard).toContain('out of its launch slot')
+  })
+
   it('creates the table in the exact column order the typed batch writer uses', () => {
     const createTable = between(
       migration,

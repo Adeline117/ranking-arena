@@ -118,12 +118,14 @@ function AuthCallbackContent() {
       const providerError = searchParams.get('error')
       const errorDescription = searchParams.get('error_description')
       if (providerError) {
-        const errorMsg = errorDescription || providerError
         logger.warn('OAuth provider error:', {
           error: providerError,
           description: errorDescription,
         })
-        replaceFromCallback(`/login?error=${encodeURIComponent(errorMsg)}`)
+        // Hand off a fixed code only; provider text is never shown verbatim.
+        replaceFromCallback(
+          `/login?error=${providerError === 'access_denied' ? 'oauth_cancelled' : 'auth_failed'}`
+        )
         return
       }
 

@@ -20,51 +20,59 @@ import { withCron } from '@/lib/api/with-cron'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-export const GET = withCron('health-check-all', async (request: NextRequest) => {
-  // Resolve base URL for self-checks
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
-    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-    || request.nextUrl.origin
+export const GET = withCron(
+  'health-check-all',
+  async (request: NextRequest) => {
+    // Resolve base URL for self-checks
+    const baseUrl =
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+      request.nextUrl.origin
 
-  // Safety timeout: race the full health check against a 45s deadline so
-  // plog always has at least 15s to finalize before Vercel kills the fn.
-  const HEALTH_CHECK_BUDGET_MS = 45_000
-  const report = await Promise.race([
-    runFullHealthCheck(baseUrl),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`runFullHealthCheck exceeded ${HEALTH_CHECK_BUDGET_MS}ms budget`)), HEALTH_CHECK_BUDGET_MS)
-    ),
-  ])
+    // Safety timeout: race the full health check against a 45s deadline so
+    // plog always has at least 15s to finalize before Vercel kills the fn.
+    const HEALTH_CHECK_BUDGET_MS = 45_000
+    const report = await Promise.race([
+      runFullHealthCheck(baseUrl),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`runFullHealthCheck exceeded ${HEALTH_CHECK_BUDGET_MS}ms budget`)),
+          HEALTH_CHECK_BUDGET_MS
+        )
+      ),
+    ])
 
-  // Store result for dashboard
-  await PipelineState.set('health:latest', {
-    score: report.score,
-    overall: report.overall,
-    checked_at: report.checked_at,
-    pass: report.checks.filter(c => c.status === 'pass').length,
-    warn: report.checks.filter(c => c.status === 'warn').length,
-    fail: report.checks.filter(c => c.status === 'fail').length,
-  })
+    // Store result for dashboard
+    await PipelineState.set('health:latest', {
+      score: report.score,
+      overall: report.overall,
+      checked_at: report.checked_at,
+      pass: report.checks.filter((c) => c.status === 'pass').length,
+      warn: report.checks.filter((c) => c.status === 'warn').length,
+      fail: report.checks.filter((c) => c.status === 'fail').length,
+    })
 
-  // Alert on degraded/critical
-  if (report.overall !== 'healthy') {
-    const failedChecks = report.checks.filter(c => c.status === 'fail')
-    const warnChecks = report.checks.filter(c => c.status === 'warn')
+    // Alert on degraded/critical
+    if (report.overall !== 'healthy') {
+      const failedChecks = report.checks.filter((c) => c.status === 'fail')
+      const warnChecks = report.checks.filter((c) => c.status === 'warn')
 
-    sendRateLimitedAlert(
-      {
-        title: `Health Check: ${report.overall.toUpperCase()} (score: ${report.score}/100)`,
-        message: [
-          ...failedChecks.map(c => `FAIL: ${c.name} — ${c.details}`),
-          ...warnChecks.map(c => `WARN: ${c.name} — ${c.details}`),
-        ].join('\n'),
-        level: report.overall === 'critical' ? 'critical' : 'warning',
-        details: { score: report.score, fail: failedChecks.length, warn: warnChecks.length },
-      },
-      'health-check:alert',
-      30 * 60 * 1000 // 30min rate limit
-    ).catch(err => logger.warn('[health-check] Alert failed:', err))
-  }
+      sendRateLimitedAlert(
+        {
+          title: `Health Check: ${report.overall.toUpperCase()} (score: ${report.score}/100)`,
+          message: [
+            ...failedChecks.map((c) => `FAIL: ${c.name} — ${c.details}`),
+            ...warnChecks.map((c) => `WARN: ${c.name} — ${c.details}`),
+          ].join('\n'),
+          level: report.overall === 'critical' ? 'critical' : 'warning',
+          details: { score: report.score, fail: failedChecks.length, warn: warnChecks.length },
+        },
+        'health-check:alert',
+        30 * 60 * 1000 // 30min rate limit
+      ).catch((err) => logger.warn('[health-check] Alert failed:', err))
+    }
 
-  return { count: report.checks.length, score: report.score, overall: report.overall }
-})
+    return { count: report.checks.length, score: report.score, overall: report.overall }
+  },
+  { maxDurationSec: maxDuration }
+)

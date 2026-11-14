@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
 import { formatTimeAgo, type Locale } from '@/lib/utils/date'
+import { describeDataTime, formatDataClock } from '@/lib/utils/data-time'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface RankingFooterProps {
@@ -17,6 +18,13 @@ interface RankingFooterProps {
   isStale: boolean
 }
 
+const CLOCK_LOCALE: Record<string, string> = {
+  en: 'en-US',
+  zh: 'zh-CN',
+  ja: 'ja-JP',
+  ko: 'ko-KR',
+}
+
 export default function RankingFooter({
   loading,
   lastUpdated,
@@ -27,6 +35,13 @@ export default function RankingFooter({
   isStale,
 }: RankingFooterProps) {
   const { language } = useLanguage()
+  // The SSR shell's "Data as of" (RankingControls) is hidden once React data is
+  // ready, so the client footer must carry the same machine-readable source time.
+  const sourceMs = describeDataTime(lastUpdated ?? null).timestampMs
+  const sourceClock =
+    sourceMs === null
+      ? null
+      : formatDataClock(sourceMs, Date.now(), CLOCK_LOCALE[language] ?? 'en-US')
 
   // Live relative timestamp: re-render every 10s so "12s ago" keeps ticking.
   // The absolute time stays available as the title attribute.
@@ -83,7 +98,13 @@ export default function RankingFooter({
             <circle cx="12" cy="12" r="10" />
             <path d="M12 6v6l4 2" />
           </svg>
+          {sourceClock && (
+            <time dateTime={lastUpdated} suppressHydrationWarning>
+              {t('rankingControlsDataAsOf')} {sourceClock}
+            </time>
+          )}
           <span suppressHydrationWarning title={formatLastUpdated(lastUpdated) ?? undefined}>
+            {sourceClock ? '· ' : ''}
             {formatTimeAgo(lastUpdated, language as Locale)}
           </span>
           {lastRefreshFailed && (

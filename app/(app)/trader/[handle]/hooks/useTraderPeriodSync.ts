@@ -10,7 +10,8 @@
  * so it can be reasoned about and tested in isolation.
  *
  * Sync rules:
- *  - On mount: read `?period=` from URL and push it into the zustand store
+ *  - On mount and on every pathname (trader) change: read `?period=` from the
+ *    URL and push it into the zustand store; no/invalid `?period=` means 90D
  *  - On store change: write the new period back to URL (shallow
  *    history.replaceState — no RSC round-trip, no scroll)
  *  - Skip the very first store-change tick (mount race — the init effect
@@ -32,15 +33,17 @@ export function useTraderPeriodSync(): Period {
   const selectedPeriod = usePeriodStore((s) => s.period)
   const setPeriod = usePeriodStore((s) => s.setPeriod)
 
-  // 1. URL → store on mount. The store is module-global, so without a reset a
-  // trader opened in-app inherited the previous trader's period (e.g. 7D)
-  // while its URL (no ?period=) meant the 90D default, and shared links
-  // disagreed with what was shown. The URL is the source of truth.
+  // 1. URL → store on mount AND whenever the trader (pathname) changes. The
+  // store is module-global, so without a reset a trader opened in-app
+  // inherited the previous trader's period (e.g. 7D) while its URL (no
+  // ?period=) meant the 90D default, and shared links disagreed with what was
+  // shown. Keying on pathname also covers a [handle] page that stays mounted
+  // across a client navigation. The URL is the source of truth.
   const urlPeriod = searchParams.get('period')
   useEffect(() => {
     setPeriod(urlPeriod && ['7D', '30D', '90D'].includes(urlPeriod) ? (urlPeriod as Period) : '90D')
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on mount
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- per page/trader, not per period tick
+  }, [pathname])
 
   // 2. store → URL on change (skip first fire to avoid mount race)
   const periodSyncCountRef = useRef(0)

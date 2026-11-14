@@ -127,8 +127,8 @@ test('passing report is deterministic, exact, and redacts unrelated input fields
 
   assert.equal(first.schema, REPORT_SCHEMA)
   assert.equal(first.status, 'pass')
-  assert.equal(first.summary.repositoryDefinedCount, 17)
-  assert.equal(first.summary.disabledRepositoryDefinedCount, 17)
+  assert.equal(first.summary.repositoryDefinedCount, 18)
+  assert.equal(first.summary.disabledRepositoryDefinedCount, 18)
   assert.equal(first.summary.dynamicWorkflowCount, 1)
   assert.equal(first.summary.nonCompletedRunCount, 0)
   assert.deepEqual(first, second)
@@ -152,6 +152,91 @@ test('an expected repository workflow becoming active fails closed', () => {
       path: '.github/workflows/ci.yml',
     }
   )
+})
+
+const PROBE_PATH = '.github/workflows/public-freshness-probe.yml'
+const PROBE_NAME = 'Public Data Freshness Probe'
+
+test('the public freshness probe is the sole repository workflow allowed to be active', () => {
+  const workflows = passingWorkflows()
+  workflows.find((workflow) => workflow.path === PROBE_PATH).state = 'active'
+  const report = analyzeWorkflowControlPlane({
+    runs: [completedRun({ workflowName: PROBE_NAME })],
+    workflows,
+  })
+  assert.equal(report.status, 'pass')
+  assert.deepEqual(report.policy.repositoryStateExceptions, [
+    { allowedStates: ['active', 'disabled_manually'], path: PROBE_PATH },
+  ])
+  const exceptions = EXPECTED_REPOSITORY_WORKFLOWS.filter((workflow) => workflow.allowedStates)
+  assert.deepEqual(
+    exceptions.map((workflow) => workflow.path),
+    [PROBE_PATH]
+  )
+})
+
+test('every other repository workflow active still fails while the probe is active', () => {
+  for (const other of EXPECTED_REPOSITORY_WORKFLOWS.filter((w) => w.path !== PROBE_PATH)) {
+    const workflows = passingWorkflows()
+    workflows.find((workflow) => workflow.path === PROBE_PATH).state = 'active'
+    workflows.find((workflow) => workflow.path === other.path).state = 'active'
+    const report = analyzeWorkflowControlPlane({ runs: [], workflows })
+    assert.equal(report.status, 'fail', `${other.path} active must fail`)
+    assert.deepEqual(
+      report.violations.find((v) => v.code === 'repository_workflow_state_mismatch'),
+      {
+        actual: 'active',
+        code: 'repository_workflow_state_mismatch',
+        expected: 'disabled_manually',
+        path: other.path,
+      }
+    )
+  }
+})
+
+test('an in-flight probe run is allowed but any other non-completed run still fails', () => {
+  const workflows = passingWorkflows()
+  workflows.find((workflow) => workflow.path === PROBE_PATH).state = 'active'
+  const probeRun = completedRun({
+    databaseId: 9100,
+    status: 'in_progress',
+    workflowName: PROBE_NAME,
+  })
+  const totals = Object.fromEntries(NON_COMPLETED_RUN_STATUSES.map((status) => [status, 0]))
+  assert.equal(
+    analyzeWorkflowControlPlane({
+      maxObservedRunStatusTotals: { ...totals, in_progress: 1 },
+      observationRoundCount: LIVE_OBSERVATION_ROUND_COUNT,
+      runs: [probeRun],
+      workflows,
+    }).status,
+    'pass'
+  )
+
+  const report = analyzeWorkflowControlPlane({
+    maxObservedRunStatusTotals: { ...totals, in_progress: 2 },
+    observationRoundCount: LIVE_OBSERVATION_ROUND_COUNT,
+    runs: [probeRun, completedRun({ databaseId: 9101, status: 'in_progress', workflowName: 'CI' })],
+    workflows,
+  })
+  assert.equal(report.status, 'fail')
+  assert.ok(
+    report.violations.some((v) => v.code === 'non_completed_run' && v.workflowName === 'CI')
+  )
+  assert.ok(!report.violations.some((v) => v.workflowName === PROBE_NAME))
+})
+
+test('the probe exception does not cover an untracked active workflow file', () => {
+  const workflows = passingWorkflows()
+  workflows.push({
+    id: 98,
+    name: PROBE_NAME,
+    path: '.github/workflows/probe-copy.yml',
+    state: 'active',
+  })
+  const report = analyzeWorkflowControlPlane({ runs: [], workflows })
+  assert.equal(report.status, 'fail')
+  assert.ok(report.violations.some((v) => v.code === 'unknown_repository_workflow_active'))
 })
 
 test('missing, renamed, and unknown active repository workflows are all rejected', () => {

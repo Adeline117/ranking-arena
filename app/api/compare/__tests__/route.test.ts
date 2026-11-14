@@ -107,10 +107,10 @@ jest.mock('@/lib/data/trader/public-profile-ranking', () => {
   }
 })
 
-jest.mock('@/lib/logger', () => ({
-  __esModule: true,
-  default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
-}))
+jest.mock('@/lib/logger', () => {
+  const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }
+  return { __esModule: true, default: logger, logger }
+})
 
 jest.mock('@/lib/utils/logger', () => ({
   createLogger: jest.fn(() => ({
@@ -273,6 +273,36 @@ describe('GET /api/compare', () => {
 
     expect(res.status).toBe(403)
     expect((await res.json()).error.message).toMatch(/Pro membership required/)
+  })
+
+  it('answers 503, not 403, when the subscription lookup fails', async () => {
+    mockSupabaseFrom.mockImplementation((table: string) =>
+      table === 'subscriptions'
+        ? buildFromMock({ result: { data: null, error: { message: 'multiple rows' } } })
+        : buildFromMock()
+    )
+
+    const res = await GET(
+      new NextRequest('http://localhost/api/compare?ids=t1,t2&platforms=bybit,binance_futures')
+    )
+
+    expect(res.status).toBe(503)
+  })
+
+  it('passes a profile-only Pro grant to the feature gate', async () => {
+    mockSupabaseFrom.mockImplementation((table: string) => {
+      if (table === 'subscriptions') return buildFromMock({ result: { data: null, error: null } })
+      if (table === 'user_profiles') {
+        return buildFromMock({ result: { data: { subscription_tier: 'pro' }, error: null } })
+      }
+      return buildFromMock()
+    })
+
+    await GET(
+      new NextRequest('http://localhost/api/compare?ids=t1,t2&platforms=bybit,binance_futures')
+    )
+
+    expect(hasFeatureAccess).toHaveBeenCalledWith('pro', 'trader_comparison')
   })
 
   it.each([

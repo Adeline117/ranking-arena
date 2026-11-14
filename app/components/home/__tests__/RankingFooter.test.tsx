@@ -24,4 +24,19 @@ describe('RankingFooter source freshness', () => {
 
     expect(screen.getByText('dataStaleWarning')).toBeInTheDocument()
   })
+
+  it('renders a machine-readable "Data as of" source time after hydration', () => {
+    const watermark = new Date().toISOString()
+    render(<RankingFooter {...commonProps} lastUpdated={watermark} isStale={false} />)
+
+    const time = screen.getByText(/^rankingControlsDataAsOf /)
+    expect(time.tagName).toBe('TIME')
+    expect(time).toHaveAttribute('datetime', watermark)
+  })
+
+  it('omits the source time when the watermark is not a valid timestamp', () => {
+    render(<RankingFooter {...commonProps} lastUpdated="not-a-time" isStale={false} />)
+
+    expect(screen.queryByText(/^rankingControlsDataAsOf /)).not.toBeInTheDocument()
+  })
 })

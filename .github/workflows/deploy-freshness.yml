@@ -138,7 +138,7 @@ jobs:
             --output /tmp/deploy-freshness-health.json --write-out '%{http_code}' \
             "$HEALTH_URL") || HEALTH_CURL_EXIT=$?
           if [ "$HEALTH_CURL_EXIT" -ne 0 ] \
-            || [[ "$HEALTH_HTTP" != "200" && "$HEALTH_HTTP" != "202" ]]; then
+            || [[ "$HEALTH_HTTP" != "200" && "$HEALTH_HTTP" != "202" && "$HEALTH_HTTP" != "503" ]]; then
             fail_freshness "🛑 部署新鲜度哨兵失明：生产 health 不可读（curl=$HEALTH_CURL_EXIT HTTP=${HEALTH_HTTP:-000}）。"
           fi
           if ! jq -e 'type == "object"' /tmp/deploy-freshness-health.json >/dev/null 2>&1; then

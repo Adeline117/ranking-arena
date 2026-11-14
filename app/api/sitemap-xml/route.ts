@@ -17,6 +17,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { parseWatermarkRows, watermarkBySource } from '@/lib/rankings/source-watermark'
 import { TOP_EXCHANGE_SLUGS } from '@/lib/constants/exchange-slugs'
 import { ARTICLES } from '@/app/(app)/learn/articles'
 import { ARENA_BOT_AUTHOR_ID } from '@/lib/data/arena-bot-publication-policy'
@@ -55,7 +56,6 @@ type SitemapProfileState = {
 type PublicSitemapTrader = {
   handle: string
   source: string
-  computedAt?: string
 }
 
 function isNonEmptyString(value: unknown): value is string {
@@ -86,12 +86,7 @@ function asPublicSitemapTrader(row: unknown): PublicSitemapTrader | null {
     return null
   }
 
-  const computedAt =
-    isNonEmptyString(record.computed_at) && Number.isFinite(Date.parse(record.computed_at))
-      ? new Date(record.computed_at).toISOString()
-      : undefined
-
-  return { handle, source, ...(computedAt ? { computedAt } : {}) }
+  return { handle, source }
 }
 
 export function isSitemapProfileActive(profile: SitemapProfileState, now = Date.now()): boolean {
@@ -288,7 +283,7 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
   // not fetch an arbitrary raw page and attempt to filter it after pagination.
   const { data, error } = (await supabase
     .from(PUBLIC_RANKED_LEADERBOARD as never)
-    .select('handle, source_trader_id, source, rank, computed_at')
+    .select('handle, source_trader_id, source, rank')
     .eq('season_id', '90D')
     .not('rank', 'is', null)
     .order('rank', { ascending: true, nullsFirst: false })
@@ -313,6 +308,28 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
     return xmlResponse(urlsetXml([]))
   }
 
+  // lastmod = the 90D source watermark (when the exchange data was captured).
+  // `computed_at` is only Arena's re-score time; an unknown watermark omits
+  // lastmod instead of claiming the compute or request time.
+  const shardSources = [...new Set(traders.flatMap((trader) => (trader ? [trader.source] : [])))]
+  let watermarks = new Map<string, string | null>()
+  if (shardSources.length > 0) {
+    try {
+      const { data: watermarkData, error: watermarkError } = await supabase
+        .from('leaderboard_source_freshness')
+        .select('source, source_as_of')
+        .eq('season_id', '90D')
+        .in('source', shardSources)
+      if (watermarkError) {
+        console.error('[sitemap] source watermark query failed:', watermarkError.message)
+      } else {
+        watermarks = watermarkBySource(parseWatermarkRows(watermarkData), shardSources)
+      }
+    } catch (watermarkException) {
+      console.error('[sitemap] source watermark query threw:', watermarkException)
+    }
+  }
+
   const seen = new Set<string>()
   const entries = traders
     .filter((trader): trader is PublicSitemapTrader => {
@@ -329,9 +346,8 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
       // handle-vs-id 双 URL + 跨源同名歧义。ASCII handle 用 handle 段,否则不确定
       // 就用它本身(sitemap 只是发现入口,canonical 才是权威,Google 会向其收敛)。
       loc: `${BASE_URL}/trader/${encodeURIComponent(trader.handle)}?platform=${encodeURIComponent(trader.source)}`,
-      // 用真实 computed_at 作 lastmod;此前全用请求时刻 now → Google 判 lastmod
-      // 不可信直接整体忽略该字段(2026-07-11 SEO 审计),而不是伪造请求时刻。
-      lastmod: trader.computedAt,
+      // lastmod 只用来源水位;未知则省略,不伪造请求时刻或 computed_at。
+      lastmod: watermarks.get(trader.source) ?? undefined,
       changefreq: 'daily',
       priority: 0.8,
     }))

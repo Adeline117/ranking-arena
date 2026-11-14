@@ -227,7 +227,7 @@ describe('checkRateLimitFull with Redis errors at runtime', () => {
     expect(result.response!.headers.get('Retry-After')).toBe('30')
   })
 
-  it('failClose: false (default) → allows request when ratelimiter.limit throws', async () => {
+  it('failClose: false (default) → falls back to the in-process limiter when ratelimiter.limit throws', async () => {
     let rlMod!: typeof import('../rate-limit')
     await jest.isolateModulesAsync(async () => {
       jest.doMock('@upstash/redis', () => ({
@@ -253,8 +253,20 @@ describe('checkRateLimitFull with Redis errors at runtime', () => {
       // failClose not specified → defaults to false
     })
 
+    // Allowed, but now counted by the coarse per-instance fallback.
     expect(result.response).toBeNull()
-    expect(result.meta).toBeNull()
+    expect(result.meta).toMatchObject({ limit: 5, remaining: 4 })
+
+    // The fallback still enforces the configured ceiling (no unbounded fail-open).
+    let last = result
+    for (let i = 0; i < 5; i += 1) {
+      last = await rlMod.checkRateLimitFull(req, {
+        requests: 5,
+        window: 60,
+        prefix: 'failopen-allow-test',
+      })
+    }
+    expect(last.response?.status).toBe(429)
   })
 
   it('failClose: true with healthy Redis → still enforces 429 when over limit', async () => {

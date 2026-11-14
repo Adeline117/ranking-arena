@@ -37,7 +37,14 @@ interface CronContext {
 }
 
 interface CronOptions {
-  /** Max duration before safety timeout fires (ms). Default: 580_000 (for 600s Vercel limit) */
+  /**
+   * The route's own `export const maxDuration` (seconds). The safety timeout
+   * and lock TTL are derived from it so the timeout fires BEFORE Vercel kills
+   * the function (2026-11 audit P2-3: a fixed 580s default never fired for
+   * 30-300s routes, leaving pipeline_logs stuck in `running`). Default 60.
+   */
+  maxDurationSec?: number
+  /** Explicit safety timeout (ms); must be below the route's maxDuration. */
   safetyTimeoutMs?: number
   /** Initial metadata to log with PipelineLogger */
   metadata?: Record<string, unknown>
@@ -51,8 +58,26 @@ type CronHandler = (
 /**
  * Wrap a cron job handler with auth, logging, and safety timeout.
  */
+const DEFAULT_MAX_DURATION_SEC = 60
+
+/** Safety timeout = maxDuration minus a margin (10%, at least 5s) so the
+ *  timeout log is written while the function is still alive. */
+export function deriveSafetyTimeoutMs(maxDurationSec: number): number {
+  const maxMs = Math.max(1, maxDurationSec) * 1000
+  const margin = Math.max(5_000, Math.round(maxMs * 0.1))
+  return Math.max(1_000, maxMs - margin)
+}
+
+/** Compare-and-delete: only the holder of `token` may release the lock, so a
+ *  run that outlived its TTL cannot delete the next run's lock. */
+const RELEASE_LOCK_IF_OWNER = `if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('DEL', KEYS[1])
+end
+return 0`
+
 export function withCron(jobName: string, handler: CronHandler, options: CronOptions = {}) {
-  const { safetyTimeoutMs = 580_000 } = options
+  const maxDurationSec = options.maxDurationSec ?? DEFAULT_MAX_DURATION_SEC
+  const safetyTimeoutMs = options.safetyTimeoutMs ?? deriveSafetyTimeoutMs(maxDurationSec)
 
   return async (request: NextRequest) => {
     // 1. Authenticate first, then stop V1-held automation before correlation,
@@ -73,14 +98,17 @@ export function withCron(jobName: string, handler: CronHandler, options: CronOpt
   async function runCron(request: NextRequest, correlationId: string): Promise<NextResponse> {
     // 2. Distributed lock — prevent concurrent execution of the same cron job
     const lockKey = `cron:lock:${jobName}`
-    const lockTtlSec = Math.ceil(safetyTimeoutMs / 1000)
+    // The lock must outlive the function (killed at maxDuration) by a small
+    // margin, then expire on its own if `finally` never ran.
+    const lockTtlSec = Math.ceil(Math.max(maxDurationSec * 1000, safetyTimeoutMs) / 1000) + 30
+    const lockToken = `${Date.now()}:${Math.random().toString(36).slice(2, 12)}`
     let redis: Awaited<ReturnType<typeof getSharedRedis>> = null
     let lockAcquired = false
     try {
       redis = await getSharedRedis()
       if (redis) {
         // SET NX with EX — atomic acquire
-        const result = await redis.set(lockKey, Date.now().toString(), { nx: true, ex: lockTtlSec })
+        const result = await redis.set(lockKey, lockToken, { nx: true, ex: lockTtlSec })
         if (result === 'OK') {
           lockAcquired = true
         } else {
@@ -168,7 +196,7 @@ export function withCron(jobName: string, handler: CronHandler, options: CronOpt
       // Release the distributed lock
       if (lockAcquired && redis) {
         try {
-          await redis.del(lockKey)
+          await redis.eval(RELEASE_LOCK_IF_OWNER, [lockKey], [lockToken])
         } catch (unlockErr) {
           logger.warn(`[${jobName}] Failed to release lock:`, unlockErr)
         }

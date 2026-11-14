@@ -5,6 +5,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
 import type { RecordProvenance } from '@/lib/data/serving/types'
 import { formatTimeAgo } from '@/lib/utils/date'
+import { describeDataTime } from '@/lib/utils/data-time'
 
 export interface RecordProvenanceFooterProps {
   provenance: RecordProvenance
@@ -37,6 +38,9 @@ export default function RecordProvenanceFooter({
 }: RecordProvenanceFooterProps) {
   const { t, language } = useLanguage()
   const name = exchangeName || provenance.source
+  // An epoch/invalid clock is unknown, never a real age.
+  const sourceTime = describeDataTime(provenance.sourceAsOf)
+  const observedTime = describeDataTime(provenance.observedAt)
 
   return (
     <div
@@ -51,15 +55,26 @@ export default function RecordProvenanceFooter({
     >
       <Text size="xs" color="tertiary">
         {t('provenanceSource')}: {name} · {t('recordProvenanceSourceAsOf')}{' '}
-        {provenance.sourceAsOf ? (
-          <ProvenanceTime timestamp={provenance.sourceAsOf} language={language} />
+        {sourceTime.iso ? (
+          <ProvenanceTime timestamp={sourceTime.iso} language={language} />
         ) : (
           t('recordProvenanceUnknown')
         )}
+        {sourceTime.isStale && (
+          <span
+            data-testid="record-provenance-stale"
+            suppressHydrationWarning
+            style={{ color: tokens.colors.accent.warning }}
+          >
+            {' ('}
+            {t('dataStaleWarning')}
+            {')'}
+          </span>
+        )}
         {' · '}
         {t('recordProvenanceObservedAt')}{' '}
-        {provenance.observedAt ? (
-          <ProvenanceTime timestamp={provenance.observedAt} language={language} />
+        {observedTime.iso ? (
+          <ProvenanceTime timestamp={observedTime.iso} language={language} />
         ) : (
           t('recordProvenanceUnknown')
         )}

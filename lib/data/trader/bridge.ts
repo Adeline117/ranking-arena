@@ -53,9 +53,12 @@ export function toTraderPageData(
   }
 
   // Performance (matches TraderPerformance interface)
+  // 90D-labelled fields come ONLY from the 90D period. `t` is the primary
+  // period (90D → 30D → 7D fallback, queries.ts), so `?? t.*` here made a
+  // 30D-only source render its 30D ROI/score under the 90D tab.
   const performance = {
     has_period_90d: p90 != null,
-    roi_90d: p90?.roi ?? t.roi,
+    roi_90d: p90?.roi ?? null,
     roi_30d: p30?.roi ?? null,
     roi_7d: p7?.roi ?? null,
     pnl: t.pnl,
@@ -69,12 +72,12 @@ export function toTraderPageData(
     max_drawdown_30d: p30?.maxDrawdown ?? null,
     trades_count: t.tradesCount,
     arena_score: t.arenaScore,
-    arena_score_90d: p90?.arenaScore ?? t.arenaScore,
+    arena_score_90d: p90?.arenaScore ?? null,
     arena_score_30d: p30?.arenaScore ?? null,
     arena_score_7d: p7?.arenaScore ?? null,
     // Overall composite score (70/25/5 weighting)
     overall_score: (() => {
-      const s90 = p90?.arenaScore ?? t.arenaScore
+      const s90 = p90?.arenaScore ?? null
       const s30 = p30?.arenaScore
       const s7 = p7?.arenaScore
       if (s90 != null) {

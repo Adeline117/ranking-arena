@@ -4,34 +4,40 @@
  * (defeats React.memo; ~750-1000 throwaway objects per 50-row render pass -> ~0).
  */
 import { tokens } from '@/lib/design-tokens'
-import { TRADER_TEXT_TERTIARY, TRADER_ACCENT_ERROR } from './shared/TraderDisplay'
+import { TRADER_TEXT_TERTIARY } from './shared/TraderDisplay'
 
-// Hero row gradient styles (top 3) — more dramatic presence
+// Shared horizontal rhythm for the sticky column header AND every data row.
+// The header used gap 8 / padding-x 16 while rows used 12 / 20, so numeric
+// columns drifted 16–20px from their labels. Both now read these.
+export const ROW_GAP = tokens.spacing[3] // 12px
+export const ROW_PADDING_X = tokens.spacing[5] // 20px
+
+// Hero row styles (top 3): left medal bar + subtle tint. No horizontal margin
+// (hero numbers must line up with every other row and the header) and no
+// outer glow (it bled over neighbouring rows). Mirrored for the SSR first
+// paint in lib/performance/critical-css.ts (.ssr-ranking-entry-rank-N).
 export const HERO_STYLE_RANK_1: React.CSSProperties = {
   background:
     'linear-gradient(135deg, rgba(255,215,0,0.18) 0%, rgba(255,215,0,0.06) 35%, rgba(255,215,0,0.02) 70%, transparent 100%)',
-  boxShadow:
-    'inset 4px 0 0 var(--color-rank-gold), 0 4px 24px rgba(255,215,0,0.10), inset 0 1px 0 rgba(255,215,0,0.10)',
+  boxShadow: 'inset 4px 0 0 var(--color-rank-gold), inset 0 1px 0 rgba(255,215,0,0.10)',
   borderRadius: 14,
-  margin: '6px 4px 8px',
+  margin: '6px 0 8px',
   borderTop: '1px solid rgba(255,215,0,0.12)',
 }
 export const HERO_STYLE_RANK_2: React.CSSProperties = {
   background:
     'linear-gradient(135deg, rgba(192,192,192,0.14) 0%, rgba(192,192,192,0.04) 35%, transparent 80%)',
-  boxShadow:
-    'inset 4px 0 0 var(--color-rank-silver), 0 3px 18px rgba(192,192,192,0.08), inset 0 1px 0 rgba(192,192,192,0.08)',
+  boxShadow: 'inset 4px 0 0 var(--color-rank-silver), inset 0 1px 0 rgba(192,192,192,0.08)',
   borderRadius: 14,
-  margin: '4px 4px 6px',
+  margin: '4px 0 6px',
   borderTop: '1px solid rgba(192,192,192,0.08)',
 }
 export const HERO_STYLE_RANK_3: React.CSSProperties = {
   background:
     'linear-gradient(135deg, rgba(205,127,50,0.14) 0%, rgba(205,127,50,0.04) 35%, transparent 80%)',
-  boxShadow:
-    'inset 4px 0 0 var(--color-rank-bronze), 0 3px 18px rgba(205,127,50,0.08), inset 0 1px 0 rgba(205,127,50,0.08)',
+  boxShadow: 'inset 4px 0 0 var(--color-rank-bronze), inset 0 1px 0 rgba(205,127,50,0.08)',
   borderRadius: 14,
-  margin: '4px 4px 6px',
+  margin: '4px 0 6px',
   borderTop: '1px solid rgba(205,127,50,0.08)',
 }
 
@@ -74,8 +80,8 @@ export const HOLDER_CHIP_STYLE: React.CSSProperties = {
 export const ROW_BASE_STYLE: React.CSSProperties = {
   display: 'grid',
   alignItems: 'center',
-  gap: tokens.spacing[3],
-  padding: `${tokens.spacing[3.5]} ${tokens.spacing[5]}`,
+  gap: ROW_GAP,
+  padding: `${tokens.spacing[3.5]} ${ROW_PADDING_X}`,
   cursor: 'pointer',
   position: 'relative' as const,
 }
@@ -198,18 +204,20 @@ export const STAT_TEXT_TERTIARY_STYLE: React.CSSProperties = {
   opacity: 0.75,
 }
 
-// MDD text base style (opacity merged at render time)
-export const MDD_TEXT_BASE_STYLE: React.CSSProperties = {
-  color: TRADER_ACCENT_ERROR,
+// Neutral supporting stat (Win% / MDD / Sharpe): 13px text-secondary, no
+// gain/loss color. Mirrored by .ssr-metric-value in critical CSS.
+export const SUPPORTING_STAT_STYLE: React.CSSProperties = {
+  color: tokens.colors.text.secondary,
   lineHeight: 1.2,
   fontSize: tokens.typography.fontSize.sm,
   fontVariantNumeric: 'tabular-nums',
 }
 
-// AnimatedROI base style (color merged at render time)
+// AnimatedROI base style (color merged at render time). 14px: Arena Score is
+// the row's single primary number (owner 2026-11-13); ROI is secondary.
 export const ROI_TEXT_BASE_STYLE: React.CSSProperties = {
   lineHeight: 1.2,
-  fontSize: tokens.typography.fontSize.lg,
+  fontSize: tokens.typography.fontSize.base,
   letterSpacing: '-0.02em',
   maxWidth: '100%',
   overflow: 'hidden',
@@ -219,15 +227,16 @@ export const ROI_TEXT_BASE_STYLE: React.CSSProperties = {
 }
 
 // Expand button style
-// 36x36 touch target: meets WCAG 2.2 AA (24×24) comfortably while staying
-// small enough to fit between the right-edge of the row and the sort chevron
-// area. Was 28×28 — too small for thumbs in the dense ranking list.
+// 24×36 target: still meets WCAG 2.2 AA (24×24). Width trimmed from 36 so it
+// sits inside the row's 20px right padding — flush right, the 10px chevron
+// (x 7–17px from the edge) no longer overlaps the right-aligned last value
+// (e.g. MDD "%"), which it did at 36px/right:2.
 export const EXPAND_BTN_STYLE: React.CSSProperties = {
   position: 'absolute',
-  right: 2,
+  right: 0,
   top: '50%',
   transform: 'translateY(-50%)',
-  width: 36,
+  width: 24,
   height: 36,
   display: 'flex',
   alignItems: 'center',

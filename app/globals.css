@@ -20,7 +20,8 @@
      imported with the server data, so there is no empty center-column gap.
    - HomePageClient's layout effect remains a fallback for browsers without
      :has() support.
-   #ssr-topnav stays visible permanently. */
+   The SSR TopNav stays visible permanently (rendered unwrapped so its
+   position:sticky pins against the viewport, like every other page). */
 
 /*
  * Performance Optimization: CSS files moved to async loading
@@ -57,24 +58,6 @@ html.theme-transition #main-content {
 
 ::view-transition-new(root) {
   z-index: 9999;
-}
-
-@keyframes fade-out {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
-}
-
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
 }
 
 @keyframes fadeIn {
@@ -196,9 +179,19 @@ html.theme-transition #main-content {
   --color-error: #ff7c7c;
   --color-warning: #ffc107;
 
-  /* Transition tokens */
+  /* Transition tokens — --transition-base agrees with tokens.transition.base (200ms) */
   --transition-fast: 0.15s;
-  --transition-base: 0.25s;
+  --transition-base: 0.2s;
+
+  /* Motion tokens (docs/DESIGN.md): short, decelerating, never looping on data */
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --motion-slow: 260ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* TopNav height — sticky sidebars / table header pin directly beneath it */
+  --nav-height: 56px;
 }
 
 /* ============================================
@@ -1059,26 +1052,9 @@ select:focus-visible {
   animation: contentReveal 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
 }
 
-/* Hero section subtle border glow animation */
-@keyframes heroGlow {
-  0%,
-  100% {
-    border-color: var(--color-border-primary);
-  }
-  50% {
-    border-color: var(--color-accent-primary-30, rgba(147, 115, 181, 0.3));
-  }
-}
-
-#ssr-hero-shell section {
-  animation: heroGlow 4s ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  #ssr-hero-shell section {
-    animation: none;
-  }
-}
+/* (Hero border no longer "breathes": a 4s infinite border-color loop is a
+   non-composited repaint on the LCP element and competes with the rankings.
+   The section keeps its static border from HomeHeroSSR.) */
 
 /* scrollTicker is needed for the market ticker on homepage */
 @keyframes scrollTicker {
@@ -1162,7 +1138,62 @@ select:focus-visible {
   }
 }
 
+/* Background-sweep skeleton (inline-styled skeletons with a 200%-wide
+   gradient background: PostFeed, NotificationsList, messages, trader page).
+   Deliberately NOT named "shimmer": critical-css.ts defines shimmer as a
+   translateX slide for .skeleton::after, so elements using it for a
+   background sweep slid their whole box left/right instead. */
+@keyframes skeleton-sweep {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
 /* Skeleton shape variants removed — unused (Skeleton.tsx uses inline props) */
+
+/* Trader detail hero metrics (HeroMetrics.tsx): Arena Score is the primary
+   figure (owner 2026-11-13) — full-width above ROI | PnL on narrow cards,
+   Score | ROI | PnL in one row on wide ones. Lives here (render-blocking), not
+   in the async responsive.css, so the hero never reflows after first paint. */
+.hero-metrics-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas:
+    'score score'
+    'roi pnl';
+}
+.hero-metrics-score {
+  grid-area: score;
+}
+.hero-metrics-roi {
+  grid-area: roi;
+}
+.hero-metrics-pnl {
+  grid-area: pnl;
+}
+@media (min-width: 1024px) {
+  .hero-metrics-grid {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.25fr) minmax(0, 1fr);
+    grid-template-areas: 'score roi pnl';
+  }
+}
+/* Half-width ROI card on phones: keep a long ROI inside the card. */
+@media (max-width: 479px) {
+  .hero-metrics-roi .hero-metric-value > span {
+    font-size: 20px !important;
+  }
+}
+@media (max-width: 339px) {
+  .hero-metrics-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'score'
+      'roi'
+      'pnl';
+  }
+}
 
 /* ============================================
    Three-Column Layout
@@ -1238,7 +1269,7 @@ select:focus-visible {
 }
 
 /* Large desktop: no-left variant */
-@media (min-width: 1280px) and (max-width: 1440px) {
+@media (min-width: 1280px) and (max-width: 1439px) {
   .three-col-layout.three-col-no-left {
     grid-template-columns: 1fr 240px;
   }
@@ -1250,8 +1281,8 @@ select:focus-visible {
 .three-col-left,
 .three-col-right {
   position: sticky;
-  top: 60px;
-  height: calc(100vh - 60px);
+  top: var(--nav-height, 56px);
+  height: calc(100vh - var(--nav-height, 56px));
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
@@ -1271,7 +1302,7 @@ select:focus-visible {
 }
 
 .three-col-center {
-  min-height: calc(100vh - 60px);
+  min-height: calc(100vh - var(--nav-height, 56px));
   min-width: 0;
   overflow-x: hidden;
 }
@@ -1328,10 +1359,9 @@ select:focus-visible {
   .profile-header-actions.action-buttons > * {
     flex: 0 1 auto;
   }
-  .performance-main-grid {
-    grid-template-columns: 1fr !important;
-  }
-  .hero-metric-value {
+  /* Metric sets font-size inline on its inner value span, so target that span
+     (the old rule on the wrapper never applied). */
+  .hero-metric-value > span {
     font-size: 24px !important;
   }
   .metric-badges-grid {
@@ -1534,46 +1564,6 @@ select:focus-visible {
 .ranking-table-grid {
   contain: layout style;
   grid-template-columns: 48px minmax(140px, 2fr) 90px 100px 70px 70px 72px;
-}
-
-@media (max-width: 767px) {
-  .ranking-table-grid {
-    grid-template-columns: 32px 1fr 52px 56px 44px 44px;
-  }
-  .ranking-table-grid .col-pnl {
-    display: none !important;
-  }
-  /* Compact text for mobile columns */
-  .ranking-table-grid .col-winrate,
-  .ranking-table-grid .col-mdd,
-  .ranking-table-grid .col-score {
-    font-size: 11px !important;
-  }
-  .ranking-table-grid .roi-cell .roi-value {
-    font-size: 13px !important;
-  }
-  .ranking-table-grid .roi-cell .pnl-value {
-    display: none !important;
-  }
-  /* Tighter padding on mobile */
-  .ranking-table-grid {
-    padding-left: 8px !important;
-    padding-right: 8px !important;
-    gap: 4px !important;
-  }
-  /* Hide mobile score badge in trader name since score column is visible */
-  .ranking-table-grid .mobile-score-badge {
-    display: none !important;
-  }
-  /* Hide source tag on mobile to save space */
-  .ranking-table-grid .source-tag {
-    display: none !important;
-  }
-  /* Smaller avatar on mobile */
-  .ranking-table-grid .avatar-container {
-    width: 28px !important;
-    height: 28px !important;
-  }
 }
 
 /* ============================================
@@ -1894,9 +1884,13 @@ select:focus-visible {
 .swipe-row-content .row-compare-check[aria-pressed='true'] {
   opacity: 1 !important;
 }
-/* Touch devices: always show compare checkbox (no hover available) */
+/* Touch devices: always show the card-view compare checkbox (no hover
+   available). Table rows (.row-compare-check) are excluded: on touch their
+   compare entry point is the swipe-to-reveal action, and the always-on empty
+   box sat on the top-3 medal bars as a stray dark square. A selected row
+   still shows its check via [aria-pressed='true'] above. */
 @media (hover: none) {
-  .compare-checkbox-cell {
+  .compare-checkbox-cell:not(.row-compare-check) {
     opacity: 0.5 !important;
   }
 }
@@ -2032,12 +2026,18 @@ button:focus-visible,
     transform: translateY(0);
   }
 }
+/* --row-index is the in-page position (TraderRow rowIndex), capped at 7 so the
+   whole stagger is ≤ 140ms + 260ms. It plays once: RankingTable sets
+   data-rows-entered after the first mount, so page / sort / period swaps
+   (which re-mount rows) render instantly. */
 .ranking-row-link {
-  animation: row-enter 0.3s cubic-bezier(0.4, 0, 0.2, 1) backwards;
-  animation-delay: calc(var(--row-index, 0) * 20ms);
+  animation: row-enter var(--motion-slow, 260ms) var(--ease-out, ease-out) backwards;
+  animation-delay: calc(min(var(--row-index, 0), 7) * 20ms);
 }
-/* Disable animation after initial load (perf) */
-.ranking-row-link.loaded {
+.ranking-table-rows[data-rows-entered] .ranking-row-link,
+/* Homepage: the server shell already painted these rows; replaying an
+   entrance from opacity 0 after the SSR→client swap reads as a blink. */
+html:has(#ssr-home-content-shell) .ranking-row-link {
   animation: none;
 }
 
@@ -2560,27 +2560,13 @@ a.ranking-filter-btn:active {
   transition: opacity var(--transition-base, 0.25s) ease;
 }
 
-/* ===== View Transitions API page transitions ===== */
+/* ===== View Transitions API =====
+   Single @view-transition rule. Root pseudo-elements use animation:none (top
+   of this file) so ThemeToggle's 600ms circular clip-path reveal is the only
+   animation; nothing sets view-transition-name: page-content, so the former
+   page-content fade rules were dead. */
 @view-transition {
   navigation: auto;
-}
-
-::view-transition-old(page-content) {
-  animation: vt-fade-out 0.15s ease-out both;
-}
-::view-transition-new(page-content) {
-  animation: vt-fade-in 0.2s ease-in both;
-}
-
-@keyframes vt-fade-out {
-  to {
-    opacity: 0;
-  }
-}
-@keyframes vt-fade-in {
-  from {
-    opacity: 0;
-  }
 }
 
 /* Toast close button hover */
@@ -2804,12 +2790,13 @@ input[type='search']::-webkit-search-cancel-button:hover {
   }
 
   /* Performance cards */
-  .performance-main-grid {
-    grid-template-columns: 1fr 1fr !important;
+  .hero-metrics-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    grid-template-areas: 'score roi pnl' !important;
     gap: 8pt !important;
   }
 
-  .performance-main-grid > div {
+  .hero-metrics-grid > div {
     background: #f8f8f8 !important;
     border: 1px solid #ddd !important;
     border-radius: 4pt !important;
@@ -2904,15 +2891,17 @@ input[type='search']::-webkit-search-cancel-button:hover {
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+    /* A 0.01ms animation still waits out its delay with backwards fill —
+       staggered rows would sit invisible for the full delay. */
+    animation-delay: 0s !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
     scroll-behavior: auto !important;
   }
 
   /* Ensure view transitions are instant */
   ::view-transition-old(root),
-  ::view-transition-new(root),
-  ::view-transition-old(page-content),
-  ::view-transition-new(page-content) {
+  ::view-transition-new(root) {
     animation: none !important;
   }
 
@@ -3007,20 +2996,9 @@ input[type='search']::-webkit-search-cancel-button:hover {
   color: var(--color-text-primary);
   position: relative;
 }
-.home-page-container {
-  max-width: 1400px;
-  margin: 0 auto;
-  position: relative;
-  z-index: 1;
-  padding: 8px 16px;
-}
-
-/* Wide desktop: expand outer container to match three-col-layout */
-@media (min-width: 1441px) {
-  .home-page-container {
-    max-width: 1600px;
-  }
-}
+/* .home-page-container geometry (width, gutter, padding-top) lives in
+   lib/performance/critical-css.ts (.home-container / containerCss, generated
+   from tokens.layout) so first paint and hydration share one source. */
 .home-mesh-bg {
   display: none;
 }
@@ -3065,64 +3043,105 @@ input[type='search']::-webkit-search-cancel-button:hover {
   border-color: var(--color-accent-primary-60);
 }
 
-/* The ranking controls should enter the first mobile viewport. The hero keeps
-   the trust essentials (what Arena ranks, coverage, freshness and methodology)
-   while dropping desktop-scale whitespace and decorative hierarchy. */
+/* Short neutrality pledge: mobile-only one-liner (see the mobile hero block). */
+.home-hero-neutrality-short {
+  display: none;
+}
+
+/* Mobile hero: compressed so the ranking rows reach the iPhone SE first
+   screen (owner decision 2026-11-13). Kept: headline, subtitle (which already
+   states the live-board count and the 2h cadence), the Sign-up CTA and the
+   methodology link — CTA + link share one row — and the neutrality pledge as
+   one small line (heroNeutralityShort). Hidden below 768px only: the long
+   pledge wording, the Score sentence (the methodology link covers it), the
+   stat tiles (a verbatim repeat of the subtitle's numbers) and the Pro pill
+   (repeats the site-wide promo banner). The hero is one server-rendered
+   element, so the first paint and hydration agree. */
 @media (max-width: 767px) {
-  #ssr-hero-shell {
-    padding: 8px 8px 0 !important;
-  }
   .home-hero {
-    min-height: 0 !important;
-    margin-bottom: 12px !important;
-    padding: 20px 18px 16px !important;
-    border-radius: 14px !important;
-  }
-  .home-hero-main {
     display: grid !important;
-    grid-template-columns: 1fr !important;
-    gap: 14px !important;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      'title title'
+      'sub sub'
+      'trust trust'
+      'cta link';
+    align-items: center;
+    column-gap: 14px;
+    min-height: 0 !important;
+    margin-bottom: 8px !important;
+    padding: 14px 14px 12px !important;
+    border-radius: 12px !important;
   }
-  .home-hero-copy {
-    flex-basis: auto !important;
+  .home-hero-main,
+  .home-hero-copy,
+  .home-hero-actions {
+    display: contents !important;
+  }
+  /* Grid items sit above the absolutely positioned decorative mesh. */
+  .home-hero-title,
+  .home-hero-subtitle,
+  .home-hero-methodology,
+  .home-hero-cta {
+    position: relative;
+    z-index: 1;
   }
   .home-hero-title {
-    font-size: clamp(1.75rem, 9vw, 2.25rem) !important;
-    line-height: 1.05 !important;
-    margin-bottom: 8px !important;
+    grid-area: title;
+    font-size: clamp(1.25rem, 5.6vw, 1.5rem) !important;
+    line-height: 1.1 !important;
+    margin-bottom: 4px !important;
   }
   .home-hero-subtitle {
-    font-size: 0.875rem !important;
-    line-height: 1.45 !important;
+    grid-area: sub;
+    font-size: 0.8125rem !important;
+    line-height: 1.4 !important;
+    max-width: none !important;
+    margin-bottom: 4px !important;
   }
+  /* The neutrality pledge stays on mobile (trust is the product's promise);
+     the Score sentence is covered by the methodology link next to the CTA. */
   .home-hero-explainer {
+    grid-area: trust;
+    position: relative;
+    z-index: 1;
     font-size: 0.75rem !important;
     line-height: 1.4 !important;
-    margin-top: 8px !important;
+    max-width: none !important;
+    margin: 0 0 10px !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .home-hero-neutrality-short {
+    display: inline;
+  }
+  .home-hero-neutrality,
+  .home-hero-score-explainer,
+  .home-hero-stats,
+  .home-hero-pro {
+    display: none !important;
+  }
+  .home-hero-cta {
+    grid-area: cta;
+    justify-self: start;
+    align-self: center;
   }
   .home-hero-methodology {
-    margin-top: 8px !important;
-  }
-  .home-hero-stats {
-    width: 100%;
-    justify-content: flex-start;
-    gap: 28px !important;
-  }
-  .home-hero-stats > div {
-    text-align: left !important;
-  }
-  .home-hero-stats > div > div:first-child {
-    font-size: 1.375rem !important;
-  }
-  .home-hero-actions {
-    margin-top: 14px !important;
-    gap: 8px !important;
+    grid-area: link;
+    margin-top: 0 !important;
+    justify-self: start;
+    align-self: center;
+    /* The link keeps a 44px touch target; centre its text in it so it lines
+       up with the Sign-up button instead of hugging the top edge. */
+    display: inline-flex !important;
+    align-items: center;
   }
 
   /* B2C mobile leaderboard: keep the primary toolbar to one decision row. */
   .ranking-toolbar-row {
     flex-wrap: nowrap !important;
-    padding: 6px 8px !important;
+    padding: 4px 8px !important;
   }
   .ranking-toolbar-row > div:last-child {
     min-width: 0;
@@ -3190,10 +3209,14 @@ input[type='search']::-webkit-search-cancel-button:hover {
 .top-nav-header {
   position: sticky;
   top: 0;
-  height: 56px;
+  height: var(--nav-height, 56px);
   border-bottom: 1px solid var(--color-border-primary);
   background: var(--color-bg-primary);
   z-index: 200;
+  /* Same frosted glass on every page. .glass in animations.css carries the
+     blur too, but the provider-less homepage never loads that sheet. */
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 .ranking-time-range-bar {
   display: flex;
@@ -3624,45 +3647,8 @@ td[data-numeric],
   word-break: break-word;
 }
 
-/* Arena Score glow animation for top performers.
-   Removed box-shadow keyframe (unused + non-composited paint).
-   Use score-legendary-glow (filter-based, composited) instead. */
-
-/* Purple tier (90+) shimmer effect */
-@keyframes score-shimmer {
-  0% {
-    background-position: -200% center;
-  }
-  100% {
-    background-position: 200% center;
-  }
-}
-
-/* score-legendary-glow: uses opacity + filter (both GPU-composited, no layout/paint)
-   Previously used box-shadow which triggers paint layer updates on every frame. */
-@keyframes score-legendary-glow {
-  0%,
-  100% {
-    filter: drop-shadow(0 0 4px rgba(139, 92, 246, 0.4));
-    opacity: 0.9;
-  }
-  50% {
-    filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.6));
-    opacity: 1;
-  }
-}
-
-@keyframes score-legendary-glow-intense {
-  0%,
-  100% {
-    filter: drop-shadow(0 0 5px rgba(139, 92, 246, 0.5));
-    opacity: 0.9;
-  }
-  50% {
-    filter: drop-shadow(0 0 11px rgba(139, 92, 246, 0.7));
-    opacity: 1;
-  }
-}
+/* Arena Score 90+ badge: static halo (TraderDisplay ArenaScoreBadge). The
+   former score-shimmer / score-legendary-glow loops were removed. */
 
 /* ============================================
    Groups / Community Layout
@@ -3723,19 +3709,7 @@ td[data-numeric],
   box-shadow: 0 0 0 3px var(--color-accent-primary-15, rgba(139, 111, 168, 0.15)) !important;
 }
 
-/* Empty state illustration pulse */
-@keyframes empty-state-float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-6px);
-  }
-}
-.empty-state-icon {
-  animation: empty-state-float 3s ease-in-out infinite;
-}
+/* Empty state icon is static (the infinite float loop was removed). */
 
 /* Activity badge / member count badge */
 .member-badge {
@@ -3910,8 +3884,8 @@ td[data-numeric],
 }
 .rankings-right-sidebar {
   position: sticky;
-  top: 60px;
-  height: calc(100vh - 60px);
+  top: var(--nav-height, 56px);
+  height: calc(100vh - var(--nav-height, 56px));
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
@@ -4329,6 +4303,30 @@ td[data-numeric],
   color: var(--color-accent-error) !important;
 }
 
+/* Swipe-to-reveal guard (full rules in /styles/ranking-table.css, which loads
+   async after hydration). Until then the action buttons would render in flow
+   under every row; keep them out of layout and invisible until a swipe. */
+.swipe-row-wrapper {
+  position: relative;
+  overflow: hidden;
+}
+.swipe-row-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  visibility: hidden;
+}
+/* Layout of the content layer must be final before the async sheet lands:
+   flow-root changes where the hero rows' margins live, and switching it late
+   registered as a layout shift on the top-3 rows. */
+.swipe-row-content {
+  position: relative;
+  z-index: 2;
+  display: flow-root;
+  background: var(--color-bg-secondary);
+}
+
 /* Flash animation for ranking value changes */
 @keyframes flash-green-bg {
   0% {
@@ -4351,18 +4349,6 @@ td[data-numeric],
 }
 .flash-red {
   animation: flash-red-bg 1s ease-out;
-}
-
-/* View Transitions API — cross-fade on route change */
-/* fade-out / fade-in keyframes are defined near the top of this file */
-@view-transition {
-  navigation: auto;
-}
-::view-transition-old(root) {
-  animation: fade-out 0.15s ease-out;
-}
-::view-transition-new(root) {
-  animation: fade-in 0.15s ease-in;
 }
 
 /* #26: StatsPage layout (moved from inline <style>) */

@@ -9,7 +9,16 @@
 
 import crypto from 'crypto'
 
-const HMAC_SECRET = process.env.CRON_SECRET || 'arena-unsubscribe-fallback-secret'
+/**
+ * The signing key comes only from the environment. There is deliberately no
+ * fallback: a constant in source would let anyone who can read the code forge
+ * an unsubscribe link for any user. Without the key, tokens are neither issued
+ * nor accepted.
+ */
+function signingSecret(): string | null {
+  const secret = process.env.CRON_SECRET
+  return secret && secret.length > 0 ? secret : null
+}
 
 // Tokens expire after 90 days
 const TOKEN_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000
@@ -29,20 +38,19 @@ function fromBase64Url(data: string): string {
   return Buffer.from(data, 'base64url').toString('utf-8')
 }
 
-function sign(payload: string): string {
-  return crypto
-    .createHmac('sha256', HMAC_SECRET)
-    .update(payload)
-    .digest('base64url')
+function sign(payload: string, secret: string): string {
+  return crypto.createHmac('sha256', secret).update(payload).digest('base64url')
 }
 
 /**
  * Generate an unsubscribe token for a user
  */
 export function generateUnsubscribeToken(userId: string, type: UnsubscribeType): string {
+  const secret = signingSecret()
+  if (!secret) throw new Error('CRON_SECRET is not configured; cannot sign unsubscribe token')
   const timestamp = Date.now().toString()
   const payload = `${userId}:${type}:${timestamp}`
-  const signature = sign(payload)
+  const signature = sign(payload, secret)
   return `${toBase64Url(payload)}.${signature}`
 }
 
@@ -51,6 +59,8 @@ export function generateUnsubscribeToken(userId: string, type: UnsubscribeType):
  * Returns the payload if valid, null if invalid or expired
  */
 export function verifyUnsubscribeToken(token: string): UnsubscribePayload | null {
+  const secret = signingSecret()
+  if (!secret) return null
   try {
     const parts = token.split('.')
     if (parts.length !== 2) return null
@@ -59,7 +69,7 @@ export function verifyUnsubscribeToken(token: string): UnsubscribePayload | null
     const payload = fromBase64Url(encodedPayload)
 
     // Verify HMAC signature
-    const expectedSignature = sign(payload)
+    const expectedSignature = sign(payload, secret)
     if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
       return null
     }

@@ -268,14 +268,14 @@ describe('GET /api/rankings public-ranked cohort', () => {
     expect(platform.rankingQuery.eq).not.toHaveBeenCalledWith('source_type', 'web3')
   })
 
-  it('treats composite as the published 90D cohort while preserving the legacy response label', async () => {
+  it('serves composite from the published 90D cohort and labels it 90D (no fake COMPOSITE)', async () => {
     const { rankingQuery } = mockPublicView([publicRankedRow()])
     const response = await GET(new NextRequest('http://localhost/api/rankings?window=composite'))
     const data = unwrap(await response.json())
 
     expect(response.status).toBe(200)
     expect(rankingQuery.eq).toHaveBeenCalledWith('season_id', '90D')
-    expect(data.window).toBe('COMPOSITE')
+    expect(data.window).toBe('90D')
   })
 
   it('fails closed when a displayed source has no trustworthy source watermark', async () => {

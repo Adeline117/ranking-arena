@@ -111,22 +111,6 @@ const LINKED_RANKING_PERIOD = '90D'
 const PUBLIC_LINKED_RANKING_COLUMNS =
   'source,source_trader_id,season_id,rank,arena_score,roi,pnl,win_rate,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at'
 
-type PublicRankedLeaderboardQueryResult = {
-  data: unknown[] | null
-  error: { message: string } | null
-}
-
-type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
-  select(columns: string): PublicRankedLeaderboardQuery
-  eq(column: string, value: string): PublicRankedLeaderboardQuery
-  in(column: string, values: readonly string[]): PublicRankedLeaderboardQuery
-  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
-}
-
-type PublicRankedLeaderboardClient = {
-  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
-}
-
 interface PublicLinkedRankedRow extends Record<string, unknown> {
   source: string
   source_trader_id: string
@@ -139,16 +123,6 @@ interface LinkedPublicRankingCohort {
   /** Only rows that passed the full publication-policy sanitizer. */
   verifiedByIdentity: Map<string, PublicLinkedRankedRow[]>
   unavailable: boolean
-}
-
-function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
-  // The security-barrier view is additive while generated database types catch
-  // up. Keep this narrow bridge read-only; there is deliberately no raw-table
-  // fallback when the public cohort is unavailable.
-  if (!isRecord(value) || typeof value.from !== 'function') {
-    throw new TypeError('Supabase client does not expose the public ranking cohort')
-  }
-  return value as PublicRankedLeaderboardClient
 }
 
 function linkedRankingIdentity(source: string, traderKey: string): string {
@@ -400,7 +374,7 @@ export async function getLinkedTraders(
   await Promise.all(
     [...byPlatform.entries()].map(async ([platform, traderKeys]) => {
       try {
-        const { data, error } = await publicRankedLeaderboardClient(supabase)
+        const { data, error } = await supabase
           .from('public_ranked_leaderboard')
           .select(PUBLIC_LINKED_RANKING_COLUMNS)
           .eq('source', platform)

@@ -30,24 +30,58 @@ const SourceFreshnessSchema = z.object({
   age_seconds: nullableNumber,
 })
 
+const optionalNullableNumber = nullableNumber.optional()
+const optionalNullableString = nullableString.optional()
+
+/**
+ * One /api/traders row. The required fields are the core-path contract; the
+ * optional ones are trust/ranking signals the homepage renders (movement
+ * arrows, NEW, copiers, Verified/anti-gaming badges, bot + style, Sharpe).
+ * Both the SSR first paint and the client refresh map rows through
+ * `toUiTrader()` (app/components/ranking/toUiTrader.ts), whose input type is
+ * inferred from this schema, so the two paths cannot drift apart again.
+ */
+export const TradersListRowSchema = z.object({
+  id: z.string().min(1),
+  handle: nullableString,
+  source: z.string().min(1),
+  rank: z.number().int().positive(),
+  roi: nullableNumber,
+  pnl: nullableNumber,
+  win_rate: nullableNumber,
+  max_drawdown: nullableNumber,
+  arena_score: nullableNumber,
+  avatar_url: nullableString,
+  followers: nullableNumber,
+  trades_count: nullableNumber,
+  avatar_url_mirror: optionalNullableString,
+  source_type: optionalNullableString,
+  copiers: optionalNullableNumber,
+  rank_change: optionalNullableNumber,
+  is_new: z.boolean().optional(),
+  profitability_score: optionalNullableNumber,
+  risk_control_score: optionalNullableNumber,
+  execution_score: optionalNullableNumber,
+  score_completeness: optionalNullableString,
+  trading_style: optionalNullableString,
+  avg_holding_hours: optionalNullableNumber,
+  style_confidence: optionalNullableNumber,
+  sharpe_ratio: optionalNullableNumber,
+  sortino_ratio: optionalNullableNumber,
+  calmar_ratio: optionalNullableNumber,
+  profit_factor: optionalNullableNumber,
+  is_bot: z.boolean().optional(),
+  trader_type: optionalNullableString,
+  is_verified: z.boolean().optional(),
+  is_verified_data: z.boolean().optional(),
+  anti_gaming_flags: z.array(z.string()).optional(),
+})
+
+export type TradersListRow = z.infer<typeof TradersListRowSchema>
+
 /** GET /api/traders: the homepage list after hydration. */
 export const TradersListResponseSchema = z.object({
-  traders: z.array(
-    z.object({
-      id: z.string().min(1),
-      handle: nullableString,
-      source: z.string().min(1),
-      rank: z.number().int().positive(),
-      roi: nullableNumber,
-      pnl: nullableNumber,
-      win_rate: nullableNumber,
-      max_drawdown: nullableNumber,
-      arena_score: nullableNumber,
-      avatar_url: nullableString,
-      followers: nullableNumber,
-      trades_count: nullableNumber,
-    })
-  ),
+  traders: z.array(TradersListRowSchema),
   timeRange: PeriodSchema,
   totalCount: nullableNumber,
   totalCountIsExact: z.boolean(),

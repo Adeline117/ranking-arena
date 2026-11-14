@@ -9,6 +9,8 @@ import { authedFetch, getCsrfHeaders } from '@/lib/api/client'
 import { validateHandle } from '../validation'
 import { isHapticsEnabled } from '@/lib/utils/haptics'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
+import { signOutAndForgetAccounts } from '@/lib/hooks/useMultiAccount'
+import { getPasswordStrength } from '@/app/(app)/login/components/loginHelpers'
 import {
   buildAccountRecoveryLoginPath,
   persistAccountRecoveryToken,
@@ -1053,8 +1055,13 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
       showToast(t('validationPasswordMismatch'), 'error')
       return
     }
-    if (newPassword.length < 6) {
-      showToast(t('validationPasswordMinLength'), 'error')
+    // Same floor as signup and password reset (8+ chars, strength >= 2).
+    if (newPassword.length < 8) {
+      showToast(t('resetPasswordPasswordMinLength'), 'error')
+      return
+    }
+    if (getPasswordStrength(newPassword).level < 2) {
+      showToast(t('resetPasswordPasswordTooWeak'), 'error')
       return
     }
     submittingRef.current = true
@@ -1661,14 +1668,17 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
       } catch {
         /* ignore */
       }
-      await auth.signOut()
+      await signOutAndForgetAccounts(auth.signOut)
       router.push('/')
     } catch {
       if (viewerIsCurrent(scope)) showToast(t('logoutFailed'), 'error')
     }
   }
 
-  // 打开删号弹窗时探测账号是否有密码凭据(OAuth/钱包用户无 → 走 DELETE 确认)。
+  // On opening the delete dialog, ask the server which confirmation applies.
+  // Identities alone cannot tell a code-only email signup (no password, must
+  // type DELETE) from a password account, so the identity rule is only the
+  // immediate guess and the fallback if the request fails.
   useEffect(() => {
     if (!showDeleteAccountModal) return
     const scope = captureViewer()
@@ -1676,6 +1686,25 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     const providers = (auth.user.identities ?? []).map((identity) => identity.provider)
     const isWalletEmail = (auth.user.email ?? '').endsWith('@wallet.arena')
     setDeleteHasPassword(!isWalletEmail && providers.includes('email'))
+
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch('/api/account/delete', {
+          headers: { Authorization: `Bearer ${scope.accessToken}` },
+        })
+        if (!res.ok) return
+        const data: unknown = await res.json()
+        const requiresPassword = (data as { requires_password?: unknown } | null)?.requires_password
+        if (cancelled || !viewerIsCurrent(scope) || typeof requiresPassword !== 'boolean') return
+        setDeleteHasPassword(requiresPassword)
+      } catch (error) {
+        logger.warn('[Settings] Delete confirmation requirements lookup failed:', error)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [auth.sessionGeneration, auth.user, captureViewer, showDeleteAccountModal])
 
   const handleDeleteAccount = async () => {
@@ -1710,7 +1739,13 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
       const data = await res.json()
       if (!viewerIsCurrent(scope)) return
       if (!res.ok) {
-        setDeleteError(data.error || t('operationFailed'))
+        // 403 = password check failed. The server cannot tell a wrong password
+        // from an email-code signup that never set one, so say how to get out.
+        setDeleteError(
+          res.status === 403 && deleteHasPassword
+            ? t('deleteAccountInvalidPassword')
+            : data.error || t('operationFailed')
+        )
         return
       }
       const recoveryLoginPath = buildAccountRecoveryLoginPath()

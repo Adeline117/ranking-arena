@@ -195,6 +195,7 @@ import { useOnchainEnrichTrigger } from './hooks/useOnchainEnrichTrigger'
 import { TraderProfileError } from './components/TraderProfileError'
 import { TraderStaleBanner, TraderPlatformDeadBanner } from './components/TraderStatusBanners'
 import { resolveTraderProfileOwnership } from './profile-ownership'
+import { resolveHeaderDataTime } from '@/app/components/trader/header-data-time'
 import {
   parseExactTraderClaimEnvelope,
   resolveTraderClaimSources,
@@ -517,7 +518,7 @@ export default function TraderProfileClient({
         source_trader_id: profile.trader_key || profile.id,
         rank: null,
         arena_score: performance?.arena_score_90d ?? performance?.arena_score ?? null,
-        roi: performance?.roi_90d ?? null,
+        roi: performance?.roi_90d ?? performance?.roi_30d ?? performance?.roi_7d ?? null,
         pnl: performance?.pnl ?? null,
         win_rate: performance?.win_rate ?? null,
         max_drawdown: performance?.max_drawdown ?? null,
@@ -1088,7 +1089,11 @@ export default function TraderProfileClient({
         source_trader_id: visibleTraderKey,
         rank: null,
         arena_score: exactPerformance?.arena_score_90d ?? exactPerformance?.arena_score ?? null,
-        roi: exactPerformance?.roi_90d ?? null,
+        roi:
+          exactPerformance?.roi_90d ??
+          exactPerformance?.roi_30d ??
+          exactPerformance?.roi_7d ??
+          null,
         pnl: exactPerformance?.pnl ?? null,
         win_rate: exactPerformance?.win_rate ?? null,
         max_drawdown: exactPerformance?.max_drawdown ?? null,
@@ -1127,12 +1132,13 @@ export default function TraderProfileClient({
     traderKey: accountDetailReady ? visibleTraderKey : undefined,
     tradingStyle:
       (exactPerformanceRecord?.tradingStyle as string) ?? exactPerformance?.trading_style ?? null,
-    lastUpdated:
-      scopedTraderData?.lastUpdated ??
-      scopedTraderData?.trackedSince ??
+    // Source capture time only — never trackedSince (first-seen) or compute time.
+    lastUpdated: resolveHeaderDataTime(
+      scopedTraderData?.lastUpdated,
       (validatedActiveAccount ? selectedServingFirstScreen : servingFirstScreen)?.entries.find(
         (entry) => entry.timeframe === 90
-      )?.provenance.asOf,
+      )?.provenance.asOf
+    ),
     isBot: visibleSource === 'web3_bot',
   })
 

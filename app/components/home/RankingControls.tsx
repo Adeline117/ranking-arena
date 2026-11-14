@@ -11,6 +11,7 @@ import { useTransition, useState, useEffect, useRef, useCallback } from 'react'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
 import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
+import { describeDataTime, formatDataClock } from '@/lib/utils/data-time'
 
 const RANGES = ['90D', '30D', '7D'] as const
 
@@ -32,24 +33,18 @@ function finiteNonNegative(value: number | null): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0
 }
 
-/** Format a Date to "HH:MM" in the user's locale */
-function formatTime(date: Date): string {
-  try {
-    // Pin locale: this component is SSR'd in the homepage shell AND hydrates on
-    // the client. A runtime-default locale (undefined) formats differently on
-    // server vs browser → React #418 text-content hydration mismatch.
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-  } catch {
-    const h = String(date.getHours()).padStart(2, '0')
-    const m = String(date.getMinutes()).padStart(2, '0')
-    return `${h}:${m}`
-  }
-}
-
-function formatDataTimestamp(value: string | null): string {
-  if (!value) return ''
-  const date = new Date(value)
-  return Number.isFinite(date.getTime()) ? formatTime(date) : ''
+/**
+ * Format the source watermark for "Data as of". A watermark from an earlier
+ * day keeps its date: a bare "HH:MM" reads as today even when the exchange
+ * data is weeks old.
+ */
+function formatDataTimestamp(value: string | null, nowMs = Date.now()): string {
+  const { timestampMs } = describeDataTime(value, nowMs)
+  if (timestampMs === null) return ''
+  // Pin locale: this component is SSR'd in the homepage shell AND hydrates on
+  // the client. A runtime-default locale (undefined) formats differently on
+  // server vs browser → React #418 text-content hydration mismatch.
+  return formatDataClock(timestampMs, nowMs, 'en-US')
 }
 
 export default function RankingControls({
@@ -68,6 +63,7 @@ export default function RankingControls({
   const [navError, setNavError] = useState(false)
   const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [lastDataTime, setLastDataTime] = useState<string>('')
+  const [lastDataIsStale, setLastDataIsStale] = useState(false)
 
   // A page-derived count is not a total. Only show total-based controls and
   // promotion copy when the caller explicitly has a finite, exact authority.
@@ -84,10 +80,12 @@ export default function RankingControls({
   const shouldShowPagination = hasExactTotal ? totalPages > 1 : currentPage > 0 || hasMore === true
 
   // Format only after hydration because the browser timezone can differ from
-  // the server timezone. The value itself is the leaderboard's compute time,
-  // never the page-load/navigation time.
+  // the server timezone. The value is the oldest upstream source watermark
+  // (never the score compute time or the page-load/navigation time).
   useEffect(() => {
-    setLastDataTime(formatDataTimestamp(lastUpdated))
+    const nowMs = Date.now()
+    setLastDataTime(formatDataTimestamp(lastUpdated, nowMs))
+    setLastDataIsStale(describeDataTime(lastUpdated, nowMs).isStale)
   }, [lastUpdated])
 
   // Detect online/offline status.
@@ -177,6 +175,14 @@ export default function RankingControls({
           <time dateTime={lastUpdated ?? undefined}>
             {t('rankingControlsDataAsOf')} {lastDataTime}
           </time>
+          {lastDataIsStale && (
+            <span
+              data-testid="ranking-data-stale"
+              style={{ color: tokens.colors.accent.warning, marginLeft: 4 }}
+            >
+              · {t('dataStaleWarning')}
+            </span>
+          )}
         </div>
       )}
 

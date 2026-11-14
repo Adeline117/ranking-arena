@@ -177,6 +177,14 @@ function exactSessionReference(session: Session): ExactSessionReference {
   }
 }
 
+/** Login error codes the auth callback may hand off via `?error=`. */
+const LOGIN_ERROR_MESSAGE_KEYS: Record<string, string> = {
+  auth_failed: 'loginAuthFailed',
+  no_session: 'loginNoSession',
+  profile_provisioning_failed: 'loginSetupFailed',
+  oauth_cancelled: 'loginCancelled',
+}
+
 function attemptOwnsExactSession(attempt: LoginAttempt, session: Session): boolean {
   const expected = attempt.externalSession
   return (
@@ -212,6 +220,7 @@ export default function LoginPageClient() {
   const [recovering, setRecovering] = useState(false)
   const [accountRecoveryToken, setAccountRecoveryToken] = useState<string | null>(null)
   const [rateLimitCountdown, setRateLimitCountdown] = useState(0)
+  const rateLimitErrorRef = useRef<string | null>(null)
 
   const [touchedFields, setTouchedFields] = useState<{
     email: boolean
@@ -485,14 +494,18 @@ export default function LoginPageClient() {
 
   useEffect(() => {
     // Show error from auth callback redirect or OAuth provider errors
+    // Only known codes are shown, via i18n. The raw value is attacker-
+    // controllable (phishing copy in the trusted error box) and a second
+    // decode of an already-decoded `%` throws.
     const errorParam = searchParams.get('error')
-    if (errorParam === 'auth_failed') {
-      setError(t('loginAuthFailed'))
-    } else if (errorParam === 'no_session') {
-      setError(t('loginNoSession'))
-    } else if (errorParam) {
-      // Generic error from OAuth callback or other redirects (e.g. provider cancelled)
-      setError(decodeURIComponent(errorParam))
+    if (errorParam) {
+      setError(
+        t(
+          Object.hasOwn(LOGIN_ERROR_MESSAGE_KEYS, errorParam)
+            ? LOGIN_ERROR_MESSAGE_KEYS[errorParam]
+            : 'loginAuthFailed'
+        )
+      )
     }
     if (
       searchParams.get('account_deleted') === '1' ||
@@ -563,16 +576,12 @@ export default function LoginPageClient() {
       const timer = setTimeout(() => setRateLimitCountdown(rateLimitCountdown - 1), 1000)
       return () => clearTimeout(timer)
     } else if (rateLimitCountdown === 0) {
-      // Clear rate limit error when countdown reaches 0
-      setError((prev) =>
-        prev &&
-        (prev.includes('Too many attempts') ||
-          prev.includes('操作过于频繁') ||
-          prev.includes('Try again in') ||
-          prev.includes('秒后重试'))
-          ? null
-          : prev
-      )
+      // Clear the rate limit error when the countdown reaches 0. Match the
+      // exact message that was set, not language-specific substrings (the
+      // ja/ko copies never matched and stayed on screen).
+      const rateLimitMessage = rateLimitErrorRef.current
+      rateLimitErrorRef.current = null
+      if (rateLimitMessage) setError((prev) => (prev === rateLimitMessage ? null : prev))
     }
   }, [rateLimitCountdown])
 
@@ -1069,8 +1078,13 @@ export default function LoginPageClient() {
         else if (msg.includes('Email not confirmed')) setError(t('loginEmailNotVerified'))
         else if (msg.includes('Too many requests') || msg.includes('rate limit')) {
           const RATE_LIMIT_SECONDS = 30
+          const rateLimitMessage = t('loginRateLimitRetry').replace(
+            '{n}',
+            String(RATE_LIMIT_SECONDS)
+          )
+          rateLimitErrorRef.current = rateLimitMessage
           setRateLimitCountdown(RATE_LIMIT_SECONDS)
-          setError(t('loginRateLimitRetry').replace('{n}', String(RATE_LIMIT_SECONDS)))
+          setError(rateLimitMessage)
         } else if (msg.toLowerCase().includes('banned')) {
           setError(t('loginAccountPendingDeletion'))
           setShowRecoveryPrompt(true)
