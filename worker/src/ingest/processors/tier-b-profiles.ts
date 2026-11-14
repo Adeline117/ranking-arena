@@ -116,6 +116,37 @@ async function markProfileAttempted(traderId: number): Promise<void> {
   )
 }
 
+/**
+ * Failed Tier-B attempts tolerated per refresh window before a trader is
+ * backed off like a 404/410 one. Persistent non-404 failures (HTTP-200
+ * business errors, parse failures, browser sources that never see a 404, or
+ * a profile that succeeds while its histories keep failing) would otherwise
+ * be re-crawled on every continuation hop of every pass.
+ */
+export const TIER_B_MAX_FAILED_ATTEMPTS = 3
+const FAILED_ATTEMPTS_META_KEY = 'tierb_failed_attempts'
+
+/** Counts one failed attempt; returns the trader's consecutive failure count. */
+async function recordFailedAttempt(traderId: number): Promise<number> {
+  const { rows } = await getIngestPool().query<{ failures: number | null }>(
+    `UPDATE arena.traders
+        SET meta = jsonb_set(
+              meta, ARRAY[$2::text],
+              to_jsonb(COALESCE((meta->>$2::text)::int, 0) + 1))
+      WHERE id = $1
+      RETURNING (meta->>$2::text)::int AS failures`,
+    [traderId, FAILED_ATTEMPTS_META_KEY]
+  )
+  return rows[0]?.failures ?? 0
+}
+
+async function clearFailedAttempts(traderId: number): Promise<void> {
+  await getIngestPool().query(
+    `UPDATE arena.traders SET meta = meta - $2::text WHERE id = $1 AND meta ? $2::text`,
+    [traderId, FAILED_ATTEMPTS_META_KEY]
+  )
+}
+
 /** Durable marker: the latest copier capture was cut by the page budget. */
 async function recordCopierTruncation(
   traderId: number,
@@ -511,6 +542,18 @@ export async function processTierB(
   const startedAt = Date.now()
   let attempted = 0
   const result: TierBResult = { ...empty }
+  // Bounded retries: after TIER_B_MAX_FAILED_ATTEMPTS failed attempts the
+  // trader waits for the next refresh window, then gets a fresh budget.
+  const backOffAfterFailure = async (trader: NativeCohortTrader): Promise<void> => {
+    const failures = await recordFailedAttempt(trader.id)
+    if (failures < TIER_B_MAX_FAILED_ATTEMPTS) return
+    logger.warn(
+      `[tier-b] ${src.slug} trader ${trader.exchange_trader_id}: ${failures} failed ` +
+        `attempts, backing off until the next refresh window`
+    )
+    await markProfileAttempted(trader.id)
+    await clearFailedAttempts(trader.id)
+  }
 
   try {
     for (const trader of topTraders) {
@@ -697,6 +740,8 @@ export async function processTierB(
             `backing off until the next refresh window`
         )
         await markProfileAttempted(trader.id)
+      } else if (supportsProfile && traderHadOperationalError) {
+        await backOffAfterFailure(trader)
       }
 
       if (allTimeframesSuccessful) {
@@ -720,6 +765,9 @@ export async function processTierB(
             !supportsProfile
           )
           await markProfileAttempted(trader.id)
+          if (trader.meta && FAILED_ATTEMPTS_META_KEY in trader.meta) {
+            await clearFailedAttempts(trader.id)
+          }
           result.tradersCrawled += 1
         } catch (err) {
           result.errors += 1
@@ -727,6 +775,7 @@ export async function processTierB(
             `[tier-b] ${src.slug} trader ${trader.exchange_trader_id} histories failed:`,
             err instanceof Error ? err.message : err
           )
+          await backOffAfterFailure(trader)
         }
       }
     }

@@ -1682,6 +1682,67 @@ describe('Tier-B profile coverage accounting', () => {
     ).toBe(false)
   })
 
+  describe('bounded backoff for persistent non-404 failures', () => {
+    function failuresAfterThisAttempt(failures: number) {
+      mockDbQuery.mockImplementation(async (sql: string, params: unknown[]) =>
+        String(sql).includes('RETURNING') && params?.[1] === 'tierb_failed_attempts'
+          ? { rows: [{ failures }], rowCount: 1 }
+          : { rows: [], rowCount: 1 }
+      )
+    }
+    const clearCalls = () =>
+      mockDbQuery.mock.calls.filter(
+        ([sql, params]) =>
+          String(sql).includes('meta - $2') && params?.[1] === 'tierb_failed_attempts'
+      )
+
+    it('keeps retrying below the attempt budget', async () => {
+      failuresAfterThisAttempt(2)
+      mockGetProfile.mockRejectedValue(new Error('[src] non-success API envelope (code=40001)'))
+
+      await expect(processTierB(job)).resolves.toMatchObject({ tradersCrawled: 0, errors: 2 })
+      expect(tierBProfileMarkerCalls()).toHaveLength(0)
+    })
+
+    it('backs off once the attempt budget is spent', async () => {
+      failuresAfterThisAttempt(3)
+      mockGetProfile.mockRejectedValue(new Error('[src] non-success API envelope (code=40001)'))
+
+      await expect(processTierB(job)).resolves.toMatchObject({ tradersCrawled: 0, errors: 2 })
+      expect(tierBProfileMarkerCalls()).toHaveLength(1)
+      // The next refresh window starts with a fresh budget.
+      expect(clearCalls()).toHaveLength(1)
+    })
+
+    it('also backs off when the profile succeeds but histories keep failing', async () => {
+      failuresAfterThisAttempt(3)
+      mockProfileTimeframes.mockReturnValue([30])
+      mockParseProfile.mockReturnValue(profile(30, true))
+      mockGetHistory.mockImplementation(() =>
+        (async function* () {
+          throw new Error('orders upstream failed')
+        })()
+      )
+      mockGetAdapter.mockReturnValue({
+        capabilities: {
+          profile: true,
+          positionHistory: false,
+          orders: true,
+          transfers: false,
+          copiers: false,
+        },
+        getProfile: mockGetProfile,
+        getHistory: mockGetHistory,
+        parseProfile: mockParseProfile,
+        parseHistory: mockParseHistory,
+        validateProfile: mockValidateProfile,
+      })
+
+      await expect(processTierB(job)).resolves.toMatchObject({ tradersCrawled: 0, errors: 1 })
+      expect(tierBProfileMarkerCalls()).toHaveLength(1)
+    })
+  })
+
   it('counts an HTTP-200 business error (parse throw) toward the cycle failure rate', async () => {
     mockParseProfile.mockImplementation(() => {
       throw new Error('[src] profile returned a non-success API envelope (code=40001)')
