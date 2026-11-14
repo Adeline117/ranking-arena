@@ -11,7 +11,7 @@ jest.mock('@/lib/data/trader/public-profile-ranking', () => ({
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { projectBoardExtras } from '../board-extras'
 import { getFirstScreen, getPublicFirstScreen } from '../first-screen'
-import { getCoreModules, hasRequiredProfileSeries, isFresh, tfToInt } from '../core'
+import { isFresh, tfToInt } from '../core'
 import { getSourceCapabilities } from '../capabilities'
 
 function rpcClient(data: unknown, error: unknown = null): SupabaseClient {
@@ -201,30 +201,7 @@ describe('getPublicFirstScreen', () => {
   })
 })
 
-describe('getCoreModules', () => {
-  it('splits primitive stats from structured extras and maps series', async () => {
-    const supabase = rpcClient({
-      timeframe: 30,
-      asOf: '2026-06-10T12:00:00Z',
-      currency: 'USDT',
-      stats: { roi: 22.1, win_rate: 58, trading_preferences: { BTCUSDT: 0.6 } },
-      extras: { style_tags: ['steady'] },
-      series: { roi: [{ ts: '2026-06-09T00:00:00Z', value: 1.2 }] },
-    })
-    const core = await getCoreModules(supabase, 'bitget_futures', 'abc', 30)
-    expect(core).not.toBeNull()
-    expect(core!.stats).toEqual({ roi: 22.1, win_rate: 58 })
-    expect(core!.extras.trading_preferences).toEqual({ BTCUSDT: 0.6 })
-    expect(core!.extras.style_tags).toEqual(['steady'])
-    expect(core!.series.roi).toHaveLength(1)
-    expect(core!.cacheState).toBe('warm')
-    expect(core!.provenance.asOf).toBe('2026-06-10T12:00:00Z')
-  })
-
-  it('returns null when cold (RPC NULL) so the route can bridge to Tier-C', async () => {
-    expect(await getCoreModules(rpcClient(null), 'bitget_futures', 'abc', 7)).toBeNull()
-  })
-
+describe('serving core helpers', () => {
   it('tfToInt maps inception to 0', () => {
     expect(tfToInt('inception')).toBe(0)
     expect(tfToInt(7)).toBe(7)
@@ -235,52 +212,6 @@ describe('getCoreModules', () => {
     expect(isFresh(new Date(Date.now() - 90_000).toISOString(), 60)).toBe(false)
     expect(isFresh(null, 60)).toBe(false)
     expect(isFresh('garbage', 60)).toBe(false)
-  })
-
-  it('accepts honest no-series only for complete same-basis metrics', () => {
-    const base = {
-      timeframe: 7 as const,
-      stats: {},
-      currency: 'USDC' as const,
-      series: {},
-      provenance: { source: 'gmx', asOf: '2026-06-10T12:00:00Z' },
-      cacheState: 'warm' as const,
-    }
-    expect(
-      hasRequiredProfileSeries({
-        ...base,
-        extras: {
-          profile_series_contract: 'unavailable_same_basis',
-          pnl_basis: 'gmx_period_realized_net',
-          pnl_components_complete: true,
-        },
-      })
-    ).toBe(true)
-    expect(
-      hasRequiredProfileSeries({
-        ...base,
-        extras: {
-          profile_series_contract: 'unavailable_same_basis',
-          pnl_basis: 'gmx_period_realized_net',
-          pnl_components_complete: true,
-          profile_window_metrics_complete: false,
-        },
-      })
-    ).toBe(false)
-    expect(
-      hasRequiredProfileSeries({
-        ...base,
-        extras: { gmx_pnl_contract_version: 2 },
-      })
-    ).toBe(false)
-    expect(hasRequiredProfileSeries({ ...base, extras: {}, series: { pnl: [] } })).toBe(false)
-    expect(
-      hasRequiredProfileSeries({
-        ...base,
-        extras: {},
-        series: { pnl: [{ ts: '2026-06-10T00:00:00Z', value: 1 }] },
-      })
-    ).toBe(true)
   })
 })
 

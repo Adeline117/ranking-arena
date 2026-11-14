@@ -738,5 +738,37 @@ assert_equal "core modules flag stale stats" "false|true" \
 assert_equal "sealed-source helper is not anon-callable" "f" \
   "$(psql_db -Atqc "SELECT pg_catalog.has_function_privilege('anon',
      'arena.public_sealed_rank_sources()', 'EXECUTE')")"
+assert_equal "before 20261114101605 the first screen shows unsealed boards" "999.0|7:77.0,90:555.0" \
+  "$(anon_rpc "(public.arena_first_screen('okx_futures', 'okx-only')#>>'{entries,0,headlineRoi}')
+     || '|' || (SELECT pg_catalog.string_agg((e->>'timeframe') || ':' || (e->>'headlineRoi'), ','
+                ORDER BY (e->>'timeframe')::int)
+     FROM pg_catalog.jsonb_array_elements(
+       public.arena_first_screen('binance_futures', 'bn-ace')->'entries') AS e)")"
+
+# 20261114101605: profile readers serve sealed boards only and drop stale stats.
+PGOPTIONS='-c client_min_messages=warning' psql_db -q \
+  -f "$MIGRATIONS/20261114101605_first_screen_core_modules_sealed_only.sql" >/dev/null
+assert_equal "first screen shows nothing for a never-sealed source" "[]|OkxOnly" \
+  "$(anon_rpc "(public.arena_first_screen('okx_futures', 'okx-only')->'entries')::text
+     || '|' || (public.arena_first_screen('okx_futures', 'okx-only')->>'nickname')")"
+assert_equal "first screen shows the sealed 90D board only (no newer board, no unsealed 7D)" \
+  "90:$(psql_db -Atqc "SELECT headline_roi FROM arena.leaderboard_entries
+                        WHERE snapshot_id = 101 AND trader_id = 11")" \
+  "$(anon_rpc "pg_catalog.string_agg((e->>'timeframe') || ':' || (e->>'headlineRoi'), ',')
+     FROM pg_catalog.jsonb_array_elements(
+       public.arena_first_screen('binance_futures', 'bn-ace')->'entries') AS e")"
+psql_db -q <<'SQL'
+INSERT INTO arena.leaderboard_publication_source_isolations
+  (season_id, filter_source, reasons, first_isolated_at, score_cohort_id)
+SELECT '90D', 'binance_futures', ARRAY['stale'], pg_catalog.now(), head.score_cohort_id
+FROM arena.public_ranked_leaderboard_serving_heads AS head WHERE head.season_id = '90D';
+DELETE FROM arena.public_ranked_leaderboard_serving_sources
+WHERE season_id = '90D' AND source = 'binance_futures';
+SQL
+assert_equal "first screen hides a source the sealed season no longer witnesses" "[]" \
+  "$(anon_rpc "(public.arena_first_screen('binance_futures', 'bn-ace')->'entries')::text")"
+assert_equal "core modules serve fresh stats and drop stale ones" "180.5|null" \
+  "$(anon_rpc "(public.arena_core_modules('binance_futures', 'bn-ace', 90)#>>'{stats,roi}') || '|' ||
+              COALESCE(public.arena_core_modules('binance_futures', 'bn-bolt', 90)::text, 'null')")"
 
 echo "public ranking season publication PostgreSQL 17 proof passed"

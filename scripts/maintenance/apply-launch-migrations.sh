@@ -187,6 +187,7 @@ PREDEPLOY_MIGRATIONS=(
   20261113105605_retention_preserves_metric_trust_evidence.sql
   20261113110021_leaderboard_snapshot_retention.sql
   20261113110430_rank_publication_source_evidence_binding.sql
+  20261114101605_first_screen_core_modules_sealed_only.sql
 )
 readonly -a PREDEPLOY_MIGRATIONS
 # The final six (season publication follow-ups, PR #419) must stay LAST: they
@@ -194,6 +195,9 @@ readonly -a PREDEPLOY_MIGRATIONS
 # rewrites the freshness authority after the Bitget-bot quarantine
 # (20261111134416, which replaces 20260728124000 in its slot). They follow
 # #415's reordered manifest (2026-11-11 whole-database rehearsal order).
+# 20261114101605 (profile readers: sealed boards only, no stale stats) follows
+# them: it replaces the two readers 20261113012028 rewrote and needs its
+# arena.public_sealed_rank_sources().
 #
 # 20261113014105 (unknown-trade-count sample confidence, issue #435) is
 # predeploy and must follow every migration whose pre/postflight pins the old
