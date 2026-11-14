@@ -6,6 +6,8 @@
  * - Exchange filter: ?exchange=binance_futures
  * - Sort: ?sortBy=arena_score|roi|pnl|win_rate|max_drawdown|sortino_ratio&order=desc|asc
  * - Time range: ?timeRange=7D|30D|90D
+ * - Cohort filters (SQL, see lib/rankings/leaderboard-filters.ts):
+ *   ?roi_min&roi_max&dd_min&dd_max&min_pnl&min_score&min_wr&grade&fex&fcat&preset
  * - Legacy page-based pagination still works: ?page=0&limit=500
  *
  * Performance: one bounded public cohort query + Redis cache of raw view rows.
@@ -26,6 +28,16 @@ import {
   cachedRowsStillInPublicCohort,
   isInPublicCohort,
 } from '@/lib/rankings/public-cohort'
+import {
+  FILTER_PARAM_BOUNDS,
+  LEADERBOARD_GRADES,
+  LEADERBOARD_PRESET_IDS,
+  applyLeaderboardFilters,
+  hasLeaderboardFilters,
+  toLeaderboardSourceType,
+  type LeaderboardFilters,
+  type LeaderboardSourceType,
+} from '@/lib/rankings/leaderboard-filters'
 import { validateTradersResponse } from '@/lib/api/traders-response-schema'
 import { attachAvatarMirrors } from '@/lib/data/avatar-mirrors'
 import { claimedTraderBadgeKey, getClaimedTraderBadgeKeys } from '@/lib/data/claimed-trader-badges'
@@ -73,6 +85,18 @@ const MAX_PUBLIC_RANK = 50_000
  * ~cursor × limit distinct Redis values (audit 2026-11-12 P2-4).
  */
 const CACHEABLE_LIMIT = 50
+/** Most exchanges one `fex` filter may name (bounds the SQL IN list). */
+const MAX_FILTER_SOURCES = 64
+
+/** Plain decimal in [min, max]; '' / exponent / NaN are client errors. */
+function filterNumber(min: number, max: number) {
+  return z
+    .string()
+    .regex(/^-?\d+(\.\d+)?$/)
+    .transform(Number)
+    .pipe(z.number().min(min).max(max))
+    .optional()
+}
 const tradersQuerySchema = z.object({
   // Omission has a safe default; an explicit malformed value is a client
   // error. Silently changing a shared URL's period/order changes the cohort
@@ -98,7 +122,59 @@ const tradersQuerySchema = z.object({
   cursor: z.coerce.number().int().min(0).max(MAX_PUBLIC_RANK).optional(),
   limit: z.coerce.number().int().min(1).max(200).optional().default(CACHEABLE_LIMIT),
   page: z.coerce.number().int().min(0).max(1_000).optional(),
+  // Cohort filters (P2-5). Filtered requests are never cached (see
+  // `cacheable`), so these bounds only bound the SQL, not Redis keys.
+  roi_min: filterNumber(...FILTER_PARAM_BOUNDS.roi_min),
+  roi_max: filterNumber(...FILTER_PARAM_BOUNDS.roi_max),
+  dd_min: filterNumber(...FILTER_PARAM_BOUNDS.dd_min),
+  dd_max: filterNumber(...FILTER_PARAM_BOUNDS.dd_max),
+  min_pnl: filterNumber(...FILTER_PARAM_BOUNDS.min_pnl),
+  min_score: filterNumber(...FILTER_PARAM_BOUNDS.min_score),
+  min_wr: filterNumber(...FILTER_PARAM_BOUNDS.min_wr),
+  grade: z.enum(LEADERBOARD_GRADES).optional(),
+  fex: z.string().max(2_000).optional(),
+  fcat: z.string().max(64).optional(),
+  preset: z.enum(LEADERBOARD_PRESET_IDS).optional(),
 })
+
+type ParsedTradersQuery = z.infer<typeof tradersQuerySchema>
+
+/** Parsed filter params → SQL filters; null when a list value is invalid. */
+function leaderboardFiltersFromQuery(query: ParsedTradersQuery): LeaderboardFilters | null {
+  const filters: LeaderboardFilters = {}
+  if (query.roi_min !== undefined) filters.roiMin = query.roi_min
+  if (query.roi_max !== undefined) filters.roiMax = query.roi_max
+  if (query.dd_min !== undefined) filters.ddMin = query.dd_min
+  if (query.dd_max !== undefined) filters.ddMax = query.dd_max
+  if (query.min_pnl !== undefined) filters.minPnl = query.min_pnl
+  if (query.min_score !== undefined) filters.minScore = query.min_score
+  if (query.min_wr !== undefined) filters.minWinRate = query.min_wr
+  if (query.grade !== undefined) filters.grade = query.grade
+  if (query.preset !== undefined) filters.preset = query.preset
+  if (query.fex !== undefined) {
+    const sources = [...new Set(query.fex.split(','))]
+    // Exact canonical ids only, like `exchange`: an alias or unknown string
+    // would silently query a different cohort than the caller asked for.
+    if (
+      sources.length === 0 ||
+      sources.length > MAX_FILTER_SOURCES ||
+      sources.some(
+        (source) =>
+          parsePublicActiveRankingSource(source) === null &&
+          !isPublicRankingSourceQuarantined(source)
+      )
+    ) {
+      return null
+    }
+    filters.sources = sources.sort()
+  }
+  if (query.fcat !== undefined) {
+    const types = query.fcat.split(',').map(toLeaderboardSourceType)
+    if (types.length === 0 || types.some((type) => type === null)) return null
+    filters.sourceTypes = [...new Set(types as LeaderboardSourceType[])].sort()
+  }
+  return filters
+}
 
 // Select only the response fields plus row-level publication proof required to
 // validate Redis payloads at read time. These proof fields never leave the API.
@@ -107,6 +183,8 @@ const PUBLIC_RANKED_LEADERBOARD_COLUMNS =
 
 interface TradersCacheKeyParams {
   timeRange: Period
+  /** SQL cohort filters; a filtered request is never read from / written to Redis. */
+  filters: LeaderboardFilters | null
   exchangeFilter: string | null
   categoryFilter: string | null
   sortBy: PublicTradersSortBy
@@ -265,6 +343,10 @@ export const GET = withPublic(
       order,
       limit,
     } = parsed.data
+    const filters = leaderboardFiltersFromQuery(parsed.data)
+    if (filters === null) {
+      return badRequest('Invalid filter')
+    }
     const timeRange = timeRangeStr as Period
     const cursor = parsed.data.cursor ?? null
     const page = parsed.data.page ?? null
@@ -322,6 +404,7 @@ export const GET = withPublic(
     // Cache key
     const cacheParams: TradersCacheKeyParams = {
       timeRange,
+      filters: hasLeaderboardFilters(filters) ? filters : null,
       exchangeFilter: exchangeFilter ?? null,
       categoryFilter: categoryFilter ?? null,
       sortBy,
@@ -344,7 +427,12 @@ export const GET = withPublic(
         ...(sanitized.integrityCompromised ? { integrityCompromised: true as const } : {}),
       }
     }
-    const cacheable = limit === CACHEABLE_LIMIT && (cursor === null || cursor % limit === 0)
+    // Filtered cohorts are open-ended (numeric bounds), so they are served
+    // from the database only: they can never mint unbounded Redis keys.
+    const cacheable =
+      cacheParams.filters === null &&
+      limit === CACHEABLE_LIMIT &&
+      (cursor === null || cursor % limit === 0)
     const cachedCohort = cacheable
       ? await getOrSetWithLock<PublicRankedCohortCacheValue>(cacheKey, loadCohort, {
           ttl: 300,
@@ -421,6 +509,7 @@ export async function warmDefaultPublicTradersCache(
   }
   const params: TradersCacheKeyParams = {
     timeRange,
+    filters: null,
     exchangeFilter: null,
     categoryFilter: null,
     sortBy: 'arena_score',
@@ -481,6 +570,12 @@ async function fetchPublicRankedCohort(
 
   if (exchangeFilter) {
     query = query.eq('source', exchangeFilter)
+  }
+
+  // Advanced filters / presets, in SQL before ordering and paging so every
+  // page and `hasMore` describe the filtered cohort.
+  if (params.filters) {
+    query = applyLeaderboardFilters(query, params.filters)
   }
 
   // Category filter: map frontend category to source_type in DB
