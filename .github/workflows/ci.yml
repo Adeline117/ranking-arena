@@ -123,6 +123,9 @@ jobs:
             echo "No migrations directory found, skipping check"
           fi
 
+      - name: Security — no server secret literals (public repository)
+        run: node scripts/qa/secret-literal-guard.mjs
+
       - name: Security — npm audit (blocks on critical/high)
         run: |
           npm install --package-lock-only --ignore-scripts 2>/dev/null || true
