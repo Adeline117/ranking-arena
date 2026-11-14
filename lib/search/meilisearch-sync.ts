@@ -62,7 +62,7 @@ type PublicRankRow = {
   followers: string | number | null
   rank: string | number
   trader_type: string | null
-  computed_at: string
+  source_as_of: string | null
 }
 
 export interface MeilisearchTraderDocument {
@@ -80,15 +80,16 @@ export interface MeilisearchTraderDocument {
   rank: number
   trader_type: string | null
   avatar_url: string | null
-  updated_at: string
+  /** Source data watermark (leaderboard_source_freshness.source_as_of); null = unknown. */
+  updated_at: string | null
 }
 
 const PAGE_SQL = `
 SELECT ranked.source, ranked.source_trader_id, ranked.season_id, ranked.handle,
        ranked.avatar_url, ranked.roi, ranked.pnl, ranked.arena_score, ranked.win_rate,
        ranked.max_drawdown, ranked.followers, ranked.rank, ranked.trader_type,
-       pg_catalog.to_char(ranked.computed_at AT TIME ZONE 'UTC',
-         'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS computed_at
+       pg_catalog.to_char(ranked.source_as_of AT TIME ZONE 'UTC',
+         'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS source_as_of
   FROM public.public_ranked_leaderboard AS ranked
  WHERE ranked.season_id = $1
    AND ranked.rank > $2
@@ -131,7 +132,7 @@ export function toMeilisearchTraderDocument(
     rank,
     trader_type: row.trader_type,
     avatar_url: row.avatar_url,
-    updated_at: row.computed_at,
+    updated_at: row.source_as_of,
   }
 }
 

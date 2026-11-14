@@ -20,7 +20,7 @@ function rankRow(season: string, rank: number, overrides: Record<string, unknown
     followers: '3',
     rank: String(rank),
     trader_type: null,
-    computed_at: '2026-11-12T00:00:00.000000Z',
+    source_as_of: '2026-11-12T00:00:00.000000Z',
     ...overrides,
   }
 }
