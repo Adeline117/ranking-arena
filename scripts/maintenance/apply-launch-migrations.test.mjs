@@ -146,7 +146,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     ...superseded,
   ]
 
-  assert.equal(predeploy.length, 151)
+  assert.equal(predeploy.length, 150)
   // Season publication follow-ups stay last; 011058 must follow the Bitget-bot
   // freshness-authority rewrite slot (20261111134416, #415's replacement for 20260728124000).
   assert.deepEqual(predeploy.slice(-6), [
@@ -163,7 +163,10 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
         '20261111134416_quarantine_bitget_bot_cumulative_rank_authority_prod_reader.sql'
       )
   )
+  // 040440's forward replacement freezes legacy position history only after the
+  // RAW-only release is deployed and legacy callers are drained (V1 contract).
   assert.deepEqual(postdeploy, [
+    '20261111135144_freeze_legacy_position_history_relations_prod_creator.sql',
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
     '20261113150757_clean_derived_formal_win_rate.sql',
@@ -225,7 +228,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   ])
   assert.equal(new Set(all).size, 184)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-110), [
+  assert.deepEqual(predeploy.slice(-109), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -303,7 +306,6 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260729225000_token_trader_rank_authority.sql',
     '20261111133259_token_ranking_generation_barrier_cron_api.sql',
     '20261111133300_retire_legacy_token_rankings_cron_api.sql',
-    '20261111135144_freeze_legacy_position_history_relations_prod_creator.sql',
     '20261111135302_quarantine_bingx_rank_authority_blocked_spot.sql',
     '20260804050000_harden_serving_trader_resolver.sql',
     '20260804051000_harden_serving_source_capabilities.sql',
@@ -425,13 +427,12 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes('20260729070500_leaderboard_score_input_manifest_v2.sql'))
   assert.ok(predeploy.includes('20260729071000_leaderboard_metric_trust_projection_v2.sql'))
   assert.ok(predeploy.includes('20260729071500_tier_a_one_phase_commit_guard.sql'))
-  assert.deepEqual(predeploy.slice(-38, -6), [
+  assert.deepEqual(predeploy.slice(-37, -6), [
     '20260729223000_rerank_public_eligible_rows_only.sql',
     '20260729224000_rank_eligible_leaderboard_count_cache.sql',
     '20260729225000_token_trader_rank_authority.sql',
     '20261111133259_token_ranking_generation_barrier_cron_api.sql',
     '20261111133300_retire_legacy_token_rankings_cron_api.sql',
-    '20261111135144_freeze_legacy_position_history_relations_prod_creator.sql',
     '20261111135302_quarantine_bingx_rank_authority_blocked_spot.sql',
     '20260804050000_harden_serving_trader_resolver.sql',
     '20260804051000_harden_serving_source_capabilities.sql',
