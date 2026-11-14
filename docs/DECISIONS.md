@@ -173,7 +173,11 @@ Use `(source, source_trader_id)` as composite unique key in `trader_sources`.
 ## ADR-015: Vercel Cron for Data Pipeline
 
 **Date:** 2024-02
-**Status:** Accepted
+**Status:** Superseded (2026-06 → 2026-11). Data acquisition moved to the off-Vercel
+ingest worker (`worker/src/ingest-worker.ts`, BullMQ schedules in
+`worker/src/ingest/scheduler.ts`) and scoring to the separate `arena-worker`
+process; `vercel.json` has no `crons`, and every Vercel cron route is held by the
+V1 source gate (`withCron` → `v1CronExecutionGate`). Kept for history only.
 
 ### Context
 

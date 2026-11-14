@@ -34,6 +34,7 @@ import type {
   Timeframe,
 } from '../../core/types'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
+import type { HistoryContinuationCapability } from '../../core/history-continuation'
 import type { FetchSession, ReplayRequestTemplate } from '../../fetch/types'
 import { apiFetcher, replayPaged } from '../../fetch/capture'
 import { parseBingxLeaderboardPage, parseBingxHistory, parseBingxPositions } from './parsers'
@@ -284,6 +285,14 @@ const bingxAdapter: SourceAdapter = {
   parseProfile: () => ({ stats: [], series: [], nickname: null, avatarUrlOrigin: null }),
   parsePositions: parseBingxPositions,
   parseHistory: parseBingxHistory,
+
+  /**
+   * Records are harvested from the browser-rendered first page of each tab;
+   * there is no page/time parameter we control, so a cut cannot be resumed.
+   */
+  historyContinuation(): HistoryContinuationCapability {
+    return { supported: false, reason: 'browser_harvest_first_page_only' }
+  },
 }
 
 registerAdapter(bingxAdapter)

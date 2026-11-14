@@ -189,6 +189,12 @@ export interface TierJobData {
    * source can't self-requeue forever.
    */
   contDepth?: number
+  /**
+   * Tier-D deadline continuations only: arena.traders ids not yet crawled by
+   * this pass. Absent on scheduler-fired iterations (a fresh pass selects the
+   * current top-N); a continuation crawls exactly these, never re-selecting.
+   */
+  tierDRemainingTraderIds?: number[]
 }
 
 export interface TierCJobData {

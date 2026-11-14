@@ -132,6 +132,7 @@ export interface Trader {
   // V3 Advanced Metrics
   sortino_ratio?: number | null
   calmar_ratio?: number | null
+  profit_factor?: number | null
   arena_score_v3?: number | null
   trading_style?: string | null
   style_confidence?: number | null

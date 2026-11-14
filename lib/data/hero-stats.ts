@@ -31,6 +31,11 @@ const FALLBACK_MARKER_KEY = 'hero-stats:v3:fallback-marker'
 // would evict the last known-good real value for 5 min. Now the real cache
 // stays intact; the marker just tracks "tried recently" for stampede control.
 
+function finiteCount(value: unknown): number | null {
+  const n = typeof value === 'string' && value.trim() !== '' ? Number(value) : value
+  return typeof n === 'number' && Number.isFinite(n) && n >= 0 ? n : null
+}
+
 export interface HeroStats {
   sourceBoardCount: number
   traderCount: number
@@ -102,13 +107,20 @@ export async function getHeroStats(): Promise<HeroStats> {
       return { ...DEFAULT_STATS, isDefault: true }
     }
 
-    const rpcData = data as { exchange_count?: number; trader_count?: number } | null
-    const stats: HeroStats = {
-      // The SQL output name remains exchange_count for backward compatibility;
-      // migration 20260717130000 defines its value as live source-board count.
-      sourceBoardCount: rpcData?.exchange_count || DEFAULT_STATS.sourceBoardCount,
-      traderCount: rpcData?.trader_count || DEFAULT_STATS.traderCount,
+    const rpcData = data as { exchange_count?: unknown; trader_count?: unknown } | null
+    // The SQL output name remains exchange_count for backward compatibility;
+    // migration 20260717130000 defines its value as live source-board count.
+    // A real 0 (empty public board) is a fact and must be shown as 0 — never
+    // swapped for the fallback. Only a missing/non-numeric field is "unknown".
+    const sourceBoardCount = finiteCount(rpcData?.exchange_count)
+    const traderCount = finiteCount(rpcData?.trader_count)
+    if (sourceBoardCount === null || traderCount === null) {
+      logger.warn('[getHeroStats] RPC returned a malformed payload, using defaults')
+      if (cached) return cached
+      // Defaults are never written to CACHE_KEY (see header comment).
+      return { ...DEFAULT_STATS, isDefault: true }
     }
+    const stats: HeroStats = { sourceBoardCount, traderCount }
 
     // 4. Cache success result
     await tieredSet(CACHE_KEY, stats, 'cold', ['hero-stats'])

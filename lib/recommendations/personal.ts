@@ -82,32 +82,6 @@ interface PublicPersonalRankRow extends Record<string, unknown> {
   win_rate: number
 }
 
-interface PublicRankedLeaderboardQueryResult {
-  data: unknown[] | null
-  error: unknown | null
-}
-
-type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
-  select(columns: string): PublicRankedLeaderboardQuery
-  eq(column: string, value: string): PublicRankedLeaderboardQuery
-  in(column: string, values: readonly string[]): PublicRankedLeaderboardQuery
-  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
-  gt(column: string, value: number): PublicRankedLeaderboardQuery
-  gte(column: string, value: number): PublicRankedLeaderboardQuery
-  lte(column: string, value: number): PublicRankedLeaderboardQuery
-  neq(column: string, value: string): PublicRankedLeaderboardQuery
-  or(expression: string): PublicRankedLeaderboardQuery
-  order(
-    column: string,
-    options: { ascending: boolean; nullsFirst: boolean }
-  ): PublicRankedLeaderboardQuery
-  limit(count: number): PublicRankedLeaderboardQuery
-}
-
-type PublicRankedLeaderboardClient = {
-  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
-}
-
 interface PublicPersonalCohort {
   rows: PublicPersonalRankRow[]
   rankingVisibility: PersonalRecommendationVisibility
@@ -128,16 +102,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Generated Supabase types may lag the security-barrier view. Keep this
- * narrow bridge local so this module cannot accidentally select another
- * ranking relation.
+ * The sealed public cohort, typed by the generated view row
+ * (database.types.ts public.Views.public_ranked_leaderboard).
  */
-function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
-  if (!isRecord(value) || typeof value.from !== 'function') {
-    throw new TypeError('Supabase client does not expose the public ranking cohort')
-  }
-  return value as PublicRankedLeaderboardClient
+function publicPersonalCohortQuery(supabase: ReturnType<typeof getSupabase>) {
+  return supabase
+    .from('public_ranked_leaderboard')
+    .select(PERSONAL_RECOMMENDATION_SELECT)
+    .eq('season_id', PERSONAL_RECOMMENDATION_PERIOD)
+    .not('rank', 'is', null)
 }
+
+type PublicRankedLeaderboardQuery = ReturnType<typeof publicPersonalCohortQuery>
+type PublicRankedLeaderboardResult = PromiseLike<{ data: unknown[] | null; error: unknown }>
 
 function isCanonicalPublicSource(value: unknown): value is string {
   return (
@@ -220,16 +197,10 @@ function verifyPublicPersonalCohort(value: unknown): PublicPersonalCohort {
 
 async function readPublicPersonalCohort(
   supabase: ReturnType<typeof getSupabase>,
-  buildQuery: (query: PublicRankedLeaderboardQuery) => PublicRankedLeaderboardQuery
+  buildQuery: (query: PublicRankedLeaderboardQuery) => PublicRankedLeaderboardResult
 ): Promise<PublicPersonalCohort> {
   try {
-    const query = publicRankedLeaderboardClient(supabase)
-      .from('public_ranked_leaderboard')
-      .select(PERSONAL_RECOMMENDATION_SELECT)
-      .eq('season_id', PERSONAL_RECOMMENDATION_PERIOD)
-      .not('rank', 'is', null)
-
-    const { data, error } = await buildQuery(query)
+    const { data, error } = await buildQuery(publicPersonalCohortQuery(supabase))
     if (error) {
       logger.warn('Personal recommendation cohort query failed', { error })
       return {

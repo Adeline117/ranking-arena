@@ -482,12 +482,62 @@ async function capturedFenceAdvanced(
   )
 }
 
+/**
+ * Process-local single-flight: concurrent getOrSetWithLock calls for the same
+ * key in one instance share one in-flight load. The Redis lock already
+ * de-duplicates across instances while Redis is healthy; this keeps an
+ * instance from stampeding the database when Redis is down or slow (lock
+ * errors / lock-wait timeouts make every waiter run the fetcher itself).
+ */
+const inFlightLoads = new Map<string, Promise<unknown>>()
+
+/**
+ * Short-lived process-local cache used ONLY while the shared Redis path is
+ * degraded (no client, unreadable write fence, or lock errors). It bounds a
+ * Redis outage to at most one fetch per key per instance per window instead of
+ * one per request. Kept deliberately short: degraded entries carry no shared
+ * publication fence, so their staleness is bounded by this TTL alone.
+ */
+export const DEGRADED_LOCAL_CACHE_TTL_MS = 5_000
+const DEGRADED_LOCAL_CACHE_MAX_ENTRIES = 500
+const degradedLocalCache = new Map<string, { value: unknown; expiresAt: number }>()
+
+function readDegradedLocal<T>(key: string): T | null {
+  const entry = degradedLocalCache.get(key)
+  if (!entry) return null
+  if (entry.expiresAt <= Date.now()) {
+    degradedLocalCache.delete(key)
+    return null
+  }
+  return entry.value as T
+}
+
+function writeDegradedLocal(key: string, value: unknown): void {
+  if (degradedLocalCache.size >= DEGRADED_LOCAL_CACHE_MAX_ENTRIES) {
+    const oldest = degradedLocalCache.keys().next().value
+    if (oldest !== undefined) degradedLocalCache.delete(oldest)
+  }
+  degradedLocalCache.set(key, { value, expiresAt: Date.now() + DEGRADED_LOCAL_CACHE_TTL_MS })
+}
+
+/** Test-only reset for the process-local single-flight and degraded caches. */
+export function resetLocalLoadStateForTests(): void {
+  inFlightLoads.clear()
+  degradedLocalCache.clear()
+}
+
 export async function getOrSetWithLock<T>(
   key: string,
   fetcher: () => Promise<T>,
   options: LockedCacheOptions = {}
 ): Promise<T> {
-  return getOrSetWithLockAttempt(key, fetcher, options, false)
+  const existing = inFlightLoads.get(key)
+  if (existing) return existing as Promise<T>
+  const load = getOrSetWithLockAttempt(key, fetcher, options, false).finally(() => {
+    inFlightLoads.delete(key)
+  })
+  inFlightLoads.set(key, load)
+  return load
 }
 
 async function getOrSetWithLockAttempt<T>(
@@ -513,9 +563,19 @@ async function getOrSetWithLockAttempt<T>(
   // 计算实际 TTL（添加抖动防止雪崩）
   const actualTtl = ttlJitter ? addTtlJitter(ttl) : ttl
 
+  // Degraded shared path (no Redis client, or the publication fence could not
+  // be read so shared reads are refused): serve a very recent local load
+  // before hitting the database again.
+  const degraded = !redis || !sharedReadsAllowed
+  if (degraded) {
+    const local = readDegradedLocal<T>(key)
+    if (local !== null) return local
+  }
+
   // 如果 Redis 不可用，直接获取数据并缓存到内存
   if (!redis) {
     const data = await fetcher()
+    writeDegradedLocal(key, data)
     await set(key, data, { ...guardedOptions, ttl: actualTtl })
     return data
   }
@@ -546,7 +606,10 @@ async function getOrSetWithLockAttempt<T>(
         `[Cache] Redis lock error for ${key}, falling back to direct fetch:`,
         lockError
       )
+      const local = readDegradedLocal<T>(key)
+      if (local !== null) return local
       const data = await fetcher()
+      writeDegradedLocal(key, data)
       // The lock state is uncertain, so this response may be served but must
       // not overwrite a cache committed by a proven owner.
       const written = await set(key, data, {

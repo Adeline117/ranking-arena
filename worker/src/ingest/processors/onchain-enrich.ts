@@ -30,6 +30,16 @@ import {
 } from '@/lib/onchain-quality'
 
 const WEB3_SOURCES = ['okx_web3_solana', 'binance_web3_bsc'] as const
+/**
+ * Sources whose formal trader_stats.win_rate may be FILLED from chain-derived
+ * values. Only pure on-chain sources with no exchange-provided win rate belong
+ * here (死命令「不自派生交易所提供的字段」). Both web3 boards publish winRate
+ * (okx-web3 parsers: rankingInfos[].winRate; binance-web3: board winRate), so
+ * the chain value stays in extras.onchain_win_rate with its onchain_quality
+ * provenance and never enters the formal column, where it would become
+ * indistinguishable from the exchange value.
+ */
+export const ONCHAIN_FORMAL_WIN_RATE_SOURCES: ReadonlySet<string> = new Set<string>()
 /** Per-source batch cap per run. Coverage grows across runs via the two-tier
  *  selection (below), so this bounds each 12h run, not total reach. */
 const TOP_N = Number(process.env.ONCHAIN_ENRICH_TOPN) || 150
@@ -128,6 +138,7 @@ export async function processOnchainEnrich(
       }
     }
 
+    let sourceEnriched = 0
     for (const { wallet } of rows) {
       try {
         const internalLegs =
@@ -143,6 +154,9 @@ export async function processOnchainEnrich(
           bscInternalCoverageComplete: chain === 'bsc' && internalCoverageComplete,
         })
         const extras = { ...enrichmentExtras(e), onchain_enriched_at: new Date().toISOString() }
+        const formalWinRate = ONCHAIN_FORMAL_WIN_RATE_SOURCES.has(slug)
+          ? scoreEligibleWinRate(e)
+          : null
         await pool.query(
           `UPDATE arena.trader_stats ts SET
              extras = ts.extras || $3::jsonb,
@@ -150,9 +164,10 @@ export async function processOnchainEnrich(
            FROM arena.traders t, arena.sources s
            WHERE ts.trader_id = t.id AND t.source_id = s.id
              AND s.slug = $1 AND t.exchange_trader_id = $2 AND ts.timeframe = 90`,
-          [slug, wallet, JSON.stringify(extras), scoreEligibleWinRate(e)]
+          [slug, wallet, JSON.stringify(extras), formalWinRate]
         )
         enriched += 1
+        sourceEnriched += 1
       } catch (err) {
         failed += 1
         logger.error(
@@ -161,7 +176,7 @@ export async function processOnchainEnrich(
         )
       }
     }
-    logger.info(`[onchain-enrich] ${slug}: enriched ${rows.length} wallets`)
+    logger.info(`[onchain-enrich] ${slug}: enriched ${sourceEnriched}/${rows.length} wallets`)
   }
 
   return { enriched, failed }

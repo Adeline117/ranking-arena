@@ -16,7 +16,7 @@ describe('HomeFirstPaintShell', () => {
     expect(layout).not.toHaveClass('three-col-no-left')
     expect(layout).not.toHaveClass('three-col-no-right')
     expect(container.querySelector('#ssr-home-content-shell')).toHaveClass(
-      'container-padding',
+      'home-container',
       'has-mobile-nav',
       'home-page-container'
     )

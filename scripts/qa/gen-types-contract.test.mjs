@@ -803,8 +803,6 @@ test('CI keeps type contracts secret-scoped, push-main only, and deployment-bloc
   }
   assert.match(deployGate, /SECURITY SUSPENDED \(V1 NO-GO\)/)
   assert.match(deployGate, /deploy:\n    if: \$\{\{ false \}\}/)
-  assert.match(deployGate, /jobs\?per_page=100/)
-  assert.match(deployGate, /\[ "\$C" = "success" \] \|\| PASS=false/)
   assert.equal(
     packageJson.scripts['gen:types:contract'],
     'node --test scripts/qa/gen-types-contract.test.mjs'

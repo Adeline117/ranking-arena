@@ -47,88 +47,100 @@ export default function ThemeToggle() {
     return () => mql.removeEventListener('change', handler)
   }, [preference])
 
-  const applyTheme = useCallback((newPref: ThemePreference) => {
-    const newEffective = resolveEffectiveTheme(newPref)
-    const btn = btnRef.current
+  const applyTheme = useCallback(
+    (newPref: ThemePreference) => {
+      const newEffective = resolveEffectiveTheme(newPref)
+      const btn = btnRef.current
 
-    // Try View Transition API with circular clip-path animation
-    const doc = document as Document & { startViewTransition?: (cb: () => void) => { ready: Promise<void>; finished: Promise<void> } }
-    if (btn && doc.startViewTransition && newEffective !== effective) {
-      const rect = btn.getBoundingClientRect()
-      const x = rect.left + rect.width / 2
-      const y = rect.top + rect.height / 2
-      // Calculate max radius to cover entire viewport
-      const maxRadius = Math.hypot(
-        Math.max(x, window.innerWidth - x),
-        Math.max(y, window.innerHeight - y)
-      )
-
-      setAnimating(true)
-
-      const transition = doc.startViewTransition!(() => {
-        document.documentElement.setAttribute('data-theme', newEffective)
-        localStorage.setItem('theme', newPref)
-        setPreference(newPref)
-        setEffective(newEffective)
-      })
-
-      transition.ready.then(() => {
-        // Enhance circular reveal animation with better easing
-        document.documentElement.animate(
-          {
-            clipPath: [
-              `circle(0px at ${x}px ${y}px)`,
-              `circle(${maxRadius}px at ${x}px ${y}px)`,
-            ],
-          },
-          {
-            duration: 600,
-            easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)', // More polished easing
-            pseudoElement: '::view-transition-new(root)',
-          }
+      // Try View Transition API with circular clip-path animation — skipped for
+      // prefers-reduced-motion (WAAPI ignores the CSS reduced-motion overrides).
+      const doc = document as Document & {
+        startViewTransition?: (cb: () => void) => { ready: Promise<void>; finished: Promise<void> }
+      }
+      const reduceMotion =
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      if (btn && doc.startViewTransition && !reduceMotion && newEffective !== effective) {
+        const rect = btn.getBoundingClientRect()
+        const x = rect.left + rect.width / 2
+        const y = rect.top + rect.height / 2
+        // Calculate max radius to cover entire viewport
+        const maxRadius = Math.hypot(
+          Math.max(x, window.innerWidth - x),
+          Math.max(y, window.innerHeight - y)
         )
-      }).catch(() => { // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
-        // Animation failed, theme still applied
-      })
 
-      transition.finished.then(() => {
-        setAnimating(false)
-      }).catch(() => {
-        setAnimating(false)
-      })
+        setAnimating(true)
 
-      return
-    }
+        const transition = doc.startViewTransition!(() => {
+          document.documentElement.setAttribute('data-theme', newEffective)
+          localStorage.setItem('theme', newPref)
+          setPreference(newPref)
+          setEffective(newEffective)
+        })
 
-    // Fallback: CSS transition for browsers without View Transitions API
-    if (newEffective !== effective) {
-      setAnimating(true)
-      document.documentElement.classList.add('theme-transition')
-      setTimeout(() => {
-        document.documentElement.setAttribute('data-theme', newEffective)
+        transition.ready
+          .then(() => {
+            // Enhance circular reveal animation with better easing
+            document.documentElement.animate(
+              {
+                clipPath: [
+                  `circle(0px at ${x}px ${y}px)`,
+                  `circle(${maxRadius}px at ${x}px ${y}px)`,
+                ],
+              },
+              {
+                duration: 600,
+                easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)', // More polished easing
+                pseudoElement: '::view-transition-new(root)',
+              }
+            )
+          })
+          // eslint-disable-next-line no-restricted-syntax -- intentional fire-and-forget
+          .catch(() => {
+            // Animation failed, theme still applied
+          })
+
+        transition.finished
+          .then(() => {
+            setAnimating(false)
+          })
+          .catch(() => {
+            setAnimating(false)
+          })
+
+        return
+      }
+
+      // Fallback: CSS transition for browsers without View Transitions API
+      if (newEffective !== effective) {
+        setAnimating(true)
+        document.documentElement.classList.add('theme-transition')
+        setTimeout(() => {
+          document.documentElement.setAttribute('data-theme', newEffective)
+          localStorage.setItem('theme', newPref)
+          setPreference(newPref)
+          setEffective(newEffective)
+          setTimeout(() => {
+            document.documentElement.classList.remove('theme-transition')
+            setAnimating(false)
+          }, 400)
+        }, 50)
+      } else {
+        // Same effective theme (e.g. switching to "system" when OS matches current)
         localStorage.setItem('theme', newPref)
         setPreference(newPref)
         setEffective(newEffective)
-        setTimeout(() => {
-          document.documentElement.classList.remove('theme-transition')
-          setAnimating(false)
-        }, 400)
-      }, 50)
-    } else {
-      // Same effective theme (e.g. switching to "system" when OS matches current)
-      localStorage.setItem('theme', newPref)
-      setPreference(newPref)
-      setEffective(newEffective)
-    }
-  }, [effective])
+      }
+    },
+    [effective]
+  )
 
   // Cycle: dark -> light -> system -> dark
   const cycleTheme = () => {
     if (animating) return
     const next: ThemePreference =
-      preference === 'dark' ? 'light'
-      : preference === 'light' ? 'system'
-      : 'dark'
+      preference === 'dark' ? 'light' : preference === 'light' ? 'system' : 'dark'
     applyTheme(next)
   }
 
@@ -142,7 +154,14 @@ export default function ThemeToggle() {
     if (preference === 'system') {
       // Monitor/desktop icon for system mode
       return (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
           <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
           <line x1="8" y1="21" x2="16" y2="21" />
           <line x1="12" y1="17" x2="12" y2="21" />
@@ -152,7 +171,14 @@ export default function ThemeToggle() {
     if (effective === 'dark') {
       // Sun icon — current is dark, next step goes toward light
       return (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
           <circle cx="12" cy="12" r="5" />
           <line x1="12" y1="1" x2="12" y2="3" />
           <line x1="12" y1="21" x2="12" y2="23" />
@@ -167,7 +193,14 @@ export default function ThemeToggle() {
     }
     // Moon icon — current is light
     return (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
         <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
       </svg>
     )

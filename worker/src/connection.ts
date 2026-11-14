@@ -14,6 +14,10 @@ import {
   assertV1IngestExecutionPublished,
   isV1IngestExecutionPublished,
 } from '@/lib/ingest/v1-execution-publication'
+import {
+  V1_RANKING_COMMAND_CHAIN_NOT_PUBLISHED_CODE,
+  isV1RankingCommandChainPublished,
+} from '@/lib/cron/v1-ranking-command-chain-publication'
 
 type IORedisConstructor = typeof import('ioredis').default
 type RedisConnection = InstanceType<IORedisConstructor>
@@ -28,14 +32,44 @@ function loadIORedis(): IORedisConstructor {
 }
 
 let connection: RedisConnection | null = null
+let rankingConnection: RedisConnection | null = null
 
+/**
+ * Redis for the ingest command path (ingest worker, ingest queues, ingest
+ * processors). Gated by the ingest publication constant only.
+ */
 export function getConnection(): RedisConnection {
   // Keep the package load and TCP client construction behind the fixed V1
   // publication boundary. A caller cannot re-enable this from its environment.
   assertV1IngestExecutionPublished()
 
   if (connection) return connection
+  connection = createRedisConnection()
+  return connection
+}
 
+/**
+ * Redis for the ranking command chain (arena-worker: the `arena-pipeline`
+ * queue that runs the season publication). Gated by the ranking constant
+ * only, so publishing the ranking chain does not require publishing ingest
+ * (and vice versa). Each path keeps its own client; neither gate can open the
+ * other path's queues.
+ */
+export function getRankingCommandChainConnection(): RedisConnection {
+  if (!isV1RankingCommandChainPublished()) {
+    throw Object.assign(new Error('V1 ranking command chain is not published'), {
+      code: V1_RANKING_COMMAND_CHAIN_NOT_PUBLISHED_CODE,
+      name: V1_RANKING_COMMAND_CHAIN_NOT_PUBLISHED_CODE,
+    })
+  }
+
+  if (rankingConnection) return rankingConnection
+  rankingConnection = createRedisConnection()
+  return rankingConnection
+}
+
+// Private builder: only reachable after one of the two gates above passed.
+function createRedisConnection(): RedisConnection {
   const url = process.env.REDIS_URL
   if (!url) {
     throw new Error(
@@ -46,22 +80,22 @@ export function getConnection(): RedisConnection {
   }
 
   const IORedis = loadIORedis()
-  connection = new IORedis(url, {
+  const client = new IORedis(url, {
     maxRetriesPerRequest: null, // Required by BullMQ
     enableReadyCheck: false, // Upstash compatibility
     tls: url.startsWith('rediss://') ? {} : undefined,
   })
 
-  connection.on('error', () => {
+  client.on('error', () => {
     // IORedis errors may embed the credential-bearing connection URL.
     console.error('[worker] Redis connection error')
   })
 
-  connection.on('connect', () => {
+  client.on('connect', () => {
     console.log('[worker] Redis connected')
   })
 
-  return connection
+  return client
 }
 
 export async function closeConnection(): Promise<void> {
@@ -72,5 +106,14 @@ export async function closeConnection(): Promise<void> {
   if (connection) {
     await connection.quit()
     connection = null
+  }
+}
+
+export async function closeRankingCommandChainConnection(): Promise<void> {
+  if (!isV1RankingCommandChainPublished()) return
+
+  if (rankingConnection) {
+    await rankingConnection.quit()
+    rankingConnection = null
   }
 }

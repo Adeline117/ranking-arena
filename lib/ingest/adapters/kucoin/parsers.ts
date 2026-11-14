@@ -407,7 +407,10 @@ export function validateKucoinProfile(
 
 /** Current positions are not publicly exposed (visibility-gated). */
 export function parseKucoinPositions(_raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  return []
+  // Current positions are not publicly exposed (capabilities.positions=false,
+  // getPositions throws). Never let a stray payload parse as "flat": an empty
+  // result would make Tier-D/Tier-C delete the stored book.
+  throw new Error('[kucoin] current positions are not publicly exposed')
 }
 
 /** Deterministic natural-key hash for idempotent history upserts. */

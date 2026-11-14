@@ -11,6 +11,8 @@
  * the Supabase client; ESLint guard enforces the boundary).
  */
 
+import { readFileSync } from 'fs'
+import type { ConnectionOptions } from 'tls'
 import { Pool, types, type PoolClient, type QueryResult, type QueryResultRow } from 'pg'
 
 /**
@@ -46,9 +48,47 @@ export const INGEST_DB_QUERY_TIMEOUT_MS = 5 * 60_000
 export const INGEST_DB_LOCK_TIMEOUT_MS = 60_000
 export const INGEST_DB_KEEPALIVE_INITIAL_DELAY_MS = 10_000
 
-export function getIngestPool(): Pool {
-  if (pool) return pool
+/**
+ * TLS for the ingest pool (service-level write credentials over Supavisor).
+ *
+ *   - local URLs (127.0.0.1/localhost): no TLS.
+ *   - INGEST_DATABASE_CA_CERT=/path/to/ca.pem (e.g. Supabase's downloadable
+ *     "SSL certificate"): verify the server against that CA.
+ *   - INGEST_DATABASE_TLS_VERIFY=true without a CA: verify against the
+ *     Node/system trust store.
+ *   - otherwise: LEGACY encrypted-but-unverified TLS (rejectUnauthorized:false),
+ *     kept as the default so existing Mac/SG deployments do not lose their DB
+ *     connection on upgrade (the Supabase pooler cert is not chained to a public
+ *     root). It is a MITM exposure: set INGEST_DATABASE_CA_CERT in deployment.
+ *     INGEST_DATABASE_TLS_VERIFY=false explicitly opts into the legacy mode and
+ *     silences the warning.
+ */
+export type IngestTlsMode = 'none' | 'verify-ca' | 'verify-system' | 'unverified'
 
+export function resolveIngestSsl(
+  url: string,
+  env: NodeJS.ProcessEnv = process.env,
+  readCa: (path: string) => string = (path) => readFileSync(path, 'utf8')
+): { mode: IngestTlsMode; ssl: ConnectionOptions | undefined } {
+  if (url.includes('127.0.0.1') || url.includes('localhost')) {
+    return { mode: 'none', ssl: undefined }
+  }
+  const caPath = env.INGEST_DATABASE_CA_CERT?.trim()
+  const verify = env.INGEST_DATABASE_TLS_VERIFY?.trim().toLowerCase()
+  if (caPath) {
+    if (verify === 'false') {
+      throw new Error(
+        '[ingest] INGEST_DATABASE_CA_CERT is set but INGEST_DATABASE_TLS_VERIFY=false — refusing an ambiguous TLS config'
+      )
+    }
+    // Throws (fail closed) when the configured CA file is missing/unreadable.
+    return { mode: 'verify-ca', ssl: { ca: readCa(caPath), rejectUnauthorized: true } }
+  }
+  if (verify === 'true') return { mode: 'verify-system', ssl: { rejectUnauthorized: true } }
+  return { mode: 'unverified', ssl: { rejectUnauthorized: false } }
+}
+
+function ingestDatabaseUrl(): string {
   const url = process.env.INGEST_DATABASE_URL ?? process.env.DATABASE_URL
   if (!url) {
     throw new Error(
@@ -73,18 +113,24 @@ export function getIngestPool(): Pool {
         'pooler will starve under its node-pg pool (ECHECKOUTTIMEOUT). Switch the port to 5432.'
     )
   }
+  return url
+}
 
-  pool = new Pool({
+function createWorkerPool(url: string, max: number, label: string): Pool {
+  const tls = resolveIngestSsl(url)
+  if (
+    tls.mode === 'unverified' &&
+    process.env.INGEST_DATABASE_TLS_VERIFY?.trim().toLowerCase() !== 'false'
+  ) {
+    console.warn(
+      `[${label}] DB TLS certificate is NOT verified (legacy default). Set ` +
+        'INGEST_DATABASE_CA_CERT=/path/to/supabase-ca.pem to verify the pooler certificate.'
+    )
+  }
+
+  const created = new Pool({
     connectionString: url,
-    // ── Multi-node budget (2026-07-09 re-budget; was 2026-06-12) ──
-    // BOTH ingest nodes (Mac `local` + SG `vps_sg`) import this file and open
-    // their OWN pool. The binding constraint is the Supavisor SESSION pooler's
-    // pool_size — raised 15 → 30 by the owner (2026-07-09) after concurrency 8
-    // hit EMAXCONNSESSION at startup burst. Budget: 2 nodes × 14 = 28 ≤ 30
-    // Supavisor backends, which themselves sit well under Postgres
-    // max_connections (90, ~30 used by the rest of the system). Node peak
-    // demand is INGEST_CONCURRENCY(8-12) + tier-c(2) + scheduler(1).
-    max: 14,
+    max,
     // CRITICAL: must be SHORTER than Supavisor's server-side idle timeout.
     // At 30s, node-pg kept clients Supavisor had already closed → the next
     // checkout got a dead socket and threw `EDBHANDLEREXITED`. Releasing
@@ -102,10 +148,8 @@ export function getIngestPool(): Pool {
     keepAlive: true,
     keepAliveInitialDelayMillis: INGEST_DB_KEEPALIVE_INITIAL_DELAY_MS,
     // Supabase pooler requires TLS; local dev (127.0.0.1) does not.
-    ssl:
-      url.includes('127.0.0.1') || url.includes('localhost')
-        ? undefined
-        : { rejectUnauthorized: false },
+    // Verification policy: see resolveIngestSsl.
+    ssl: tls.ssl,
   })
 
   // Catches errors on IDLE clients sitting in the pool. It does NOT cover a
@@ -113,11 +157,45 @@ export function getIngestPool(): Pool {
   // the client itself, and with no `client.on('error')` listener node-pg lets it
   // bubble to process 'uncaughtException' → crash-restart. Use ingestClientConnect()
   // for any pool.connect() so checked-out clients get their own error listener.
-  pool.on('error', (err) => {
-    console.error('[ingest] pg idle-client pool error (non-fatal):', err.message)
+  created.on('error', (err) => {
+    console.error(`[${label}] pg idle-client pool error (non-fatal):`, err.message)
   })
+  return created
+}
 
+export function getIngestPool(): Pool {
+  if (pool) return pool
+  // ── Multi-node budget (2026-07-09 re-budget; was 2026-06-12) ──
+  // BOTH ingest nodes (Mac `local` + SG `vps_sg`) import this file and open
+  // their OWN pool. The binding constraint is the Supavisor SESSION pooler's
+  // pool_size — raised 15 → 30 by the owner (2026-07-09) after concurrency 8
+  // hit EMAXCONNSESSION at startup burst. Budget: 2 nodes × 14 = 28 ≤ 30
+  // Supavisor backends, which themselves sit well under Postgres
+  // max_connections (90, ~30 used by the rest of the system). Node peak
+  // demand is INGEST_CONCURRENCY(8-12) + tier-c(2) + scheduler(1).
+  pool = createWorkerPool(ingestDatabaseUrl(), 14, 'ingest')
   return pool
+}
+
+/**
+ * The ranking command chain (arena-worker: season publication + Meilisearch
+ * sync) gets its OWN small pool instead of borrowing the 14-client ingest
+ * pool. A publication is one long transaction per season (up to 3 at once);
+ * sharing the ingest pool let ingest bursts starve it (10s checkout timeout)
+ * and let it starve ingest. Budget: ingest 2 × 14 + this pool 2 = 30, the
+ * Supavisor session pool_size — raise pool_size before raising either side.
+ */
+export const RANK_PUBLICATION_POOL_MAX = 2
+let rankPublicationPool: Pool | null = null
+
+export function getRankPublicationPool(): Pool {
+  if (rankPublicationPool) return rankPublicationPool
+  rankPublicationPool = createWorkerPool(
+    ingestDatabaseUrl(),
+    RANK_PUBLICATION_POOL_MAX,
+    'rank-publication'
+  )
+  return rankPublicationPool
 }
 
 /**
@@ -134,7 +212,16 @@ export function getIngestPool(): Pool {
  * the listener on release so it never accumulates on a reused healthy client.
  */
 export async function ingestClientConnect(): Promise<PoolClient> {
-  const client = await getIngestPool().connect()
+  return connectWithErrorListener(getIngestPool())
+}
+
+/** Same checked-out error discipline, on the dedicated ranking-chain pool. */
+export async function rankPublicationClientConnect(): Promise<PoolClient> {
+  return connectWithErrorListener(getRankPublicationPool())
+}
+
+async function connectWithErrorListener(source: Pool): Promise<PoolClient> {
+  const client = await source.connect()
   const onError = (err: Error) => {
     console.error(
       '[ingest] checked-out client connection drop (non-fatal, client discarded):',
@@ -156,5 +243,12 @@ export async function closeIngestPool(): Promise<void> {
   if (pool) {
     await pool.end()
     pool = null
+  }
+}
+
+export async function closeRankPublicationPool(): Promise<void> {
+  if (rankPublicationPool) {
+    await rankPublicationPool.end()
+    rankPublicationPool = null
   }
 }

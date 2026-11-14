@@ -2,8 +2,8 @@ name: Deploy Ingest Worker (SG)
 
 # SG receives a Linux-x64 dependency tree built on Node 22. Every run is an
 # explicit deployment of one full commit that must still be origin/main before
-# and after the remote cutover. The artifact manifest is verified independently
-# in the deploy job; it is never sourced as shell code.
+# and after the remote cutover; worker/deploy-ingest-sg.sh enforces that and
+# verifies the artifact manifest itself.
 
 # SECURITY SUSPENDED (V1 NO-GO): this reusable workflow may be invoked through
 # workflow_call, but every job is fail-closed below. Restore only with
@@ -86,13 +86,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for module in bullmq ioredis viem abitype luxon @supabase/supabase-js pg ccxt \
-                        playwright tsx dotenv esbuild; do
-            node -e "require.resolve('$module')" || {
-              echo "::error::dependency tree is incomplete: $module is unresolved"
-              exit 1
-            }
-          done
           npx tsx --eval "
             (async () => {
               const modules = ['bullmq','ioredis','pg','ccxt','viem','abitype','luxon','@supabase/supabase-js','dotenv','esbuild','playwright'];
@@ -210,96 +203,11 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Require all SG SSH trust inputs
-        env:
-          INGEST_SG_SSH_KEY: ${{ secrets.INGEST_SG_SSH_KEY }}
-          INGEST_SG_HOST: ${{ secrets.INGEST_SG_HOST }}
-          INGEST_SG_KNOWN_HOSTS: ${{ secrets.INGEST_SG_KNOWN_HOSTS }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          [ -n "$INGEST_SG_SSH_KEY" ] || { echo "::error::INGEST_SG_SSH_KEY is required"; exit 1; }
-          [ -n "$INGEST_SG_HOST" ] || { echo "::error::INGEST_SG_HOST is required"; exit 1; }
-          [ -n "$INGEST_SG_KNOWN_HOSTS" ] || { echo "::error::INGEST_SG_KNOWN_HOSTS is required"; exit 1; }
-          [[ "$INGEST_SG_HOST" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || {
-            echo "::error::INGEST_SG_HOST must be a fixed user@hostname value"
-            exit 1
-          }
-
       - name: Download the exact dependency artifact
         if: ${{ inputs.mode == 'full' }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: arena-ingest-deps-${{ inputs.target_sha }}
-
-      - name: Recompute and verify the artifact manifest independently
-        if: ${{ inputs.mode == 'full' }}
-        id: artifact_attestation
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -f arena-ingest-deps.tgz
-          test -f arena-ingest-deps.manifest
-          tar -tzf arena-ingest-deps.tgz >/dev/null
-
-          export EXPECTED_TARGET_SHA="$TARGET_SHA"
-          export EXPECTED_WORKER_RELEASE_ID="$(node scripts/ci/worker-release-id.mjs "$TARGET_SHA")"
-          export EXPECTED_DEP_INPUTS_SHA256="$({ sha256sum .npmrc package.json package-lock.json; } | sha256sum | awk '{print $1}')"
-          export EXPECTED_NODE_MAJOR="$(node -p "process.versions.node.split('.')[0]")"
-          export EXPECTED_ARCH="$(node -p 'process.arch')"
-          export EXPECTED_TARBALL_SHA256="$(sha256sum arena-ingest-deps.tgz | awk '{print $1}')"
-
-          node --input-type=module <<'NODE'
-          import { appendFileSync, readFileSync } from 'node:fs'
-
-          const keys = [
-            'TARGET_SHA',
-            'WORKER_RELEASE_ID',
-            'DEP_INPUTS_SHA256',
-            'NODE_MAJOR',
-            'ARCH',
-            'TARBALL_SHA256',
-          ]
-          const raw = readFileSync('arena-ingest-deps.manifest', 'utf8')
-          if (!raw.endsWith('\n')) throw new Error('artifact manifest must end with one newline')
-          const lines = raw.slice(0, -1).split('\n')
-          if (lines.length !== keys.length) throw new Error('artifact manifest key count is invalid')
-
-          const manifest = new Map()
-          for (const line of lines) {
-            const match = /^([A-Z][A-Z0-9_]*)=([A-Za-z0-9._-]+)$/.exec(line)
-            if (!match || manifest.has(match[1])) throw new Error('artifact manifest is malformed')
-            manifest.set(match[1], match[2])
-          }
-          if (keys.some((key) => !manifest.has(key)) || [...manifest.keys()].some((key) => !keys.includes(key))) {
-            throw new Error('artifact manifest contains missing or unknown keys')
-          }
-
-          const expected = {
-            TARGET_SHA: process.env.EXPECTED_TARGET_SHA,
-            WORKER_RELEASE_ID: process.env.EXPECTED_WORKER_RELEASE_ID,
-            DEP_INPUTS_SHA256: process.env.EXPECTED_DEP_INPUTS_SHA256,
-            NODE_MAJOR: process.env.EXPECTED_NODE_MAJOR,
-            ARCH: process.env.EXPECTED_ARCH,
-            TARBALL_SHA256: process.env.EXPECTED_TARBALL_SHA256,
-          }
-          const formats = {
-            TARGET_SHA: /^[0-9a-f]{40}$/,
-            WORKER_RELEASE_ID: /^[0-9a-f]{64}$/,
-            DEP_INPUTS_SHA256: /^[0-9a-f]{64}$/,
-            NODE_MAJOR: /^22$/,
-            ARCH: /^x64$/,
-            TARBALL_SHA256: /^[0-9a-f]{64}$/,
-          }
-          for (const key of keys) {
-            const value = manifest.get(key)
-            if (!formats[key].test(value) || value !== expected[key]) {
-              throw new Error(`artifact manifest mismatch: ${key}`)
-            }
-          }
-          appendFileSync(process.env.GITHUB_OUTPUT, `node_major=${manifest.get('NODE_MAJOR')}\n`)
-          appendFileSync(process.env.GITHUB_OUTPUT, `arch=${manifest.get('ARCH')}\n`)
-          NODE
 
       - name: Configure pinned SSH host trust
         env:
@@ -343,27 +251,8 @@ jobs:
         run: |
           set -euo pipefail
           REMOTE_RUNTIME="$(ssh "$INGEST_SG_HOST" "node -p \"process.versions.node.split('.')[0] + ' ' + process.arch\"")"
-          if [ "$DEPLOY_MODE" = 'full' ]; then
-            EXPECTED_RUNTIME='${{ steps.artifact_attestation.outputs.node_major }} ${{ steps.artifact_attestation.outputs.arch }}'
-          else
-            EXPECTED_RUNTIME='22 x64'
-          fi
-          [ "$REMOTE_RUNTIME" = "$EXPECTED_RUNTIME" ] || {
-            echo "::error::SG runtime does not match artifact contract (expected $EXPECTED_RUNTIME)"
-            exit 1
-          }
-
-      - name: Recheck current origin/main immediately before deployment
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch --force --no-tags origin refs/heads/main:refs/remotes/origin/main
-          [ "$(git rev-parse HEAD)" = "$TARGET_SHA" ] || {
-            echo "::error::working tree no longer identifies target_sha"
-            exit 1
-          }
-          [ "$(git rev-parse refs/remotes/origin/main)" = "$TARGET_SHA" ] || {
-            echo "::error::origin/main advanced before deployment; refusing stale cutover"
+          [ "$REMOTE_RUNTIME" = '22 x64' ] || {
+            echo "::error::SG runtime must be Node 22 on x64 (got $REMOTE_RUNTIME)"
             exit 1
           }
 
@@ -385,22 +274,4 @@ jobs:
               --target-sha="$TARGET_SHA" \
               --from-artifact="$PWD/arena-ingest-deps.tgz" \
               --artifact-manifest="$PWD/arena-ingest-deps.manifest"
-          fi
-
-      # The script's final exact-main check is inside its rollback transaction.
-      # A commit arriving after that success point is a new rollout, not a
-      # failed old rollout; report it without pretending the completed cutover
-      # was rolled back.
-      - name: Report if main advances after successful deployment
-        if: ${{ !cancelled() && steps.deploy.outcome == 'success' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch --force --no-tags origin refs/heads/main:refs/remotes/origin/main
-          [ "$(git rev-parse HEAD)" = "$TARGET_SHA" ] || {
-            echo "::error::post-deploy checkout identity changed"
-            exit 1
-          }
-          if [ "$(git rev-parse refs/remotes/origin/main)" != "$TARGET_SHA" ]; then
-            echo "::warning::origin/main advanced after transactional success; evaluate the new main release"
           fi

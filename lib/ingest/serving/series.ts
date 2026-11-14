@@ -8,6 +8,7 @@
  */
 
 import { getIngestPool, ingestClientConnect } from '../db'
+import { METRIC_TRUST_EVIDENCE_PRESENT_SQL } from '../raw'
 
 export interface DownsampleResult {
   weeklyUpserted: number
@@ -105,9 +106,19 @@ export async function ensurePartitions(): Promise<number> {
  * day's last passed crawl) and delete the rest — ~80% of entries volume
  * at 4-5 crawls/day.
  */
-export async function downsampleSnapshotEntries(keepAllDays = 7): Promise<number> {
-  const result = await getIngestPool().query(
-    `WITH keep AS (
+export function snapshotEntryDownsampleSql(trustEvidencePresent: boolean): string {
+  // Entries carrying metric-trust observations are evidence: deleting them
+  // used to CASCADE the observations away (now RESTRICT, 20261113*).
+  const pinned = trustEvidencePresent
+    ? `
+        AND NOT EXISTS (
+          SELECT 1 FROM arena.metric_trust_observations AS observation
+           WHERE observation.snapshot_id = e.snapshot_id
+             AND observation.trader_id = e.trader_id
+             AND observation.snapshot_scraped_at = e.scraped_at
+        )`
+    : ''
+  return `WITH keep AS (
        SELECT DISTINCT ON (source_id, timeframe, scraped_at::date) id
          FROM arena.leaderboard_snapshots
         WHERE count_check_passed
@@ -115,10 +126,43 @@ export async function downsampleSnapshotEntries(keepAllDays = 7): Promise<number
      )
      DELETE FROM arena.leaderboard_entries e
       WHERE e.scraped_at < now() - ($1 || ' days')::interval
-        AND e.snapshot_id NOT IN (SELECT id FROM keep)`,
-    [keepAllDays]
-  )
+        AND e.snapshot_id NOT IN (SELECT id FROM keep)${pinned}`
+}
+
+export async function downsampleSnapshotEntries(keepAllDays = 7): Promise<number> {
+  const pool = getIngestPool()
+  const { rows } = await pool.query<{ present: boolean }>(METRIC_TRUST_EVIDENCE_PRESENT_SQL)
+  const result = await pool.query(snapshotEntryDownsampleSql(rows[0]?.present === true), [
+    keepAllDays,
+  ])
   return result.rowCount ?? 0
+}
+
+/**
+ * Snapshot retention (20261113110021): delete snapshots (and their entries)
+ * older than `retentionDays`, never the latest passed board, a board a sealed
+ * publication was built from, or a snapshot referenced by trust evidence or a
+ * Tier-A receipt. Skips (returns a marker) until the migration is installed.
+ */
+export async function pruneLeaderboardSnapshots(
+  retentionDays = 180,
+  batchLimit = 5000
+): Promise<{ deleted_snapshots: number; deleted_entries: number } | 'not_installed'> {
+  const pool = getIngestPool()
+  const { rows: installed } = await pool.query<{ present: boolean }>(
+    `SELECT pg_catalog.to_regprocedure('arena.prune_leaderboard_snapshots(integer,integer)')
+       IS NOT NULL AS present`
+  )
+  if (installed[0]?.present !== true) return 'not_installed'
+  const { rows } = await pool.query<{
+    result: { deleted_snapshots: number; deleted_entries: number }
+  }>(`SELECT arena.prune_leaderboard_snapshots($1::integer, $2::integer) AS result`, [
+    retentionDays,
+    batchLimit,
+  ])
+  const result = rows[0]?.result
+  if (!result) throw new Error('[retention] snapshot prune returned no result')
+  return { deleted_snapshots: result.deleted_snapshots, deleted_entries: result.deleted_entries }
 }
 
 /**

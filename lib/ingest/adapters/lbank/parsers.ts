@@ -255,8 +255,16 @@ export function parseLbankProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
  * posiDirection enum unverified → side null (raw preserved).
  */
 export function parseLbankPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
+  // Fail closed: Tier-D replaces the whole book. Success = code 200 (all
+  // captured lbank fixtures); anything else, or non-array data, throws.
+  const code = (raw as Dict | null)?.code
+  if (code !== 200 && code !== '200') {
+    throw new Error(`[lbank] positions returned a non-success API envelope (code=${String(code)})`)
+  }
   const list = data(raw)
-  if (!Array.isArray(list)) return []
+  if (!Array.isArray(list)) {
+    throw new Error('[lbank] positions returned a malformed envelope (data is not an array)')
+  }
   const out: ParsedPosition[] = []
   for (const item of list as Dict[]) {
     if (!item.instrumentID) continue

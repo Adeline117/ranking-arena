@@ -7,31 +7,6 @@ import { logger } from '@/lib/logger'
 import { sanitizePublicRankingPayload } from '@/lib/rankings/publication-policy'
 import { PUBLIC_PROFILE_RANKING_COLUMNS } from '@/lib/data/trader/public-profile-ranking'
 
-type PublicRankedHandleQueryResult = {
-  data: Record<string, unknown>[] | null
-  error: { message: string } | null
-}
-
-type PublicRankedHandleQuery = PromiseLike<PublicRankedHandleQueryResult> & {
-  select(columns: string): PublicRankedHandleQuery
-  in(column: string, values: string[]): PublicRankedHandleQuery
-  eq(column: string, value: string): PublicRankedHandleQuery
-}
-
-type PublicRankedHandleClient = {
-  from(relation: 'public_ranked_leaderboard'): PublicRankedHandleQuery
-}
-
-function publicRankedHandleClient(value: unknown): PublicRankedHandleClient {
-  // The security-barrier view is intentionally additive while generated
-  // Supabase types catch up. Keep the escape hatch local to this identity-only
-  // projection rather than widening the caller's database client.
-  if (!isRecord(value) || typeof value.from !== 'function') {
-    throw new TypeError('Supabase client does not expose the public ranking cohort')
-  }
-  return value as PublicRankedHandleClient
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -123,7 +98,7 @@ export async function getAvoidList(
   // sealed public cohort: an unpublished raw rank may not decide which handle
   // a public endpoint associates with a vote record.
   const traderIds = data.map((d) => d.trader_id)
-  const { data: publicRows, error: publicError } = await publicRankedHandleClient(supabase)
+  const { data: publicRows, error: publicError } = await supabase
     .from('public_ranked_leaderboard')
     .select(PUBLIC_PROFILE_RANKING_COLUMNS)
     .in('source_trader_id', traderIds)

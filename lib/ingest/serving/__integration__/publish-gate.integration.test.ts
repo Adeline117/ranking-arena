@@ -165,6 +165,62 @@ describe('publishLeaderboardSnapshot — count-check gate', () => {
     expect(after.rows[0].as_of).toBe(before.rows[0].as_of)
   })
 
+  test('full-width repeat publish advances as_of even after a profile crawl wrote extras', async () => {
+    const src = makeSource({ expected_count: 1 })
+    await insertSourceRow(src)
+    const fullWidth = {
+      headlineRoi: 10,
+      headlinePnl: 100,
+      headlineWinRate: 50,
+      headlineMdd: 5,
+      headlineSharpe: 1.2,
+      headlineExtras: { risk_label: 'board' },
+    }
+
+    const first = await publishLeaderboardSnapshot({
+      src,
+      timeframe: 30,
+      rows: makeRows(1, fullWidth),
+      rejects: [],
+      rawObjectId: null,
+    })
+    expect(first.published).toBe(true)
+
+    // A profile crawl attaches profile-only state and its own watermark.
+    await getRawPool().query(
+      `UPDATE ${TEST_SCHEMA}.trader_stats
+          SET profit_share_rate = 0.1,
+              trading_preferences = '{"BTC":0.5}'::jsonb,
+              extras = extras || '{"_arena_profile_publication_epoch_ms": 1}'::jsonb`
+    )
+    const readAsOf = async () =>
+      (
+        await getRawPool().query(
+          `SELECT extract(epoch FROM as_of) AS as_of_epoch, extras, profit_share_rate
+             FROM ${TEST_SCHEMA}.trader_stats WHERE timeframe = 30`
+        )
+      ).rows[0]
+    const before = await readAsOf()
+
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    const second = await publishLeaderboardSnapshot({
+      src,
+      timeframe: 30,
+      rows: makeRows(1, { ...fullWidth, headlineRoi: 20 }),
+      rejects: [],
+      rawObjectId: null,
+    })
+    expect(second.published).toBe(true)
+
+    const after = await readAsOf()
+    expect(Number(after.as_of_epoch)).toBeGreaterThan(Number(before.as_of_epoch))
+    expect(after.profit_share_rate).toBe(0.1)
+    expect(after.extras).toMatchObject({
+      risk_label: 'board',
+      _arena_profile_publication_epoch_ms: 1,
+    })
+  })
+
   test('gate: deviation beyond tolerance records snapshot + rejects but publishes nothing', async () => {
     const src = makeSource({ expected_count: 100 })
     await insertSourceRow(src)

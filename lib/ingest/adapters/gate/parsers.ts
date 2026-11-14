@@ -349,8 +349,18 @@ export function parseGateProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
  * 用户 ID) — gate_cfd sources keep positions_topn=0.
  */
 export function parseGatePositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const data = (raw as Dict)?.data
-  if (!Array.isArray(data)) return []
+  // Tier-D replaces the trader's whole open-position set, so an HTTP-200
+  // business error (`code != 200/0`, `data: null`) must never parse as "flat".
+  // apiw/v2 answers code 200; the apiw/v1 family answers 0.
+  const envelope = raw as Dict | null
+  const code = envelope?.code
+  if (code !== 200 && code !== 0 && code !== '200' && code !== '0') {
+    throw new Error(`[gate] positions returned a non-success API envelope (code=${String(code)})`)
+  }
+  const data = envelope?.data
+  if (!Array.isArray(data)) {
+    throw new Error('[gate] positions returned a malformed envelope (data is not an array)')
+  }
   const out: ParsedPosition[] = []
   for (const item of data as Dict[]) {
     const symbol = item.market

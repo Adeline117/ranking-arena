@@ -79,18 +79,19 @@ describe('HomePageClient direct cohort safety', () => {
     document.body.innerHTML = '<div id="ssr-home-content-shell"></div>'
   })
 
-  it('withholds default SSR rows when a persisted exchange needs a client cohort', () => {
+  it('ignores a legacy persisted exchange: the clean homepage shows its SSR rows', () => {
     window.localStorage.setItem('ranking-exchange', 'binance-futures')
     renderClient()
 
+    // The picker that wrote this key no longer exists, so honouring it would
+    // scope the board invisibly. SSR all-exchange rows stay on screen.
     expect(latestRankingProps).toEqual(
       expect.objectContaining({
-        requiresInitialCohortFetch: true,
-        loading: true,
-        traders: [],
+        requiresInitialCohortFetch: false,
+        loading: false,
+        traders: [expect.objectContaining({ id: 'server-default' })],
       })
     )
-    expect(document.getElementById('ssr-home-content-shell')).not.toHaveStyle({ display: 'none' })
   })
 
   it('does not apply a persisted exchange to a range/page deep link', () => {

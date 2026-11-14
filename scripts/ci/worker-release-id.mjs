@@ -8,8 +8,6 @@ import { spawnSync } from 'node:child_process'
 const CONTRACT = 'arena.worker-release-inputs@1\0'
 const MAX_GIT_OUTPUT_BYTES = 64 * 1024 * 1024
 const REQUIRED_FILES = [
-  '.github/workflows/build-ingest-image.yml',
-  '.github/workflows/deploy-ingest-sg.yml',
   '.dockerignore',
   '.npmrc',
   'package-lock.json',

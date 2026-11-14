@@ -286,7 +286,12 @@ describe('GET /api/traders public ranked cohort', () => {
       'leaderboard_source_freshness',
     ])
     expect(rankingQuery.select).toHaveBeenCalledWith(expect.stringContaining('metrics_estimated'))
-    expect(rankingQuery.gte).toHaveBeenCalledWith('computed_at', '2026-07-18T06:00:00.000Z')
+    // Shared public cohort predicate (lib/rankings/public-cohort.ts): same
+    // score floor, ROI bound and 48h window as SSR and /api/rankings.
+    expect(rankingQuery.gt).toHaveBeenCalledWith('arena_score', 0)
+    expect(rankingQuery.gte).toHaveBeenCalledWith('roi', -50_000)
+    expect(rankingQuery.lte).toHaveBeenCalledWith('roi', 50_000)
+    expect(rankingQuery.gte).toHaveBeenCalledWith('computed_at', '2026-07-16T12:00:00.000Z')
     expect(rankingQuery.limit).toHaveBeenCalledWith(51)
   })
 
@@ -535,13 +540,13 @@ describe('GET /api/traders public ranked cohort', () => {
     expect(body.totalCountIsExact).toBe(false)
   })
 
-  it('rejects a 6-to-48-hour raw cache row even when its complete publication proof remains valid', async () => {
+  it('rejects a raw cache row older than the shared 48-hour cohort window', async () => {
     mockGetOrSetWithLock.mockResolvedValue({
       scope: publicRankedCohortScope({ limit: 2 }),
       rows: [
         publicRankedRow({
           source_trader_id: 'served-too-old',
-          computed_at: '2026-07-18T05:59:00.000Z',
+          computed_at: '2026-07-16T11:59:00.000Z',
         }),
       ],
     })
@@ -601,56 +606,33 @@ describe('GET /api/traders public ranked cohort', () => {
     expect(body.ranking_visibility_reasons).toEqual(['source_freshness_unverified'])
   })
 
-  it('keeps an absent exchange and literal exchange=all in separate raw cache cohorts', async () => {
-    const cache = new Map<string, unknown>()
-    const rankingQueries: Array<ReturnType<typeof publicRankedPageQuery>> = []
-    mockGetOrSetWithLock.mockImplementation(
-      async (key: string, fetcher: () => Promise<unknown>) => {
-        const cached = cache.get(key)
-        if (cached !== undefined) return cached
-        const fetched = await fetcher()
-        cache.set(key, fetched)
-        return fetched
-      }
-    )
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'public_ranked_leaderboard') {
-        const query = publicRankedPageQuery([
-          publicRankedRow({ source_trader_id: 'default-source' }),
-        ])
-        rankingQueries.push(query)
-        return query
-      }
-      if (table === 'leaderboard_source_freshness') {
-        return queryResult([
-          { source: 'binance_futures', source_as_of: '2026-07-18T11:00:00.000Z' },
-        ])
-      }
-      if (table === 'verified_traders') return queryResult([])
-      throw new Error(`unexpected exchange-cache query ${table}`)
-    })
-
-    const literalAll = await (
-      await GET({
-        nextUrl: new URL('http://localhost/api/traders?timeRange=90D&exchange=all'),
+  it.each(['all', 'not_a_source', 'BINANCE_FUTURES', ' binance_futures'])(
+    'rejects non-canonical exchange=%s before cache or DB reads (cache-key amplification)',
+    async (exchange) => {
+      const response = await GET({
+        nextUrl: new URL(
+          `http://localhost/api/traders?timeRange=90D&exchange=${encodeURIComponent(exchange)}`
+        ),
       } as never)
-    ).json()
-    const absentExchange = await (
-      await GET({
-        nextUrl: new URL('http://localhost/api/traders?timeRange=90D'),
-      } as never)
-    ).json()
 
-    expect(literalAll.traders).toEqual([])
-    expect(absentExchange.traders.map(({ id }: { id: string }) => id)).toEqual(['default-source'])
-    expect(rankingQueries).toHaveLength(2)
-    const [literalAllKey, absentExchangeKey] = mockGetOrSetWithLock.mock.calls.map(
-      ([key]) => key as string
-    )
-    expect(literalAllKey).not.toBe(absentExchangeKey)
-    expect(decodeURIComponent(literalAllKey)).toContain('"exchangeFilter":"all"')
-    expect(decodeURIComponent(absentExchangeKey)).toContain('"exchangeFilter":null')
-  })
+      expect(response.status).toBe(400)
+      expect(mockGetOrSetWithLock).not.toHaveBeenCalled()
+      expect(mockFrom).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['limit=201', 'page=1001', 'cursor=50001', 'page=250&limit=201', 'page=1000&limit=51'])(
+    'rejects out-of-range paging %s before cache or DB reads',
+    async (query) => {
+      const response = await GET({
+        nextUrl: new URL(`http://localhost/api/traders?timeRange=90D&${query}`),
+      } as never)
+
+      expect(response.status).toBe(400)
+      expect(mockGetOrSetWithLock).not.toHaveBeenCalled()
+      expect(mockFrom).not.toHaveBeenCalled()
+    }
+  )
 
   it('warms the versioned raw cohort key only after Redis confirms it', async () => {
     mockFrom.mockImplementation((table: string) => {
