@@ -26,7 +26,8 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_DIR"
 
-VPS_HOST="${INGEST_SG_HOST:-root@45.76.152.169}"
+# No default: a missing variable must never fall back to the production host.
+VPS_HOST="${INGEST_SG_HOST:?INGEST_SG_HOST must be set to a fixed user@hostname value}"
 if [[ ! "$VPS_HOST" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
   echo "✗ INGEST_SG_HOST must be a fixed user@hostname value" >&2
   exit 2
