@@ -1,16 +1,15 @@
 /**
  * Product facts that affect trust-sensitive UI copy.
  *
- * Dynamic counts come from `getHeroStats()` / `/api/hero-stats`; this module
- * owns the safe fallback and the operational cadence so marketing pages never
- * invent their own "45+" / "30 min" claims again.
+ * Dynamic counts come from `getHeroStats()` / `/api/hero-stats`. There is no
+ * hard-coded fallback count: a number is shown only when it is a live fact
+ * (see `publicCount`). When the source is unavailable — or the public board
+ * is genuinely empty — pages render count-free copy instead of a stale figure
+ * such as the old "9,600 traders / 28 boards", which kept appearing even
+ * while the rankings were empty.
  */
 
 export const PRODUCT_FACTS = {
-  /** Live 90D source boards represented in the public rankings. */
-  fallbackSourceBoardCount: 28,
-  /** Ranked 90D population, also used as the percentile denominator fallback. */
-  fallbackRankedTraderCount: 9_600,
   /** BullMQ `SCORE_INTERVALS_MS` in worker/src/scheduler.ts. */
   leaderboardRefreshHours: 2,
   /** Typical upstream refresh range; individual sources may differ. */
@@ -34,9 +33,16 @@ export function formatLiveSourceBoardCoverage(count?: number | null): string {
     : 'live public ranking sources'
 }
 
+/** A count that may be stated publicly: a live, positive integer — else null. */
+export function publicCount(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null
+}
+
 export interface ProductFactsSnapshot {
-  sourceBoardCount: number
-  rankedTraderCount: number
+  /** Live source-board count, or null when unknown / empty (render no number). */
+  sourceBoardCount: number | null
+  /** Live ranked-trader count, or null when unknown / empty (render no number). */
+  rankedTraderCount: number | null
   leaderboardRefreshHours: number
   leaderboardRefreshLabel: string
   sourceRefreshLabel: string
@@ -50,16 +56,12 @@ export function buildProductFactsSnapshot(input?: {
   traderCount?: number | null
   isDefault?: boolean
 }): ProductFactsSnapshot {
-  const sourceBoardCount =
-    typeof input?.sourceBoardCount === 'number' && input.sourceBoardCount > 0
-      ? input.sourceBoardCount
-      : typeof input?.exchangeCount === 'number' && input.exchangeCount > 0
-        ? input.exchangeCount
-        : PRODUCT_FACTS.fallbackSourceBoardCount
-  const rankedTraderCount =
-    typeof input?.traderCount === 'number' && input.traderCount > 0
-      ? input.traderCount
-      : PRODUCT_FACTS.fallbackRankedTraderCount
+  // Defaults returned by a failed lookup are not facts, whatever they hold.
+  const live = input !== undefined && input.isDefault !== true
+  const sourceBoardCount = live
+    ? (publicCount(input.sourceBoardCount) ?? publicCount(input.exchangeCount))
+    : null
+  const rankedTraderCount = live ? publicCount(input.traderCount) : null
 
   return {
     sourceBoardCount,
@@ -67,7 +69,7 @@ export function buildProductFactsSnapshot(input?: {
     leaderboardRefreshHours: PRODUCT_FACTS.leaderboardRefreshHours,
     leaderboardRefreshLabel: `${PRODUCT_FACTS.leaderboardRefreshHours}h`,
     sourceRefreshLabel: `${PRODUCT_FACTS.sourceRefreshHours.min}-${PRODUCT_FACTS.sourceRefreshHours.max}h`,
-    isFallback: input?.isDefault === true || !input,
+    isFallback: !live,
   }
 }
 

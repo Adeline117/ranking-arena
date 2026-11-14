@@ -1869,7 +1869,9 @@ const ja = {
   loginCreateAccount: 'アカウントを作成',
   loginSubtitle: 'Arenaは暗号資産のすべてをランキングします',
   loginValueProp1: '現在の90日ランキングに{count}人のトレーダー',
+  loginValueProp1NoCount: '現在の90日ランキングに並ぶトレーダー',
   loginValueProp2: '{count}の稼働中ランキングソースボードで実績を比較',
+  loginValueProp2NoCount: '稼働中のランキングソースボードで実績を比較',
   loginValueProp3: 'トレーディングコミュニティに参加',
   discoverMore: 'Arenaをもっと見る',
   loginConnectWallet: 'ウォレットを接続',
@@ -2948,6 +2950,8 @@ const ja = {
   heroHeadline: '世界最高の暗号トレーダーを追跡',
   heroSubtitle:
     '{boards}の稼働中ランキングソースボードを、最新の利用可能なデータで2時間ごとに再計算',
+  heroSubtitleNoCount:
+    '稼働中の公開ランキングソースボードを、最新の利用可能なデータで2時間ごとに再計算',
   heroScoreExplainer:
     'Arena Score はすべての稼働中ソースボードのトレーダーを同じ基準で順位付けします。',
   heroNeutrality:

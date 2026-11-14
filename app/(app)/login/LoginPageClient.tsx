@@ -1273,11 +1273,17 @@ export default function LoginPageClient() {
           }}
         >
           {[
-            t('loginValueProp1').replace(
-              '{count}',
-              formatRankedTraderCount(productFacts.rankedTraderCount, lang)
-            ),
-            t('loginValueProp2').replace('{count}', String(productFacts.sourceBoardCount)),
+            // A count appears only when it is a live fact; otherwise the same
+            // promise is made without a number.
+            productFacts.rankedTraderCount === null
+              ? t('loginValueProp1NoCount')
+              : t('loginValueProp1').replace(
+                  '{count}',
+                  formatRankedTraderCount(productFacts.rankedTraderCount, lang)
+                ),
+            productFacts.sourceBoardCount === null
+              ? t('loginValueProp2NoCount')
+              : t('loginValueProp2').replace('{count}', String(productFacts.sourceBoardCount)),
             t('loginValueProp3'),
           ].map((prop, i) => (
             <div
