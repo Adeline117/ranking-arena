@@ -129,8 +129,8 @@ bash worker/deploy-ingest-sg.sh --target-sha="$TARGET_SHA" --dry-run
 
 ## Container deployment is disabled
 
-`worker/Dockerfile.ingest` and the image workflow may build and digest-smoke a
-quarantined OCI artifact, but that artifact is not an authorized production
+`worker/Dockerfile.ingest` and the image workflow (currently suspended) may build,
+smoke-test, and push an OCI image, but that image is not an authorized production
 rollout path. `worker/docker-run-sg.sh` exits with status 2 and
 `worker/docker-compose.sg.yml` intentionally defines no services.
 
