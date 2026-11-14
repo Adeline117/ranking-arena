@@ -62,3 +62,34 @@ export function positionEnvelopeRows(
   }
   return list.filter((row): row is Dict => !!row && typeof row === 'object' && !Array.isArray(row))
 }
+
+/**
+ * Pages through a numeric-page open-positions endpoint until a short page (or
+ * the reported total is reached). Tier-D replaces the whole book, so a book
+ * still full at the page budget throws instead of publishing a cut set.
+ * `rowsOf` returns the page's row count (0 for a business-error envelope —
+ * the parser then rejects it); `totalOf` the reported total, when exposed.
+ */
+export async function fetchPositionPages(opts: {
+  source: string
+  pageSize: number
+  maxPages: number
+  fetchPage: (pageNo: number) => Promise<{ payload: unknown; url: string }>
+  rowsOf: (payload: unknown) => number
+  totalOf?: (payload: unknown) => number | null
+}): Promise<RawPage[]> {
+  const pages: RawPage[] = []
+  let seen = 0
+  for (let pageNo = 1; pageNo <= opts.maxPages; pageNo++) {
+    const { payload, url } = await opts.fetchPage(pageNo)
+    pages.push({ pageIndex: pageNo, payload, url, fetchedAt: new Date().toISOString() })
+    const rows = opts.rowsOf(payload)
+    seen += rows
+    const total = opts.totalOf?.(payload) ?? null
+    if (rows < opts.pageSize || (total !== null && seen >= total)) return pages
+  }
+  throw new Error(
+    `[${opts.source}] open positions exceed ${opts.maxPages} pages of ${opts.pageSize} — ` +
+      'refusing a partial book'
+  )
+}

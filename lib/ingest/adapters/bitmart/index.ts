@@ -55,6 +55,7 @@ import {
   parseBitmartPositions,
   parseBitmartProfile,
 } from './parsers'
+import { fetchPositionPages } from '../../core/position-snapshot'
 
 const BASE = 'https://www.bitmart.com/gw-api/contract-tiger/forward/v1/ifcontract'
 const STREAMER = `${BASE}/copytrade-streamer`
@@ -77,6 +78,12 @@ const PROFILE_WINDOW: Record<number, number> = { 7: 2, 30: 3, 90: 4 }
 function endpoint(src: SourceRow, key: string, fallback: string): string {
   const endpoints = (src.meta.endpoints ?? {}) as Record<string, string>
   return endpoints[key] ?? fallback
+}
+
+/** The `data` object of a positions envelope, if any. */
+function bitmartData(payload: unknown): Record<string, unknown> | null {
+  const d = (payload as Record<string, unknown> | null)?.data
+  return d && typeof d === 'object' && !Array.isArray(d) ? (d as Record<string, unknown>) : null
 }
 
 async function bitmartFetcher(session: FetchSession): Promise<JsonFetcher> {
@@ -267,16 +274,33 @@ const bitmartAdapter: SourceAdapter = {
     src: SourceRow,
     exchangeTraderId: string
   ): Promise<RawBundle> {
-    const url =
+    const base =
       endpoint(src, 'positions', `${STREAMER}/position/list`) +
-      `?uuid=${encodeURIComponent(exchangeTraderId)}&page=1&size=100`
-    const payload = await replayJson(session, await bitmartFetcher(session), {
-      url,
-      method: 'GET',
-      headers: HEADERS,
-    })
+      `?uuid=${encodeURIComponent(exchangeTraderId)}`
+    const fetcher = await bitmartFetcher(session)
     const fetchedAt = new Date().toISOString()
-    return { pages: [{ pageIndex: 1, payload, url, fetchedAt }], fetchedAt }
+    // data = { list, total }; a book larger than the budget fails closed.
+    const pages = await fetchPositionPages({
+      source: 'bitmart',
+      pageSize: 100,
+      maxPages: Number(src.meta.positions_max_pages ?? 10) || 10,
+      fetchPage: async (pageNo) => {
+        const url = `${base}&page=${pageNo}&size=100`
+        return {
+          url,
+          payload: await replayJson(session, fetcher, { url, method: 'GET', headers: HEADERS }),
+        }
+      },
+      rowsOf: (payload) => {
+        const list = bitmartData(payload)?.list
+        return Array.isArray(list) ? list.length : 0
+      },
+      totalOf: (payload) => {
+        const total = Number(bitmartData(payload)?.total)
+        return Number.isSafeInteger(total) && total >= 0 ? total : null
+      },
+    })
+    return { pages, fetchedAt }
   },
 
   /**

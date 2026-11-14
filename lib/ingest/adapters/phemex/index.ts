@@ -44,6 +44,7 @@ import {
   parsePhemexPositions,
   parsePhemexProfile,
 } from './parsers'
+import { fetchPositionPages } from '../../core/position-snapshot'
 
 const BASE = 'https://api10.phemex.com/phemex-lb/public/data'
 
@@ -83,6 +84,12 @@ function phemexFetcher(session: FetchSession): JsonFetcher {
     }
     return { status: response.status(), json }
   }
+}
+
+/** The `data` object of a positions envelope, if any. */
+function phemexData(payload: unknown): Record<string, unknown> | null {
+  const d = (payload as Record<string, unknown> | null)?.data
+  return d && typeof d === 'object' && !Array.isArray(d) ? (d as Record<string, unknown>) : null
 }
 
 const phemexAdapter: SourceAdapter = {
@@ -210,14 +217,31 @@ const phemexAdapter: SourceAdapter = {
   ): Promise<RawBundle> {
     await warmSession(session, src)
     const url = endpoint(src, 'positions', `${BASE}/position/current/v2`)
-    // pageSize 20 = the site's own request; >20 open lead positions is rare.
-    const payload = await replayJson(session, phemexFetcher(session), {
-      url: `${url}?pageNum=1&pageSize=20&userId=${encodeURIComponent(exchangeTraderId)}`,
-      method: 'GET',
-      headers: {},
-    })
+    const fetcher = phemexFetcher(session)
     const fetchedAt = new Date().toISOString()
-    return { pages: [{ pageIndex: 1, payload, url, fetchedAt }], fetchedAt }
+    // pageSize 20 = the site's own request; data = { total, rows }.
+    const pages = await fetchPositionPages({
+      source: 'phemex',
+      pageSize: 20,
+      maxPages: Number(src.meta.positions_max_pages ?? 20) || 20,
+      fetchPage: async (pageNo) => ({
+        url,
+        payload: await replayJson(session, fetcher, {
+          url: `${url}?pageNum=${pageNo}&pageSize=20&userId=${encodeURIComponent(exchangeTraderId)}`,
+          method: 'GET',
+          headers: {},
+        }),
+      }),
+      rowsOf: (payload) => {
+        const rows = phemexData(payload)?.rows
+        return Array.isArray(rows) ? rows.length : 0
+      },
+      totalOf: (payload) => {
+        const total = Number(phemexData(payload)?.total)
+        return Number.isSafeInteger(total) && total >= 0 ? total : null
+      },
+    })
+    return { pages, fetchedAt }
   },
 
   /**
