@@ -35,7 +35,7 @@ import {
   arenaCompletionTokenFromMetadata,
   preparePostgresConnection,
 } from './backup-restore-contract.mjs'
-import { cleanPostgresConnectionEnv } from './postgres-cli-env.mjs'
+import { cleanPostgresConnectionEnv, libpqEnvFromConnectionUrl } from './postgres-cli-env.mjs'
 
 config({ path: resolve(process.cwd(), '.env.local'), quiet: true })
 
@@ -51,7 +51,8 @@ const DEFAULT_GUNZIP_PATH = '/usr/bin/gunzip'
 
 function postgresChildEnv(connectionUrl, password) {
   const childEnv = cleanPostgresConnectionEnv(process.env, {
-    ...(connectionUrl === undefined ? {} : { PGDATABASE: connectionUrl }),
+    // A URI in PGDATABASE is read as a literal database name; split it.
+    ...(connectionUrl === undefined ? {} : libpqEnvFromConnectionUrl(connectionUrl)),
     ...(password === undefined ? {} : { PGPASSWORD: password }),
   })
   for (const secretName of [

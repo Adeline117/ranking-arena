@@ -220,3 +220,29 @@ test(
     }
   }
 )
+
+test('splits a connection URI into libpq variables instead of a literal PGDATABASE', async () => {
+  const { libpqEnvFromConnectionUrl } = await import('./postgres-cli-env.mjs')
+
+  assert.deepEqual(
+    libpqEnvFromConnectionUrl('postgresql://backup%40ops@db.example.com:6543/app?sslmode=require'),
+    {
+      PGDATABASE: 'app',
+      PGHOST: 'db.example.com',
+      PGPORT: '6543',
+      PGUSER: 'backup@ops',
+      PGSSLMODE: 'require',
+    }
+  )
+  // A unix-socket directory given as ?host= overrides the URI host.
+  assert.equal(
+    libpqEnvFromConnectionUrl('postgresql://me@localhost:5433/app?host=%2Ftmp%2Fsock').PGHOST,
+    '/tmp/sock'
+  )
+  assert.throws(() => libpqEnvFromConnectionUrl('postgresql://me@h/'), /exactly one database/)
+  assert.throws(
+    () => libpqEnvFromConnectionUrl('postgresql://me@h/a?service=x'),
+    /unsupported option/
+  )
+  assert.throws(() => libpqEnvFromConnectionUrl('mysql://me@h/a'), /postgres or postgresql/)
+})

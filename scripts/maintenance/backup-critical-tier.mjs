@@ -40,7 +40,7 @@ import { join, resolve } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
 import { preparePostgresConnection } from './backup-restore-contract.mjs'
-import { cleanPostgresConnectionEnv } from './postgres-cli-env.mjs'
+import { cleanPostgresConnectionEnv, libpqEnvFromConnectionUrl } from './postgres-cli-env.mjs'
 
 export const CRITICAL_SCHEMAS = Object.freeze(['public', 'auth'])
 
@@ -234,16 +234,15 @@ export async function runBackup({ databaseUrl, passphrase, outDir, now = new Dat
   const partialPath = `${finalPath}.partial`
   if (existsSync(finalPath)) throw new Error(`refusing to overwrite ${finalPath}`)
 
-  // pg_dump expands a connection URI only from --dbname, never from the
-  // PGDATABASE variable (which it reads as a literal database name). The URI
-  // passed here has its password stripped; the password travels in the env.
-  const env = cleanPostgresConnectionEnv(
-    process.env,
-    password === undefined ? {} : { PGPASSWORD: password }
-  )
+  // A URI in PGDATABASE is read as a literal database name, so the connection
+  // is passed as individual libpq variables (nothing sensitive in argv).
+  const env = cleanPostgresConnectionEnv(process.env, {
+    ...libpqEnvFromConnectionUrl(connectionUrl, 'DATABASE_URL'),
+    ...(password === undefined ? {} : { PGPASSWORD: password }),
+  })
   for (const name of ['DATABASE_URL', 'BACKUP_PASSPHRASE']) delete env[name]
 
-  const dump = spawn(pgBinary('pg_dump'), [...buildPgDumpArgs(), `--dbname=${connectionUrl}`], {
+  const dump = spawn(pgBinary('pg_dump'), buildPgDumpArgs(), {
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
   })

@@ -779,10 +779,12 @@ test('removes every ambient PG variable and parent credential from restore psql 
         })
 
         const pipelineEnv = await readFile(pipelineEnvLog, 'utf8')
-        assert.match(pipelineEnv, /^PGDATABASE=postgresql:\/\/restore@db\.example\.com\/app$/m)
+        assert.match(pipelineEnv, /^PGDATABASE=app$/m)
+        assert.match(pipelineEnv, /^PGHOST=db\.example\.com$/m)
+        assert.match(pipelineEnv, /^PGUSER=restore$/m)
         assert.match(pipelineEnv, /^PGPASSWORD=parsed-target-password$/m)
         for (const name of POSTGRES_CONNECTION_ENV_NAMES) {
-          if (name !== 'PGDATABASE' && name !== 'PGPASSWORD') {
+          if (!['PGDATABASE', 'PGHOST', 'PGUSER', 'PGPASSWORD'].includes(name)) {
             assert.doesNotMatch(pipelineEnv, new RegExp(`^${name}=`, 'm'))
           }
         }
@@ -801,8 +803,10 @@ test('removes every ambient PG variable and parent credential from restore psql 
         })
         assert.equal(parseCriticalTableCounts(output)['arena.traders'], 5n)
         const queryEnv = await readFile(queryEnvLog, 'utf8')
-        assert.match(queryEnv, /^PGDATABASE=postgresql:\/\/restore@db\.example\.com\/app$/m)
-        assert.doesNotMatch(queryEnv, /^PG(?!DATABASE=)[A-Z0-9_]*=/m)
+        assert.match(queryEnv, /^PGDATABASE=app$/m)
+        assert.match(queryEnv, /^PGHOST=db\.example\.com$/m)
+        assert.match(queryEnv, /^PGUSER=restore$/m)
+        assert.doesNotMatch(queryEnv, /^PG(?!(?:DATABASE|HOST|USER)=)[A-Z0-9_]*=/m)
         assert.doesNotMatch(queryEnv, /parent-secret|target-secret|parent-r2/)
       }
     )
@@ -1148,7 +1152,8 @@ test('the executable is fail-closed and its real behavior contract runs in CI', 
 
   assert.match(source, /HeadObjectCommand/)
   assert.match(source, /spawn\(gunzipPath/)
-  assert.match(source, /PGDATABASE: connectionUrl/)
+  assert.match(source, /libpqEnvFromConnectionUrl\(connectionUrl\)/)
+  assert.doesNotMatch(source, /PGDATABASE: connectionUrl/)
   assert.doesNotMatch(source, /\/bin\/bash|pipefail/)
   assert.match(source, /requiredRelations: MINIMUM_APPLICATION_BACKUP_RELATIONS/)
   assert.match(source, /parseCriticalTableCounts\(await verify\(\)\)/)
