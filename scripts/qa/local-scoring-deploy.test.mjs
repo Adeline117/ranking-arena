@@ -6,6 +6,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -85,7 +86,7 @@ test('PM2 config fails closed without a built artifact or release dir', (t) => {
 
 // ── deploy script ───────────────────────────────────────────────────────────
 
-function makeRepo(t, { gateOpen }) {
+function makeRepo(t, { gateOpen, gatePreamble = '' }) {
   const root = mkdtempSync(join(tmpdir(), 'arena-scoring-deploy-'))
   t.after(() => rmSync(root, { force: true, recursive: true }))
   const repo = join(root, 'repo')
@@ -93,7 +94,7 @@ function makeRepo(t, { gateOpen }) {
   copyFileSync(DEPLOY, join(repo, 'worker', 'deploy-scoring-local.sh'))
   put(
     join(repo, GATE_FILE),
-    `export const V1_RANKING_COMMAND_CHAIN_PUBLISHED = ${gateOpen} as const\n`
+    `${gatePreamble}export const V1_RANKING_COMMAND_CHAIN_PUBLISHED = ${gateOpen} as const\n`
   )
   put(join(repo, 'worker', 'build-scoring-worker.mjs'), '// stub\n')
   put(join(repo, 'worker', 'ecosystem.local-scoring.config.cjs'), '// stub\n')
@@ -114,10 +115,14 @@ function makeRepo(t, { gateOpen }) {
     `#!/usr/bin/env bash\necho "node $*" >> "${log}"\nfor a in "$@"; do case "$a" in --outdir=*) d="\${a#--outdir=}"; mkdir -p "$d"; echo 'export {}' > "$d/scoring-worker.mjs";; esac; done\n`,
     0o755
   )
-  put(join(bin, 'npm'), `#!/usr/bin/env bash\necho "npm $*" >> "${log}"\n`, 0o755)
+  put(
+    join(bin, 'npm'),
+    `#!/usr/bin/env bash\necho "npm $*" >> "${log}"\n[ -z "$FAKE_NPM_FAIL" ] || exit 1\n`,
+    0o755
+  )
   put(
     join(bin, 'pm2'),
-    `#!/usr/bin/env bash\necho "pm2 $*" >> "${log}"\nif [ "$1" = start ] && [ "\${FAKE_PM2_READY:-1}" = 1 ]; then mkdir -p "$ARENA_SCORING_RELEASE_DIR/worker/logs"; echo '[heartbeat] redis-hset-committed node=scoring@mac pid=1' >> "$ARENA_SCORING_RELEASE_DIR/worker/logs/scoring-out.log"; fi\n`,
+    `#!/usr/bin/env bash\necho "pm2 $*" >> "${log}"\nif [ "$1" = start ] && [ "\${FAKE_PM2_READY:-1}" = 1 ]; then mkdir -p "$ARENA_SCORING_RELEASE_DIR/worker/logs"; echo '[heartbeat] redis-hset-committed node=scoring@mac pid=1' >> "$ARENA_SCORING_RELEASE_DIR/worker/logs/scoring-out.log"; fi\nif [ "$1" = pid ]; then [ "\${FAKE_PM2_DEAD:-0}" = 1 ] && echo 0 || echo 4242; fi\n`,
     0o755
   )
   const envFile = join(root, 'worker.env')
@@ -202,5 +207,33 @@ test('rolls back (no previous release → stopped) when the heartbeat never appe
   assert.equal(r.status, 1)
   assert.match(r.stderr, /rolling back/)
   assert.match(readFileSync(ctx.log, 'utf8'), /pm2 delete arena-worker/)
+  assert.equal(existsSync(join(ctx.releaseRoot, 'current')), false)
+})
+
+test('a comment mentioning "= true" does not open the V1 gate', (t) => {
+  const ctx = makeRepo(t, {
+    gateOpen: false,
+    gatePreamble: '// flip to V1_RANKING_COMMAND_CHAIN_PUBLISHED = true at launch\n',
+  })
+  const r = deploy(ctx, [`--target-sha=${ctx.sha}`])
+  assert.equal(r.status, 1)
+  assert.equal(readFileSync(ctx.log, 'utf8'), '')
+})
+
+test('a failed npm ci leaves no release behind, so the same sha can be retried', (t) => {
+  const ctx = makeRepo(t, { gateOpen: true })
+  const failed = deploy(ctx, [`--target-sha=${ctx.sha}`], { FAKE_NPM_FAIL: '1' })
+  assert.notEqual(failed.status, 0)
+  assert.deepEqual(readdirSync(ctx.releaseRoot), [])
+  const retry = deploy(ctx, [`--target-sha=${ctx.sha}`])
+  assert.equal(retry.status, 0, retry.stderr + retry.stdout)
+})
+
+test('a process that is gone after its heartbeat is not live; rollback reports the real outcome', (t) => {
+  const ctx = makeRepo(t, { gateOpen: true })
+  const r = deploy(ctx, [`--target-sha=${ctx.sha}`], { FAKE_PM2_DEAD: '1' })
+  assert.equal(r.status, 1)
+  assert.match(r.stderr, /no previous release; arena-worker left stopped/)
+  assert.doesNotMatch(r.stderr, /restored/)
   assert.equal(existsSync(join(ctx.releaseRoot, 'current')), false)
 })

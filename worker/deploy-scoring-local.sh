@@ -83,7 +83,7 @@ git merge-base --is-ancestor "$TARGET_SHA" origin/main 2>/dev/null || \
 GATE_SOURCE="$(git show "$TARGET_SHA:$GATE_FILE" 2>/dev/null)" || \
   fail "target $TARGET_SHA has no $GATE_FILE"
 GATE_OPEN=0
-if grep -Eq 'V1_RANKING_COMMAND_CHAIN_PUBLISHED[[:space:]]*=[[:space:]]*true' <<<"$GATE_SOURCE"; then
+if grep -Eq '^export const V1_RANKING_COMMAND_CHAIN_PUBLISHED[[:space:]]*=[[:space:]]*true([^[:alnum:]_]|$)' <<<"$GATE_SOURCE"; then
   GATE_OPEN=1
 fi
 
@@ -110,14 +110,20 @@ if [ -L "$CURRENT_LINK" ]; then
   PREVIOUS_RELEASE="$(readlink "$CURRENT_LINK")"
 fi
 
+# Build in a staging dir so a failed npm ci/build never occupies the immutable
+# release name (which would refuse every retry of this sha).
 mkdir -p "$RELEASE_ROOT"
-mkdir "$RELEASE_DIR"
-git archive --format=tar "$TARGET_SHA" | tar -x -C "$RELEASE_DIR"
-install -m 600 "$ENV_SOURCE" "$RELEASE_DIR/worker/.env"
-mkdir -p "$RELEASE_DIR/worker/logs" "$RELEASE_DIR/worker/dist"
+STAGE_DIR="$RELEASE_ROOT/.staging-$TARGET_SHA-$$"
+trap 'rm -rf "$STAGE_DIR"' EXIT
+mkdir "$STAGE_DIR"
+git archive --format=tar "$TARGET_SHA" | tar -x -C "$STAGE_DIR"
+install -m 600 "$ENV_SOURCE" "$STAGE_DIR/worker/.env"
+mkdir -p "$STAGE_DIR/worker/logs" "$STAGE_DIR/worker/dist"
 
-(cd "$RELEASE_DIR" && PATH="$(dirname "$NODE_BIN"):$PATH" "$NPM_BIN" ci --ignore-scripts --no-audit --no-fund)
-"$NODE_BIN" "$RELEASE_DIR/worker/build-scoring-worker.mjs" --outdir="$RELEASE_DIR/worker/dist"
+(cd "$STAGE_DIR" && PATH="$(dirname "$NODE_BIN"):$PATH" "$NPM_BIN" ci --ignore-scripts --no-audit --no-fund)
+"$NODE_BIN" "$STAGE_DIR/worker/build-scoring-worker.mjs" --outdir="$STAGE_DIR/worker/dist"
+mv "$STAGE_DIR" "$RELEASE_DIR"
+trap - EXIT
 
 start_release() {
   local dir="$1"
@@ -131,7 +137,8 @@ wait_for_heartbeat() {
   local waited=0
   while [ "$waited" -le "$READY_TIMEOUT" ]; do
     if [ -f "$log" ] && grep -q '\[heartbeat\] redis-hset-committed node=scoring@' "$log"; then
-      return 0
+      # The line may predate a crash; require PM2 to still report a live pid.
+      [[ "$("$PM2_BIN" pid "$PM2_APP" 2>/dev/null)" =~ ^[1-9][0-9]*$ ]] && return 0
     fi
     sleep 1
     waited=$((waited + 1))
@@ -139,19 +146,24 @@ wait_for_heartbeat() {
   return 1
 }
 
+ROLLBACK_OUTCOME=''
 rollback() {
   echo "[scoring-deploy] new release did not prove liveness; rolling back" >&2
   if [ -n "$PREVIOUS_RELEASE" ] && [ -d "$PREVIOUS_RELEASE" ]; then
-    start_release "$PREVIOUS_RELEASE" || echo '✗ rollback start failed — manual recovery required' >&2
+    if start_release "$PREVIOUS_RELEASE" && wait_for_heartbeat "$PREVIOUS_RELEASE"; then
+      ROLLBACK_OUTCOME="previous release $PREVIOUS_RELEASE restored"
+    else
+      ROLLBACK_OUTCOME="rollback to $PREVIOUS_RELEASE FAILED — manual recovery required"
+    fi
   else
     "$PM2_BIN" delete "$PM2_APP" >/dev/null 2>&1 || true
-    echo '[scoring-deploy] no previous release; arena-worker left stopped' >&2
+    ROLLBACK_OUTCOME='no previous release; arena-worker left stopped'
   fi
 }
 
 if ! start_release "$RELEASE_DIR" || ! wait_for_heartbeat "$RELEASE_DIR"; then
   rollback
-  fail "scoring release $TARGET_SHA failed; previous release ${PREVIOUS_RELEASE:-none} restored"
+  fail "scoring release $TARGET_SHA failed; $ROLLBACK_OUTCOME"
 fi
 
 ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
