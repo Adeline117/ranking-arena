@@ -1,4 +1,4 @@
-import { TradersListResponseSchema } from '../core-api'
+import { RankingsResponseSchema, TradersListResponseSchema } from '../core-api'
 
 const valid = {
   traders: [
@@ -44,5 +44,29 @@ describe('core API contracts', () => {
 
   it('rejects an unknown period', () => {
     expect(TradersListResponseSchema.safeParse({ ...valid, timeRange: '1D' }).success).toBe(false)
+  })
+})
+
+describe('rankings contract window', () => {
+  const rankings = (window: string) => ({
+    success: true,
+    data: {
+      traders: [],
+      window,
+      hasMore: false,
+      is_stale: false,
+      as_of: null,
+      source_freshness: [],
+    },
+    meta: { timestamp: '2026-11-14T00:00:00.000Z' },
+  })
+
+  it('accepts the composite window that window=composite answers with', () => {
+    expect(RankingsResponseSchema.safeParse(rankings('COMPOSITE')).success).toBe(true)
+    expect(RankingsResponseSchema.safeParse(rankings('90D')).success).toBe(true)
+  })
+
+  it('rejects an unknown window', () => {
+    expect(RankingsResponseSchema.safeParse(rankings('1D')).success).toBe(false)
   })
 })
