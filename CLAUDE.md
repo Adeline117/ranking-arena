@@ -493,6 +493,10 @@ These enforce: (1) fire-and-forget (never blocks response), (2) dedup (same acto
    跑的测试，要么接入，要么删。
 6. **修复类 PR 净增行数要说明理由**：在描述里写清为什么不能靠删除或合并解决。
 
+**不要把它读成"已知缺陷也不许修"。** 会让脚本在执行时做错事的缺陷（误报成功、
+失败后无法重试、判断条件写错）照常修：取最小改动，配一个真跑脚本的行为测试，
+净增行数按第 6 条说明即可。这里限制的是没有事故依据的重复校验，不是正确性。
+
 ### Database Concurrency Safety — MANDATORY
 
 - **Counters**: NEVER use trigger-based `SET count = count + 1`. Use atomic RPC functions (`increment_*_count` / `decrement_*_count` from migration 00021) called explicitly in API handlers.
