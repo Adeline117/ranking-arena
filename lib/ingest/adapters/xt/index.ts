@@ -39,6 +39,7 @@ import type {
   SourceRow,
   Timeframe,
 } from '../../core/types'
+import { CopierPageCapReachedError } from '../../core/history-page-cap'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { apiFetcher, replayJson, replayPaged } from '../../fetch/capture'
@@ -212,9 +213,14 @@ const xtAdapter: SourceAdapter = {
         `${base(src)}/${endpointName}?leaderAccountId=${exchangeTraderId}` +
         `&page=${pageNo}&size=${size}`
       const payload = await replayJson(session, fetcher, { url, method: 'GET', headers: HEADERS })
-      const result = (payload as Record<string, unknown>)?.result as
-        | Record<string, unknown>
-        | undefined
+      const envelope = payload as Record<string, unknown> | null
+      if (kind === 'copiers' && (envelope?.returnCode !== 0 || envelope?.error != null)) {
+        // A business error is not an empty follower list.
+        throw new Error(
+          `[xt] copiers returned a non-success API envelope (returnCode=${String(envelope?.returnCode)})`
+        )
+      }
+      const result = envelope?.result as Record<string, unknown> | undefined
       const rows = Array.isArray(result?.items) ? (result!.items as Record<string, unknown>[]) : []
       if (rows.length === 0) break
 
@@ -228,6 +234,9 @@ const xtAdapter: SourceAdapter = {
         if (Number.isFinite(oldest) && oldest <= cursorMs) break
       }
       if (result?.hasNext === false || rows.length < size) break
+      if (kind === 'copiers' && pageNo === maxPages) {
+        throw new CopierPageCapReachedError(src.slug, maxPages)
+      }
     }
   },
 

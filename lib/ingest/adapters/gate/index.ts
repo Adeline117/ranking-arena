@@ -33,7 +33,7 @@ import type {
   SourceRow,
   Timeframe,
 } from '../../core/types'
-import { HistoryPageCapReachedError } from '../../core/history-page-cap'
+import { CopierPageCapReachedError, HistoryPageCapReachedError } from '../../core/history-page-cap'
 import type {
   HistoryContinuationCapability,
   HistoryFetchOptions,
@@ -376,6 +376,11 @@ const gateAdapter: SourceAdapter = {
     for (let pageNo = startPage; pageNo <= lastPage; pageNo++) {
       const url = urlFor(pageNo)
       const payload = await replayJson(session, fetcher, { url, method: 'GET', headers: HEADERS })
+      const code = (payload as Record<string, unknown> | null)?.code
+      if (kind === 'copiers' && code !== 200 && code !== 0 && code !== '200' && code !== '0') {
+        // A business error is not an empty follower list.
+        throw new Error(`[gate] copiers returned a non-success API envelope (code=${String(code)})`)
+      }
       const data = (payload as Record<string, unknown>)?.data
       const rows = Array.isArray(data)
         ? (data as Array<Record<string, unknown>>)
@@ -408,6 +413,11 @@ const gateAdapter: SourceAdapter = {
       if (pageNo === lastPage && (kind === 'orders' || kind === 'transfers')) {
         // Full last page, no overlap: older rows exist beyond the budget.
         throw new HistoryPageCapReachedError(src.slug, kind, maxPages, lastPage + 1)
+      }
+      const pageCount = Number((data as Record<string, unknown> | null)?.pagecount)
+      if (kind === 'copiers' && Number.isSafeInteger(pageCount) && pageNo >= pageCount) break
+      if (pageNo === lastPage && kind === 'copiers') {
+        throw new CopierPageCapReachedError(src.slug, maxPages)
       }
     }
   },
