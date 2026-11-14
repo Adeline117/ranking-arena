@@ -32,6 +32,16 @@ import type {
   SourceRow,
   Timeframe,
 } from '../../core/types'
+import {
+  COPIER_PAGE_CEILING,
+  CopierPageCapReachedError,
+  HistoryPageCapReachedError,
+} from '../../core/history-page-cap'
+import type {
+  ContinuableHistoryKind,
+  HistoryContinuationCapability,
+  HistoryFetchOptions,
+} from '../../core/history-continuation'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
@@ -183,10 +193,16 @@ const kucoinAdapter: SourceAdapter = {
     src: SourceRow,
     exchangeTraderId: string,
     kind: HistoryKind,
-    cursor: string | null
+    cursor: string | null,
+    _traderMeta?: Record<string, unknown> | null,
+    options?: HistoryFetchOptions
   ): AsyncIterable<RawPage> {
     if (kind !== 'orders' && kind !== 'copiers') {
       throw new Error(`[kucoin] history surface ${kind} not supported`)
+    }
+    const continuation = options?.continuation
+    if (continuation !== undefined && (kind !== 'orders' || continuation.mode !== 'page_offset')) {
+      throw new Error(`[kucoin] ${kind} continuation mode ${continuation.mode} not supported`)
     }
     await warmSession(session, src)
     const fetcher = pageFetcher(session)
@@ -197,7 +213,10 @@ const kucoinAdapter: SourceAdapter = {
     if (kind === 'orders') {
       const url = endpoint(src, 'orders', `${BASE}/cross/futures/lead/order`)
       const maxPages = Number(src.meta.history_max_pages) || 20
-      for (let pageIndex = 1; pageIndex <= maxPages; pageIndex++) {
+      // Backward continuation (#440): same budget, starting below the cut.
+      const startPage = continuation?.startPage ?? 1
+      const lastPage = startPage + maxPages - 1
+      for (let pageIndex = startPage; pageIndex <= lastPage; pageIndex++) {
         const payload = await replayJson(session, fetcher, {
           url: `${url}?lang=en_US&leadConfigId=${id}&pageNum=${pageIndex}&pageSize=${limit}`,
           method: 'GET',
@@ -207,20 +226,23 @@ const kucoinAdapter: SourceAdapter = {
         if (rows.length === 0) return
         yield { pageIndex, payload, url, fetchedAt: new Date().toISOString() }
         if (rows.length < limit) return // last (short) page
-        if (cursor !== null) {
+        if (cursor !== null && continuation === undefined) {
           const oldest = rows[rows.length - 1]
           if (oldest.kind === 'orders' && oldest.ts <= cursor) {
             return // overlap reached — older pages are already stored
           }
         }
       }
-      return
+      // Every page full, no overlap: the stream was cut by the page budget.
+      throw new HistoryPageCapReachedError(src.slug, 'orders', maxPages, lastPage + 1)
     }
 
     // copiers
     const url = endpoint(src, 'copiers', `${BASE}/leadShow/copyTraders`)
     const maxPages = Number(src.meta.copier_max_pages) || 30
-    for (let pageIndex = 1; pageIndex <= maxPages; pageIndex++) {
+    // The source reports totalPage: extend the budget to cover it (bounded).
+    let pageBudget = maxPages
+    for (let pageIndex = 1; pageIndex <= pageBudget; pageIndex++) {
       const payload = await replayJson(session, fetcher, {
         url: `${url}?lang=en_US&leadConfigId=${id}&pageNum=${pageIndex}&pageSize=${limit}`,
         method: 'GET',
@@ -239,6 +261,9 @@ const kucoinAdapter: SourceAdapter = {
         }
         return
       }
+      if (Number.isSafeInteger(totalPage) && totalPage > pageBudget) {
+        pageBudget = Math.min(totalPage, Math.max(maxPages, COPIER_PAGE_CEILING))
+      }
       yield { pageIndex, payload, url, fetchedAt: new Date().toISOString() }
       if (Number.isSafeInteger(totalPage) && totalPage > 0) {
         if (pageIndex >= totalPage) return
@@ -246,12 +271,24 @@ const kucoinAdapter: SourceAdapter = {
       }
       if (candidateCount < limit) return
     }
+    // Budget exhausted while the source still had pages: never let a cut
+    // capture pass as a complete (unbounded) Tier-B copier snapshot.
+    throw new CopierPageCapReachedError(src.slug, pageBudget)
   },
 
   parseLeaderboard: parseKucoinLeaderboardPage,
   parseProfile: parseKucoinProfile,
   validateProfile: validateKucoinProfile,
   parsePositions: parseKucoinPositions,
+  /** Orders page by number (pageNum); transfers are not exposed at all. */
+  historyContinuation(
+    _src: SourceRow,
+    kind: ContinuableHistoryKind
+  ): HistoryContinuationCapability {
+    return kind === 'orders'
+      ? { supported: true, mode: 'page_offset' }
+      : { supported: false, reason: 'surface_not_exposed' }
+  },
   parseHistory: parseKucoinHistory,
 }
 

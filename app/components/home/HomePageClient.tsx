@@ -12,6 +12,7 @@ import type { TimeRange } from './hooks/useTraderData'
 import type { InitialTrader, CategoryCounts } from '@/lib/getInitialTraders'
 import type { Trader } from '../ranking/RankingTable'
 import { trackEvent } from '@/lib/analytics/track'
+import { toUiTrader } from '../ranking/toUiTrader'
 
 interface HomePageClientProps {
   initialTraders?: InitialTrader[]
@@ -28,27 +29,6 @@ interface HomePageClientProps {
   initialPageIndex?: number
   /** URL state needs a matching client cohort before SSR rows may be replaced. */
   initialClientCohortPending?: boolean
-}
-
-function hasPersistedExchangeCohort(): boolean {
-  // HomePageClient is loaded through the client-only Phase 2 boundary, so a
-  // synchronous preference read here cannot create an SSR hydration mismatch.
-  // It lets us keep default SSR rows neutral while a saved exchange scope is
-  // fetched instead of briefly relabelling the all-exchange cohort.
-  try {
-    // Stored preferences are allowed to choose the clean landing page only.
-    // A share/deep link is already a complete cohort statement; layering a
-    // local exchange over `?range=30D&page=3` would make its URL lie about
-    // the rows being shown and make copied/reloaded links non-reproducible.
-    return (
-      typeof window !== 'undefined' &&
-      window.location.pathname === '/' &&
-      window.location.search === '' &&
-      Boolean(localStorage.getItem('ranking-exchange'))
-    )
-  } catch {
-    return false
-  }
 }
 
 /**
@@ -72,39 +52,18 @@ export default function HomePageClient({
 }: HomePageClientProps) {
   const { isLoggedIn } = useAuthSession()
   const { t } = useLanguage()
-  const [requiresInitialClientCohort] = useState(
-    () => initialClientCohortPending || hasPersistedExchangeCohort()
-  )
+  const [requiresInitialClientCohort] = useState(() => initialClientCohortPending)
   const [initialCohortStatus, setInitialCohortStatus] = useState<'ready' | 'loading' | 'failed'>(
     () => (requiresInitialClientCohort ? 'loading' : 'ready')
   )
   const [initialCohortAttempt, setInitialCohortAttempt] = useState(0)
   const pendingRangeRef = useRef<TimeRange | null>(null)
 
-  // Convert InitialTrader[] to Trader[] for compatibility
+  // SSR InitialTrader rows go through the same toUiTrader() mapper as the
+  // client /api/traders refresh, so a row renders identically before and after
+  // hydration (movement arrows, NEW, bot/style, Sharpe, trust badges).
   const convertedInitialTraders: Trader[] | undefined = useMemo(
-    () =>
-      initialTraders?.map((t) => ({
-        id: t.id,
-        handle: t.handle,
-        roi: t.roi,
-        pnl: t.pnl,
-        win_rate: t.win_rate,
-        max_drawdown: t.max_drawdown,
-        followers: t.followers,
-        source: t.source,
-        avatar_url: t.avatar_url,
-        avatar_url_mirror: t.avatar_url_mirror,
-        arena_score: t.arena_score,
-        score_confidence: t.score_confidence,
-        rank: t.rank,
-        // Rank-movement signals — the SSR shape carries them but this
-        // allowlist copy silently dropped them, so first-paint rows never
-        // showed the ↑/↓ arrows that hydrated /api/traders rows now get.
-        rank_change: t.rank_change ?? null,
-        is_new: t.is_new === true,
-        trades_count: t.trades_count,
-      })),
+    () => initialTraders?.map(toUiTrader),
     [initialTraders]
   )
 

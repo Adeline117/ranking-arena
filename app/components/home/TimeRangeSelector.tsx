@@ -71,11 +71,11 @@ export default function TimeRangeSelector({
       ref={containerRef}
       className="time-range-selector"
       role="group"
-      aria-label="Time range"
+      aria-label={t('timeRangeAria')}
       style={{
         display: 'inline-flex',
         gap: tokens.spacing[0],
-        padding: tokens.spacing[1],
+        // padding: .time-range-selector in critical CSS (4px; 2px on mobile)
         background: tokens.colors.bg.secondary,
         borderRadius: tokens.radius.lg,
         border: `1px solid ${tokens.colors.border.primary}`,
@@ -113,11 +113,11 @@ export default function TimeRangeSelector({
             onClick={() => !disabled && onChange(range)}
             disabled={disabled}
             aria-pressed={isActive}
-            aria-label={`Show ${range} rankings`}
-            className="touch-target"
+            aria-label={t('showRangeRankingsAria').replace('{range}', range)}
+            className="touch-target time-range-btn"
             style={{
-              padding: `10px ${tokens.spacing[4]}`,
-              minHeight: 44,
+              // padding + min-height: .time-range-btn in critical CSS
+              // (desktop 10px 16px / 44px; compact single-row on mobile)
               background: 'transparent',
               color: isActive ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
               border: '1px solid transparent',

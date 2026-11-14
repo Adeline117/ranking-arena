@@ -4,7 +4,7 @@ function report(overrides: Partial<FreshnessReport> = {}): FreshnessReport {
   return {
     ok: true,
     checked_at: '2026-07-18T18:00:00.000Z',
-    summary: { total: 1, fresh: 1, stale: 0, critical: 0, unknown: 0 },
+    summary: { total: 1, fresh: 1, stale: 0, critical: 0, unknown: 0, quarantined: 0 },
     thresholds: { stale_hours: 8, critical_hours: 24 },
     platforms: [
       {
@@ -29,7 +29,7 @@ describe('parseFreshnessReport', () => {
   it('accepts an unknown-only fail-closed report', () => {
     const unknownReport = report({
       ok: false,
-      summary: { total: 1, fresh: 0, stale: 0, critical: 0, unknown: 1 },
+      summary: { total: 1, fresh: 0, stale: 0, critical: 0, unknown: 1, quarantined: 0 },
       platforms: [
         {
           platform: 'gmx',
@@ -44,6 +44,44 @@ describe('parseFreshnessReport', () => {
     })
 
     expect(parseFreshnessReport(unknownReport)).toEqual(unknownReport)
+  })
+
+  it('accepts a quarantined source with its seasons, reasons and start time', () => {
+    const quarantined = report({
+      ok: false,
+      summary: { total: 1, fresh: 0, stale: 0, critical: 0, unknown: 0, quarantined: 1 },
+      platforms: [
+        {
+          platform: 'bybit',
+          displayName: 'bybit',
+          lastUpdate: '2026-07-16T17:00:00.000Z',
+          ageMs: 1,
+          ageHours: 0,
+          status: 'quarantined',
+          recordCount: 0,
+          quarantine: [
+            {
+              season: '90D',
+              reasons: ['stale'],
+              since: '2026-07-17T00:00:00.000Z',
+              lastConfirmedAt: '2026-07-18T17:00:00.000Z',
+            },
+          ],
+        },
+      ],
+    })
+    expect(parseFreshnessReport(quarantined)).toEqual(quarantined)
+    expect(() => parseFreshnessReport({ ...quarantined, ok: true })).toThrow(
+      'freshness ok does not match summary'
+    )
+  })
+
+  it('treats a report without a quarantined count (older deployment) as none', () => {
+    const legacy = {
+      ...report(),
+      summary: { total: 1, fresh: 1, stale: 0, critical: 0, unknown: 0 },
+    }
+    expect(parseFreshnessReport(legacy).summary.quarantined).toBe(0)
   })
 
   it.each([

@@ -281,5 +281,5 @@ export const GET = withCron(
       warnings,
     }
   },
-  { safetyTimeoutMs: 55_000 }
+  { maxDurationSec: maxDuration, safetyTimeoutMs: 55_000 }
 )

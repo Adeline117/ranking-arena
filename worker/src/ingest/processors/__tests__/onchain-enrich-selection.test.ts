@@ -51,4 +51,39 @@ describe('on-chain enrichment legacy quality selection', () => {
       tailSql.indexOf("ts.extras ? 'onchain_enriched_at'")
     )
   })
+
+  it('keeps chain-derived win rate in extras and never fills the formal column for web3 boards', async () => {
+    const enrich = jest.requireMock('@/lib/ingest/onchain/enrich') as Record<string, jest.Mock>
+    enrich.enrichWeb3Wallet.mockResolvedValue({ winRate: 55 })
+    enrich.enrichmentExtras.mockReturnValue({ onchain_win_rate: 55 })
+    enrich.scoreEligibleWinRate.mockReturnValue(55)
+    const dune = jest.requireMock('@/lib/ingest/onchain/dune-bsc-internal') as Record<
+      string,
+      jest.Mock
+    >
+    dune.scanBscInternalBnb.mockResolvedValue({
+      transfersByWallet: new Map(),
+      coverage: {
+        scanComplete: true,
+        stopReason: 'done',
+        rowsFetched: 0,
+        pagesFetched: 0,
+        walletsRequested: 1,
+      },
+    })
+    mockQuery.mockImplementation(async (sql: string) =>
+      String(sql).startsWith('UPDATE')
+        ? { rows: [], rowCount: 1 }
+        : { rows: [{ wallet: 'w1' }], rowCount: 1 }
+    )
+
+    await expect(processOnchainEnrich({} as never)).resolves.toEqual({ enriched: 2, failed: 0 })
+
+    const updates = mockQuery.mock.calls.filter(([sql]) => String(sql).startsWith('UPDATE'))
+    expect(updates).toHaveLength(2)
+    for (const [, params] of updates) {
+      expect(JSON.parse(params[2])).toMatchObject({ onchain_win_rate: 55 })
+      expect(params[3]).toBeNull()
+    }
+  })
 })

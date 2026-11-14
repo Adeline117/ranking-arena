@@ -26,6 +26,11 @@ import type {
 } from '@/lib/ingest/core/types'
 import type { FetchSession } from '@/lib/ingest/fetch/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
+import { UpstreamGoneError } from '@/lib/ingest/fetch/capture'
+import {
+  CopierPageCapReachedError,
+  HistoryPageCapReachedError,
+} from '@/lib/ingest/core/history-page-cap'
 import { captureHistoryAcquisition } from '@/lib/ingest/history-acquisition'
 import { buildPositionHistoryAcquisitionArtifactV2 } from '@/lib/ingest/position-history-acquisition-v2'
 import {
@@ -42,11 +47,15 @@ import { publishCopierSnapshotInTransaction } from '@/lib/ingest/serving/copier-
 import { recordFieldInventory } from '@/lib/ingest/field-inventory'
 import { fireAndForget, logger } from '@/lib/utils/logger'
 import { getRegionQueue, INGEST_JOB, type TierJobData } from '../queues'
+import { getConnection } from '../../connection'
+import { closeCircuitCycle } from '../circuit-cycle'
 import {
   assertSourceMatchesConsumedRegion,
   type ConsumedRegionContext,
 } from '../consumed-region-context'
 import { runHistoryTransaction } from '../history-transaction'
+import { isContinuableHistoryKind } from '@/lib/ingest/core/history-continuation'
+import { continueTruncatedHistory, recordHistoryTruncation } from './tier-b-history-continuation'
 
 /**
  * Staleness filter (deadline-chunking, 2026-07-03): only traders NOT
@@ -103,6 +112,23 @@ async function markProfileAttempted(traderId: number): Promise<void> {
      ON CONFLICT (trader_id, kind)
      DO UPDATE SET cursor_value = EXCLUDED.cursor_value, updated_at = now()`,
     [traderId, PROFILED_CURSOR_KIND, new Date().toISOString()]
+  )
+}
+
+/** Durable marker: the latest copier capture was cut by the page budget. */
+async function recordCopierTruncation(
+  traderId: number,
+  pageCap: number,
+  pagesCaptured: number
+): Promise<void> {
+  await getIngestPool().query(
+    `UPDATE arena.traders
+        SET meta = meta || jsonb_build_object(
+          'copiers_truncated',
+          jsonb_build_object('detected_at', now(), 'page_cap', $2::int, 'pages_captured', $3::int)
+        )
+      WHERE id = $1`,
+    [traderId, pageCap, pagesCaptured]
   )
 }
 
@@ -274,6 +300,35 @@ async function crawlTraderHistories(
     }
 
     if (kind === 'copiers') {
+      if (fetchError instanceof CopierPageCapReachedError) {
+        // Contract: a Tier-B copier snapshot is never caller-limited
+        // (copier_snapshot_tier_b_not_caller_limited). A capture cut by the
+        // page budget is therefore kept as RAW diagnostics only — no snapshot
+        // is published (the last complete one stays) — and the cut is recorded
+        // durably. Not rethrown: retrying every continuation hop would burn
+        // the same budget and hit the same cap.
+        await writeRawObject({
+          sourceId: src.id,
+          sourceSlug: src.slug,
+          jobType: 'history:copiers',
+          traderId: trader.id,
+          timeframe: null,
+          payload: rawPages,
+          meta: {
+            surface: 'copiers',
+            lane: 'tier_b',
+            fetch_failed: false,
+            capture_rejected: 'caller_page_budget',
+            page_cap: fetchError.pageCap,
+          },
+        })
+        await recordCopierTruncation(trader.id, fetchError.pageCap, rawPages.length)
+        logger.warn(
+          `[tier-b] ${src.slug} trader ${trader.exchange_trader_id} copiers: page cap ` +
+            `${fetchError.pageCap} reached — snapshot not published (recorded as truncated)`
+        )
+        continue
+      }
       if (fetchError !== null || rawPages.length === 0) {
         // Failed or evidence-free captures are useful diagnostics, but cannot
         // satisfy the page-bearing snapshot contract or mark this trader fresh.
@@ -320,6 +375,12 @@ async function crawlTraderHistories(
       continue
     }
 
+    // A page-budget cut is not a failed fetch: the yielded newest pages are
+    // valid. Publish them, but record the truncation durably (RAW meta +
+    // traders.meta.history_truncated) so the gap in older history is visible
+    // instead of silently looking complete once the cursor jumps to newest.
+    const pageCapCut =
+      fetchError instanceof HistoryPageCapReachedError && rawPages.length > 0 ? fetchError : null
     if (rawPages.length > 0 || fetchError !== null) {
       await writeRawObject({
         sourceId: src.id,
@@ -328,13 +389,21 @@ async function crawlTraderHistories(
         traderId: trader.id,
         timeframe: null,
         payload: rawPages,
-        meta: { fetch_failed: fetchError !== null },
+        meta: {
+          fetch_failed: fetchError !== null && pageCapCut === null,
+          caller_limited: pageCapCut !== null,
+          ...(pageCapCut !== null ? { page_cap: pageCapCut.pageCap } : {}),
+        },
       })
     }
-    if (fetchError !== null) throw fetchError
+    if (fetchError !== null && pageCapCut === null) throw fetchError
     if (rawPages.length === 0) {
       if (requireResponseForEveryKind) {
         throw new Error(`[tier-b] ${src.slug} ${kind} returned no upstream response page`)
+      }
+      if (isContinuableHistoryKind(kind)) {
+        written += (await continueTruncatedHistory(session, adapter, src, trader, kind, ctx))
+          .rowsWritten
       }
       continue
     }
@@ -345,6 +414,29 @@ async function crawlTraderHistories(
     )
 
     written += await publishHistoryRows(src, trader.id, kind, rows, nextHistoryCursor(rows, cursor))
+    if (pageCapCut !== null && isContinuableHistoryKind(kind)) {
+      const continuation = await recordHistoryTruncation(
+        adapter,
+        src,
+        trader.id,
+        kind,
+        pageCapCut,
+        rows
+      )
+      logger.warn(
+        `[tier-b] ${src.slug} trader ${trader.exchange_trader_id} ${kind}: page cap ` +
+          `${pageCapCut.pageCap} reached — older history not captured yet (recorded as ` +
+          `truncated; continuation ${continuation.state})`
+      )
+      // This run already spent its budget on the newest pages: the backward
+      // continuation resumes on the next run, keeping each run bounded.
+      continue
+    }
+    if (isContinuableHistoryKind(kind)) {
+      // Bounded backward continuation of an earlier truncation (#440).
+      written += (await continueTruncatedHistory(session, adapter, src, trader, kind, ctx))
+        .rowsWritten
+    }
   }
   return written
 }
@@ -429,6 +521,8 @@ export async function processTierB(
       let successfulTimeframes = 0
       let traderHadQualityReject = false
       let traderHadOperationalError = false
+      // Every operational error of this trader was a 404/410 "gone" response.
+      let traderOnlyGoneErrors = true
       for (const timeframe of timeframes) {
         try {
           const scrapedAt = new Date().toISOString()
@@ -558,6 +652,7 @@ export async function processTierB(
           terminalTimeframes += 1
         } catch (err) {
           traderHadOperationalError = true
+          if (!(err instanceof UpstreamGoneError)) traderOnlyGoneErrors = false
           result.errors += 1
           console.warn(
             `[tier-b] ${src.slug} trader ${trader.exchange_trader_id} ${timeframe}d failed:`,
@@ -582,6 +677,16 @@ export async function processTierB(
         // Quality rejects are terminal for this pass: throttle the next attempt
         // so continuation jobs cannot hot-loop on a permanently bad upstream
         // payload. The compatibility cursor kind remains `tierb_profiled`.
+        await markProfileAttempted(trader.id)
+      } else if (supportsProfile && traderHadOperationalError && traderOnlyGoneErrors) {
+        // 404/410 on every failing timeframe = deregistered/removed trader.
+        // Back off to the next refresh window (same throttle as a quality
+        // reject) instead of re-crawling it on every continuation hop (up to
+        // MAX_CONT_DEPTH per cadence). Transient errors stay retryable.
+        logger.warn(
+          `[tier-b] ${src.slug} trader ${trader.exchange_trader_id}: upstream 404/410, ` +
+            `backing off until the next refresh window`
+        )
         await markProfileAttempted(trader.id)
       }
 
@@ -618,6 +723,8 @@ export async function processTierB(
     }
   } finally {
     await session.close()
+    // Spec §4 per-cycle failure-rate alert (never throws).
+    await closeCircuitCycle(src, 'B', { redis: getConnection })
   }
 
   result.remaining = topTraders.length - attempted

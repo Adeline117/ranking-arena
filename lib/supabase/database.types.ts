@@ -2718,6 +2718,7 @@ export type Database = {
           profitability_score: number | null
           rank: number | null
           rank_change: number | null
+          rank_publication_id: string | null
           risk_control_score: number | null
           roi: number | null
           score_completeness: string | null
@@ -2756,6 +2757,7 @@ export type Database = {
           profitability_score?: number | null
           rank?: number | null
           rank_change?: number | null
+          rank_publication_id?: string | null
           risk_control_score?: number | null
           roi?: number | null
           score_completeness?: string | null
@@ -2794,6 +2796,7 @@ export type Database = {
           profitability_score?: number | null
           rank?: number | null
           rank_change?: number | null
+          rank_publication_id?: string | null
           risk_control_score?: number | null
           roi?: number | null
           score_completeness?: string | null
@@ -9298,6 +9301,55 @@ export type Database = {
         }
         Relationships: []
       }
+      public_ranked_leaderboard: {
+        Row: {
+          arena_score: number | null
+          arena_score_v3: number | null
+          arena_score_v4: number | null
+          avatar_url: string | null
+          avg_holding_hours: number | null
+          calmar_ratio: number | null
+          computed_at: string | null
+          copiers: number | null
+          execution_score: number | null
+          followers: number | null
+          handle: string | null
+          id: number | null
+          is_new: boolean | null
+          is_outlier: boolean | null
+          max_drawdown: number | null
+          metrics_estimated: boolean | null
+          pnl: number | null
+          profit_factor: number | null
+          profitability_score: number | null
+          rank: number | null
+          rank_change: number | null
+          risk_control_score: number | null
+          roi: number | null
+          score_completeness: string | null
+          season_id: string | null
+          sharpe_ratio: number | null
+          sortino_ratio: number | null
+          source: string | null
+          source_trader_id: string | null
+          source_type: string | null
+          style_confidence: number | null
+          trader_type: string | null
+          trades_count: number | null
+          trading_style: string | null
+          win_rate: number | null
+        }
+        Relationships: []
+      }
+      public_ranked_leaderboard_source_evidence: {
+        Row: {
+          evidence_grade: string | null
+          season_id: string | null
+          source: string | null
+          source_as_of: string | null
+        }
+        Relationships: []
+      }
       public_user_profiles: {
         Row: {
           avatar_url: string | null
@@ -9607,6 +9659,16 @@ export type Database = {
           slug: string
           status: string
           timeframe: number
+        }[]
+      }
+      arena_publication_source_isolations: {
+        Args: never
+        Returns: {
+          filter_source: string
+          first_isolated_at: string
+          isolated_at: string
+          reasons: string[]
+          season_id: string
         }[]
       }
       arena_records_page: {

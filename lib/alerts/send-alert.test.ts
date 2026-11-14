@@ -166,6 +166,76 @@ describe('sendAlert', () => {
   })
 })
 
+describe('warning fallback when Telegram fails (audit P2-9)', () => {
+  function failingTelegram() {
+    mockSendTelegram.mockResolvedValue({ outcome: 'failed', reason: 'http_error', httpStatus: 401 })
+  }
+
+  function fakeRedis() {
+    const store = new Map<string, unknown>()
+    return {
+      store,
+      lpush: jest.fn().mockResolvedValue(1),
+      ltrim: jest.fn().mockResolvedValue('OK'),
+      set: jest.fn(async (key: string, value: unknown, opts?: { nx?: boolean }) => {
+        if (opts?.nx && store.has(key)) return null
+        store.set(key, value)
+        return 'OK'
+      }),
+    }
+  }
+
+  test('opens a de-duplicated [WARN] GitHub issue and persists the undelivered alert', async () => {
+    process.env.ALERT_GITHUB_TOKEN = 'github-token'
+    process.env.ALERT_GITHUB_REPO = 'owner/repo'
+    failingTelegram()
+    const redis = fakeRedis()
+    mockGetSharedRedis.mockResolvedValue(redis as never)
+    ;(global.fetch as jest.Mock).mockImplementation(async (input: string | URL | Request) =>
+      String(input).includes('/search/issues')
+        ? httpResponse(200, { items: [] })
+        : httpResponse(201)
+    )
+
+    const first = await sendAlert({ title: 'Data gaps', message: '12 traders', level: 'warning' })
+    expect(first).toEqual({ sent: true, channels: ['github'] })
+    const createCall = (global.fetch as jest.Mock).mock.calls.find(([url]) =>
+      String(url).endsWith('/issues')
+    )
+    expect(JSON.parse(createCall[1].body).title).toBe('⚠️ [WARN] Data gaps')
+    expect(redis.lpush).toHaveBeenCalledWith(
+      'alert:undelivered',
+      expect.stringContaining('Data gaps')
+    )
+
+    // Same title within the window: persisted again, but no second GitHub call.
+    ;(global.fetch as jest.Mock).mockClear()
+    const second = await sendAlert({ title: 'Data gaps', message: '13 traders', level: 'warning' })
+    expect(second.sent).toBe(false)
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(redis.lpush).toHaveBeenCalledTimes(2)
+  })
+
+  test('info alerts are persisted but never open an issue', async () => {
+    process.env.ALERT_GITHUB_TOKEN = 'github-token'
+    process.env.ALERT_GITHUB_REPO = 'owner/repo'
+    failingTelegram()
+    const redis = fakeRedis()
+    mockGetSharedRedis.mockResolvedValue(redis as never)
+    await sendAlert({ title: 'fyi', message: 'm', level: 'info' })
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(redis.lpush).toHaveBeenCalledTimes(1)
+  })
+
+  test('a delivered Telegram warning leaves no fallback trace', async () => {
+    const redis = fakeRedis()
+    mockGetSharedRedis.mockResolvedValue(redis as never)
+    await sendAlert({ title: 'ok', message: 'm', level: 'warning' })
+    expect(redis.lpush).not.toHaveBeenCalled()
+    expect(global.fetch).not.toHaveBeenCalled()
+  })
+})
+
 describe('sendRateLimitedAlert', () => {
   test('does not write a cooldown when only the GitHub fallback delivered', async () => {
     const redis = {

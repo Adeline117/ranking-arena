@@ -724,6 +724,15 @@ export const ARENA_V4_CONFIG = {
   PNL_LO: 1_000,
   PNL_HI: 10_000_000,
   SAMPLE_K: 50, // 样本量置信:trades/(trades+50) → 50 笔=0.5,250=0.83
+  // 成交数未知(null/0)时按"约 5 笔真实成交"计样本置信:5/(5+50)≈0.091(V4 与 V5 同)。
+  // 旧值 0.3(≈21.4 笔)让 0 成交/未知成交的号比 1–21 笔真实交易员置信度更高
+  // (审计探针:t=0→60.6 分、t=1→23.1、t=10→47.7、t=21→59.9)。上游没有可靠的逐源
+  // "成交数是否真实提供"声明接入评分(expected-metrics 按 adapter 键、评分按旧
+  // serving 源名,且部分 CEX 用 0 表示未知),无法区分"真 0"与"未知";
+  // 取保守下界:未知永远不高于小样本真实交易员。
+  // PG17 双实现:迁移 20261113014105 同步改写 compute_arena_scores_v4/v5_json,
+  // golden vectors 已按新口径重签——三者必须一起上线。
+  UNKNOWN_TRADES_EQUIV: 5,
   CONF_FLOOR: 0.35, // 置信度下限——真实交易员永不归零
   // 显示分 = composite 队内百分位 × DISPLAY_PCT + composite 相对值 × (1−);
   // 混一点相对值,让顶端精英不至于全挤 100(纯百分位在极顶端会饱和)。
@@ -834,9 +843,11 @@ function computeArenaScoresV4OrV5(
 
     // Confidence:样本量 × 数据完整度(软准入门槛)
     // 0 = "未知交易数"(很多 CEX 源对未知返回 0),不是真的 0 笔——按 null(未知)处理,
-    // 否则 cN=0→置信度触底,结构性压低合法源(对齐 V3 语义)。
+    // 否则 cN=0→置信度触底,结构性压低合法源。但未知的样本置信只按
+    // UNKNOWN_TRADES_EQUIV 笔计,绝不高于小样本真实交易员(见配置注释)。
     const trades = t.tradesCount != null && t.tradesCount > 0 ? t.tradesCount : null
-    const cN = trades == null ? 0.3 : trades / (trades + V.SAMPLE_K)
+    const sampleTrades = trades ?? V.UNKNOWN_TRADES_EQUIV
+    const cN = sampleTrades / (sampleTrades + V.SAMPLE_K)
     const presentCnt = [shArr[i], mddArr[i], winArr[i], pfArr[i]].filter((v) => v != null).length
     const cC = Math.max(presentCnt / 4, 0.25)
     const confidence = V.CONF_FLOOR + (1 - V.CONF_FLOOR) * Math.cbrt(Math.max(0.01, cN * cC))
@@ -847,7 +858,9 @@ function computeArenaScoresV4OrV5(
 
   // 显示分 = 队内百分位("超过 X% 的人") + 少量 composite 相对值展开顶端
   const pComp = percentRanks(composite.map((c) => c))
-  const maxComp = Math.max(...composite, 1e-9)
+  // 循环求最大值:Math.max(...arr) 展开参数在约 12 万+元素时抛 RangeError(调用栈上限)
+  let maxComp = 1e-9
+  for (const c of composite) if (c > maxComp) maxComp = c
 
   return inputs.map((_, i) => {
     const pct = pComp[i] ?? 0

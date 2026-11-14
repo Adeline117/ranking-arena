@@ -86,13 +86,16 @@ export class Circuit {
     return total === 0 ? 0 : this.cycleFailures / total
   }
 
-  /** Ends an orchestrator cycle; returns whether the alert threshold tripped. */
-  endCycle(): { failureRate: number; shouldAlert: boolean } {
+  /** Ends an orchestrator cycle; returns whether the alert threshold tripped
+   *  plus the sample count (callers gate on a minimum sample size). */
+  endCycle(): { failureRate: number; shouldAlert: boolean; samples: number; failures: number } {
     const failureRate = this.cycleFailureRate()
     const shouldAlert = failureRate > this.failureRateAlert
+    const samples = this.cycleSuccesses + this.cycleFailures
+    const failures = this.cycleFailures
     this.cycleSuccesses = 0
     this.cycleFailures = 0
-    return { failureRate, shouldAlert }
+    return { failureRate, shouldAlert, samples, failures }
   }
 
   private open(): void {

@@ -32,6 +32,13 @@ import type {
   SourceRow,
   Timeframe,
 } from '../../core/types'
+import { HistoryPageCapReachedError } from '../../core/history-page-cap'
+import {
+  HISTORY_CONTINUATION_NOT_WIRED,
+  type ContinuableHistoryKind,
+  type HistoryContinuationCapability,
+  type HistoryFetchOptions,
+} from '../../core/history-continuation'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import {
@@ -426,7 +433,9 @@ const binanceAdapter: SourceAdapter = {
     src: SourceRow,
     exchangeTraderId: string,
     kind: HistoryKind,
-    cursor: string | null
+    cursor: string | null,
+    _traderMeta?: Record<string, unknown> | null,
+    options?: HistoryFetchOptions
   ): AsyncGenerator<RawPage, HistoryTerminalClaim | undefined, void> {
     const board = boardKeyOf(src)
     const supported =
@@ -437,11 +446,24 @@ const binanceAdapter: SourceAdapter = {
           kind === 'transfers' ||
           kind === 'copiers'
     if (!supported) return undefined
+    const continuation = options?.continuation
+    if (continuation !== undefined) {
+      const capability =
+        kind === 'orders' || kind === 'transfers'
+          ? binanceHistoryContinuation(src, kind)
+          : HISTORY_CONTINUATION_NOT_WIRED
+      if (!capability.supported || capability.mode !== continuation.mode) {
+        throw new Error(`[binance] ${kind} continuation mode ${continuation.mode} not supported`)
+      }
+    }
+    // Backward continuation (#440) by page number: same budget, below the cut.
+    const startPage = continuation?.mode === 'page_offset' ? continuation.startPage : 1
 
     await warmSession(session, src)
     const fetcher = pageFetcher(session)
     const maxPages = Number(src.meta.history_max_pages ?? 25) || 25
-    const cursorMs = cursor ? Date.parse(cursor) : NaN
+    // A backward continuation never cursor-stops: it walks below the cut.
+    const cursorMs = cursor && continuation === undefined ? Date.parse(cursor) : NaN
     let captureOrdinal = 0
 
     const fetchPage = async (url: string, body: Record<string, unknown>): Promise<unknown> =>
@@ -457,6 +479,8 @@ const binanceAdapter: SourceAdapter = {
         sort?: string
         pageSize: number
         pages: number
+        /** First page number to request (backward continuation). */
+        startPage?: number
         allowShortPage: boolean
         tsOf?: (row: Record<string, unknown>) => number | null
       }
@@ -467,7 +491,9 @@ const binanceAdapter: SourceAdapter = {
     > {
       let rowsSeen = 0
       let reportedTotal: number | null | undefined
-      for (let pageNo = 1; pageNo <= opts.pages; pageNo++) {
+      const firstPage = opts.startPage ?? 1
+      const lastPage = firstPage + opts.pages - 1
+      for (let pageNo = firstPage; pageNo <= lastPage; pageNo++) {
         const request = bodyOf(pageNo)
         const response = await fetchPage(url, request)
         captureOrdinal += 1
@@ -516,6 +542,9 @@ const binanceAdapter: SourceAdapter = {
           throw new Error(`[binance] ${kind} ${opts.segmentId} changed total during pagination`)
         }
 
+        // reportedTotal counts the whole stream from page 1; a continuation
+        // starting at page N has already "seen" the rows of pages 1..N-1.
+        if (rowsSeen === 0 && firstPage > 1) rowsSeen = (firstPage - 1) * opts.pageSize
         rowsSeen += rows.length
         if (reportedTotal !== null && rowsSeen > reportedTotal) {
           throw new Error(`[binance] ${kind} ${opts.segmentId} exceeded its reported total`)
@@ -555,6 +584,11 @@ const binanceAdapter: SourceAdapter = {
             }
           }
         }
+      }
+      if (kind === 'orders' || kind === 'transfers') {
+        // Typed so Tier-B publishes the captured newest pages and records the
+        // truncation instead of failing the whole trader every cycle.
+        throw new HistoryPageCapReachedError(src.slug, kind, opts.pages, lastPage + 1)
       }
       throw new Error(
         `[binance] ${kind} ${opts.sort ?? 'default'} reached page cap ${opts.pages} without terminal proof`
@@ -615,6 +649,7 @@ const binanceAdapter: SourceAdapter = {
             segmentId: 'default',
             pageSize: 50,
             pages: maxPages,
+            startPage,
             allowShortPage: true,
             tsOf: (r) => (Number.isFinite(Number(r.time)) ? Number(r.time) : null),
           }
@@ -622,8 +657,16 @@ const binanceAdapter: SourceAdapter = {
         return terminalClaim([terminal])
       }
       const backfillDays = Number(src.meta.orders_backfill_days ?? 90) || 90
-      const endTime = Date.now()
-      const startTime = Number.isFinite(cursorMs) ? cursorMs : endTime - backfillDays * 86_400_000
+      const now = Date.now()
+      // Backward continuation (#440) moves the window's upper bound below the
+      // oldest captured order; the lower bound stays the declared backfill
+      // horizon, so a window that has closed means the scope is exhausted.
+      const endTime = continuation?.mode === 'end_time' ? continuation.endTimeMs : now
+      const startTime =
+        continuation === undefined && Number.isFinite(cursorMs)
+          ? cursorMs
+          : now - backfillDays * 86_400_000
+      if (continuation !== undefined && endTime <= startTime) return undefined
       const terminal = yield* paged(
         endpoint(src, 'orders'),
         (pageNo) => ({
@@ -652,6 +695,7 @@ const binanceAdapter: SourceAdapter = {
           segmentId: 'default',
           pageSize: 50,
           pages: maxPages,
+          startPage,
           allowShortPage: true,
           tsOf: (r) => (Number.isFinite(Number(r.time)) ? Number(r.time) : null),
         }
@@ -678,6 +722,25 @@ const binanceAdapter: SourceAdapter = {
   parseProfile: parseBinanceProfile,
   parsePositions: parseBinancePositions,
   parseHistory: parseBinanceHistory,
+  historyContinuation: binanceHistoryContinuation,
+}
+
+/**
+ * Futures orders take a startTime/endTime window (resume below the oldest
+ * captured orderTime); spot orders and futures transfers page by number.
+ * Spot exposes no transfers surface.
+ */
+function binanceHistoryContinuation(
+  src: SourceRow,
+  kind: ContinuableHistoryKind
+): HistoryContinuationCapability {
+  const board = boardKeyOf(src)
+  if (kind === 'orders') {
+    return { supported: true, mode: board === 'spot' ? 'page_offset' : 'end_time' }
+  }
+  return board === 'spot'
+    ? { supported: false, reason: 'surface_not_exposed' }
+    : { supported: true, mode: 'page_offset' }
 }
 
 /** Parse-time ctx for extractMeta inside the replay loop (counts only). */

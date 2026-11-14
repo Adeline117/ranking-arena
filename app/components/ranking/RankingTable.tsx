@@ -10,7 +10,6 @@ import React, {
   useDeferredValue,
 } from 'react'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
-import { getCsrfHeaders } from '@/lib/api/csrf'
 import { useTableKeyboardNav } from '@/lib/hooks/useTableKeyboardNav'
 import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { RankingSkeleton } from '../ui/Skeleton'
@@ -25,14 +24,16 @@ import { CategoryType } from './CategoryRankingTabs'
 // Lazy-load non-LCP components to reduce initial bundle
 const Pagination = dynamic(() => import('../ui/Pagination'), { ssr: false })
 
-// Extracted components — keep TraderRow/TraderCard static (LCP-critical)
+// Extracted components — keep TraderRow/TraderMobileRow static (LCP-critical)
 import { TraderRow } from './TraderRow'
-import { TraderCard } from './TraderCard'
+import { ROW_GAP, ROW_PADDING_X } from './TraderRowStyles'
+import { MobileRankHeader, TraderMobileRow } from './MobileRankRows'
 import { AvatarPreload } from '../ui/AvatarPreload'
 import { SortIndicator } from './Icons'
 import { getPnLTooltip, parseSourceInfo as parseSourceInfoUtil, getMedalGlowClass } from './utils'
 import { classifyStyle, type TradingStyle } from '@/lib/utils/trading-style'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
+import { RankingPeriodContext } from './RankingPeriodContext'
 
 // CSS animations loaded async to avoid render-blocking (medal glow, hover effects, pagination)
 // Critical layout styles (grid, responsive columns) are already in critical-css.ts and responsive.css
@@ -68,44 +69,6 @@ const LS_KEY_DENSITY = 'arena.ranking.density'
 import { useDebounce } from '@/lib/hooks/useDebounce'
 
 // ExportRankingButton moved to RankingFilters.tsx
-
-/**
- * Historical rank points need their own publication proof. In particular, do
- * not accept the legacy bare `{ "source:trader": [rank] }` payload: a stale
- * browser/CDN response in that shape predates the no-store history boundary.
- */
-function parseVerifiedRankHistorySeries(value: unknown): Record<string, number[]> | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const payload = value as Record<string, unknown>
-  if (payload.ranking_visibility !== 'verified') return null
-
-  const rawSeries = payload.series
-  if (!rawSeries || typeof rawSeries !== 'object' || Array.isArray(rawSeries)) return null
-
-  const series: Record<string, number[]> = {}
-  for (const [key, points] of Object.entries(rawSeries)) {
-    if (!Array.isArray(points) || !points.every((point) => Number.isInteger(point) && point > 0)) {
-      return null
-    }
-    series[key] = points
-  }
-  return series
-}
-
-function removeRankSeriesKeys(
-  current: Record<string, number[]>,
-  keys: readonly string[]
-): Record<string, number[]> {
-  let changed = false
-  const next = { ...current }
-  for (const key of keys) {
-    if (key in next) {
-      delete next[key]
-      changed = true
-    }
-  }
-  return changed ? next : current
-}
 
 /** Infinite scroll sentinel — triggers onVisible when scrolled into view */
 function CardLoadMoreSentinel({ onVisible }: { onVisible: () => void }) {
@@ -166,6 +129,10 @@ function RankingTableInner(props: {
   } | null
   /** False means category totals cannot define a finite page boundary. */
   categoryCountsAreExact?: boolean
+  /** Source-watermark staleness: an empty unfiltered board is "refreshing". */
+  isStale?: boolean
+  /** Clears advanced filters/presets (the empty state's reset action). */
+  onResetFilters?: () => void
 }) {
   const {
     traders: tradersRaw,
@@ -193,17 +160,10 @@ function RankingTableInner(props: {
     hasMore,
     categoryCounts,
     categoryCountsAreExact,
+    isStale = false,
+    onResetFilters,
   } = props
   const { t, language } = useLanguage()
-
-  // Real per-row rank-trajectory sparklines (audit 1.3). rank_history is keyed by
-  // 7D/30D/90D, so map the COMPOSITE view onto its dominant 90D window.
-  const seriesPeriod = timeRange === 'COMPOSITE' ? '90D' : timeRange
-  // Map of `${period}:${platform}:${traderKey}` → ranks (oldest→newest). Period
-  // is part of the key so a timeframe switch can never surface stale ranks.
-  const [rankSeries, setRankSeries] = useState<Record<string, number[]>>({})
-  // Keys already requested (success keeps them; abort/failure releases for retry).
-  const requestedSeriesKeysRef = useRef<Set<string>>(new Set())
 
   // useDeferredValue allows React to interrupt the expensive 50-row render during hydration.
   // During loading state, show immediate (empty/skeleton) data.
@@ -348,7 +308,7 @@ function RankingTableInner(props: {
   // horizontal-scroll threshold: the grid only overflows (and the frozen columns
   // engage) once the viewport is narrower than this. On wider screens the 1.5fr
   // name column absorbs the slack and min-width has no effect — layout unchanged.
-  // Uses the row's larger gap (12px) / padding (40px) so the box fully covers its
+  // Uses the shared row/header gap (12px) and padding (2 × 20px) so the box covers its
   // background + bottom border even in the overflow region.
   const desktopGridMinWidth = React.useMemo(() => {
     const widths: number[] = [40, 140] // rank, name (floor)
@@ -363,8 +323,8 @@ function RankingTableInner(props: {
     if (visibleColumns.includes('followers')) widths.push(70)
     if (visibleColumns.includes('trades')) widths.push(70)
     const cols = widths.reduce((a, b) => a + b, 0)
-    const gaps = (widths.length - 1) * 12 // row gap = tokens.spacing[3]
-    const padding = 40 // row horizontal padding = 2 × tokens.spacing[5]
+    const gaps = (widths.length - 1) * parseInt(ROW_GAP, 10)
+    const padding = 2 * parseInt(ROW_PADDING_X, 10)
     return cols + gaps + padding
   }, [visibleColumns])
 
@@ -543,74 +503,6 @@ function RankingTableInner(props: {
     tradersFingerprint,
   ])
 
-  // Batch-fetch real rank-trajectory series for the visible cards (audit 1.3).
-  // Card view only — the desktop TraderRow has no sparkline. Fully non-blocking:
-  // ONE POST per page of keys, results stream into rankSeries as they arrive, and
-  // any failure leaves the static ROI-bar fallback untouched (no first-paint /
-  // poll regression). Never N+1.
-  useEffect(() => {
-    if (viewMode !== 'card') return
-    const visible = sortedTraders.slice(0, cardVisibleCount)
-    const release = (keys: string[]) => {
-      for (const k of keys) requestedSeriesKeysRef.current.delete(k)
-    }
-    const toFetch: { platform: string; trader_key: string }[] = []
-    for (const tr of visible) {
-      const platform = tr.source || source || ''
-      if (!platform || !tr.id) continue
-      const cacheKey = `${seriesPeriod}:${platform}:${tr.id}`
-      if (requestedSeriesKeysRef.current.has(cacheKey)) continue
-      requestedSeriesKeysRef.current.add(cacheKey)
-      toFetch.push({ platform, trader_key: tr.id })
-    }
-    if (toFetch.length === 0) return
-
-    const controller = new AbortController()
-    ;(async () => {
-      for (let i = 0; i < toFetch.length; i += 60) {
-        const chunk = toFetch.slice(i, i + 60)
-        const chunkKeys = chunk.map((c) => `${seriesPeriod}:${c.platform}:${c.trader_key}`)
-        try {
-          const res = await fetch('/api/rankings/rank-history', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
-            body: JSON.stringify({ traders: chunk, period: seriesPeriod, days: 7 }),
-            signal: controller.signal,
-          })
-          if (!res.ok) {
-            release(chunkKeys)
-            continue
-          }
-          const payload: unknown = await res.json()
-          if (controller.signal.aborted) {
-            release(chunkKeys)
-            return
-          }
-          const map = parseVerifiedRankHistorySeries(payload)
-          if (!map) {
-            // Expire any old in-memory series for the visible cards. The
-            // request itself may have crossed a deployment where rank_history
-            // was formerly cacheable, so leaving the previous state would
-            // still replay a raw sparkline after the server fails closed.
-            setRankSeries((prev) => removeRankSeriesKeys(prev, chunkKeys))
-            continue
-          }
-          // Re-key under the active period before merging into state.
-          const prefixed: Record<string, number[]> = {}
-          for (const [k, v] of Object.entries(map)) prefixed[`${seriesPeriod}:${k}`] = v
-          if (Object.keys(prefixed).length > 0) {
-            setRankSeries((prev) => ({ ...prev, ...prefixed }))
-          }
-        } catch {
-          // Network error / abort — release so a later render can retry.
-          release(chunkKeys)
-          if (controller.signal.aborted) return
-        }
-      }
-    })()
-    return () => controller.abort()
-  }, [viewMode, sortedTraders, cardVisibleCount, source, seriesPeriod])
-
   // Server pages can deliberately omit totals. Treat an explicit unknown as
   // server pagination (so this finite page is not sliced as a client-side
   // collection), and let Pagination expose only the proven limit+1 direction.
@@ -639,6 +531,12 @@ function RankingTableInner(props: {
   const startIndex = hasServerPagination ? 0 : (currentPage - 1) * itemsPerPage
   const endIndex = hasServerPagination ? sortedTraders.length : startIndex + itemsPerPage
   const paginatedTraders = sortedTraders.slice(startIndex, endIndex)
+  // True whenever another server page provably exists (exact total or limit+1
+  // look-ahead). Used to suppress the card view's "end of list" footer.
+  const serverHasNextPage =
+    effectiveTotalCount !== null
+      ? totalPages !== null && currentPage < totalPages
+      : hasServerPagination && hasMore === true
 
   // Reset scroll position on page/sort/filter changes
   const tableScrollRef = useRef<HTMLDivElement>(null)
@@ -667,6 +565,23 @@ function RankingTableInner(props: {
   useEffect(() => {
     if (tableScrollRef.current) tableScrollRef.current.scrollTop = 0
   }, [resetKey])
+
+  // Row value flashes (TraderRow) are for live updates only. Any user-driven
+  // change of period / sort / page / filter / category swaps the row values
+  // wholesale, so TraderRow skips the flash whenever this key changes.
+  const flashContextKey = `${timeRange}|${category}|${source ?? ''}|${resetKey}`
+
+  // Staggered row entrance plays once, on the first mount of rows. After it
+  // finishes, data-rows-entered disables it so page / sort / period changes
+  // (which re-key and re-mount rows) render instantly instead of re-staggering.
+  const hasRows = paginatedTraders.length > 0
+  const [rowsEntered, setRowsEntered] = useState(false)
+  useEffect(() => {
+    if (rowsEntered || !hasRows) return
+    // Longest entrance = 7 × 20ms stagger + 260ms duration ≈ 400ms.
+    const timer = setTimeout(() => setRowsEntered(true), 450)
+    return () => clearTimeout(timer)
+  }, [rowsEntered, hasRows])
 
   // Detect horizontal overflow on the desktop table wrapper and toggle
   // data-hscroll (mirrored onto the header, which sits outside the wrapper).
@@ -792,8 +707,11 @@ function RankingTableInner(props: {
     enabled: viewMode === 'table' && !loading && paginatedTraders.length > 0,
   })
 
+  // Rows label lifetime-as-90D sources; COMPOSITE is dominated by its 90D window.
+  const rankingPeriod = timeRange === 'COMPOSITE' ? '90D' : timeRange
+
   return (
-    <>
+    <RankingPeriodContext.Provider value={rankingPeriod}>
       {/* Preload top-3 trader avatars for faster LCP. Card view on mobile
         only shows top-3 medals above the fold, and table view uses
         loading="lazy" on rows 4+. Previously preloaded 10 which opened
@@ -810,7 +728,8 @@ function RankingTableInner(props: {
         p={0}
         radius="none"
         style={{
-          boxShadow: `0 0 0 1px var(--glass-border-light)`,
+          // One border only (a 1px boxShadow ring on top of the border drew a
+          // doubled edge).
           // 'clip' (NOT 'hidden'): clips identically but does not create a
           // scroll container, so the header's position:sticky keeps the
           // viewport as its scrollport and pins under the nav. 'hidden' makes
@@ -870,14 +789,15 @@ function RankingTableInner(props: {
             className="ranking-table-header ranking-table-grid ranking-table-grid-custom"
             style={{
               display: 'grid',
-              gap: tokens.spacing[2],
-              padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+              // Same gap / horizontal padding as the rows → labels sit exactly
+              // over their numbers.
+              gap: ROW_GAP,
+              padding: `${tokens.spacing[2]} ${ROW_PADDING_X}`,
               borderBottom: `1px solid var(--glass-border-light)`,
-              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
               background: 'var(--color-bg-secondary, #14121C)',
               borderRadius: onCategoryChange ? '0' : `${tokens.radius.xl} ${tokens.radius.xl} 0 0`,
               position: 'sticky',
-              top: 56,
+              top: 'var(--nav-height, 56px)',
               zIndex: tokens.zIndex.sticky,
             }}
           >
@@ -1185,7 +1105,10 @@ function RankingTableInner(props: {
                   gap: tokens.spacing[3],
                 }}
               >
-                <Text size="md" color="secondary">
+                <Text size="md" weight="semibold">
+                  {t('failedToLoadRankings')}
+                </Text>
+                <Text size="sm" color="secondary">
                   {error}
                 </Text>
                 {onRetry && (
@@ -1226,22 +1149,29 @@ function RankingTableInner(props: {
                 title={
                   debouncedSearch.trim() || hasActiveFilters
                     ? t('rankingNoMatchCriteria')
-                    : t('noTraderData')
+                    : // Single empty state for the board (RankingSection no longer
+                      // renders a second one). The request succeeded but no rows
+                      // are published: stale sources = refreshing, else empty period.
+                      isStale
+                      ? t('rankingsRefreshingTitle')
+                      : t('rankingsEmptyPeriodTitle')
                 }
                 description={
                   debouncedSearch.trim() || hasActiveFilters
                     ? t('rankingBroadenFilters')
-                    : undefined
+                    : t('rankingsRefreshingDesc')
                 }
                 action={
                   debouncedSearch.trim() || hasActiveFilters
                     ? {
-                        label: t('clearSearch'),
+                        // Label matches what the click actually clears.
+                        label: debouncedSearch.trim() ? t('clearSearch') : t('resetFilters'),
                         onClick: () => {
                           if (debouncedSearch.trim()) {
                             if (onSearchChange) onSearchChange('')
                             else setInternalSearchQuery('')
                           }
+                          if (hasActiveFilters && onResetFilters) onResetFilters()
                         },
                       }
                     : // Unfiltered + empty = soft fetch failure → offer a real retry
@@ -1253,31 +1183,24 @@ function RankingTableInner(props: {
               />
             ) : viewMode === 'card' ? (
               <>
-                <Box
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))',
-                    gap: tokens.spacing[3],
-                    padding: tokens.spacing[4],
-                  }}
-                >
+                {/* Mobile: compact ~56px rows (owner 2026-11-13). Geometry is
+                    the shared .mrow block in critical CSS, also used by the
+                    SSR shell, so the hand-off cannot jump. */}
+                <MobileRankHeader />
+                <div className="mrow-list">
                   {sortedTraders.slice(0, cardVisibleCount).map((trader, idx) => {
                     const rank = trader.rank
-                    const series =
-                      rankSeries[`${seriesPeriod}:${trader.source || source || ''}:${trader.id}`]
                     const presentationTrader = normalizeTraderArenaScoreForPresentation(trader)
                     return (
                       <React.Fragment key={`${trader.id}-${trader.source || 'unknown'}`}>
                         <SectionErrorBoundary>
-                          <TraderCard
+                          <TraderMobileRow
                             trader={presentationTrader}
                             rank={rank}
                             source={source}
                             language={language}
                             searchQuery={debouncedSearch}
-                            getMedalGlowClass={getMedalGlowClass}
                             parseSourceInfo={parseSourceInfoWithT}
-                            series={series}
                           />
                         </SectionErrorBoundary>
                         {!props.loggedIn && idx === 7 && (
@@ -1297,7 +1220,7 @@ function RankingTableInner(props: {
                       </React.Fragment>
                     )
                   })}
-                </Box>
+                </div>
                 {cardVisibleCount < sortedTraders.length && cardVisibleCount < MAX_CARD_COUNT && (
                   <>
                     {/* Auto-load more via IntersectionObserver */}
@@ -1364,9 +1287,27 @@ function RankingTableInner(props: {
                     </button>
                   </Box>
                 )}
+                {/* Mobile card view pages through the server cohort just like
+                  the desktop table: once the fetched page is fully expanded,
+                  expose the same limit+1 driven Pagination. Never claim
+                  "end of list" while the server still proves a next page. */}
+                {hasServerPagination && cardVisibleCount >= sortedTraders.length && (
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    totalCountIsExact={
+                      effectiveTotalCount !== null ? true : hasServerPagination ? false : true
+                    }
+                    hasMore={
+                      effectiveTotalCount === null && hasServerPagination ? hasMore === true : false
+                    }
+                    onPageChange={handlePaginationChange}
+                  />
+                )}
                 {cardVisibleCount >= sortedTraders.length &&
                   sortedTraders.length > 20 &&
-                  sortedTraders.length <= MAX_CARD_COUNT && (
+                  sortedTraders.length <= MAX_CARD_COUNT &&
+                  !serverHasNextPage && (
                     <Box style={{ textAlign: 'center', padding: tokens.spacing[4], opacity: 0.5 }}>
                       <Text size="xs" color="tertiary">
                         {t('endOfList')}
@@ -1378,6 +1319,7 @@ function RankingTableInner(props: {
               <>
                 <Box
                   className="content-appear ranking-table-rows"
+                  data-rows-entered={rowsEntered ? 'true' : undefined}
                   style={{
                     display: 'flex',
                     flexDirection: 'column',
@@ -1397,13 +1339,17 @@ function RankingTableInner(props: {
                     const presentationTrader = normalizeTraderArenaScoreForPresentation(trader)
                     return (
                       <div
-                        key={`${trader.id}-${trader.source || 'unknown'}-${startIndex + idx}`}
+                        // Identity only — a position suffix remounted every row
+                        // whose position changed on sort/refresh.
+                        key={`${trader.id}-${trader.source || 'unknown'}`}
                         {...kbGetRowProps(idx)}
                       >
                         <SectionErrorBoundary>
                           <TraderRow
                             trader={presentationTrader}
                             rank={rank}
+                            rowIndex={idx}
+                            flashContextKey={flashContextKey}
                             source={source}
                             language={language}
                             searchQuery={debouncedSearch}
@@ -1488,7 +1434,7 @@ function RankingTableInner(props: {
           </Box>
         </div>
       </Box>
-    </>
+    </RankingPeriodContext.Provider>
   )
 }
 

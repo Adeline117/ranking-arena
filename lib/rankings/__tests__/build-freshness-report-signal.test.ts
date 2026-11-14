@@ -42,7 +42,7 @@ describe('buildFreshnessReport abort propagation', () => {
     })
   })
 
-  it('passes the request signal to all five freshness authority queries', async () => {
+  it('passes the request signal to all six freshness authority queries', async () => {
     const { buildFreshnessReport } = await import('../build-freshness-report')
     const signal = new AbortController().signal
 
@@ -51,8 +51,61 @@ describe('buildFreshnessReport abort propagation', () => {
       summary: { total: 0 },
     })
 
-    expect(observedSignals).toHaveLength(5)
+    expect(observedSignals).toHaveLength(6)
     expect(observedSignals.every((observed) => observed === signal)).toBe(true)
+  })
+
+  it('reports isolated sources as quarantined (ok=false) instead of dropping them', async () => {
+    mockRpc.mockImplementation((name: string) =>
+      abortableResult(
+        name === 'arena_publication_source_isolations'
+          ? {
+              data: [
+                {
+                  season_id: '90D',
+                  filter_source: 'bybit',
+                  reasons: ['stale'],
+                  first_isolated_at: '2026-11-12T00:00:00.000Z',
+                  isolated_at: '2026-11-13T00:00:00.000Z',
+                },
+              ],
+              error: null,
+            }
+          : { data: [], error: null }
+      )
+    )
+    const { buildFreshnessReport } = await import('../build-freshness-report')
+    const report = await buildFreshnessReport(new AbortController().signal)
+    expect(report).toMatchObject({
+      ok: false,
+      summary: { total: 1, quarantined: 1 },
+      platforms: [{ platform: 'bybit', status: 'quarantined' }],
+    })
+  })
+
+  it('treats a missing isolation RPC as "nothing isolated" but fails on other errors', async () => {
+    const isolationError = (code: string) =>
+      mockRpc.mockImplementation((name: string) =>
+        abortableResult(
+          name === 'arena_publication_source_isolations'
+            ? { data: null, error: { code, message: 'boom' } }
+            : { data: [], error: null }
+        )
+      )
+    const { buildFreshnessReport } = await import('../build-freshness-report')
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    isolationError('PGRST202')
+    await expect(buildFreshnessReport(new AbortController().signal)).resolves.toMatchObject({
+      ok: true,
+    })
+    isolationError('57014')
+    await expect(buildFreshnessReport(new AbortController().signal)).rejects.toThrow(
+      'source isolation authority'
+    )
+    expect(error).toHaveBeenCalled()
+    warn.mockRestore()
+    error.mockRestore()
   })
 
   it('runtime-parses publication fields that are ahead of the generated schema', async () => {

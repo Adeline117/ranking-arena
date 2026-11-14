@@ -14,10 +14,14 @@ import { withCron } from '@/lib/api/with-cron'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-export const GET = withCron('sync-ranking-store', async (_request: NextRequest) => {
-  return {
-    count: 0,
-    synced: {},
-    disabled: 'database_rank_authority',
-  }
-})
+export const GET = withCron(
+  'sync-ranking-store',
+  async (_request: NextRequest) => {
+    return {
+      count: 0,
+      synced: {},
+      disabled: 'database_rank_authority',
+    }
+  },
+  { maxDurationSec: maxDuration }
+)

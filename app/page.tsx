@@ -76,6 +76,36 @@ const MAX_HOME_PAGE_INDEX = 40_000
 
 type HomeSearchParams = Record<string, string | string[] | undefined>
 
+/**
+ * Query keys that change WHICH rows the ranking shows (read by
+ * app/components/home/useRankingFilters.ts). Only these make the SSR snapshot
+ * unfaithful. Everything else — `ref` invite codes, `utm_*`, `fbclid`,
+ * `gclid`, … — is attribution that must never cost an invite/ad landing its
+ * server-rendered leaderboard (LCP + crawlers would otherwise see "Loading").
+ */
+const COHORT_QUERY_KEYS: ReadonlySet<string> = new Set([
+  'sort',
+  'order',
+  'category',
+  'ex',
+  'exchange',
+  'q',
+  'preset',
+  'fcat',
+  'fex',
+  'roi_min',
+  'roi_max',
+  'dd_min',
+  'dd_max',
+  'min_pnl',
+  'min_score',
+  'min_wr',
+])
+
+function isCohortQueryKey(key: string): boolean {
+  return COHORT_QUERY_KEYS.has(key)
+}
+
 export interface HomeRankingQuery {
   timeRange: Period
   /** Zero-based, for the data reader/API boundary. The public URL is one-based. */
@@ -107,7 +137,8 @@ function canonicalClientCohortKey(
   params.set('page', String(pageIndex + 1))
 
   for (const key of Object.keys(searchParams).sort()) {
-    if (key === 'range' || key === 'page') continue
+    // Attribution params (ref/utm_*/fbclid/…) never define a cohort.
+    if (!isCohortQueryKey(key)) continue
     const raw = searchParams[key]
     const values = typeof raw === 'string' ? [raw] : Array.isArray(raw) ? raw : []
     for (const value of [...values].sort()) {
@@ -141,15 +172,17 @@ export function parseHomeRankingQuery(searchParams: HomeSearchParams): HomeRanki
     timeRange,
     pageIndex: requestedPage - 1,
     clientCohortKey: canonicalClientCohortKey(searchParams, timeRange, requestedPage - 1),
-    // Any query can describe a client-side filter/search state. Do not attach
-    // the canonical Top-20 ItemList to those URLs; it only belongs to `/`.
-    isCanonical: Object.keys(searchParams).length === 0,
+    // A cohort/range/page query describes a different list. Do not attach the
+    // canonical Top-20 ItemList to those URLs; it only belongs to `/` (plus
+    // attribution-only params such as `?ref=`/`?utm_source=`, same content).
+    isCanonical: !Object.keys(searchParams).some(
+      (key) => key === 'range' || key === 'page' || isCohortQueryKey(key)
+    ),
     // The server reader owns only range/page. Sort, category, exchange, search,
     // and advanced-filter URLs must stay neutral until the client obtains the
     // matching cohort instead of relabelling default SSR rows as filtered data.
-    requiresClientCohortFetch: Object.keys(searchParams).some(
-      (key) => key !== 'range' && key !== 'page'
-    ),
+    // Attribution params are ignored: they do not change the rows.
+    requiresClientCohortFetch: Object.keys(searchParams).some(isCohortQueryKey),
   }
 }
 
@@ -217,21 +250,20 @@ export default async function Page({ searchParams }: { searchParams: Promise<Hom
       {itemListJsonLd && <JsonLd data={itemListJsonLd} />}
 
       {/* SSR TopNav — stays visible permanently (see HomePage.tsx). Outside
-          <main> so the skip link actually skips it in the tab order. */}
-      <div id="ssr-topnav">
-        <TopNav />
-      </div>
+          <main> so the skip link actually skips it in the tab order. Rendered
+          WITHOUT a wrapper element: a same-height wrapper div becomes the
+          sticky containing block, so .top-nav-header (position:sticky; top:0)
+          scrolled away with it and left a 56px dead band above the table's
+          sticky column header (which assumes the nav is pinned at top:0). */}
+      <TopNav container="home" />
 
       <main id="main-content" tabIndex={-1}>
         {/* WelcomeBanner moved to HomePageLoader Phase 2 (client-only) */}
 
         {/* SSR Hero — stays visible permanently. Outside #ssr-ranking-table so
-          Phase 2 hiding the table doesn't affect it. Constrained to center
-          column width via max-width + margin for alignment with three-col grid. */}
-        <div
-          id="ssr-hero-shell"
-          style={{ maxWidth: 1400, margin: '0 auto', padding: '12px 20px 0' }}
-        >
+          Phase 2 hiding the table doesn't affect it. Shares .home-container
+          with the nav, source strip and three-column grid (one left edge). */}
+        <div id="ssr-hero-shell" className="home-container home-hero-shell">
           <HomeHeroSSR sourceBoardCount={heroStats?.sourceBoardCount} />
         </div>
 

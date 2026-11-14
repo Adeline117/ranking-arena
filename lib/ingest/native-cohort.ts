@@ -50,6 +50,15 @@ export interface NativeCohortOptions {
 
 type NativeCohortSource = Pick<SourceRow, 'id' | 'timeframes_native' | 'deep_profile_topn'>
 
+/**
+ * A "latest PASSED" snapshot older than this is not a current cohort. Without
+ * a bound, a run of failed count-checks left Tier-B/D and derived boards
+ * working (and derived boards publishing) from weeks-old membership. An aged
+ * timeframe is reported as missing: derived boards keep their last good
+ * publication, Tier-B crawls the remaining fresh boards only.
+ */
+export const NATIVE_COHORT_MAX_SNAPSHOT_AGE_SECONDS = 72 * 3600
+
 function normalizedNativeTimeframes(src: NativeCohortSource): NativeTimeframe[] {
   return [...new Set(nativeRankingTimeframes(src))].sort((a, b) => a - b)
 }
@@ -75,8 +84,9 @@ export async function getLatestPassedNativeCohort(
         AND timeframe = ANY($2::int[])
         AND count_check_passed
         AND NOT is_derived
+        AND scraped_at > now() - make_interval(secs => $3::int)
       ORDER BY timeframe, scraped_at DESC, id DESC`,
-    [src.id, nativeTimeframes]
+    [src.id, nativeTimeframes, NATIVE_COHORT_MAX_SNAPSHOT_AGE_SECONDS]
   )
 
   const foundSet = new Set(snapshotRows.map((row) => row.timeframe))

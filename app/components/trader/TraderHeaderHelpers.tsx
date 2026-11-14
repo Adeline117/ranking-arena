@@ -144,7 +144,7 @@ export function StatItem({ icon, value, label, hasCover }: StatItemProps): React
           color: valueColor,
           textShadow,
           fontSize: tokens.typography.fontSize.sm,
-          fontFamily: tokens.typography.fontFamily.mono.join(', '),
+          fontVariantNumeric: 'tabular-nums',
           letterSpacing: '-0.01em',
         }}
       >

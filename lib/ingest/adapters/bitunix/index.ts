@@ -31,6 +31,7 @@ import type {
   SourceRow,
   Timeframe,
 } from '../../core/types'
+import { CopierPageCapReachedError } from '../../core/history-page-cap'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { apiFetcher, replayJson, replayPaged, type JsonFetcher } from '../../fetch/capture'
@@ -261,6 +262,9 @@ const bitunixAdapter: SourceAdapter = {
       if (metadataClaimsEnd) return
       if (candidateCount < limit) return
     }
+    // Budget exhausted while the source still had pages: never let a cut
+    // capture pass as a complete (unbounded) Tier-B copier snapshot.
+    throw new CopierPageCapReachedError(src.slug, maxPages)
   },
 
   parseLeaderboard: parseBitunixLeaderboardPage,

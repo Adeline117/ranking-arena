@@ -220,7 +220,7 @@ export default function ConversationPage({
                   height: 40,
                   borderRadius: 16,
                   background: tokens.colors.bg.tertiary,
-                  animation: 'shimmer 1.5s ease-in-out infinite',
+                  animation: 'skeleton-sweep 1.5s ease-in-out infinite',
                   backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`,
                   backgroundSize: '200% 100%',
                 }}
@@ -357,7 +357,7 @@ export default function ConversationPage({
                   height: 36 + (i % 3) * 8,
                   borderRadius: 16,
                   background: tokens.colors.bg.tertiary,
-                  animation: 'shimmer 1.5s ease-in-out infinite',
+                  animation: 'skeleton-sweep 1.5s ease-in-out infinite',
                   backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`,
                   backgroundSize: '200% 100%',
                 }}

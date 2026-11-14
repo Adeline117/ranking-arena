@@ -4,9 +4,11 @@ import React, { memo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { t as i18nT } from '@/lib/i18n'
+import { isAllTime90dSource } from '@/lib/utils/all-time-90d'
+import { useRankingPeriod } from './RankingPeriodContext'
+import { AllTime90dBadge } from './AllTime90dBadge'
 import { getPlatformNote } from '@/lib/constants/platform-metrics'
 import { useCountUp } from '@/lib/hooks/useCountUp'
-import { TRADER_TEXT_TERTIARY } from './shared/TraderDisplay'
 import { formatROI } from './utils'
 import Metric from '../ui/Metric'
 import { formatDrawdown, NULL_DISPLAY } from '@/lib/utils/format'
@@ -20,6 +22,7 @@ import {
   RIGHT_CELL_STYLE,
   STAT_TEXT_TERTIARY_STYLE,
   ROI_TEXT_BASE_STYLE,
+  SUPPORTING_STAT_STYLE,
 } from './TraderRowStyles'
 
 function safeNonNegativeCount(value: number | null | undefined): number | null {
@@ -72,10 +75,10 @@ function AnimatedROI({
   return (
     <Text
       size="md"
-      weight="black"
+      weight="bold"
       className="roi-value"
       style={{ ...ROI_TEXT_BASE_STYLE, color: roiColor }}
-      title={roi != null ? `${roi >= 0 ? '+' : ''}${Number(roi).toFixed(2)}%` : 'ROI unknown'}
+      title={roi != null ? `${roi >= 0 ? '+' : ''}${Number(roi).toFixed(2)}%` : i18nT('roiUnknown')}
     >
       {arrowGlyph && (
         <span aria-hidden="true" style={{ marginRight: '0.25em', fontSize: '0.8em' }}>
@@ -124,8 +127,8 @@ export const TraderMetricCells = memo(function TraderMetricCells({
   const parsedDrawdown = trader.max_drawdown == null ? null : Number(trader.max_drawdown)
   const drawdownDisplay = formatDrawdown(parsedDrawdown)
   const hasDrawdown = drawdownDisplay !== NULL_DISPLAY
-  const drawdownValue = hasDrawdown ? -Math.abs(parsedDrawdown ?? 0) : null
   const copierCount = safeNonNegativeCount(trader.copiers ?? trader.followers)
+  const rankingPeriod = useRankingPeriod()
   const tradesCount = safeNonNegativeCount(trader.trades_count)
 
   return (
@@ -133,6 +136,9 @@ export const TraderMetricCells = memo(function TraderMetricCells({
       {/* ROI — current published scalar only; historical trajectories are quarantined. */}
       <Box className="roi-cell" style={ROI_CELL_STYLE}>
         <AnimatedROI roi={roi} roiColor={roiColor} animate={rank <= 3} />
+        {rankingPeriod === '90D' && isAllTime90dSource(trader.source || source) && (
+          <AllTime90dBadge />
+        )}
       </Box>
 
       {/* PnL — shared Metric with colorblind-safe arrow (audit 1.2) */}
@@ -145,23 +151,21 @@ export const TraderMetricCells = memo(function TraderMetricCells({
           showArrow
           className="pnl-value"
           title={hasPnl ? getPnLTooltipFn(trader.source || source || '', language) : undefined}
-          style={{ opacity: hasPnl ? 0.7 : 0.4, cursor: hasPnl ? 'help' : 'default' }}
+          style={{ opacity: hasPnl ? 1 : 0.4, cursor: hasPnl ? 'help' : 'default' }}
         />
       </Box>
 
-      {/* Win% */}
+      {/* Win% — neutral supporting stat (owner 2026-11-13: only ROI and PnL
+          carry gain/loss color; a green >50% win rate read as a second signal). */}
       <Box className="col-winrate" style={RIGHT_CELL_STYLE}>
         {trader.win_rate != null && Number.isFinite(Number(trader.win_rate)) ? (
           <Text
             size="sm"
             weight="medium"
+            className="metric-neutral"
             style={{
-              color:
-                Number(trader.win_rate) > 50 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY,
-              lineHeight: 1.2,
-              fontSize: tokens.typography.fontSize.sm,
-              fontVariantNumeric: 'tabular-nums',
-              opacity: trader.metrics_estimated ? 0.4 : 0.75,
+              ...SUPPORTING_STAT_STYLE,
+              opacity: trader.metrics_estimated ? 0.6 : 1,
             }}
             title={trader.metrics_estimated ? t('estimatedFromRoi') : undefined}
           >
@@ -180,21 +184,23 @@ export const TraderMetricCells = memo(function TraderMetricCells({
         )}
       </Box>
 
-      {/* MDD — shared Metric, rendered as a negative loss with arrow (audit 1.2).
-          Pre-formatted via `display` because the values are already in percent
-          units (Metric's `percent` formatter would multiply by 100). */}
+      {/* MDD — neutral supporting stat. A drawdown is always a loss by
+          definition, so a permanent red ▼ carried no information (owner
+          2026-11-13). formatDrawdown already renders the leading minus. */}
       <Box className="col-mdd" style={RIGHT_CELL_STYLE}>
         {hasDrawdown ? (
-          <Metric
-            value={drawdownValue}
-            format="percent"
-            display={`${trader.metrics_estimated ? '~' : ''}${drawdownDisplay}`}
+          <Text
             size="sm"
-            align="right"
-            showArrow
+            weight="medium"
+            className="metric-neutral"
             title={trader.metrics_estimated ? t('estimatedFromRoi') : undefined}
-            style={{ opacity: trader.metrics_estimated ? 0.4 : 0.7 }}
-          />
+            style={{
+              ...SUPPORTING_STAT_STYLE,
+              opacity: trader.metrics_estimated ? 0.6 : 1,
+            }}
+          >
+            {`${trader.metrics_estimated ? '~' : ''}${drawdownDisplay}`}
+          </Text>
         ) : (
           <NaIndicator source={trader.source || source} metricType="drawdown" />
         )}
@@ -203,20 +209,7 @@ export const TraderMetricCells = memo(function TraderMetricCells({
       {/* Sharpe Ratio */}
       <Box className="col-sharpe" style={RIGHT_CELL_STYLE}>
         {trader.sharpe_ratio != null && Number.isFinite(Number(trader.sharpe_ratio)) ? (
-          <Text
-            size="sm"
-            weight="medium"
-            style={{
-              color:
-                Number(trader.sharpe_ratio) >= 1
-                  ? tokens.colors.accent.success
-                  : TRADER_TEXT_TERTIARY,
-              lineHeight: 1.2,
-              fontSize: tokens.typography.fontSize.sm,
-              fontVariantNumeric: 'tabular-nums',
-              opacity: 0.75,
-            }}
-          >
+          <Text size="sm" weight="medium" style={SUPPORTING_STAT_STYLE}>
             {Number(trader.sharpe_ratio).toFixed(2)}
           </Text>
         ) : (

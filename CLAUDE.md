@@ -227,8 +227,15 @@ Daily snapshot production, historical violation cleanup, and the unversioned qua
 
 ## Exchange Adapters (`lib/ingest/adapters/`)
 
-CEX: binance-futures, binance-spot, bybit, okx, bitget, mexc, kucoin, htx, coinex
-DEX: hyperliquid, gmx, dydx, vertex, drift, aevo, gains, kwenta
+Directories actually present (2026-11):
+
+CEX: binance, bingx, bitfinex, bitget, bitmart, bitunix, blofin, btcc, bybit-copytrade,
+bybit-mt5, coinex, gate, htx, kucoin, lbank, mexc, okx, phemex, toobit, xt
+DEX / on-chain: hyperliquid, gmx, gtrade, binance-web3, okx-web3
+
+(dydx, vertex, drift, aevo, gains and kwenta have no adapter here; one adapter
+directory may back several `arena.sources` rows via `adapter_slug` — see
+`lib/ingest/adapters/register.ts`.)
 
 The source bootstrap registers adapters through `lib/ingest/adapters/register.ts`
 and is referenced by `worker/src/ingest-worker.ts`. This is source architecture, not

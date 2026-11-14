@@ -28,7 +28,11 @@ test('worker entry checks the gate before dotenv, BullMQ, DB, Redis, or HTTP dep
 
   assert.ok(gateCheck >= 0)
   assert.ok(firstDeferredImport > gateCheck)
-  assert.doesNotMatch(workerEntry, /^import\s+(?!\{ isV1RankingCommandChainPublished \})/m)
+  // Type-only imports are erased at runtime and load nothing.
+  assert.doesNotMatch(
+    workerEntry,
+    /^import\s+(?!type\s)(?!\{ isV1RankingCommandChainPublished \})/m
+  )
   assert.doesNotMatch(
     workerEntry.slice(0, gateCheck),
     /config\(|new Worker\(|fetch\(|getConnection\(|getQueue\(/

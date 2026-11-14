@@ -79,14 +79,14 @@ export default function HomePage({
   initialClientCohortKey,
 }: HomePageProps) {
   // SSR TopNav stays visible permanently (no portal, no removal).
-  // globals.css no longer hides #ssr-topnav when Phase 2 loads.
+  // The server-rendered TopNav in app/page.tsx is never hidden when Phase 2 loads.
 
   // SSR shell hiding moved to HomePageClient.tsx — only hides when data is ready.
 
   return (
     <>
       <div id="homepage-interactive" suppressHydrationWarning className="home-page-root">
-        <div className="container-padding has-mobile-nav home-page-container">
+        <div className="home-container has-mobile-nav home-page-container">
           {/* Phase 2 hero REMOVED — SSR hero stays visible permanently as LCP element.
             Rendering a Phase 2 hero would paint a new large element at ~10s on slow 4G,
             resetting LCP from 1.2s to 10s. SSR hero is identical visual content. */}

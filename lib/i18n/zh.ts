@@ -245,6 +245,7 @@ const zh = {
   history: '历史',
   na: '暂无',
   score: '评分',
+  rankingMobileMetricLabel: '每行显示的第二指标',
   // 小组申请相关
   applyCreateGroup: '申请创办小组',
   groupName: '小组名称',
@@ -1856,6 +1857,7 @@ const zh = {
   adminStatusStale: '陈旧',
   adminStatusCritical: '严重',
   adminStatusUnknown: '未知',
+  adminStatusQuarantined: '已隔离',
   adminNoDataLabel: '无数据',
   adminLastUpdate: '最老上游水位: {time}',
   adminAgeHours: '距今: {hours} 小时',
@@ -3101,6 +3103,7 @@ const zh = {
   heroSubtitle: '汇总 {boards} 个当前有排名数据的来源板，每 2 小时使用最新可用数据重新计算',
   heroScoreExplainer: 'Arena Score 按同一规则对所有当前来源板的交易员排名——一眼看清你的真实位置。',
   heroNeutrality: '任何来源都不能付费买排名——所有当前榜单使用同一套规则。',
+  heroNeutralityShort: '任何来源都不能付费买排名。',
   heroHowRanked: '排名是怎么算的 →',
   heroCTABrowse: '查看排行榜',
   heroCTASignUp: '免费注册',
@@ -6681,6 +6684,23 @@ const zh = {
   historyVerificationTitle: '历史数据验证中',
   historyVerificationDesc: '该交易员的历史数据通过校验后，将在此显示图表和详细统计。',
   historyVerificationCurrentRanking: '当前排名（{period}）',
+  rankingFilteredByExchange: '已按 {exchange} 筛选',
+  rankingClearExchangeFilter: '清除交易所筛选',
+  rankingSearchElsewhereTitle: '当前页没有匹配，以下是全站匹配的交易员：',
+  rankingFiltersCurrentPageOnly:
+    '筛选仅作用于当前页的 50 名交易员，其他页可能还有符合条件的交易员。',
+  roiUnknown: 'ROI 未知',
+  timeRangeAria: '时间范围',
+  showRangeRankingsAria: '查看 {range} 排名',
+  arenaScoreAria: 'Arena 评分：{score}',
+  arenaScoreOfHundredAria: 'Arena 评分 {score}（满分 100）',
+  platformTypeAria: '平台类型：{type}',
+  suspectedBotAria: '疑似机器人',
+  tradingStyleAria: '交易风格：{style}',
+  noRankHistoryAria: '暂无排名历史',
+  rankTrendAria: '排名走势：{from} → {to}',
+  traderActionsAria: '{name} 的操作',
+  allTime90dShort: '全周期',
 } as const
 
 export default zh
