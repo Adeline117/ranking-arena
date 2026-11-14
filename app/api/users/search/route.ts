@@ -34,7 +34,8 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseAdmin()
 
-    const escapedQ = escapeLikePattern(q)
+    // Direct .ilike() filter: keep dots so dotted handles stay searchable.
+    const escapedQ = escapeLikePattern(q, 200, { direct: true })
 
     const candidateLimit = Math.min(limit * 4, 80)
     const { data: userCandidates, error: userCandidatesError } = await supabase

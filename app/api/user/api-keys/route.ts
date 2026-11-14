@@ -1,6 +1,17 @@
 import { NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { withAuth } from '@/lib/api/middleware'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('api-keys')
+
+/** A JSON body that is missing, malformed or not an object reads as `{}`. */
+async function readBody(request: Request): Promise<Record<string, unknown>> {
+  const body: unknown = await request.json().catch(() => null)
+  return body && typeof body === 'object' && !Array.isArray(body)
+    ? (body as Record<string, unknown>)
+    : {}
+}
 
 const MAX_KEYS_PER_USER = 5
 
@@ -19,6 +30,7 @@ export const GET = withAuth(
       .order('created_at', { ascending: false })
 
     if (error) {
+      logger.error('List failed', { userId: user!.id, error: error.message })
       return NextResponse.json({ error: 'Failed to fetch API keys' }, { status: 500 })
     }
 
@@ -41,16 +53,22 @@ export const GET = withAuth(
  */
 export const POST = withAuth(
   async ({ user, supabase, request }) => {
-    const body = await request.json().catch(() => ({}))
+    const body = await readBody(request)
     const name =
       typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 50) : 'Default'
 
     // Check key limit
-    const { count } = await supabase
+    const { count, error: countError } = await supabase
       .from('api_keys')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user!.id)
       .eq('active', true)
+
+    // A failed count must not read as "0 keys" and skip the limit.
+    if (countError) {
+      logger.error('Key limit check failed', { userId: user!.id, error: countError.message })
+      return NextResponse.json({ error: 'Failed to create API key' }, { status: 500 })
+    }
 
     if ((count ?? 0) >= MAX_KEYS_PER_USER) {
       return NextResponse.json(
@@ -76,6 +94,7 @@ export const POST = withAuth(
           { status: 409 }
         )
       }
+      logger.error('Create failed', { userId: user!.id, error: error.message })
       return NextResponse.json({ error: 'Failed to create API key' }, { status: 500 })
     }
 
@@ -91,7 +110,7 @@ export const POST = withAuth(
  */
 export const PATCH = withAuth(
   async ({ user, supabase, request }) => {
-    const body = await request.json().catch(() => ({}))
+    const body = await readBody(request)
     const id = body.id
 
     if (!id || typeof id !== 'string') {
@@ -104,9 +123,15 @@ export const PATCH = withAuth(
       .eq('id', id)
       .eq('user_id', user!.id)
       .select('id')
-      .single()
+      .maybeSingle()
 
-    if (error || !data) {
+    // "Not found" and "the database failed" are different answers: a caller
+    // told 404 on an outage believes a live key is gone.
+    if (error) {
+      logger.error('Revoke failed', { userId: user!.id, error: error.message })
+      return NextResponse.json({ error: 'Failed to revoke API key' }, { status: 500 })
+    }
+    if (!data) {
       return NextResponse.json({ error: 'Key not found' }, { status: 404 })
     }
 

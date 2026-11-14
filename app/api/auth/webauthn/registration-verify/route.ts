@@ -38,12 +38,21 @@ export const POST = withAuth(
     }
     const { assertion, deviceName } = parsed.data
 
+    // Resolve the origin before spending the single-use challenge: an
+    // unrecognized origin is the caller's error (400), not a server fault,
+    // and must not burn a challenge the real page could still use.
+    let rpID: string
+    let origin: string
+    try {
+      ;({ rpID, origin } = getWebAuthnConfig(request))
+    } catch {
+      return badRequest('Unrecognized origin')
+    }
+
     const expectedChallenge = await consumeRegistrationChallenge(user.id)
     if (!expectedChallenge) {
       return badRequest('Challenge expired. Please try again.')
     }
-
-    const { rpID, origin } = getWebAuthnConfig(request)
 
     let verification
     try {

@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('api-keys-usage')
+const usageUnavailable = () =>
+  NextResponse.json({ error: 'Failed to load API key usage' }, { status: 500 })
 
 /**
  * GET /api/user/api-keys/usage?days=30
@@ -16,10 +21,16 @@ export const GET = withAuth(
     since.setDate(since.getDate() - days)
 
     // Get user's key IDs
-    const { data: keys } = await supabase
+    const { data: keys, error: keysError } = await supabase
       .from('api_keys')
       .select('id, name')
       .eq('user_id', user!.id)
+
+    // A failed lookup is not "this user has no keys".
+    if (keysError) {
+      logger.error('Key lookup failed', { userId: user!.id, error: keysError.message })
+      return usageUnavailable()
+    }
 
     if (!keys || keys.length === 0) {
       return NextResponse.json({ data: { keys: [], daily: [], totals: {} } })
@@ -36,14 +47,20 @@ export const GET = withAuth(
       .order('date', { ascending: true })
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      // Log the database message; never echo it to the client.
+      logger.error('Daily usage query failed', { userId: user!.id, error: error.message })
+      return usageUnavailable()
     }
 
     // Also include today's live counts from api_keys.request_count_today
-    const { data: liveKeys } = await supabase
+    const { data: liveKeys, error: liveError } = await supabase
       .from('api_keys')
       .select('id, request_count_today')
       .in('id', keyIds)
+    if (liveError) {
+      // Today's live counts are an overlay; the rolled-up history still stands.
+      logger.error('Live count query failed', { userId: user!.id, error: liveError.message })
+    }
 
     const today = new Date().toISOString().slice(0, 10)
     const todayEntries = (liveKeys ?? [])

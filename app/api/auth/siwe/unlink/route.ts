@@ -36,6 +36,10 @@ export async function POST(request: NextRequest) {
       .eq('id', user.id)
 
     if (updateError) {
+      logger.error('[SIWE unlink] Profile update failed:', {
+        userId: user.id,
+        error: updateError.message,
+      })
       return NextResponse.json({ error: 'Failed to unlink wallet' }, { status: 500 })
     }
 
