@@ -15,6 +15,8 @@
   "include": [
     "worker/src/connection.ts",
     "worker/src/ingest-worker.ts",
+    "worker/src/index.ts",
+    "worker/src/types/*.d.ts",
     "worker/src/ingest/**/*.ts",
     "worker/preflight-local-release.ts",
     "worker/preflight-sg-runtime.ts",

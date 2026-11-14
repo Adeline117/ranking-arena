@@ -39,9 +39,9 @@ async function main() {
   const [
     { Worker },
     { getRankingCommandChainConnection, closeRankingCommandChainConnection },
-    { QUEUE_NAME, JOB, getQueue },
+    { QUEUE_NAME, JOB, getQueue, rankingCommandChainBullConnection },
     { PIPELINE_WORKER_CONCURRENCY },
-    { assertSuccessfulMeilisearchSyncResponse },
+    { assertSuccessfulMeilisearchSyncResponse: assertMeilisearchSyncLoaded },
     { registerSchedules },
     { startDashboard },
     { assertMetricTrustWorkerReadiness },
@@ -69,6 +69,9 @@ async function main() {
     import('../../lib/search/meilisearch-sync'),
     import('../../lib/rankings/publication/alert-routing'),
   ])
+  // An assertion function must carry an explicit type to be callable (TS2775).
+  const assertSuccessfulMeilisearchSyncResponse: typeof import('./pipeline-response').assertSuccessfulMeilisearchSyncResponse =
+    assertMeilisearchSyncLoaded
 
   // The season publication (and the Meilisearch read) runs in-process on the
   // worker's direct postgres connection (the fence/claim/seal RPCs are
@@ -156,7 +159,7 @@ async function main() {
       }
     },
     {
-      connection: getRankingCommandChainConnection(),
+      connection: rankingCommandChainBullConnection(),
       concurrency: PIPELINE_WORKER_CONCURRENCY,
       removeOnComplete: { age: 24 * 3600, count: 1000 }, // Keep last 1000 completed jobs for 24h
       removeOnFail: { age: 7 * 24 * 3600, count: 5000 }, // Keep failed jobs for 7 days
