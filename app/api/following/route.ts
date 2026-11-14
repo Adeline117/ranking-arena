@@ -129,23 +129,6 @@ type TraderMaterializedData = {
 
 type RankingVisibility = 'verified' | 'partial' | 'unknown'
 
-type PublicRankedLeaderboardQueryResult = {
-  data: unknown[] | null
-  error: { message: string } | null
-}
-
-type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
-  select(columns: string): PublicRankedLeaderboardQuery
-  eq(column: string, value: string): PublicRankedLeaderboardQuery
-  in(column: string, values: readonly string[]): PublicRankedLeaderboardQuery
-  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
-  abortSignal(signal: AbortSignal): PublicRankedLeaderboardQuery
-}
-
-type PublicRankedLeaderboardClient = {
-  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
-}
-
 type PublicFollowingRankedRow = Record<string, unknown> & {
   source: string
   source_trader_id: string
@@ -165,16 +148,6 @@ type FollowingPublicRankingCohort = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
-  // The security-barrier view is additive while generated Supabase types catch
-  // up. Keep the type escape hatch narrow and read-only; never fall back to
-  // the retained parent table when the view is unavailable.
-  if (!isRecord(value) || typeof value.from !== 'function') {
-    throw new TypeError('Supabase client does not expose the public ranking cohort')
-  }
-  return value as PublicRankedLeaderboardClient
 }
 
 function hasPositivePublishedRank(row: unknown): row is PublicFollowingRankedRow {
@@ -443,7 +416,7 @@ async function materializeFollowingItems(
     let publicCohort = buildFollowingPublicRankingCohort([], false)
     try {
       const rows = await fetchRowsInChunks(traderIds, 'public_ranked_leaderboard', async (chunk) =>
-        publicRankedLeaderboardClient(supabase)
+        supabase
           .from('public_ranked_leaderboard')
           .select(PUBLIC_FOLLOWING_RANKING_COLUMNS)
           .in('source_trader_id', chunk)

@@ -179,51 +179,6 @@ interface SanitizedPublicRankedCohort {
   integrityCompromised: boolean
 }
 
-interface PublicRankedLeaderboardQueryResult {
-  data: unknown[] | null
-  error: { message: string } | null
-}
-
-/**
- * Local bridge until `npm run gen:types` includes public_ranked_leaderboard.
- * It deliberately exposes only the read-only query operations used here, so
- * the generated Database type remains the source of truth once regenerated.
- */
-type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
-  select(columns: string): PublicRankedLeaderboardQuery
-  eq(column: string, value: string): PublicRankedLeaderboardQuery
-  gte(column: string, value: number | string): PublicRankedLeaderboardQuery
-  gt(column: string, value: number): PublicRankedLeaderboardQuery
-  lte(column: string, value: number): PublicRankedLeaderboardQuery
-  order(
-    column: string,
-    options: { ascending: boolean; nullsFirst: boolean }
-  ): PublicRankedLeaderboardQuery
-  range(from: number, to: number): PublicRankedLeaderboardQuery
-  limit(count: number): PublicRankedLeaderboardQuery
-}
-
-type PublicRankedLeaderboardClient = {
-  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
-}
-
-function isPublicRankedLeaderboardClient(value: unknown): value is PublicRankedLeaderboardClient {
-  return isRecord(value) && typeof value.from === 'function'
-}
-
-function publicRankedLeaderboardClient(
-  supabase: ReturnType<typeof import('@/lib/supabase/server').getSupabaseAdmin>
-): PublicRankedLeaderboardClient {
-  // Keep the generated client unmodified while the migration's View is absent
-  // from database.types.ts. This is a checked boundary rather than a double
-  // assertion; `from` remains the only capability exposed through the bridge.
-  const candidate: unknown = supabase
-  if (!isPublicRankedLeaderboardClient(candidate)) {
-    throw new TypeError('Supabase client does not expose a public view reader')
-  }
-  return candidate
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -490,7 +445,7 @@ async function fetchPublicRankedCohort(
   // Shared public cohort predicate (score floor, ROI bound, 48h window) —
   // identical to the homepage SSR page and /api/rankings.
   let query = applyPublicCohortFilters(
-    publicRankedLeaderboardClient(supabase)
+    supabase
       .from('public_ranked_leaderboard')
       .select(PUBLIC_RANKED_LEADERBOARD_COLUMNS)
       .eq('season_id', timeRange)

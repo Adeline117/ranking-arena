@@ -96,47 +96,8 @@ const SORT_COLUMN: Record<PublicRankingSortBy, string> = {
 const PUBLIC_RANKED_LEADERBOARD_COLUMNS =
   'source_trader_id, handle, source, source_type, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, avatar_url, rank, rank_change, is_new, computed_at, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, calmar_ratio, profit_factor, trader_type, is_outlier, metrics_estimated, season_id'
 
-interface PublicRankedLeaderboardQueryResult {
-  data: unknown[] | null
-  error: { message: string } | null
-}
-
-/**
- * Local read-only bridge until generated Supabase types contain the additive
- * public view. It deliberately exposes only the query methods used below.
- */
-type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
-  select(columns: string): PublicRankedLeaderboardQuery
-  eq(column: string, value: string): PublicRankedLeaderboardQuery
-  neq(column: string, value: string): PublicRankedLeaderboardQuery
-  not(column: string, operator: string, value: unknown): PublicRankedLeaderboardQuery
-  gt(column: string, value: number): PublicRankedLeaderboardQuery
-  gte(column: string, value: number | string): PublicRankedLeaderboardQuery
-  lte(column: string, value: number): PublicRankedLeaderboardQuery
-  or(filters: string): PublicRankedLeaderboardQuery
-  order(
-    column: string,
-    options: { ascending: boolean; nullsFirst: boolean }
-  ): PublicRankedLeaderboardQuery
-  range(from: number, to: number): PublicRankedLeaderboardQuery
-}
-
-type PublicRankedLeaderboardClient = {
-  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function publicRankedLeaderboardClient(
-  supabase: ReturnType<typeof import('@/lib/supabase/server').getSupabaseAdmin>
-): PublicRankedLeaderboardClient {
-  const candidate: unknown = supabase
-  if (!isRecord(candidate) || typeof candidate.from !== 'function') {
-    throw new TypeError('Supabase client does not expose a public ranked cohort reader')
-  }
-  return candidate as PublicRankedLeaderboardClient
 }
 
 function singleQueryParam(searchParams: URLSearchParams, name: string): string | null {
@@ -381,7 +342,7 @@ export const GET = withPublic(
     // The security-barrier view enforces public rank membership before every
     // predicate below. Keep all additional filters and the finite range in the
     // database; mapping code must never repair a page assembled from raw rows.
-    let query = publicRankedLeaderboardClient(supabase)
+    let query = supabase
       .from('public_ranked_leaderboard')
       .select(PUBLIC_RANKED_LEADERBOARD_COLUMNS)
       .eq('season_id', seasonId)

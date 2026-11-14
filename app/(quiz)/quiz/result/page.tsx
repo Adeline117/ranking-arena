@@ -67,26 +67,6 @@ const QUIZ_RECOMMENDATION_PERIOD = '90D'
 const PUBLIC_QUIZ_TRADER_COLUMNS =
   'source,source_trader_id,handle,avatar_url,roi,arena_score,win_rate,pnl,rank,season_id,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at'
 
-type PublicQuizTraderQueryResult = {
-  data: unknown[] | null
-  error: { message: string } | null
-}
-
-type PublicQuizTraderQuery = PromiseLike<PublicQuizTraderQueryResult> & {
-  select(columns: string): PublicQuizTraderQuery
-  eq(column: string, value: string): PublicQuizTraderQuery
-  not(column: string, operator: string, value: null): PublicQuizTraderQuery
-  order(
-    column: string,
-    options: { ascending: boolean; nullsFirst?: boolean }
-  ): PublicQuizTraderQuery
-  limit(count: number): PublicQuizTraderQuery
-}
-
-type PublicQuizTraderClient = {
-  from(relation: 'public_ranked_leaderboard'): PublicQuizTraderQuery
-}
-
 type VerifiedQuizTrader = Record<string, unknown> & {
   source: string
   source_trader_id: string
@@ -102,13 +82,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /** Narrow bridge while generated Supabase types catch up with the public view. */
-function publicQuizTraderClient(value: unknown): PublicQuizTraderClient {
-  if (!isRecord(value) || typeof value.from !== 'function') {
-    throw new TypeError('Supabase client does not expose the public ranking cohort')
-  }
-  return value as PublicQuizTraderClient
-}
-
 function finiteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
 }
@@ -152,7 +125,7 @@ async function getRecommendedTraders(typeId: PersonalityTypeId): Promise<Recomme
     const supabase = getSupabaseAdmin()
     const query = TRADER_QUERIES[typeId] || { orderBy: 'arena_score', ascending: false }
 
-    const { data, error } = await publicQuizTraderClient(supabase)
+    const { data, error } = await supabase
       .from('public_ranked_leaderboard')
       .select(PUBLIC_QUIZ_TRADER_COLUMNS)
       .eq('season_id', QUIZ_RECOMMENDATION_PERIOD)

@@ -18,22 +18,6 @@ const BADGE_CACHE_CONTROL = 'private, no-store, max-age=0, must-revalidate'
 const PUBLIC_RANKED_BADGE_COLUMNS =
   'source_trader_id,roi,pnl,win_rate,max_drawdown,followers,arena_score,rank,source,computed_at,score_completeness,metrics_estimated,is_outlier,season_id'
 
-type PublicRankedLeaderboardQueryResult = {
-  data: unknown | null
-  error: { message: string } | null
-}
-
-type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
-  select(columns: string): PublicRankedLeaderboardQuery
-  eq(column: string, value: string): PublicRankedLeaderboardQuery
-  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
-  maybeSingle(): PublicRankedLeaderboardQuery
-}
-
-type PublicRankedLeaderboardClient = {
-  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
-}
-
 interface BadgeCacheScope {
   source: string
   sourceTraderId: string
@@ -54,13 +38,6 @@ interface SanitizedBadgeCohort {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
-  if (!isRecord(value) || typeof value.from !== 'function') {
-    throw new TypeError('Supabase client does not expose the public ranking cohort')
-  }
-  return value as PublicRankedLeaderboardClient
 }
 
 function hasPositiveRank(row: unknown): row is BadgePublicRankedRow {
@@ -178,7 +155,7 @@ export async function GET(
       async () => {
         // The security-barrier view proves source, history, freshness, and
         // complete score inputs before identity filters are applied here.
-        const { data, error } = await publicRankedLeaderboardClient(supabase)
+        const { data, error } = await supabase
           .from('public_ranked_leaderboard')
           .select(PUBLIC_RANKED_BADGE_COLUMNS)
           .eq('source', scope.source)

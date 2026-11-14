@@ -20,28 +20,6 @@ const SIDEBAR_PERIOD = '90D'
 const PUBLIC_RANKED_SIDEBAR_COLUMNS =
   'source,source_trader_id,handle,avatar_url,roi,pnl,arena_score,rank,win_rate,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at,season_id'
 
-interface PublicRankedLeaderboardQueryResult {
-  data: unknown[] | null
-  error: { message: string } | null
-}
-
-type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
-  select(columns: string): PublicRankedLeaderboardQuery
-  eq(column: string, value: string): PublicRankedLeaderboardQuery
-  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
-  gt(column: string, value: number): PublicRankedLeaderboardQuery
-  or(expression: string): PublicRankedLeaderboardQuery
-  order(
-    column: string,
-    options: { ascending: boolean; nullsFirst: boolean }
-  ): PublicRankedLeaderboardQuery
-  limit(count: number): PublicRankedLeaderboardQuery
-}
-
-type PublicRankedLeaderboardClient = {
-  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
-}
-
 interface SidebarPublicRankedRow extends Record<string, unknown> {
   source: string
   source_trader_id: string
@@ -62,13 +40,6 @@ interface SanitizedSidebarCohort {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
-  if (!isRecord(value) || typeof value.from !== 'function') {
-    throw new TypeError('Supabase client does not expose the public ranking cohort')
-  }
-  return value as PublicRankedLeaderboardClient
 }
 
 function isSidebarPublicRankedRow(row: unknown): row is SidebarPublicRankedRow {
@@ -128,7 +99,7 @@ export const GET = withPublic(
         // Fetch top 50 to diversify across exchanges (avoid showing only 1-2 exchanges)
         // The security-barrier view establishes row eligibility before every
         // request-derived predicate, ordering clause, or finite limit below.
-        const { data: snapData, error: snapErr } = await publicRankedLeaderboardClient(supabase)
+        const { data: snapData, error: snapErr } = await supabase
           .from('public_ranked_leaderboard')
           .select(PUBLIC_RANKED_SIDEBAR_COLUMNS)
           .eq('season_id', SIDEBAR_PERIOD)

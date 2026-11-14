@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
+import type { Database } from '@/lib/supabase/database.types'
 import { EXCHANGE_CONFIG, resolveExchangeSlug } from '@/lib/constants/exchanges'
 import { TOP_EXCHANGE_SLUGS } from '@/lib/constants/exchange-slugs'
 import { BASE_URL } from '@/lib/constants/urls'
@@ -36,7 +37,7 @@ export const dynamicParams = true
 function getExchangeSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  return createClient(url || '', key || '', {
+  return createClient<Database>(url || '', key || '', {
     auth: { persistSession: false, autoRefreshToken: false },
     global: {
       fetch: (input: RequestInfo | URL, init?: RequestInit) => {
@@ -73,41 +74,8 @@ interface ExchangeData {
 const PUBLIC_RANKED_EXCHANGE_COLUMNS =
   'source,source_trader_id,handle,arena_score,roi,pnl,win_rate,max_drawdown,rank,score_completeness,metrics_estimated,is_outlier,computed_at,season_id'
 
-type PublicRankedLeaderboardQueryResult = {
-  data: unknown[] | null
-  error: { message: string } | null
-  count?: number | null
-}
-
-type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
-  select(
-    columns: string,
-    options?: { count?: 'exact'; head?: boolean }
-  ): PublicRankedLeaderboardQuery
-  eq(column: string, value: string): PublicRankedLeaderboardQuery
-  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
-  order(
-    column: string,
-    options: { ascending: boolean; nullsFirst: boolean }
-  ): PublicRankedLeaderboardQuery
-  limit(count: number): PublicRankedLeaderboardQuery
-}
-
-type PublicRankedLeaderboardClient = {
-  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
-  // The public view is deliberately additive and generated database types can
-  // lag its deployment. Keep the typed escape hatch local to this reader.
-  if (!isRecord(value) || typeof value.from !== 'function') {
-    throw new TypeError('Supabase client does not expose the public ranking cohort')
-  }
-  return value as PublicRankedLeaderboardClient
 }
 
 function finiteOrNull(value: unknown): number | null {
@@ -125,7 +93,7 @@ function hasPositivePublishedRank(row: unknown, sourceKey: string): row is Recor
 }
 
 function exactCountOrUnknown(
-  result: PublicRankedLeaderboardQueryResult,
+  result: { count: number | null; error: unknown },
   minimumVisibleRows: number
 ): number | null {
   const count = result.count
@@ -156,8 +124,7 @@ async function fetchExchangeData(sourceKey: string): Promise<ExchangeData | null
     }
   }
 
-  const supabase = getExchangeSupabase()
-  const publicCohort = publicRankedLeaderboardClient(supabase)
+  const publicCohort = getExchangeSupabase()
 
   const [topResult, countResult] = await Promise.all([
     publicCohort

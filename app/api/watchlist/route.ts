@@ -11,6 +11,7 @@ import { withAuth } from '@/lib/api/middleware'
 import { badRequest, serverError, error as errorResponse } from '@/lib/api/response'
 import { ErrorCode } from '@/lib/api/errors'
 import { createLogger } from '@/lib/utils/logger'
+import type { TypedSupabaseClient } from '@/lib/supabase/typed-client'
 import {
   isPublicRankingSourceAllowed,
   sanitizePublicRankingPayload,
@@ -22,23 +23,6 @@ const PUBLIC_WATCHLIST_RANKING_COLUMNS =
   'source,source_trader_id,roi,pnl,rank,arena_score,win_rate,avatar_url,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at,season_id'
 
 type WatchlistRankingVisibility = 'verified' | 'partial' | 'unknown'
-
-type PublicRankedLeaderboardQueryResult = {
-  data: unknown[] | null
-  error: { message: string } | null
-}
-
-type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
-  select(columns: string): PublicRankedLeaderboardQuery
-  eq(column: string, value: string): PublicRankedLeaderboardQuery
-  in(column: string, values: readonly string[]): PublicRankedLeaderboardQuery
-  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
-  limit(count: number): PublicRankedLeaderboardQuery
-}
-
-type PublicRankedLeaderboardClient = {
-  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
-}
 
 type PublicWatchlistRankedRow = Record<string, unknown> & {
   source: string
@@ -54,15 +38,6 @@ type WatchlistRankingCohort = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
-  // Generated Supabase types lag the additive security-barrier view. This
-  // narrow bridge intentionally has no raw-table fallback.
-  if (!isRecord(value) || typeof value.from !== 'function') {
-    throw new TypeError('Supabase client does not expose the public ranking cohort')
-  }
-  return value as PublicRankedLeaderboardClient
 }
 
 function watchlistIdentity(source: unknown, traderId: unknown): string | null {
@@ -153,7 +128,7 @@ function unknownWatchlistRankingFields(
  * disclose no raw ranking fields.
  */
 async function enrichWatchlistWithPublicRankings(
-  supabase: unknown,
+  supabase: TypedSupabaseClient,
   watchlist: unknown[]
 ): Promise<Record<string, unknown>[]> {
   const items = watchlist.filter(isRecord)
@@ -170,7 +145,7 @@ async function enrichWatchlistWithPublicRankings(
     const sources = [...new Set(publicItems.map((item) => item.source as string))]
     const traderIds = [...new Set(publicItems.map((item) => item.source_trader_id as string))]
     try {
-      const { data, error } = await publicRankedLeaderboardClient(supabase)
+      const { data, error } = await supabase
         .from('public_ranked_leaderboard')
         .select(PUBLIC_WATCHLIST_RANKING_COLUMNS)
         .eq('season_id', WATCHLIST_RANKING_PERIOD)
