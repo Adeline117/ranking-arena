@@ -80,7 +80,8 @@ export interface MeilisearchTraderDocument {
   rank: number
   trader_type: string | null
   avatar_url: string | null
-  updated_at: string
+  /** When the rank row was computed — not a source-data time; search never displays it. */
+  computed_at: string
 }
 
 const PAGE_SQL = `
@@ -131,7 +132,7 @@ export function toMeilisearchTraderDocument(
     rank,
     trader_type: row.trader_type,
     avatar_url: row.avatar_url,
-    updated_at: row.computed_at,
+    computed_at: row.computed_at,
   }
 }
 
