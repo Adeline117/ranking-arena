@@ -376,18 +376,25 @@ export function startFakeSupabase({ port = 54399, log } = {}) {
       if (rows.length === 1) return send(200, rows[0])
       return send(406, { code: 'PGRST116', message: 'expected one row', details: null, hint: null })
     }
-    // Upstash REST: production requires it at boot, so answer as an empty Redis.
-    if (url.pathname === '/upstash') return send(200, { result: null })
+    // Upstash REST: production requires it at boot, so answer as an empty Redis
+    // that stores nothing. SET answers "OK" like a real Redis (including a
+    // SET NX lock on an absent key); answering null made every cache lock
+    // wait time out, so each request ran the lock-timeout path instead of the
+    // normal one.
+    const upstashResult = (command) =>
+      Array.isArray(command) && String(command[0]).toUpperCase() === 'SET'
+        ? { result: 'OK' }
+        : { result: null }
+    if (url.pathname === '/upstash') {
+      return readBody((body) => send(200, upstashResult(body)))
+    }
     if (url.pathname === '/upstash/pipeline' || url.pathname === '/upstash/multi-exec') {
-      let body = ''
-      req.on('data', (chunk) => (body += chunk))
-      req.on('end', () =>
+      return readBody((body) =>
         send(
           200,
-          JSON.parse(body).map(() => ({ result: null }))
+          (Array.isArray(body) ? body : []).map((command) => upstashResult(command))
         )
       )
-      return
     }
     if (url.pathname === '/auth/v1/token') {
       return readBody((body) => {

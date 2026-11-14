@@ -86,6 +86,10 @@ test('answers Upstash commands and pipelines as an empty Redis', async (t) => {
     body: '[["GET","a"],["GET","b"]]',
   })
   assert.deepEqual(await pipeline.json(), [{ result: null }, { result: null }])
+
+  // A lock SET NX on an absent key succeeds, as in a real Redis.
+  const lock = await fetch(base, { method: 'POST', body: '["SET","lock:k","t","EX","10","NX"]' })
+  assert.deepEqual(await lock.json(), { result: 'OK' })
 })
 
 test('signs in only with the test credentials, and the token identifies the user', async (t) => {
