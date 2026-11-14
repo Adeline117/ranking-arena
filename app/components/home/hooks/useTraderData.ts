@@ -6,6 +6,7 @@ import { toUiTrader, type UiTraderInput } from '../../ranking/toUiTrader'
 import { useTraderDataSync, type TraderDataPayload } from '@/lib/hooks/useBroadcastSync'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { CategoryCounts } from '@/lib/getInitialTraders'
+import type { PublicTradersListResponse } from '@/lib/contracts/traders-list'
 import { resolveExchangeSlug } from '@/lib/constants/exchanges'
 
 import { FIVE_MINUTES_MS } from '@/lib/constants/time'
@@ -51,6 +52,18 @@ function normalizeCategoryCounts(value: unknown): CategoryCounts | null {
   return Object.values(normalized).every(isSafeNonNegativeCount)
     ? (normalized as CategoryCounts)
     : null
+}
+
+/**
+ * Fields an older /api/traders deployment emitted. The current route never
+ * sends them; the reads below stay so a payload cached during rollout cannot
+ * silently lose its flag.
+ */
+interface LegacyTradersListFields {
+  as_of?: string | null
+  is_stale?: unknown
+  categoryCounts?: unknown
+  categoryCountsAreExact?: unknown
 }
 
 function isTimeRange(value: unknown): value is TimeRange {
@@ -673,7 +686,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
           throw new Error(`${tRef.current('loadFailed')} (${response.status})`)
         }
 
-        const data = await response.json()
+        const data: PublicTradersListResponse & LegacyTradersListFields = await response.json()
         // A slower, aborted request can still resolve in some environments.
         // Never let it overwrite or broadcast a newer page/filter cohort.
         if (requestSequence !== requestSequenceRef.current) return false

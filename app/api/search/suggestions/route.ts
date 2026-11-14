@@ -12,6 +12,7 @@ import { searchTraders } from '@/lib/data/unified'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { parseLimit } from '@/lib/utils/safe-parse'
 import { isMaliciousSearchQuery } from '@/lib/utils/search-sanitize'
+import type { SearchSuggestion, SearchSuggestionsData } from '@/lib/contracts/search-suggestions'
 
 // Trader metrics are materialized from the live sealed cohort by searchTraders.
 // Do not put a metric-bearing suggestion response in Redis, browser, or CDN cache.
@@ -21,18 +22,6 @@ const SEARCH_SUGGESTIONS_NO_STORE_HEADERS = {
   'Vercel-CDN-Cache-Control': 'no-store',
 } as const
 
-interface SearchSuggestion {
-  type: 'trader' | 'symbol' | 'keyword'
-  value: string
-  label: string
-  subLabel?: string
-  avatar?: string | null
-  source?: string
-  roi?: number
-  arenaScore?: number
-  rankingVisibility?: 'verified' | 'unknown'
-}
-
 export const GET = withPublic(
   async ({ supabase, request }) => {
     const searchParams = request.nextUrl.searchParams
@@ -40,6 +29,7 @@ export const GET = withPublic(
     const limit = parseLimit(searchParams.get('limit'), 10, 20)
 
     if (!query || query.length < 1) {
+      // EmptySearchSuggestionsData: no `query` key (known contract divergence).
       return success({ suggestions: [] }, 200, SEARCH_SUGGESTIONS_NO_STORE_HEADERS)
     }
 
@@ -106,7 +96,7 @@ export const GET = withPublic(
     const result = {
       suggestions: suggestions.slice(0, limit),
       query,
-    }
+    } satisfies SearchSuggestionsData
 
     // Log search analytics asynchronously (fire-and-forget) — skip malicious queries
     if (!isMaliciousSearchQuery(query)) {

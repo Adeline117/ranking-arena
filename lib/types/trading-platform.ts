@@ -240,15 +240,6 @@ export interface RefreshRequest {
 // API Response Types
 // ============================================
 
-export interface RankingsResponse {
-  traders: RankedTraderV2[]
-  window: SnapshotWindow
-  total_count: number
-  as_of: string
-  is_stale: boolean
-  stale_sources?: string[]
-}
-
 /** DB row type */
 export interface RankedTraderV2 {
   platform: Platform

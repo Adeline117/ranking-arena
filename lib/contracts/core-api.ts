@@ -10,6 +10,13 @@
  */
 import { z } from 'zod'
 import type { UnifiedSearchResponse } from '@/lib/search/contracts'
+import type { PublicTradersListResponse } from '@/lib/contracts/traders-list'
+import type { PublicRankingsData } from '@/lib/contracts/rankings'
+import type { TraderDetailProfile, TraderDetailResponseData } from '@/lib/contracts/trader-detail'
+import type {
+  EmptySearchSuggestionsData,
+  SearchSuggestionsData,
+} from '@/lib/contracts/search-suggestions'
 
 const nullableNumber = z.number().nullable()
 const nullableString = z.string().nullable()
@@ -172,10 +179,54 @@ const SearchDataSchema = z.object({
 })
 export const SearchResponseSchema = envelope(SearchDataSchema)
 
-// The route and its clients share UnifiedSearchResponse. If that type stops
-// satisfying this contract, type-checking fails here instead of in production.
+// Each route and its clients share one transport type (UnifiedSearchResponse,
+// PublicTradersListResponse, ...). If a shared type stops satisfying its
+// contract, type-checking fails here instead of in production.
 type Satisfies<Actual extends Contract, Contract> = Actual
 export type SearchContractCheck = Satisfies<UnifiedSearchResponse, z.infer<typeof SearchDataSchema>>
+export type TradersListContractCheck = Satisfies<
+  PublicTradersListResponse,
+  z.infer<typeof TradersListResponseSchema>
+>
+
+type RankingsContract = z.infer<typeof RankingsResponseSchema>['data']
+/**
+ * KNOWN DIVERGENCE (reported, not fixed here): `window=composite` answers with
+ * `window: 'COMPOSITE'`, which PeriodSchema rejects. RankingsContractCheck
+ * covers every other field; the expect-error line fails once route and
+ * contract agree on `window`, and the narrowing can then be dropped.
+ */
+type RankingsPeriodData = Omit<PublicRankingsData, 'window'> & {
+  window: z.infer<typeof PeriodSchema>
+}
+export type RankingsContractCheck = Satisfies<RankingsPeriodData, RankingsContract>
+// @ts-expect-error -- known divergence on `window`, see above
+export type RankingsCompositeCheck = Satisfies<PublicRankingsData, RankingsContract>
+
+type TraderDetailContract = z.infer<typeof TraderDetailResponseSchema>['data']
+/**
+ * KNOWN DIVERGENCE (reported, not fixed here): the route omits
+ * `profile.followers` when the source has no count, while the contract
+ * requires the key with a null value. TraderDetailContractCheck covers every
+ * other contract field; the expect-error line fails once the two agree.
+ */
+type TraderDetailNullFollowers = {
+  profile: Omit<TraderDetailProfile, 'followers'> & { followers: number | null }
+  performance: TraderDetailResponseData['performance']
+}
+export type TraderDetailContractCheck = Satisfies<TraderDetailNullFollowers, TraderDetailContract>
+// @ts-expect-error -- known divergence on `profile.followers`, see above
+export type TraderDetailFullCheck = Satisfies<TraderDetailResponseData, TraderDetailContract>
+
+type SuggestionsContract = z.infer<typeof SearchSuggestionsResponseSchema>['data']
+export type SearchSuggestionsContractCheck = Satisfies<SearchSuggestionsData, SuggestionsContract>
+/**
+ * KNOWN DIVERGENCE (reported, not fixed here): a missing or blank `q` answers
+ * `{ suggestions: [] }` without the `query` key the contract requires. The
+ * expect-error line fails once the empty answer satisfies the contract.
+ */
+// @ts-expect-error -- known divergence on the empty-query answer, see above
+export type EmptySuggestionsCheck = Satisfies<EmptySearchSuggestionsData, SuggestionsContract>
 
 export type TradersListResponse = z.infer<typeof TradersListResponseSchema>
 export type RankingsResponse = z.infer<typeof RankingsResponseSchema>

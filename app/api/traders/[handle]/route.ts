@@ -27,6 +27,7 @@ import { serializePublicLinkedAggregate } from '@/lib/data/linked-trader-public'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { quarantineLegacyPositionHistory } from '@/lib/data/trader/history-quarantine'
 import { unavailablePublicRankHistoryProvenance } from '@/lib/rankings/public-rank-history'
+import type { TraderDetailResponseData } from '@/lib/contracts/trader-detail'
 import { decodeRouteParam } from '@/lib/utils/decode-route-param'
 
 // 输入验证 schema（支持字母、数字、下划线、连字符、点、中文、0x 地址）
@@ -354,7 +355,7 @@ export async function GET(
       }
 
       const responseData = {
-        ...(pageData as Record<string, unknown>),
+        ...pageData,
         ...extras,
         ...(consistencyProbe
           ? { consistency_probe: { cache_bypassed: true, loader: 'unified-live' } }
@@ -362,7 +363,11 @@ export async function GET(
       }
 
       const duration = Date.now() - startTime
-      const response = apiSuccess({ ...responseData, cached: false, fetchTime: duration })
+      const response = apiSuccess({
+        ...responseData,
+        cached: false,
+        fetchTime: duration,
+      } satisfies TraderDetailResponseData)
       if (consistencyProbe) {
         response.headers.set('X-Arena-Consistency-Proof', 'live-loader-v1')
       }

@@ -7,6 +7,7 @@
 import type { TraderDetail, EquityPoint } from './types'
 import { normalizeScoreConfidence } from './mappers'
 import { quarantineLegacyPositionHistory } from './history-quarantine'
+import type { TraderDetailPageData } from '@/lib/contracts/trader-detail'
 
 /**
  * Convert unified TraderDetail to the legacy TraderPageData shape
@@ -15,7 +16,7 @@ import { quarantineLegacyPositionHistory } from './history-quarantine'
 export function toTraderPageData(
   detail: TraderDetail,
   options: { publicProfileHistoryQuarantine?: boolean } = {}
-): Record<string, unknown> {
+): TraderDetailPageData {
   const t = detail.trader
   const p90 = detail.periods['90D']
   const p30 = detail.periods['30D']
@@ -55,7 +56,7 @@ export function toTraderPageData(
   // 90D-labelled fields come ONLY from the 90D period. `t` is the primary
   // period (90D → 30D → 7D fallback, queries.ts), so `?? t.*` here made a
   // 30D-only source render its 30D ROI/score under the 90D tab.
-  const performance: Record<string, unknown> = {
+  const performance = {
     has_period_90d: p90 != null,
     roi_90d: p90?.roi ?? null,
     roi_30d: p30?.roi ?? null,
@@ -300,7 +301,5 @@ export function toTraderPageData(
   // Keep compare's existing legacy adapter contract outside this containment
   // scope. Public profile callers opt in so a future enrichment change cannot
   // accidentally reintroduce curve/portfolio/price/PnL fields after mapping.
-  return publicProfileHistoryQuarantine
-    ? (quarantineLegacyPositionHistory(pageData) as Record<string, unknown>)
-    : pageData
+  return publicProfileHistoryQuarantine ? quarantineLegacyPositionHistory(pageData) : pageData
 }

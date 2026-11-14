@@ -38,6 +38,11 @@ import {
   sanitizePublicRankingPayload,
 } from '@/lib/rankings/publication-policy'
 import { parsePublicActiveRankingSource } from '@/lib/constants/exchanges'
+import type {
+  PublicRankingsData,
+  PublicRankingsTrader,
+  PublicRankingsWindow,
+} from '@/lib/contracts/rankings'
 import { applyPublicCohortFilters } from '@/lib/rankings/public-cohort'
 
 const logger = createLogger('rankings-api')
@@ -226,7 +231,7 @@ function displayName(handle: unknown, traderId: string): string {
 function mapPublicRankedRow(
   row: Record<string, unknown>,
   sourceFreshness: ReturnType<typeof sourceFreshnessStatusMap>
-) {
+): PublicRankingsTrader {
   const source = String(row.source)
   const traderId = String(row.source_trader_id)
   let platform = source
@@ -368,7 +373,7 @@ export const GET = withPublic(
         ranking_visibility: 'partial',
         ranking_visibility_reason: 'publication_policy_filtered',
         ranking_visibility_reasons: ['quarantined_source_requested'],
-      })
+      } satisfies PublicRankingsData)
       response.headers.set('Cache-Control', PUBLIC_RANKING_RESPONSE_CACHE_CONTROL)
       return response
     }
@@ -450,7 +455,7 @@ export const GET = withPublic(
         ranking_visibility: 'partial',
         ranking_visibility_reason: 'publication_policy_filtered',
         ranking_visibility_reasons: ['ineligible_public_cohort_row_removed'],
-      })
+      } satisfies PublicRankingsData)
       response.headers.set('Cache-Control', PUBLIC_RANKING_RESPONSE_CACHE_CONTROL)
       return response
     }
@@ -499,7 +504,7 @@ export const GET = withPublic(
         ranking_visibility: 'partial',
         ranking_visibility_reason: 'source_freshness_unverified',
         ranking_visibility_reasons: ['source_freshness_unverified'],
-      })
+      } satisfies PublicRankingsData)
       response.headers.set('Cache-Control', PUBLIC_RANKING_RESPONSE_CACHE_CONTROL)
       return response
     }
@@ -529,7 +534,7 @@ export const GET = withPublic(
       sort_dir: sortDir,
       limit,
       offset,
-    })
+    } satisfies PublicRankingsData)
     response.headers.set('Cache-Control', PUBLIC_RANKING_RESPONSE_CACHE_CONTROL)
     return response
   },
