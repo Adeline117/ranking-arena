@@ -87,9 +87,8 @@ export interface CountBaseline {
   /** true when the adopted downward shift was operator-acknowledged. */
   shiftAcknowledged?: boolean
   /**
-   * A sustained DOWNWARD shift too far below the historical baseline was
-   * detected but NOT adopted: repeated truncation must never silently become
-   * the new normal. The crawl is judged against the old baseline (and fails);
+   * A sustained DOWNWARD shift was detected but NOT adopted: repeated
+   * truncation must never silently become the new normal. The crawl is judged against the old baseline (and fails);
    * an operator confirms the new level by setting
    * arena.sources.meta.count_shift_ack.<timeframe> = <proposedBaseline>.
    */
@@ -100,11 +99,6 @@ export interface CountBaseline {
 export const SHIFT_CONFIRM_CRAWLS = 3
 /** Max spread among the confirming crawls for them to count as "consistent". */
 export const SHIFT_MAX_SPREAD_PCT = 10
-/**
- * Floor for automatic downward level-shifts: a new level more than this far
- * below the current (historical) baseline is held for operator confirmation.
- */
-export const SHIFT_MAX_AUTO_DROP_PCT = 30
 
 /**
  * Operator acknowledgement of a downward level-shift for (source, timeframe):
@@ -312,11 +306,13 @@ export async function getCountBaseline(
         const driftPct = (Math.abs(recentMedian - baseline) / baseline) * 100
         if (spreadPct <= SHIFT_MAX_SPREAD_PCT && driftPct > tolerance) {
           const proposed = Math.round(recentMedian)
-          const dropPct = ((baseline - recentMedian) / baseline) * 100
-          if (dropPct > SHIFT_MAX_AUTO_DROP_PCT) {
-            // Downward floor: consistent truncation is indistinguishable from
-            // a genuinely smaller board without a human. Adopt only an
-            // operator-acknowledged level that matches the observed one.
+          if (recentMedian < baseline) {
+            // Every sustained DOWNWARD shift needs a human: a deterministic
+            // truncation (a lost page, a capped cursor) repeats exactly and is
+            // indistinguishable from a genuinely smaller board. Losing one of
+            // five pages is a 20% drop, so no automatic drop floor is safe.
+            // Adopt only an operator-acknowledged level matching the observed
+            // one. Upward shifts stay automatic.
             const ack = await readShiftAcknowledgement(sourceId, timeframe, executor)
             if (
               ack !== null &&
