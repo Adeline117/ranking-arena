@@ -85,4 +85,58 @@ describe('runMaintenanceWithStandby', () => {
     ).rejects.toThrow('boom')
     expect(redis.store.has(PRIMARY)).toBe(false)
   })
+
+  it('pages when the standby takes over from an overdue primary, and still runs', async () => {
+    const redis = fakeRedis()
+    const now = 10 * EVERY
+    redis.store.set(PRIMARY, String(now - Math.ceil(STANDBY_GRACE * EVERY) - 1))
+    const fn = jest.fn(async () => ({ stale: 0 }))
+    const onTakeover = jest.fn(async () => {})
+    await expect(
+      runMaintenanceWithStandby(
+        redis as never,
+        FRESHNESS,
+        { standby: true },
+        fn,
+        () => now,
+        onTakeover
+      )
+    ).resolves.toEqual({ stale: 0 })
+    expect(onTakeover).toHaveBeenCalledWith(FRESHNESS)
+    expect(fn).toHaveBeenCalled()
+  })
+
+  it('does not page while the primary is healthy, and a failing page never fails the run', async () => {
+    const redis = fakeRedis()
+    const now = 10 * EVERY
+    redis.store.set(PRIMARY, String(now - 1))
+    const quiet = jest.fn(async () => {})
+    await runMaintenanceWithStandby(
+      redis as never,
+      FRESHNESS,
+      { standby: true },
+      jest.fn(),
+      () => now,
+      quiet
+    )
+    expect(quiet).not.toHaveBeenCalled()
+
+    jest.spyOn(console, 'error').mockImplementation(() => {})
+    redis.store.set(PRIMARY, String(0))
+    const fn = jest.fn(async () => ({ stale: 0 }))
+    const failing = jest.fn(async () => {
+      throw new Error('no channel')
+    })
+    await expect(
+      runMaintenanceWithStandby(
+        redis as never,
+        FRESHNESS,
+        { standby: true },
+        fn,
+        () => now,
+        failing
+      )
+    ).resolves.toEqual({ stale: 0 })
+    expect(failing).toHaveBeenCalled()
+  })
 })

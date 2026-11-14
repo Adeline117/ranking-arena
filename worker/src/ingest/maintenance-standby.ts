@@ -72,7 +72,9 @@ export async function runMaintenanceWithStandby<T>(
   jobName: string,
   data: unknown,
   fn: () => Promise<T>,
-  now: () => number = Date.now
+  now: () => number = Date.now,
+  /** Called when the standby takes over from an overdue primary (a node-down signal). */
+  onTakeover: (jobName: string) => Promise<void> = async () => {}
 ): Promise<T | { skipped: 'primary-healthy'; primaryLastRunAt: string }> {
   const standby = isStandbyJob(data)
   if (standby) {
@@ -90,6 +92,14 @@ export async function runMaintenanceWithStandby<T>(
       )
     }
     console.warn(`[maint-standby] ${jobName}: primary overdue — standby node is running it`)
+    // The primary node stopped running maintenance: page it, never let the
+    // takeover itself fail the job (the standby run is the remedy).
+    await onTakeover(jobName).catch((err) =>
+      console.error(
+        `[maint-standby] ${jobName}: takeover alert failed:`,
+        err instanceof Error ? err.message : err
+      )
+    )
   }
 
   const result = await fn()

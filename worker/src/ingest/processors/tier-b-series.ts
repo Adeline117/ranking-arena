@@ -23,6 +23,7 @@
  *   'series_backfill') stores the next rank offset to resume from.
  */
 
+import { NATIVE_COHORT_MAX_SNAPSHOT_AGE_SECONDS } from '@/lib/ingest/native-cohort'
 import type { Job } from 'bullmq'
 import { getIngestPool } from '@/lib/ingest/db'
 import { getSourceBySlug, profileTimeframes } from '@/lib/ingest/sources'
@@ -75,7 +76,9 @@ async function getBandTraders(
        SELECT DISTINCT ON (timeframe) id AS snapshot_id
          FROM arena.leaderboard_snapshots
         WHERE source_id = $1 AND count_check_passed
-        ORDER BY timeframe, scraped_at DESC
+          AND NOT is_derived
+          AND scraped_at > now() - make_interval(secs => ${NATIVE_COHORT_MAX_SNAPSHOT_AGE_SECONDS})
+        ORDER BY timeframe, scraped_at DESC, id DESC
      ),
      ranked AS (
        SELECT e.trader_id, min(e.rank) AS rank
@@ -113,7 +116,9 @@ async function getNeverCrawledBandTraders(
        SELECT DISTINCT ON (timeframe) id AS snapshot_id
          FROM arena.leaderboard_snapshots
         WHERE source_id = $1 AND count_check_passed
-        ORDER BY timeframe, scraped_at DESC
+          AND NOT is_derived
+          AND scraped_at > now() - make_interval(secs => ${NATIVE_COHORT_MAX_SNAPSHOT_AGE_SECONDS})
+        ORDER BY timeframe, scraped_at DESC, id DESC
      ),
      ranked AS (
        SELECT e.trader_id, min(e.rank) AS rank
@@ -152,7 +157,9 @@ async function bandSize(sourceId: number, topN: number, backfillTopN: number): P
        SELECT DISTINCT ON (timeframe) id AS snapshot_id
          FROM arena.leaderboard_snapshots
         WHERE source_id = $1 AND count_check_passed
-        ORDER BY timeframe, scraped_at DESC
+          AND NOT is_derived
+          AND scraped_at > now() - make_interval(secs => ${NATIVE_COHORT_MAX_SNAPSHOT_AGE_SECONDS})
+        ORDER BY timeframe, scraped_at DESC, id DESC
      ),
      ranked AS (
        SELECT e.trader_id, min(e.rank) AS rank
