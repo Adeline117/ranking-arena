@@ -273,7 +273,11 @@ export function generateTraderProfilePageSchema(
     name: `${trader.handle} - Crypto Trader Profile`,
     url: `${BASE_URL}/trader/${encodeURIComponent(trader.handle)}`,
     description,
-    dateModified: lastModified || new Date().toISOString(),
+    // Only a real data time may be claimed. The render/request time is not
+    // when this trader's data changed, so an unknown time omits the field.
+    ...(lastModified && Number.isFinite(Date.parse(lastModified))
+      ? { dateModified: lastModified }
+      : {}),
   }
 }
 

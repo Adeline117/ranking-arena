@@ -195,6 +195,7 @@ import { useOnchainEnrichTrigger } from './hooks/useOnchainEnrichTrigger'
 import { TraderProfileError } from './components/TraderProfileError'
 import { TraderStaleBanner, TraderPlatformDeadBanner } from './components/TraderStatusBanners'
 import { resolveTraderProfileOwnership } from './profile-ownership'
+import { resolveHeaderDataTime } from '@/app/components/trader/header-data-time'
 import {
   parseExactTraderClaimEnvelope,
   resolveTraderClaimSources,
@@ -1131,12 +1132,13 @@ export default function TraderProfileClient({
     traderKey: accountDetailReady ? visibleTraderKey : undefined,
     tradingStyle:
       (exactPerformanceRecord?.tradingStyle as string) ?? exactPerformance?.trading_style ?? null,
-    lastUpdated:
-      scopedTraderData?.lastUpdated ??
-      scopedTraderData?.trackedSince ??
+    // Source capture time only — never trackedSince (first-seen) or compute time.
+    lastUpdated: resolveHeaderDataTime(
+      scopedTraderData?.lastUpdated,
       (validatedActiveAccount ? selectedServingFirstScreen : servingFirstScreen)?.entries.find(
         (entry) => entry.timeframe === 90
-      )?.provenance.asOf,
+      )?.provenance.asOf
+    ),
     isBot: visibleSource === 'web3_bot',
   })
 

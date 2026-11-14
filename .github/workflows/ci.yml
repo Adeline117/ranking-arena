@@ -405,6 +405,8 @@ jobs:
         run: npm run qa:vps-topology
       - name: UI sweep unit contracts
         run: npm run qa:sweep-unit
+      - name: Data-time honesty (computed_at is not data freshness)
+        run: npm run qa:data-time
 
       # API 鉴权覆盖兜底(默认拒绝)：无根级 middleware，313+ route 靠自觉调 auth
       # wrapper——本检查强制每个 route 要么有 auth 原语要么在显式公开白名单，

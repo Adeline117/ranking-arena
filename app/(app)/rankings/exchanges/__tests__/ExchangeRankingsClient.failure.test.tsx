@@ -94,4 +94,23 @@ describe('ExchangeRankingsClient failure states', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
+
+  it('dates the page footer by the oldest exchange source time, not the newest', () => {
+    const fresh: ExchangeRankingRow = {
+      ...row,
+      source: 'okx',
+      exchangeSlug: 'okx',
+      exchangeName: 'OKX',
+      provenance: { source: 'okx', asOf: '2026-11-10T12:00:00.000Z', derived: false },
+    }
+    render(
+      <ExchangeRankingsClient
+        byTimeframe={{ 7: result(7), 30: result(30), 90: result(90, [fresh, row]) }}
+      />
+    )
+
+    const footer = screen.getByText(/provenanceSource: Arena/)
+    expect(footer.querySelector('time')).toHaveAttribute('dateTime', row.provenance.asOf)
+    expect(footer).toHaveTextContent('dataStaleWarning')
+  })
 })
