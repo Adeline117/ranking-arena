@@ -78,7 +78,10 @@ export function toUiTrader(row: UiTraderInput): Trader {
     rank: publishedRankOrNull(row.rank),
     rank_change: finiteOrNull(row.rank_change),
     is_new: row.is_new === true,
-    score_confidence: tier(row.score_confidence),
+    // SSR derives confidence from `score_completeness` (lib/data/trader/mappers);
+    // /api/traders has no confidence column, so derive it the same way here.
+    // Otherwise the indicator flips to "unknown" on the first client refresh.
+    score_confidence: tier(row.score_confidence) ?? tier(row.score_completeness),
     profitability_score: finiteOrNull(row.profitability_score),
     risk_control_score: finiteOrNull(row.risk_control_score),
     execution_score: finiteOrNull(row.execution_score),

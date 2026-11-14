@@ -12,6 +12,8 @@ import type { UnifiedTrader } from '@/lib/types/unified-trader'
 import { getLeaderboard } from '@/lib/data/unified'
 import { isInPublicCohort } from '@/lib/rankings/public-cohort'
 import { attachAvatarMirrors } from '@/lib/data/avatar-mirrors'
+import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
+import { claimedTraderBadgeKey, getClaimedTraderBadgeKeys } from '@/lib/data/claimed-trader-badges'
 import { logger, fireAndForget } from '@/lib/logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import * as cache from '@/lib/cache'
@@ -78,6 +80,10 @@ export interface InitialTrader {
   trading_style?: string | null
   avg_holding_hours?: number | null
   trader_type?: string | null
+  /** Claimed-owner badge — same lookup /api/traders applies (verified_traders). */
+  is_verified?: boolean
+  /** API-verified data badge — same lookup /api/traders applies. */
+  is_verified_data?: boolean
   /**
    * Cache-revalidation evidence copied from the verified cohort view. These
    * columns are public view fields, not derived UI state: retaining them lets
@@ -606,11 +612,20 @@ export async function fetchLeaderboardFromDB(
       ...pageResult.traders.map((trader) => trader.source),
       ...(pageResult.lookahead ? [pageResult.lookahead.source] : []),
     ]
-    const [enrichedTraders, watermarkRows] = await Promise.all([
+    const [mirroredTraders, watermarkRows, claimedKeys, verifiedKeys] = await Promise.all([
       attachAvatarMirrors(supabase, pageResult.traders, signal),
       fetchInitialFreshnessRows(supabase, timeRange, observedSources, signal),
+      getClaimedTraderBadgeKeys(supabase),
+      getVerifiedTraderKeys(supabase, signal),
     ])
     if (signal.aborted) throw signal.reason
+    // Same badge lookups as /api/traders, so the first paint and the client
+    // refresh show the same Verified / claimed badges.
+    const enrichedTraders = mirroredTraders.map((trader) => ({
+      ...trader,
+      is_verified: claimedKeys.has(claimedTraderBadgeKey(trader.source, trader.id)),
+      is_verified_data: verifiedKeys.has(verifiedTraderKey(trader.source, trader.id)),
+    }))
 
     const freshness = summarizeInitialTraderFreshness({
       watermarkRows,

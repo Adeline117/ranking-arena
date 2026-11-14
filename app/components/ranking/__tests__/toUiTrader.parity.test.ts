@@ -23,7 +23,8 @@ const ssrRow: InitialTrader = {
   arena_score: 88.2,
   sharpe: 2.1,
   trades_count: 40,
-  score_confidence: null,
+  // getInitialTraders derives this from score_completeness ('full').
+  score_confidence: 'full',
   rank_change: 2,
   is_new: false,
   copiers: 17,
@@ -37,6 +38,8 @@ const ssrRow: InitialTrader = {
   trading_style: 'swing',
   avg_holding_hours: 30,
   trader_type: 'suspected_bot',
+  is_verified: true,
+  is_verified_data: false,
   source_trader_id: 'trader-1',
   season_id: '90D',
   score_completeness: 'full',
@@ -79,6 +82,7 @@ const apiRow = {
   is_outlier: false,
   computed_at: '2026-11-12T00:00:00.000Z',
   anti_gaming_flags: ['implausible_win_rate'],
+  is_verified: true,
   is_verified_data: false,
 }
 
@@ -107,6 +111,15 @@ describe('toUiTrader — SSR and client rows map identically', () => {
       avg_holding_hours: 30,
       profitability_score: 30,
     })
+  })
+
+  it('keeps score confidence and the claimed badge across the SSR -> client refresh', () => {
+    const ssr = toUiTrader(ssrRow)
+    const client = toUiTrader(apiRow)
+    expect(ssr.score_confidence).toBe('full')
+    expect(client.score_confidence).toBe('full')
+    expect(ssr.is_verified).toBe(true)
+    expect(client.is_verified).toBe(true)
   })
 
   it('reads the SSR `sharpe` alias when `sharpe_ratio` is absent (old cache payload)', () => {
