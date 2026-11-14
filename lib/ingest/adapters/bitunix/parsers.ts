@@ -31,6 +31,7 @@ import type {
   RankingTimeframe,
   Timeframe,
 } from '../../core/types'
+import { positionEnvelopeRows } from '../../core/position-snapshot'
 import { parseBitunixCopiersV1 } from './copier-parser-v1'
 
 type Dict = Record<string, unknown>
@@ -249,7 +250,12 @@ export function parseBitunixProfile(raw: unknown, ctx: ParseCtx): ParsedProfile 
  * mark price, unrealized PnL and ROE are all public here.
  */
 export function parseBitunixPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const list = Array.isArray((raw as Dict)?.data) ? ((raw as Dict).data as Dict[]) : []
+  const list = positionEnvelopeRows(
+    'bitunix',
+    raw,
+    (e) => e.code === 0,
+    (e) => e.data
+  )
   const out: ParsedPosition[] = []
   for (const item of list) {
     if (!item.symbol) continue

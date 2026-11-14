@@ -28,6 +28,7 @@ import type {
   RankingTimeframe,
   Timeframe,
 } from '../../core/types'
+import { positionEnvelopeRows } from '../../core/position-snapshot'
 import { parseOkxCopiersV1 } from './copier-parser-v1'
 
 type Dict = Record<string, unknown>
@@ -249,8 +250,16 @@ export function parseOkxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
 // ── Positions (public-current-subpositions) ──
 
 export function parseOkxPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
+  // getPositions wraps fetchData's payload (code '0' already enforced) as
+  // { data }; a non-array data is still a failed fetch, not a flat book.
+  const rows = positionEnvelopeRows(
+    'okx',
+    raw,
+    (e) => e.code === undefined || e.code === '0',
+    (e) => e.data
+  )
   const out: ParsedPosition[] = []
-  for (const item of dataRows(raw)) {
+  for (const item of rows) {
     const symbol = str(item.instId)
     if (!symbol) continue
     out.push({

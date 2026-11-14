@@ -30,6 +30,7 @@ import type {
   ParsedStats,
   Timeframe,
 } from '../../core/types'
+import { positionEnvelopeRows } from '../../core/position-snapshot'
 import { parseMexcCopiersV1 } from './copier-parser-v1'
 
 type Dict = Record<string, unknown>
@@ -306,8 +307,12 @@ export function parseMexcProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
  * unrealized PnL is NOT public here → NULL (NULL-collapse, spec §6).
  */
 export function parseMexcPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const d = data(raw)
-  const list = Array.isArray(d?.content) ? (d.content as Dict[]) : []
+  const list = positionEnvelopeRows(
+    'mexc',
+    raw,
+    (e) => e.success === true && e.code === 0,
+    (e) => (e.data as Dict | null)?.content
+  )
   const out: ParsedPosition[] = []
   for (const item of list) {
     if (!item.symbol) continue

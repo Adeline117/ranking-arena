@@ -27,6 +27,7 @@ import type {
   RankingTimeframe,
   Timeframe,
 } from '../../core/types'
+import { positionEnvelopeRows } from '../../core/position-snapshot'
 import { riskFromEquitySeries } from '../../core/series-risk'
 import { fillStats, reconstructRoundTrips, type HlFill } from './fills'
 import type { HyperliquidFillsFetch } from './fills-fetch'
@@ -508,8 +509,14 @@ export function parseHyperliquidProfile(raw: unknown, ctx: ParseCtx): ParsedProf
 
 /** clearinghouseState.assetPositions → current open positions (Tier D). */
 export function parseHyperliquidPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const ch = (raw ?? {}) as Dict
-  const assetPositions = Array.isArray(ch.assetPositions) ? (ch.assetPositions as Dict[]) : []
+  // clearinghouseState has no code field; a missing assetPositions array is a
+  // failed fetch, never a flat book.
+  const assetPositions = positionEnvelopeRows(
+    'hyperliquid',
+    raw,
+    () => true,
+    (e) => e.assetPositions
+  )
 
   const out: ParsedPosition[] = []
   for (const ap of assetPositions) {

@@ -43,6 +43,7 @@ import type {
   ParsedStats,
   Timeframe,
 } from '../../core/types'
+import { positionEnvelopeRows } from '../../core/position-snapshot'
 
 type Dict = Record<string, unknown>
 
@@ -235,8 +236,12 @@ export function parseHtxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
 
 /** Current positions (GET trader-info/current-positions, { isHide, positions }). */
 export function parseHtxPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const d = data(raw)
-  const list = Array.isArray(d?.positions) ? (d.positions as Dict[]) : []
+  const list = positionEnvelopeRows(
+    'htx',
+    raw,
+    (e) => e.code === 200 && e.success === true,
+    (e) => (e.data as Dict | null)?.positions
+  )
   const out: ParsedPosition[] = []
   for (const item of list) {
     const symbol = item.contractCode ?? item.symbol

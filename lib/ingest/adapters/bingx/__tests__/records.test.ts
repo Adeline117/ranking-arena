@@ -34,7 +34,7 @@ describe('parseBingxPositions', () => {
   })
 
   it('returns [] for an empty positions payload', () => {
-    expect(parseBingxPositions({ data: { result: [], total: 0 } }, ctx)).toEqual([])
+    expect(parseBingxPositions({ code: 0, data: { result: [], total: 0 } }, ctx)).toEqual([])
   })
 })
 

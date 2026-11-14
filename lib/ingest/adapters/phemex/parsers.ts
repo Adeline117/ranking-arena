@@ -47,6 +47,7 @@ import type {
   ParsedStats,
   Timeframe,
 } from '../../core/types'
+import { positionEnvelopeRows } from '../../core/position-snapshot'
 
 type Dict = Record<string, unknown>
 
@@ -300,8 +301,12 @@ export function parsePhemexProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
 
 /** Current positions (GET position/current/v2, { total, rows }). */
 export function parsePhemexPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const d = data(raw) as Dict | null
-  const rows = Array.isArray(d?.rows) ? (d.rows as Dict[]) : []
+  const rows = positionEnvelopeRows(
+    'phemex',
+    raw,
+    (e) => e.code === 0,
+    (e) => (e.data as Dict | null)?.rows
+  )
   const out: ParsedPosition[] = []
   for (const item of rows) {
     if (!item.symbol) continue

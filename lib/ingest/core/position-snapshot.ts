@@ -35,3 +35,30 @@ export function parsePositionSnapshot(
   })
   return positions
 }
+
+type Dict = Record<string, unknown>
+
+/**
+ * The row array of a position response, or a throw. `isSuccess` is the
+ * source's success-envelope test; `rows` picks the row array out of the
+ * envelope. A business-error envelope or a non-array row field is a failed
+ * fetch — returning [] would make publishPositions delete the stored book.
+ */
+export function positionEnvelopeRows(
+  source: string,
+  raw: unknown,
+  isSuccess: (envelope: Dict) => boolean,
+  rows: (envelope: Dict) => unknown
+): Dict[] {
+  const envelope = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Dict) : null
+  if (!envelope || !isSuccess(envelope)) {
+    throw new Error(
+      `[${source}] positions returned a non-success API envelope (code=${String(envelope?.code)})`
+    )
+  }
+  const list = rows(envelope)
+  if (!Array.isArray(list)) {
+    throw new Error(`[${source}] positions returned a malformed envelope (rows are not an array)`)
+  }
+  return list.filter((row): row is Dict => !!row && typeof row === 'object' && !Array.isArray(row))
+}

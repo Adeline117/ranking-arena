@@ -32,6 +32,7 @@ import type {
   ParsedProfile,
   RankingTimeframe,
 } from '../../core/types'
+import { positionEnvelopeRows } from '../../core/position-snapshot'
 type Dict = Record<string, unknown>
 
 const E30 = 1e30
@@ -370,7 +371,13 @@ interface TokenInfo {
  */
 export function parseGmxPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
   const payload = (raw ?? {}) as { positions?: unknown; markets?: unknown; tokens?: unknown }
-  const positions = Array.isArray(payload.positions) ? (payload.positions as Dict[]) : []
+  // A missing positions array is a failed subgraph read, never a flat book.
+  const positions = positionEnvelopeRows(
+    'gmx',
+    raw,
+    () => true,
+    () => payload.positions
+  )
   const markets = Array.isArray(payload.markets) ? (payload.markets as Dict[]) : []
   const tokens = Array.isArray(payload.tokens) ? (payload.tokens as TokenInfo[]) : []
 
