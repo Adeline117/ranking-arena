@@ -176,6 +176,9 @@ test(
          INSERT INTO auth.identities VALUES (1, 1);
          INSERT INTO public.user_profiles VALUES (1, 'owner@example.com');
          INSERT INTO public.posts VALUES (1, 'first post');
+         -- Large incompressible content: the dump must exceed pg_restore's read-ahead
+         -- so --list closes its stdin while verification is still streaming.
+         INSERT INTO public.posts SELECT g, (SELECT string_agg(md5((g * 1000 + i)::text), '') FROM generate_series(1, 40) i) FROM generate_series(2, 6000) g;
          INSERT INTO public.comments VALUES (1);
          INSERT INTO public.groups VALUES (1);
          INSERT INTO public.group_members VALUES (1);
@@ -208,7 +211,7 @@ test(
       assert.equal(
         psql(
           'restored',
-          `SELECT (SELECT email FROM auth.users) || '|' || (SELECT body FROM public.posts) || '|' || (SELECT trader_id FROM public.trader_follows) || '|' || (SELECT count(*) FROM public.trader_equity_curve) || '|' || (SELECT count(*) FROM public.tph_2026_05)`
+          `SELECT (SELECT email FROM auth.users) || '|' || (SELECT body FROM public.posts WHERE id = 1) || '|' || (SELECT trader_id FROM public.trader_follows) || '|' || (SELECT count(*) FROM public.trader_equity_curve) || '|' || (SELECT count(*) FROM public.tph_2026_05)`
         ).trim(),
         'owner@example.com|first post|trader-1|0|0'
       )
