@@ -204,6 +204,18 @@ async function runJob(
   // one-way token digests and the public lease proof can cross this boundary.
   void provenance
   const { runMaintenanceWithStandby } = await import('./ingest/maintenance-standby')
+  const pagePrimaryDown = async (jobName: string) => {
+    const { alert } = await import('@/lib/ingest/alerting')
+    await alert(getConnection(), {
+      sourceSlug: `framework:maintenance-primary-down:${jobName}`,
+      phase: 0,
+      tier: 'A',
+      page: true,
+      message:
+        `${jobName}: the primary (local) node has not run this maintenance job for over 1.5× ` +
+        'its cadence; the SG standby took over. The primary node is likely down — restart it.',
+    })
+  }
   switch (job.name) {
     case INGEST_JOB.TIER_A: {
       const { processTierA } = await import('./ingest/processors/tier-a-leaderboard')
@@ -236,20 +248,35 @@ async function runJob(
       return { mirrored: 0, failed: 0 }
     case INGEST_JOB.MAINTENANCE: {
       const { processMaintenance } = await import('./ingest/processors/maintenance')
-      return runMaintenanceWithStandby(getConnection(), job.name, job.data, () =>
-        processMaintenance(job)
+      return runMaintenanceWithStandby(
+        getConnection(),
+        job.name,
+        job.data,
+        () => processMaintenance(job),
+        Date.now,
+        pagePrimaryDown
       )
     }
     case INGEST_JOB.FRESHNESS: {
       const { processFreshness } = await import('./ingest/processors/freshness-sentinel')
-      return runMaintenanceWithStandby(getConnection(), job.name, job.data, () =>
-        processFreshness(job)
+      return runMaintenanceWithStandby(
+        getConnection(),
+        job.name,
+        job.data,
+        () => processFreshness(job),
+        Date.now,
+        pagePrimaryDown
       )
     }
     case INGEST_JOB.DAILY_DIGEST: {
       const { processDailyDigest } = await import('./ingest/processors/daily-digest')
-      return runMaintenanceWithStandby(getConnection(), job.name, job.data, () =>
-        processDailyDigest(job)
+      return runMaintenanceWithStandby(
+        getConnection(),
+        job.name,
+        job.data,
+        () => processDailyDigest(job),
+        Date.now,
+        pagePrimaryDown
       )
     }
     case INGEST_JOB.ONCHAIN_ENRICH: {
