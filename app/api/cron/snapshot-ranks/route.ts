@@ -2,8 +2,10 @@
  * Cron: Snapshot daily ranks into rank_history
  * Schedule: Daily at 00:15 UTC (after compute-leaderboard has run)
  *
- * Takes a daily snapshot of leaderboard_ranks (top 500 per period) and
- * writes into rank_history for sparkline trajectory rendering.
+ * Takes a daily snapshot of the sealed public cohort (public_ranked_leaderboard,
+ * top 500 per period) and writes into rank_history for sparkline trajectory
+ * rendering. Raw leaderboard_ranks rows of an unsealed, isolated or expired
+ * cohort never enter the history.
  * Retains 30 days of history (older rows cleaned up automatically).
  */
 
@@ -36,7 +38,7 @@ export const GET = withCron(
     const periodResults = await Promise.all(
       PERIODS.map(async (period) => {
         const { data: rows, error: fetchError } = await supabase
-          .from('leaderboard_ranks')
+          .from('public_ranked_leaderboard')
           .select('source, source_trader_id, rank, arena_score')
           .eq('season_id', period)
           .not('rank', 'is', null)
@@ -44,7 +46,7 @@ export const GET = withCron(
           .limit(TOP_N)
 
         if (fetchError) {
-          log.error(`Failed to fetch leaderboard_ranks for ${period}`, {
+          log.error(`Failed to fetch public_ranked_leaderboard for ${period}`, {
             error: fetchError.message,
           })
           failures.push(`${period} fetch: ${fetchError.message}`)
@@ -55,11 +57,10 @@ export const GET = withCron(
           return 0
         }
 
-        // rank 在 leaderboard_ranks 可空,但 rank_history.rank 非空 —— 跳过空 rank
-        // 行(flatMap 在 else 分支收窄 row.rank 为 number)。查询已 .not('rank',is,null),
-        // 此处是类型安全 + 防御双保险。
+        // 视图列在生成类型里都可空,rank_history 的这三列非空 —— 跳过空值行
+        // (flatMap 收窄类型)。
         const records = rows.flatMap((row) =>
-          row.rank == null
+          row.rank == null || row.source == null || row.source_trader_id == null
             ? []
             : [
                 {
