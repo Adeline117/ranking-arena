@@ -37,6 +37,7 @@ import {
   unlinkSync,
 } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { Writable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
 import { preparePostgresConnection } from './backup-restore-contract.mjs'
@@ -208,7 +209,28 @@ export async function verifyBackupFile(filePath, passphrase) {
     listing += chunk
   })
   const exited = waitForExit(restore, 'pg_restore --list')
-  await decryptFileToStream(filePath, restore.stdin, passphrase)
+  // pg_restore --list reads the table of contents and closes its stdin long
+  // before a real dump has been fully written. Keep decrypting to the end
+  // anyway — that is what authenticates the whole file (GCM tag) — and just
+  // stop forwarding once the reader has gone.
+  let readerGone = false
+  restore.stdin.on('error', () => {
+    readerGone = true
+  })
+  restore.stdin.on('close', () => {
+    readerGone = true
+  })
+  const forward = new Writable({
+    write(chunk, _encoding, callback) {
+      if (readerGone || restore.stdin.destroyed) return callback()
+      restore.stdin.write(chunk, () => callback())
+    },
+    final(callback) {
+      if (!readerGone && !restore.stdin.destroyed) restore.stdin.end()
+      callback()
+    },
+  })
+  await decryptFileToStream(filePath, forward, passphrase)
   await exited
   const entries = parseTableDataEntries(listing)
   assertCriticalCoverage(entries)
