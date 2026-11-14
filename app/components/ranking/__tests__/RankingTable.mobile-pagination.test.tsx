@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { RankingTable } from '../RankingTable'
 import type { Trader } from '../RankingTableTypes'
 
@@ -17,7 +17,7 @@ jest.mock('../TraderRow', () => ({
 }))
 
 jest.mock('../MobileRankRows', () => ({
-  MobileRankHeader: () => null,
+  MobileRankHeader: jest.requireActual('../MobileRankRows').MobileRankHeader,
   TraderMobileRow: ({ trader }: { trader: Trader }) => <div data-testid="card">{trader.id}</div>,
 }))
 
@@ -109,6 +109,28 @@ describe('RankingTable mobile card pagination', () => {
     const pagination = screen.getByTestId('pagination')
     expect(pagination).toHaveAttribute('data-has-more', 'true')
     expect(screen.queryByText('endOfList')).not.toBeInTheDocument()
+  })
+
+  it('lets mobile users change the server sort order from the compact header', () => {
+    const onSortChange = jest.fn()
+    render(
+      <RankingTable
+        traders={makeTraders(5)}
+        loading={false}
+        loggedIn
+        controlledPage={1}
+        controlledSortColumn="score"
+        controlledSortDir="desc"
+        onSortChange={onSortChange}
+        hasMore={false}
+      />
+    )
+    const select = screen.getByRole('combobox', { name: 'rankingMobileSortLabel' })
+    expect(select).toHaveValue('score:desc')
+    fireEvent.change(select, { target: { value: 'roi:desc' } })
+    expect(onSortChange).toHaveBeenCalledWith('roi', 'desc')
+    fireEvent.change(select, { target: { value: 'mdd:asc' } })
+    expect(onSortChange).toHaveBeenLastCalledWith('mdd', 'asc')
   })
 
   it('shows endOfList only when the server proves there is no next page', () => {

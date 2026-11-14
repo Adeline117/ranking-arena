@@ -13,6 +13,7 @@ import React from 'react'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { getScoreColorInfo } from '@/lib/utils/score-colors'
 import { normalizeFiniteScore } from './RankingTableTypes'
+import { t } from '@/lib/i18n'
 
 export interface ScoreMiniBarProps {
   /** Arena score (0–100). */
@@ -27,8 +28,8 @@ export interface ScoreMiniBarProps {
   style?: React.CSSProperties
   /**
    * Localized accessible label. Hook-free component, so client callers pass
-   * it (e.g. t('arenaScoreOfHundredAria')); the English default stays for the
-   * server shell, which has no client language yet.
+   * it (e.g. t('arenaScoreOfHundredAria')); the default uses the same key via
+   * the non-hook i18n lookup.
    */
   ariaLabel?: string
 }
@@ -68,7 +69,7 @@ export default function ScoreMiniBar({
       )}
       <div
         role="img"
-        aria-label={ariaLabel ?? `Arena score ${rounded} of 100`}
+        aria-label={ariaLabel ?? t('arenaScoreOfHundredAria').replace('{score}', String(rounded))}
         style={{
           width,
           height,

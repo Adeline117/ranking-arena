@@ -41,7 +41,8 @@ describe('Mobile compact ranking rows (owner 2026-11-13)', () => {
 
     expect(link).toHaveAttribute('href', '/trader/mobile-1?platform=binance_futures')
     expect(link).toHaveClass('mrow', 'mrow-top', 'mrow-top-2')
-    expect(link).toHaveAccessibleName(expect.stringContaining('Arena Score 87'))
+    // Localized via i18n keys (the mock t echoes the key), never inline English.
+    expect(link).toHaveAccessibleName('#2 Mobile Trader, arenaScoreAria, roiValueAria')
     expect(link.querySelector('.mrow-rank')).toHaveTextContent('2')
     expect(link.querySelector('.mrow-name')).toHaveTextContent('Mobile Trader')
     expect(link.querySelector('.mrow-tag')).toHaveTextContent('Futures')
@@ -110,5 +111,16 @@ describe('Desktop metric cells — Score-primary hierarchy', () => {
     const roi = container.querySelector('.roi-cell') as HTMLElement
     expect(roi.innerHTML).toContain('accent-success')
     expect(roi).toHaveTextContent('▲')
+  })
+
+  it('without a sort handler (SSR-equivalent) the trader column stays a static label', () => {
+    render(<MobileRankHeader />)
+    expect(screen.queryByTestId('mobile-rank-sort-select')).toBeNull()
+    expect(screen.getByTestId('mobile-rank-header')).toHaveTextContent('trader')
+  })
+
+  it('keeps an off-list current sort (e.g. sortino from a URL) selectable', () => {
+    render(<MobileRankHeader sortColumn="sortino" sortDir="asc" onSortChange={jest.fn()} />)
+    expect(screen.getByTestId('mobile-rank-sort-select')).toHaveValue('sortino:asc')
   })
 })

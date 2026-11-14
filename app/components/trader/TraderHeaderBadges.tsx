@@ -40,6 +40,8 @@ export interface TraderHeaderBadgesProps {
   scoreConfidence?: string | null
   tradesCount?: number | null
   rank?: number | null
+  /** Board window of `rank`; undefined = 90D. */
+  headlineWindow?: string
   tradingStyle?: string | null
   isAuthorized?: boolean
   dataSource?: 'authorized' | 'public_api' | 'enrichment' | 'historical' | null
@@ -70,6 +72,7 @@ export function TraderHeaderBadges({
   arenaScore,
   scoreConfidence,
   rank,
+  headlineWindow,
   tradingStyle,
   isAuthorized = false,
   dataSource,
@@ -239,7 +242,10 @@ export function TraderHeaderBadges({
       {/* Cross-exchange percentile — accurate "beats X% of all tracked traders"
           derived from the overall 90D rank / total tracked count (NOT the
           blended display score). The flagship moat framing. */}
-      {rank != null && rank > 0 && <CrossExchangePercentileBadge rank={rank} />}
+      {/* Denominator is the 90D tracked count, so a 7D/30D rank must not use it. */}
+      {rank != null && rank > 0 && (headlineWindow == null || headlineWindow === '90d') && (
+        <CrossExchangePercentileBadge rank={rank} />
+      )}
 
       {/* Trading Style Tag */}
       {tradingStyleCfg && (

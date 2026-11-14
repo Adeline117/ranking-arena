@@ -8,6 +8,12 @@ jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: () => ({ from: mockFrom }),
 }))
 
+const mockClaimedKeys = jest.fn(async () => new Set<string>())
+jest.mock('@/lib/data/claimed-trader-badges', () => ({
+  ...jest.requireActual('@/lib/data/claimed-trader-badges'),
+  getClaimedTraderBadgeKeys: () => mockClaimedKeys(),
+}))
+
 jest.mock('@/lib/data/avatar-mirrors', () => ({
   attachAvatarMirrors: (...args: unknown[]) => mockAttachAvatarMirrors(...args),
 }))
@@ -217,6 +223,33 @@ describe('SSR public ranking cohort', () => {
       ([column]) => column === 'arena_score'
     )
     expect(scoreFloorCalls).toEqual([['arena_score', PUBLIC_COHORT_MIN_ARENA_SCORE_EXCLUSIVE]])
+  })
+
+  it('carries the same claimed / verified-data badges as /api/traders on the SSR rows', async () => {
+    mockClaimedKeys.mockResolvedValueOnce(new Set(['binance_futures|safe-2']))
+    const cohort = cohortQuery([cohortRow('safe-1', 1), cohortRow('safe-2', 2)])
+    mockFrom.mockImplementation((relation: string) => {
+      if (relation === 'public_ranked_leaderboard') return cohort
+      if (relation === 'leaderboard_source_freshness') {
+        return resultQuery([
+          { source: 'binance_futures', source_as_of: '2026-07-24T11:00:00.000Z' },
+        ])
+      }
+      throw new Error(`unexpected relation ${relation}`)
+    })
+
+    const result = await fetchLeaderboardFromDB('90D', 2, 0)
+
+    expect(
+      result.traders.map(({ id, is_verified, is_verified_data }) => ({
+        id,
+        is_verified,
+        is_verified_data,
+      }))
+    ).toEqual([
+      { id: 'safe-1', is_verified: false, is_verified_data: false },
+      { id: 'safe-2', is_verified: true, is_verified_data: false },
+    ])
   })
 
   it('keeps totals unknown even on terminal pages until a same-predicate count authority exists', async () => {
