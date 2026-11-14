@@ -200,6 +200,20 @@ describe('alert', () => {
     expect(redis.lists.get(DIGEST_KEY)).toHaveLength(1)
   })
 
+  it('pages a framework alert the caller marks page, keeping the digest record clean', async () => {
+    const redis = new FakeRedis()
+    const fetchFn = mockFetch({ status: 200 })
+    await alert(
+      asRedis(redis),
+      { sourceSlug: 'framework', phase: 0, tier: 'maint', message: 'partitions', page: true },
+      { sleep: noSleep }
+    )
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+    expect(redis.strings.has(pageCooldownKey('framework', 'maint'))).toBe(true)
+    const [queued] = redis.lists.get(DIGEST_KEY) ?? []
+    expect(JSON.parse(queued)).not.toHaveProperty('page')
+  })
+
   it('does not re-page inside the cooldown window', async () => {
     const redis = new FakeRedis()
     const fetchFn = mockFetch({ status: 200 }, { status: 200 })
