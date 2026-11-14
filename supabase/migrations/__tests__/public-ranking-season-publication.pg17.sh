@@ -352,6 +352,12 @@ SQL
 for migration in "${CHAIN[@]}"; do
   PGOPTIONS='-c client_min_messages=warning' psql_db -q -f "$MIGRATIONS/$migration" >/dev/null
 done
+# Hero stats (20261114103025) count the sealed public cohort only.
+PGOPTIONS='-c client_min_messages=warning' psql_db -q \
+  -f "$MIGRATIONS/20261114103025_hero_stats_sealed_public_cohort.sql" >/dev/null
+hero_stats() {
+  psql_db -Atqc "SET ROLE anon; SELECT exchange_count || '|' || trader_count FROM public.get_hero_stats()"
+}
 
 view_count() {
   psql_db -Atqc "SELECT pg_catalog.count(*) FROM public.public_ranked_leaderboard WHERE season_id = '90D'"
@@ -517,8 +523,11 @@ assert_equal "refusal wrote no claim, receipt, isolation or event" "$COUNTS_BEFO
 # The registry change alone invalidates the old head (expected set changed),
 # which is the database's own rule; restoring it re-serves the unchanged
 # previous cohort because the refusal wrote nothing.
+assert_equal "hero stats count nothing while no head is valid, despite raw ranks" "0|0|7" \
+  "$(hero_stats)|$(psql_db -Atqc "SELECT pg_catalog.count(*) FROM public.leaderboard_ranks WHERE season_id = '90D'")"
 psql_db -qc "UPDATE arena.sources SET serving_mode = 'shadow' WHERE id IN (5, 6, 7, 8)"
 assert_equal "previous cohort still served after refusal" "$FIRST_VIEW" "$(anon_view)"
+assert_equal "hero stats count the served cohort" "3|7" "$(hero_stats)"
 
 # ---------------------------------------------------------------------------
 # Negative 3 (database side): even if a caller skipped the orchestrator's gate,
