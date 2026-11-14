@@ -46,29 +46,6 @@ const TRADER_RECOMMENDATION_PERIOD = '90D'
 const PUBLIC_RANKED_TRADER_RECOMMENDATION_SELECT =
   'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, rank_change, is_new, profitability_score, risk_control_score, execution_score, score_completeness, metrics_estimated, trading_style, avg_holding_hours, computed_at, season_id, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type, is_outlier'
 
-type PublicRankedLeaderboardQueryResult = {
-  data: unknown[] | null
-  error: { message: string } | null
-}
-
-type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
-  select(columns: string): PublicRankedLeaderboardQuery
-  eq(column: string, value: string): PublicRankedLeaderboardQuery
-  in(column: string, values: readonly string[]): PublicRankedLeaderboardQuery
-  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
-  gt(column: string, value: number): PublicRankedLeaderboardQuery
-  or(expression: string): PublicRankedLeaderboardQuery
-  order(
-    column: string,
-    options: { ascending: boolean; nullsFirst: boolean }
-  ): PublicRankedLeaderboardQuery
-  limit(count: number): PublicRankedLeaderboardQuery
-}
-
-type PublicRankedLeaderboardClient = {
-  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
-}
-
 type PublicRankedTraderRecommendation = Record<string, unknown> & {
   source: string
   source_trader_id: string
@@ -101,13 +78,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * view. Keeping this narrow prevents callers from accidentally selecting a
  * raw ranking relation through this recommendation path.
  */
-function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
-  if (!isRecord(value) || typeof value.from !== 'function') {
-    throw new TypeError('Supabase client does not expose the public ranking cohort')
-  }
-  return value as PublicRankedLeaderboardClient
-}
-
 function hasPositivePublicRank(row: unknown): row is PublicRankedTraderRecommendation {
   return (
     isRecord(row) &&
@@ -350,14 +320,13 @@ async function getCurrentTraderRecommendations(
         // The security-barrier view establishes complete metric, source,
         // publication, and freshness eligibility before these candidate
         // identity predicates. The collaborative RPC is never rank authority.
-        const { data: currentTraders, error: currentTradersError } =
-          await publicRankedLeaderboardClient(supabase)
-            .from('public_ranked_leaderboard')
-            .select(PUBLIC_RANKED_TRADER_RECOMMENDATION_SELECT)
-            .eq('season_id', TRADER_RECOMMENDATION_PERIOD)
-            .not('rank', 'is', null)
-            .in('source', traderSources)
-            .in('source_trader_id', traderKeys)
+        const { data: currentTraders, error: currentTradersError } = await supabase
+          .from('public_ranked_leaderboard')
+          .select(PUBLIC_RANKED_TRADER_RECOMMENDATION_SELECT)
+          .eq('season_id', TRADER_RECOMMENDATION_PERIOD)
+          .not('rank', 'is', null)
+          .in('source', traderSources)
+          .in('source_trader_id', traderKeys)
 
         if (currentTradersError) {
           return unavailableTraderRecommendations('unknown', 'public_cohort_unavailable')
@@ -399,9 +368,8 @@ async function getCurrentTraderRecommendations(
     // Fall back only to a finite slice of the same sealed view. No Redis
     // position, raw rank row, or partial profile observation may become a
     // "top performer" recommendation.
-    const { data: topTraders, error: topTradersError } = await publicRankedLeaderboardClient(
-      supabase
-    )
+    const { data: topTraders, error: topTradersError } = await supabase
+
       .from('public_ranked_leaderboard')
       .select(PUBLIC_RANKED_TRADER_RECOMMENDATION_SELECT)
       .eq('season_id', TRADER_RECOMMENDATION_PERIOD)

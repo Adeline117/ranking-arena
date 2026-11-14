@@ -47,22 +47,6 @@ interface TelegramSendMessageParams {
   reply_to_message_id?: number
 }
 
-type PublicStatsQueryResult = {
-  data: unknown[] | null
-  error: { message: string } | null
-  count?: number | null
-}
-
-type PublicStatsQuery = PromiseLike<PublicStatsQueryResult> & {
-  select(columns: string, options?: { count?: 'exact'; head?: boolean }): PublicStatsQuery
-  eq(column: string, value: string): PublicStatsQuery
-  range(from: number, to: number): PublicStatsQuery
-}
-
-type PublicStatsClient = {
-  from(relation: 'public_ranked_leaderboard'): PublicStatsQuery
-}
-
 const PUBLIC_TELEGRAM_STATS_PERIOD = '90D'
 // Keep the bot's source scan bounded. A partial source list is less honest
 // than explicitly reporting its publication state as unknown.
@@ -70,13 +54,6 @@ const MAX_PUBLIC_TELEGRAM_STATS_SOURCE_ROWS = 5_000
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function publicStatsClient(value: unknown): PublicStatsClient {
-  if (!isRecord(value) || typeof value.from !== 'function') {
-    throw new TypeError('Supabase client does not expose the public ranking cohort')
-  }
-  return value as PublicStatsClient
 }
 
 function exactPublicTraderCount(value: unknown): number | null {
@@ -363,7 +340,7 @@ async function handlePrice(chatId: number, args: string, lang: BotLang): Promise
 }
 
 async function handleStats(chatId: number, lang: BotLang): Promise<void> {
-  const cohort = publicStatsClient(getSupabaseAdmin())
+  const cohort = getSupabaseAdmin()
   const [traderResult, exchangeResult] = await Promise.all([
     cohort
       .from('public_ranked_leaderboard')

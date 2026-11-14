@@ -46,7 +46,8 @@ CREATE TABLE arena.raw_objects (
 );
 CREATE TABLE arena.leaderboard_snapshots (
   id bigint PRIMARY KEY, source_id smallint NOT NULL, timeframe smallint NOT NULL,
-  scraped_at timestamptz NOT NULL, count_check_passed boolean NOT NULL
+  scraped_at timestamptz NOT NULL, count_check_passed boolean NOT NULL,
+  raw_object_id bigint
 );
 CREATE TABLE arena.leaderboard_entries (
   scraped_at timestamptz NOT NULL, snapshot_id bigint NOT NULL, trader_id bigint NOT NULL,
@@ -82,10 +83,13 @@ INSERT INTO arena.raw_objects VALUES
   (2, 'raw/2', 'h2', false, now() - interval '40 days'),
   (3, 'raw/3', 'h3', false, now() - interval '40 days'),
   (4, 'raw/4', 'h4', false, now() - interval '40 days'),
-  (5, 'raw/5', 'h5', false, now() - interval '1 day');
+  (5, 'raw/5', 'h5', false, now() - interval '1 day'),
+  (6, 'raw/6', 'h6', false, now() - interval '40 days');
 INSERT INTO arena.leaderboard_snapshots VALUES
   (10, 1, 90, date_trunc('day', now() - interval '20 days') + interval '20 hours', true),
   (11, 1, 90, date_trunc('day', now() - interval '20 days') + interval '10 hours', false);
+-- Snapshot 10 is a no-trust-path board: raw 6 is its soft-referenced payload.
+UPDATE arena.leaderboard_snapshots SET raw_object_id = 6 WHERE id = 10;
 INSERT INTO arena.leaderboard_entries VALUES
   ((SELECT scraped_at FROM arena.leaderboard_snapshots WHERE id = 11), 11, 100),
   ((SELECT scraped_at FROM arena.leaderboard_snapshots WHERE id = 11), 11, 101),

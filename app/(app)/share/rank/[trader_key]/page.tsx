@@ -35,21 +35,6 @@ export const revalidate = 300
 const PUBLIC_SHARE_RANK_COLUMNS =
   'rank,rank_change,roi,pnl,win_rate,arena_score,max_drawdown,source,source_trader_id,score_completeness,metrics_estimated,is_outlier,computed_at,season_id'
 
-type PublicShareRankQueryResult = {
-  data: unknown | null
-  error: { message: string } | null
-}
-
-type PublicShareRankQuery = {
-  select(columns: string): PublicShareRankQuery
-  eq(column: string, value: string): PublicShareRankQuery
-  maybeSingle(): Promise<PublicShareRankQueryResult>
-}
-
-type PublicShareRankClient = {
-  from(relation: 'public_ranked_leaderboard'): PublicShareRankQuery
-}
-
 type VerifiedShareRank = {
   rank: number
   rankChange: number | null
@@ -64,13 +49,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /** Local bridge until generated Supabase types include the additive public view. */
-function publicShareRankClient(value: unknown): PublicShareRankClient {
-  if (!isRecord(value) || typeof value.from !== 'function') {
-    throw new TypeError('Supabase client does not expose the public ranking cohort')
-  }
-  return value as PublicShareRankClient
-}
-
 function finiteOrNull(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
@@ -149,14 +127,14 @@ async function resolveTraderForWrapped(
 
     const rankResult = isPublicRankingSourceAllowed(resolved.platform)
       ? await Promise.race([
-          publicShareRankClient(supabase)
+          supabase
             .from('public_ranked_leaderboard')
             .select(PUBLIC_SHARE_RANK_COLUMNS)
             .eq('source', resolved.platform)
             .eq('source_trader_id', resolved.traderKey)
             .eq('season_id', seasonId)
             .maybeSingle(),
-          new Promise<PublicShareRankQueryResult>((resolve) =>
+          new Promise<{ data: null; error: null }>((resolve) =>
             setTimeout(() => resolve({ data: null, error: null }), SSR_TIMEOUT_MS)
           ),
         ])

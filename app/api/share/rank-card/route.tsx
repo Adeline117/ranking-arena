@@ -59,21 +59,6 @@ const PLAT_L: Record<string, string> = {
 const PUBLIC_RANK_CARD_COLUMNS =
   'rank,roi,win_rate,arena_score,source,source_trader_id,score_completeness,metrics_estimated,is_outlier,computed_at,season_id'
 
-type PublicRankCardQueryResult = {
-  data: unknown | null
-  error: { message: string } | null
-}
-
-type PublicRankCardQuery = {
-  select(columns: string): PublicRankCardQuery
-  eq(column: string, value: string): PublicRankCardQuery
-  maybeSingle(): Promise<PublicRankCardQueryResult>
-}
-
-type PublicRankCardClient = {
-  from(relation: 'public_ranked_leaderboard'): PublicRankCardQuery
-}
-
 type VerifiedRankCardRow = {
   rank: number
   roi: number | null
@@ -83,13 +68,6 @@ type VerifiedRankCardRow = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function publicRankCardClient(value: unknown): PublicRankCardClient {
-  if (!isRecord(value) || typeof value.from !== 'function') {
-    throw new TypeError('Supabase client does not expose the public ranking cohort')
-  }
-  return value as PublicRankCardClient
 }
 
 function verifiedRankCardRow(
@@ -172,7 +150,7 @@ export async function GET(request: NextRequest) {
       { status: 404, headers: publicRankingResponseRejectionHeaders() }
     )
   }
-  const { data: candidate } = await publicRankCardClient(sb)
+  const { data: candidate } = await sb
     .from('public_ranked_leaderboard')
     .select(PUBLIC_RANK_CARD_COLUMNS)
     .eq('source', tr.source)

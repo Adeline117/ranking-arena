@@ -333,7 +333,7 @@ test('CLI reads one canonical owner-only artifact and emits no credential materi
     assert.equal(exact.status, 0, exact.stderr)
     const report = JSON.parse(exact.stdout)
     assert.equal(report.outcome, 'exact')
-    assert.equal(report.summary.exact, 151)
+    assert.equal(report.summary.exact, 154)
     assert.equal(exact.stdout.includes('postgres://'), false)
     // No credential values; migration file names (…_auth_user_has_password_rpc.sql)
     // legitimately contain the bare word.

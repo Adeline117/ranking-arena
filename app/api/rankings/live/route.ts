@@ -41,45 +41,10 @@ const liveRankingsSchema = z.object({
 const PUBLIC_RANKED_LEADERBOARD_COLUMNS =
   'source_trader_id,handle,roi,pnl,win_rate,max_drawdown,trades_count,followers,copiers,source,source_type,avatar_url,arena_score,rank,rank_change,is_new,profitability_score,risk_control_score,execution_score,score_completeness,metrics_estimated,trading_style,avg_holding_hours,style_confidence,computed_at,season_id,sharpe_ratio,sortino_ratio,profit_factor,calmar_ratio,trader_type,is_outlier'
 
-interface PublicRankedLeaderboardQueryResult {
-  data: unknown[] | null
-  error: { message: string } | null
-}
-
-type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
-  select(columns: string): PublicRankedLeaderboardQuery
-  eq(column: string, value: string): PublicRankedLeaderboardQuery
-  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
-  order(
-    column: string,
-    options: { ascending: boolean; nullsFirst: boolean }
-  ): PublicRankedLeaderboardQuery
-  range(from: number, to: number): PublicRankedLeaderboardQuery
-}
-
-type PublicRankedLeaderboardClient = {
-  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
-}
-
 type PublicRankedLeaderboardRow = Record<string, unknown>
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function isPublicRankedLeaderboardClient(value: unknown): value is PublicRankedLeaderboardClient {
-  return isRecord(value) && typeof value.from === 'function'
-}
-
-function publicRankedLeaderboardClient(
-  supabase: ReturnType<typeof getSupabaseAdmin>
-): PublicRankedLeaderboardClient {
-  // The view is introduced by a migration and is not yet in generated types.
-  // Keep this tiny checked bridge local rather than widening the entire client.
-  if (!isPublicRankedLeaderboardClient(supabase)) {
-    throw new TypeError('Supabase client does not expose the public ranking cohort')
-  }
-  return supabase
 }
 
 function finiteOrNull(value: unknown): number | null {
@@ -199,7 +164,7 @@ export async function GET(request: NextRequest) {
   const { period, limit, offset } = parsed.data
   try {
     const supabase = getSupabaseAdmin()
-    const query = publicRankedLeaderboardClient(supabase)
+    const query = supabase
       .from('public_ranked_leaderboard')
       .select(PUBLIC_RANKED_LEADERBOARD_COLUMNS)
       .eq('season_id', period)

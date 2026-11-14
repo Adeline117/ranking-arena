@@ -22,7 +22,7 @@ jest.mock('@/lib/utils/logger', () => ({
 jest.mock('@/lib/api', () => ({
   getSupabaseAdmin: () => ({
     from: (table: string) => {
-      if (table === 'leaderboard_ranks') {
+      if (table === 'public_ranked_leaderboard') {
         const chain = {
           select: () => chain,
           eq: () => chain,

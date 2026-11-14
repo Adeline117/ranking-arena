@@ -3,10 +3,10 @@
  *
  * Identity/profile observations can remain visible when a trader has not
  * entered the ranking cohort. Rank, score, ROI/PnL, and ranking-derived
- * counts must come only from the sealed public view. Keep this adapter local
- * to profile consumers while generated Supabase types catch up with the view.
+ * counts must come only from the sealed public view.
  */
 
+import type { TypedSupabaseClient } from '@/lib/supabase/typed-client'
 import type { TradingPeriod } from './types'
 import { logger } from '@/lib/logger'
 import {
@@ -22,23 +22,6 @@ export const PUBLIC_PROFILE_RANKING_PERIODS = [
 
 export const PUBLIC_PROFILE_RANKING_COLUMNS =
   'season_id,source,source_trader_id,handle,avatar_url,rank,arena_score,arena_score_v3,roi,pnl,win_rate,max_drawdown,trades_count,followers,copiers,profitability_score,risk_control_score,execution_score,score_completeness,metrics_estimated,is_outlier,computed_at,trading_style,style_confidence,avg_holding_hours,sharpe_ratio,sortino_ratio,profit_factor,calmar_ratio,trader_type,source_type,rank_change,is_new'
-
-type PublicRankedLeaderboardQueryResult = {
-  data: unknown[] | null
-  error: { message: string } | null
-}
-
-type PublicRankedLeaderboardQuery = PromiseLike<PublicRankedLeaderboardQueryResult> & {
-  select(columns: string): PublicRankedLeaderboardQuery
-  eq(column: string, value: string): PublicRankedLeaderboardQuery
-  in(column: string, values: readonly string[]): PublicRankedLeaderboardQuery
-  not(column: string, operator: string, value: null): PublicRankedLeaderboardQuery
-  abortSignal(signal: AbortSignal): PublicRankedLeaderboardQuery
-}
-
-type PublicRankedLeaderboardClient = {
-  from(relation: 'public_ranked_leaderboard'): PublicRankedLeaderboardQuery
-}
 
 export interface PublicProfileRankingScope {
   source: string
@@ -63,16 +46,6 @@ export interface PublicProfileRankingResult {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function publicRankedLeaderboardClient(value: unknown): PublicRankedLeaderboardClient {
-  // The view is intentionally additive during the rolling database deployment,
-  // so generated Database types can lag it. Keep this checked escape hatch
-  // narrow instead of widening every Supabase caller.
-  if (!isRecord(value) || typeof value.from !== 'function') {
-    throw new TypeError('Supabase client does not expose the public ranking cohort')
-  }
-  return value as PublicRankedLeaderboardClient
 }
 
 function uniquePeriods(periods: readonly TradingPeriod[]): TradingPeriod[] | null {
@@ -187,7 +160,7 @@ export function sanitizePublicProfileRankingRows(
  * field is allowed to leak through as a fallback.
  */
 export async function fetchPublicProfileRankingRows(
-  supabase: unknown,
+  supabase: TypedSupabaseClient,
   scope: PublicProfileRankingScope,
   signal?: AbortSignal
 ): Promise<PublicProfileRankingResult> {
@@ -201,7 +174,7 @@ export async function fetchPublicProfileRankingRows(
   }
 
   try {
-    let query = publicRankedLeaderboardClient(supabase)
+    let query = supabase
       .from('public_ranked_leaderboard')
       .select(PUBLIC_PROFILE_RANKING_COLUMNS)
       .eq('source', scope.source)
