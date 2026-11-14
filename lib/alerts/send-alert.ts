@@ -8,6 +8,7 @@
 import { sendTelegramAlertDetailed, type AlertLevel } from '@/lib/notifications/telegram'
 import { logger } from '@/lib/logger'
 import { getSharedRedis } from '@/lib/cache/redis-client'
+import { postGithubIssueAlert } from '@/lib/alerts/github-issue'
 
 interface AlertPayload {
   source?: string
@@ -32,94 +33,24 @@ interface AlertDispatchResult {
   requestedChannelDelivered: boolean
 }
 
-/**
- * SEV1 backup channel — GitHub Issue.
- *
- * WHY: Telegram is currently the ONLY real primary channel (slack/email are
- * stubs). The 2026-07-07 outage happened because Telegram was 401-broken and
- * nobody knew for hours. This is the second INDEPENDENT channel for critical
- * alerts, mirroring `.github/workflows/deploy-freshness.yml` (which opens a
- * de-duplicated GitHub issue that does NOT depend on Telegram).
- *
- * Fully env-gated: no-op (returns false) unless BOTH a token and a repo are
- * configured. Never throws — fail-open. No secrets are hardcoded.
- *   - token: ALERT_GITHUB_TOKEN | GITHUB_TOKEN | GH_TOKEN
- *   - repo:  ALERT_GITHUB_REPO | GITHUB_REPOSITORY  (format: "owner/repo")
- */
+/** SEV1 backup channel — GitHub Issue (lib/alerts/github-issue.ts). */
 async function sendGithubIssueAlert(payload: AlertPayload): Promise<boolean> {
   const isCritical = payload.level === 'critical'
-  const token = process.env.ALERT_GITHUB_TOKEN || process.env.GITHUB_TOKEN || process.env.GH_TOKEN
-  const repo = process.env.ALERT_GITHUB_REPO || process.env.GITHUB_REPOSITORY
-  if (!token || !repo) return false // env-gated no-op when not configured
-
-  try {
-    const title = isCritical ? `🛑 [SEV1] ${payload.title}` : `⚠️ [WARN] ${payload.title}`
-    const detailLines = payload.details
-      ? Object.entries(payload.details).map(([k, v]) => `- **${k}**: ${String(v)}`)
-      : []
-    const body = [
-      payload.message,
-      '',
-      ...detailLines,
-      '',
-      isCritical
-        ? `_Telegram 主通道发送失败，GitHub issue 兜底（SEV1 备份通道）。_`
-        : `_Telegram 主通道发送失败，warning 级 GitHub issue 兜底（同标题 6h 内只发一次）。_`,
-      new Date().toISOString(),
-    ].join('\n')
-
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/vnd.github+json',
-      'Content-Type': 'application/json',
-      'User-Agent': 'arena-alert-sentinel',
-    }
-
-    // De-dup: comment on an existing open issue with the same title instead of
-    // spamming new ones (mirrors the deploy-freshness sentinel behaviour).
-    let existingNumber: number | null = null
-    try {
-      const q = `repo:${repo} is:issue is:open in:title "${title}"`
-      const searchRes = await fetch(
-        `https://api.github.com/search/issues?q=${encodeURIComponent(q)}`,
-        { headers, signal: AbortSignal.timeout(5000) }
-      )
-      if (searchRes.ok) {
-        const sj = (await searchRes.json()) as { items?: Array<{ number: number; title: string }> }
-        existingNumber = sj.items?.find((i) => i.title === title)?.number ?? null
-      }
-    } catch {
-      // search failed — fall through to create a fresh issue
-    }
-
-    if (existingNumber) {
-      const commentRes = await fetch(
-        `https://api.github.com/repos/${repo}/issues/${existingNumber}/comments`,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ body }),
-          signal: AbortSignal.timeout(5000),
-        }
-      )
-      return commentRes.ok
-    }
-
-    // No labels — a non-existent label makes the create call 422 and drops the alert.
-    const createRes = await fetch(`https://api.github.com/repos/${repo}/issues`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ title, body }),
-      signal: AbortSignal.timeout(5000),
-    })
-    return createRes.ok
-  } catch (err) {
-    logger.error(
-      '[send-alert] GitHub issue backup failed:',
-      err instanceof Error ? err.message : String(err)
-    )
-    return false
-  }
+  const title = isCritical ? `🛑 [SEV1] ${payload.title}` : `⚠️ [WARN] ${payload.title}`
+  const detailLines = payload.details
+    ? Object.entries(payload.details).map(([k, v]) => `- **${k}**: ${String(v)}`)
+    : []
+  const body = [
+    payload.message,
+    '',
+    ...detailLines,
+    '',
+    isCritical
+      ? `_Telegram 主通道发送失败，GitHub issue 兜底（SEV1 备份通道）。_`
+      : `_Telegram 主通道发送失败，warning 级 GitHub issue 兜底（同标题 6h 内只发一次）。_`,
+    new Date().toISOString(),
+  ].join('\n')
+  return postGithubIssueAlert(title, body)
 }
 
 // ============================================
