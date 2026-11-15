@@ -97,13 +97,25 @@ function dataRows(block: unknown): Dict[] {
 
 // ── Leaderboard ──
 
-export function parseOkxLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLeaderboardPage {
-  const payload = (raw ?? {}) as { board?: { ranks?: unknown } }
-  const ranks = Array.isArray(payload.board?.ranks)
-    ? (payload.board!.ranks as unknown[]).filter(
+/**
+ * Board rows of one RAW page: the public-lead-traders response verbatim
+ * ({code, data: [{dataVer, totalPage, ranks}]}, attempt-bound capture), or the
+ * legacy normalized chunk ({timeframe, dataVer, board: {ranks}}).
+ */
+function boardRanks(raw: unknown): Dict[] {
+  const payload = (raw ?? {}) as { board?: { ranks?: unknown }; data?: unknown }
+  const block = Array.isArray(payload.data)
+    ? (payload.data[0] as { ranks?: unknown } | undefined)
+    : payload.board
+  return Array.isArray(block?.ranks)
+    ? (block.ranks as unknown[]).filter(
         (r): r is Dict => typeof r === 'object' && r !== null && !Array.isArray(r)
       )
     : []
+}
+
+export function parseOkxLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLeaderboardPage {
+  const ranks = boardRanks(raw)
 
   const rows: ParsedLeaderboardRow[] = []
   for (let i = 0; i < ranks.length; i++) {
@@ -153,13 +165,7 @@ export function parseOkxLeaderboardSeries(
   timeframe: RankingTimeframe
 ): Map<string, BoardSeriesBlock[]> {
   const out = new Map<string, BoardSeriesBlock[]>()
-  const payload = (raw ?? {}) as { board?: { ranks?: unknown } }
-  const ranks = Array.isArray(payload.board?.ranks)
-    ? (payload.board!.ranks as unknown[]).filter(
-        (r): r is Dict => typeof r === 'object' && r !== null && !Array.isArray(r)
-      )
-    : []
-  for (const item of ranks) {
+  for (const item of boardRanks(raw)) {
     const code = str(item.uniqueCode)
     if (!code) continue
     const ratios = Array.isArray(item.pnlRatios) ? (item.pnlRatios as Dict[]) : []

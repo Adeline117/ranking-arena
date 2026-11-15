@@ -533,6 +533,26 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
       { metric: 'pnl', fieldPath: 'data.records[].sprofit' },
     ],
   }),
+  okx_futures: boardHeadlineContract({
+    sourceId: 'okx_futures',
+    methodology: 'okx',
+    windowKeys: ['90D'],
+    currency: 'USDT',
+    fields: [
+      { metric: 'roi', fieldPath: 'data[0].ranks[].pnlRatio' },
+      { metric: 'pnl', fieldPath: 'data[0].ranks[].pnl' },
+    ],
+  }),
+  okx_spot: boardHeadlineContract({
+    sourceId: 'okx_spot',
+    methodology: 'okx',
+    windowKeys: ['90D'],
+    currency: 'USDT',
+    fields: [
+      { metric: 'roi', fieldPath: 'data[0].ranks[].pnlRatio' },
+      { metric: 'pnl', fieldPath: 'data[0].ranks[].pnl' },
+    ],
+  }),
   okx_web3_solana: boardHeadlineContract({
     sourceId: 'okx_web3_solana',
     methodology: 'okx-web3',

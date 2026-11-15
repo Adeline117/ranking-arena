@@ -1,0 +1,184 @@
+{
+  "_comment": "Sanitized from a live public-lead-traders probe (2026-11-15): ids/nicknames/avatars replaced, rows trimmed; totalPage rewritten to the fixture page count.",
+  "pages": [
+    {
+      "code": "0",
+      "msg": "",
+      "data": [
+        {
+          "dataVer": "20261116050001",
+          "totalPage": "2",
+          "ranks": [
+            {
+              "accCopyTraderNum": "481",
+              "aum": "311362.4451840312028662",
+              "ccy": "USDT",
+              "copyState": "0",
+              "copyTraderNum": "261",
+              "leadDays": "100",
+              "maxCopyTraderNum": "300",
+              "nickName": "trader-1",
+              "pnl": "413338.4524153544175118",
+              "pnlRatio": "3.7019",
+              "pnlRatios": [
+                {
+                  "beginTs": "1794758400000",
+                  "pnlRatio": "3.7019"
+                },
+                {
+                  "beginTs": "1794326400000",
+                  "pnlRatio": "3.2046"
+                },
+                {
+                  "beginTs": "1793894400000",
+                  "pnlRatio": "1.7352"
+                }
+              ],
+              "portLink": "https://static.okx.com/cdn/okx/avatar/trader-1.png",
+              "tradFiTrader": true,
+              "traderInsts": ["ICP-USDT-SWAP", "MINA-USDT-SWAP", "NEIRO-USDT-SWAP"],
+              "uniqueCode": "7A6F5F4C32F50293",
+              "winRatio": "0.5222"
+            },
+            {
+              "accCopyTraderNum": "43",
+              "aum": "134208.8255169156998363",
+              "ccy": "USDT",
+              "copyState": "0",
+              "copyTraderNum": "19",
+              "leadDays": "202",
+              "maxCopyTraderNum": "301",
+              "nickName": "trader-2",
+              "pnl": "197207.1880190793377034",
+              "pnlRatio": "6.096",
+              "pnlRatios": [
+                {
+                  "beginTs": "1794758400000",
+                  "pnlRatio": "6.096"
+                },
+                {
+                  "beginTs": "1794326400000",
+                  "pnlRatio": "5.8586"
+                },
+                {
+                  "beginTs": "1793894400000",
+                  "pnlRatio": "5.0781"
+                }
+              ],
+              "portLink": "https://static.okx.com/cdn/okx/avatar/trader-2.png",
+              "tradFiTrader": true,
+              "traderInsts": ["ICP-USDT-SWAP", "MINA-USDT-SWAP", "NEIRO-USDT-SWAP"],
+              "uniqueCode": "85B6597075589B37",
+              "winRatio": "0.5111"
+            },
+            {
+              "accCopyTraderNum": "99",
+              "aum": "73019.8835288589933609",
+              "ccy": "USDT",
+              "copyState": "0",
+              "copyTraderNum": "50",
+              "leadDays": "42",
+              "maxCopyTraderNum": "50",
+              "nickName": "trader-3",
+              "pnl": "33454.4687662872658687",
+              "pnlRatio": "0.4461",
+              "pnlRatios": [
+                {
+                  "beginTs": "1794758400000",
+                  "pnlRatio": "0.4461"
+                },
+                {
+                  "beginTs": "1794585600000",
+                  "pnlRatio": "0.4461"
+                },
+                {
+                  "beginTs": "1794412800000",
+                  "pnlRatio": "0.4324"
+                }
+              ],
+              "portLink": "https://static.okx.com/cdn/okx/avatar/trader-3.png",
+              "tradFiTrader": true,
+              "traderInsts": ["ICP-USDT-SWAP", "MINA-USDT-SWAP", "NEIRO-USDT-SWAP"],
+              "uniqueCode": "0980718B6D7D181C",
+              "winRatio": "0.8077"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "0",
+      "msg": "",
+      "data": [
+        {
+          "dataVer": "20261116050001",
+          "totalPage": "2",
+          "ranks": [
+            {
+              "accCopyTraderNum": "130",
+              "aum": "10100",
+              "ccy": "USDT",
+              "copyState": "0",
+              "copyTraderNum": "3",
+              "leadDays": "733",
+              "maxCopyTraderNum": "50",
+              "nickName": "trader-4",
+              "pnl": "0",
+              "pnlRatio": "0",
+              "pnlRatios": [
+                {
+                  "beginTs": "1794758400000",
+                  "pnlRatio": "0.0"
+                },
+                {
+                  "beginTs": "1794326400000",
+                  "pnlRatio": "0.0"
+                },
+                {
+                  "beginTs": "1793894400000",
+                  "pnlRatio": "0.0"
+                }
+              ],
+              "portLink": "https://static.okx.com/cdn/okx/avatar/trader-4.png",
+              "tradFiTrader": false,
+              "traderInsts": ["ICP-USDT-SWAP", "MINA-USDT-SWAP", "NEIRO-USDT-SWAP"],
+              "uniqueCode": "B7A46026AB3536A0",
+              "winRatio": "0"
+            },
+            {
+              "accCopyTraderNum": "0",
+              "aum": "0",
+              "ccy": "USDT",
+              "copyState": "0",
+              "copyTraderNum": "0",
+              "leadDays": "908",
+              "maxCopyTraderNum": "300",
+              "nickName": "trader-5",
+              "pnl": "-553.7803485958266336",
+              "pnlRatio": "-0.0175",
+              "pnlRatios": [
+                {
+                  "beginTs": "1794758400000",
+                  "pnlRatio": "-0.0175"
+                },
+                {
+                  "beginTs": "1794326400000",
+                  "pnlRatio": "-0.0175"
+                },
+                {
+                  "beginTs": "1793894400000",
+                  "pnlRatio": "-0.0175"
+                }
+              ],
+              "portLink": "https://static.okx.com/cdn/okx/avatar/trader-5.png",
+              "tradFiTrader": false,
+              "traderInsts": ["BTC-USDT-SWAP"],
+              "uniqueCode": "247F17DD16F8B2A1",
+              "winRatio": "0.2"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
