@@ -24,10 +24,11 @@ SET LOCAL search_path = pg_catalog, pg_temp;
 LOCK TABLE arena.sources IN SHARE MODE;
 LOCK TABLE arena.leaderboard_capture_contracts IN SHARE ROW EXCLUSIVE MODE;
 
+-- Session-local seed (pg_temp); it disappears with the applying session.
 CREATE TEMPORARY TABLE attempt_bound_capture_seed (
   source_slug text PRIMARY KEY,
   adapter_slug text NOT NULL
-) ON COMMIT DROP;
+);
 
 INSERT INTO attempt_bound_capture_seed VALUES
   ('binance_spot', 'binance'),

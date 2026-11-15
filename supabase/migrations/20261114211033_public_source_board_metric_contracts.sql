@@ -25,6 +25,7 @@ SET LOCAL search_path = pg_catalog, pg_temp;
 LOCK TABLE arena.sources IN SHARE MODE;
 LOCK TABLE arena.metric_source_contracts IN SHARE ROW EXCLUSIVE MODE;
 
+-- Session-local seed (pg_temp); it disappears with the applying session.
 CREATE TEMPORARY TABLE board_metric_contract_seed (
   source_slug text NOT NULL,
   adapter_slug text NOT NULL,
@@ -37,7 +38,7 @@ CREATE TEMPORARY TABLE board_metric_contract_seed (
   timeframes smallint[] NOT NULL,
   value_unit text NOT NULL,
   currencies text[] NOT NULL
-) ON COMMIT DROP;
+);
 
 INSERT INTO board_metric_contract_seed VALUES
     ('coinex_futures', 'coinex', '1', 'roi', 'data.data[].profit_rate', 'source_reported', 'coinex-board-roi@1', 'coinex-board-roi-pnl@1', ARRAY[7, 30, 90]::smallint[], 'percent', ARRAY['USDT']::text[]),
