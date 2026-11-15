@@ -455,6 +455,47 @@ append-only 触发器保护，按设计不可删除；快照保留清理因此�
 - ✅ 证据链完整可审计，主库体量有上界（约 13 个月明细）。
 - ⚠️ 需要实现月度归档导出工具与校验，并在运维窗口执行；超过 13 个月的明细查询需走冷存储。
 
+### Amendment 2026-11-14: owner-opened launch window, ordered psql channel
+
+**Decided by:** owner (explicit instruction on 2026-11-14 to execute the launch
+and choose the long-term-optimal channel; option "A" confirmed on 2026-11-15).
+
+**Why:** the launch backlog is 92 predeploy files (2.9 MB, ~79k lines) plus
+five single-file-slot migrations and three postdeploy files of up to 98 KB
+each. Supabase MCP `apply_migration` takes the SQL as a typed parameter, so
+that volume cannot be submitted byte-exactly. The single-file rule protected
+against replaying unrelated DDL from a drifted ledger; the ordered runner
+gives the same protection mechanically.
+
+**What is approved, and only this:**
+
+- `apply-launch-migrations.sh apply-predeploy-one <file>` and
+  `apply-single-file <file>`, one file per invocation, by one operator, with
+  `ARENA_LAUNCH_WINDOW_CONFIRM` set to the attestation constant in the script.
+- Each invocation: body bytes from the verified `origin/main` Git object; the
+  target must be the first missing manifest entry and every earlier entry
+  exact in the ledger (version, name, body SHA-256); production endpoint,
+  `sslmode=verify-full` and session-mode checks; a session advisory lock plus
+  a ledger table lock so two operators cannot interleave; one transaction that
+  also records the ledger row.
+- The bulk commands (`apply-predeploy`, `apply-postdeploy`, recovery) remain
+  disabled. `db push`, the SQL editor and ledger repair remain forbidden.
+
+**Evidence before the first write:** whole-database rehearsal on 2026-11-14/15
+against a read-only production dump (full schema, small-table data, real roles
+and ledger) on a scratch PG17, using the SQL these two commands emit: 100/100
+steps passed (92 predeploy, 5 single-file slots, 3 postdeploy). The rehearsal
+first found four manifest defects that would have stopped the production run;
+they were fixed in #475. Critical-tier backup and restore drill:
+`docs/BACKUP_CRITICAL_TIER.md`.
+
+**Rollback:** forward compensating migration, or restore of the critical tier
+from the backup taken immediately before the first write. Market data is
+re-derived by the pipeline.
+
+**Closing the window:** change `LAUNCH_WINDOW_ATTESTATION` (or remove the two
+commands) once the launch migrations are exact in the ledger.
+
 ---
 
 ## Pending Decisions
