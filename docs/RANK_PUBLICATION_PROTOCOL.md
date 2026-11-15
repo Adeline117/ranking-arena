@@ -62,7 +62,8 @@ fence / claim / seal 相关 RPC 只对 owner 和 `service_role` 开放。
   `arena.leaderboard_publication_source_isolation_events`，并给 `arena_freshness_expected_sources()`
   加一条"排除本季已隔离来源"的条件（标记 `leaderboard-publication-source-isolation@1`）。
 - 编排器在事务开头先删掉本季所有隔离行，再读 expected 集合和板证据；不新鲜（stale / missing /
-  latest_attempt_failed / count-check 未过等）的来源**写回隔离行 + 事件**，其余来源照常整季发布。
+  latest_attempt_failed / count-check 未过等），以及板缺 attempt-bound 信任证据（`untrusted`，见
+  "证据绑定"一节）的来源**写回隔离行 + 事件**，其余来源照常整季发布。
   之后再读一次 expected 集合，必须恰好等于"新鲜子集"，否则 `isolation_not_applied` 回滚。
   因为 cleanup / rerank / seal / 服务触发器 / 读取时校验都读同一个函数，隔离与封存在同一事务里原子生效；
   被隔离来源的旧行被 rerank 置为 `rank = NULL`、没有 serving witness，不会被公开。
@@ -167,13 +168,22 @@ persistLeaderboardRanks` 已于 2026-11-13 删除；`scripts/qa/public-ranking-s
   发布事务内的隔离与封存同时生效，不会造成空窗。
 - 任何来源水位超过 48 小时、或 `computed_at` 超过 48 小时 → 整季下线。
 
-## 证据绑定与证据等级（20261113110430）
+## 证据绑定：发布必须有 attempt-bound 信任证据（20261113110430 + 20261114193017）
 
+- 唯一的证据判定是 `public.rank_publication_trust_evidence(snapshot_ids)`（仅 service_role）：
+  一块已通过的板只有在其 `raw_object_id` 恰好是同一来源、同一周期的 attempt-bound（@3/@4）采集
+  尝试的终态 `complete` outcome 的 source payload，且该 outcome 记有 population manifest 时，
+  才算"有信任证据"。count-check-only 的板一律不算。
+- 编排器在打分前用它检查每个新鲜来源的板；任何一块板没有证据，该来源就以原因 `untrusted`
+  走单源隔离路径（与不新鲜同一条路径，同样受"超过半数 / 核心来源全部"整季拒发阈值约束）。
+  证据链迁移未安装时整季拒发（`trust_evidence_not_installed`）。
 - 封存确认在服务后，编排器在同一事务里调用 `public.record_leaderboard_rank_publication_evidence`，
   为每个发布来源写一行不可变的 `arena.leaderboard_rank_publication_source_evidence`：
-  所用快照 id、RAW 对象 id、信任采集 run id 与 manifest RAW id，以及证据等级。
-- 证据等级：该来源所有快照都有 metric-trust run → `attempt_bound`；否则（例如
-  `INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED` 关闭时的 count-check-only 发布）→ `count_check_only`。
+  所用快照 id、RAW 对象 id、采集 outcome 的 source run id 与 manifest RAW id。任何来源的板缺证据，
+  这个 RPC 直接拒绝（23514）；新写入的等级只会是 `attempt_bound`。
+- `arena.leaderboard_rank_publications` 上有 DEFERRABLE INITIALLY DEFERRED 约束触发器：封存回执的
+  每个 proof 来源都必须有 `attempt_bound` 证据行，否则 COMMIT 失败、整个发布回滚。绕过编排器的
+  调用方也无法提交无证据的封存。
 - 只接受本事务刚封存的 cohort、与封存 proof 完全一致的来源集合、该来源自己的已通过板。
 - 公开视图 `public.public_ranked_leaderboard_source_evidence`（anon 可读）给出当前在服务季每个来源的
   `evidence_grade` 与 `source_as_of`，前端可据此区分证据等级。

@@ -5,10 +5,13 @@
  *
  *   0. clear the season's source-isolation rows (20261113011058)
  *   1. read the score-input publish bundle + the season's expected sources
- *   2. isolate every expected source without fresh (<48h) PASSED evidence from
- *      this cohort (isolation row + event, same transaction); refuse the whole
+ *   2. isolate every expected source without fresh (<48h) PASSED evidence, or
+ *      whose PASSED boards lack attempt-bound trust evidence
+ *      (public.rank_publication_trust_evidence, 20261114193017), from this
+ *      cohort (isolation row + event, same transaction); refuse the whole
  *      season if more than half of the sources, or every core source, would be
- *      isolated (or isolation is not installed). Refusals and isolations alert.
+ *      isolated (or isolation / the evidence chain is not installed).
+ *      Refusals and isolations alert.
  *   3. score the fresh rows and keep only rows the DB eligibility policy admits
  *   4. claim one fenced generation (claim_leaderboard_rank_generation)
  *   5. upsert every row with rank_publication_id = score cohort
@@ -17,6 +20,8 @@
  *   8. seal_leaderboard_rank_publication     (receipt + freshness proofs; the
  *      freshness trigger then advances the public serving head)
  *   9. confirm the season is now served by public_ranked_leaderboard
+ *  10. bind every source to its attempt-bound evidence; the seal cannot COMMIT
+ *      without it (deferred constraint trigger, 20261114193017)
  *
  * Every step runs inside ONE READ COMMITTED transaction owned by the caller's
  * `database.transaction`. Any failure rolls back the claim, the row writes and
@@ -77,6 +82,7 @@ export type RankPublicationErrorCode =
   | 'write_incomplete'
   | 'not_serving_after_seal'
   | 'isolation_not_applied'
+  | 'trust_evidence_not_installed'
 
 export class RankPublicationError extends Error {
   constructor(
@@ -263,10 +269,10 @@ export interface PublishLeaderboardSeasonResult {
   restoredSources: string[]
   /**
    * Evidence level per published source, bound immutably to the sealed cohort
-   * (20261113110430): 'attempt_bound' (metric-trust capture) or
-   * 'count_check_only'. null when the binding migration is not installed.
+   * (20261113110430 / 20261114193017). Every published source is
+   * 'attempt_bound'; a source without that evidence is isolated instead.
    */
-  evidenceGrades: Record<string, 'attempt_bound' | 'count_check_only'> | null
+  evidenceGrades: Record<string, 'attempt_bound'>
 }
 
 interface PublishableRow {
@@ -629,6 +635,43 @@ async function probeSourceIsolation(tx: RankPublicationSqlExecutor): Promise<boo
   return probe.rows[0]?.supported === true
 }
 
+/** The attempt-bound evidence chain (20261114193017) must be installed. */
+async function probeTrustEvidence(tx: RankPublicationSqlExecutor): Promise<boolean> {
+  const probe = await tx.query<{ supported: boolean }>(
+    `SELECT pg_catalog.to_regprocedure('public.rank_publication_trust_evidence(bigint[])') IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM pg_catalog.pg_proc AS function_row
+           WHERE function_row.oid = pg_catalog.to_regprocedure(
+                   'public.record_leaderboard_rank_publication_evidence(text,uuid,jsonb)')
+             AND pg_catalog.strpos(function_row.prosrc,
+                   'leaderboard-rank-publication-evidence@2') > 0
+        ) AS supported`
+  )
+  return probe.rows[0]?.supported === true
+}
+
+/** Fresh sources with at least one PASSED board lacking attempt-bound evidence. */
+async function readUntrustedSources(
+  tx: RankPublicationSqlExecutor,
+  aliases: ReadonlyArray<{ source: string; snapshot_ids: readonly number[] }>
+): Promise<Set<string>> {
+  const snapshotIds = aliases.flatMap((alias) => alias.snapshot_ids)
+  if (snapshotIds.length === 0) return new Set()
+  const evidence = await tx.query<{ snapshot_id: string | number; trust_bound: boolean }>(
+    `SELECT evidence.snapshot_id, evidence.trust_bound
+       FROM public.rank_publication_trust_evidence($1::bigint[]) AS evidence`,
+    [snapshotIds]
+  )
+  const bound = new Set(
+    evidence.rows.filter((row) => row.trust_bound === true).map((row) => Number(row.snapshot_id))
+  )
+  return new Set(
+    aliases
+      .filter((alias) => alias.snapshot_ids.some((snapshotId) => !bound.has(snapshotId)))
+      .map((alias) => alias.source)
+  )
+}
+
 async function publishInTransaction(
   season: PublicationWindow,
   deps: PublishLeaderboardSeasonDependencies,
@@ -644,6 +687,15 @@ async function publishInTransaction(
          'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS now`
     )
     const computedAt = clock.rows[0].now
+
+    // Publication requires the attempt-bound evidence chain; without it the
+    // season is refused and the previous serving head keeps serving.
+    if (!(await probeTrustEvidence(tx))) {
+      throw new RankPublicationError(
+        'trust_evidence_not_installed',
+        `[${season}] attempt-bound publication evidence (20261114193017) is not installed`
+      )
+    }
 
     // 0. Source isolation: clear this season's isolation rows; every source
     // that is still not fresh is re-isolated below in this same transaction.
@@ -675,14 +727,25 @@ async function publishInTransaction(
     }
     const bundle = await readSourcePublicationBundle(rpc, season, { now: new Date(computedAt) })
 
-    // 2. Freshness gate. A source without fresh PASSED evidence is isolated
-    // from this cohort (and from the season's expected set, atomically with
-    // the seal) unless too many / all core sources are affected, in which case
-    // the whole season is refused and the previous serving head keeps serving.
-    const freshSources = new Set(bundle.evidence.freshAliases.map((alias) => alias.source))
+    // 2. Freshness + trust gate. A source without fresh PASSED evidence, or
+    // whose PASSED boards lack attempt-bound trust evidence ('untrusted'), is
+    // isolated from this cohort (and from the season's expected set,
+    // atomically with the seal) unless too many / all core sources are
+    // affected, in which case the whole season is refused and the previous
+    // serving head keeps serving.
+    const untrustedSources = await readUntrustedSources(
+      tx,
+      bundle.evidence.freshAliases.filter((alias) => allExpectedSources.includes(alias.source))
+    )
+    const freshSources = new Set(
+      bundle.evidence.freshAliases
+        .map((alias) => alias.source)
+        .filter((source) => !untrustedSources.has(source))
+    )
     const notFresh = allExpectedSources
       .filter((source) => !freshSources.has(source))
       .map((source) => {
+        if (untrustedSources.has(source)) return { source, reasons: ['untrusted'] }
         const retained = bundle.evidence.retainedAliases.find((alias) => alias.source === source)
         return { source, reasons: retained ? [...retained.denial_reasons] : ['missing'] }
       })
@@ -936,44 +999,27 @@ async function publishInTransaction(
       )
     }
 
-    // 10. Bind every published source to its snapshots / RAW / acquisition
-    // runs and record its evidence grade, in the sealing transaction.
-    const evidenceAvailable = await tx.query<{ available: boolean }>(
-      `SELECT pg_catalog.to_regprocedure(
-         'public.record_leaderboard_rank_publication_evidence(text,uuid,jsonb)'
-       ) IS NOT NULL AS available`
+    // 10. Bind every published source to its attempt-bound snapshots / RAW /
+    // acquisition runs, in the sealing transaction. The RPC refuses an unbound
+    // source and the seal cannot COMMIT without these rows (20261114193017).
+    const recorded = await tx.query<{
+      result: { grades: Record<string, 'attempt_bound'> }
+    }>(
+      `SELECT public.record_leaderboard_rank_publication_evidence(
+         p_season_id => $1, p_score_cohort_id => $2::uuid, p_source_publications => $3::jsonb
+       ) AS result`,
+      [
+        season,
+        scoreCohortId,
+        JSON.stringify(
+          freshPublications.map((publication) => ({
+            source: publication.source,
+            snapshot_ids: publication.snapshot_ids,
+          }))
+        ),
+      ]
     )
-    let evidenceGrades: PublishLeaderboardSeasonResult['evidenceGrades'] = null
-    if (evidenceAvailable.rows[0]?.available === true) {
-      const recorded = await tx.query<{
-        result: { grades: Record<string, 'attempt_bound' | 'count_check_only'> }
-      }>(
-        `SELECT public.record_leaderboard_rank_publication_evidence(
-           p_season_id => $1, p_score_cohort_id => $2::uuid, p_source_publications => $3::jsonb
-         ) AS result`,
-        [
-          season,
-          scoreCohortId,
-          JSON.stringify(
-            freshPublications.map((publication) => ({
-              source: publication.source,
-              snapshot_ids: publication.snapshot_ids,
-            }))
-          ),
-        ]
-      )
-      evidenceGrades = recorded.rows[0]?.result.grades ?? null
-      const countOnly = Object.entries(evidenceGrades ?? {})
-        .filter(([, grade]) => grade === 'count_check_only')
-        .map(([source]) => source)
-      if (countOnly.length > 0) {
-        log(
-          `[${season}] count-check-only evidence (no attempt-bound capture): ${countOnly.join(', ')}`
-        )
-      }
-    } else {
-      log(`[${season}] publication evidence binding not installed; grades not recorded`)
-    }
+    const evidenceGrades = recorded.rows[0].result.grades
 
     // 11. Release the claim lease, bound to this cohort and this transaction
     // (the release RPC requires the seal receipt this transaction inserted).

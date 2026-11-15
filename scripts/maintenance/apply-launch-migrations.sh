@@ -190,6 +190,7 @@ PREDEPLOY_MIGRATIONS=(
   20261113110430_rank_publication_source_evidence_binding.sql
   20261114101605_first_screen_core_modules_sealed_only.sql
   20261114103025_hero_stats_sealed_public_cohort.sql
+  20261114193017_rank_publication_requires_attempt_bound_evidence.sql
 )
 readonly -a PREDEPLOY_MIGRATIONS
 # The final six (season publication follow-ups, PR #419) must stay LAST: they
@@ -202,6 +203,12 @@ readonly -a PREDEPLOY_MIGRATIONS
 # arena.public_sealed_rank_sources().
 # 20261114103025 (hero stats from the sealed cohort) keeps the RPC's return
 # shape, so either app version reads it; it needs the public serving view.
+# 20261114193017 (publication requires attempt-bound evidence, audit-2 P1-4)
+# replaces 20261113110430's evidence RPC and adds a deferred seal fence, so it
+# must follow 110430. It is predeploy: the new orchestrator refuses every
+# season without it, and the old orchestrator already calls the replaced RPC
+# (an untrusted source then refuses that season instead of being isolated
+# until the new worker ships, which publishes nothing unbound either way).
 #
 # 20261113014105 (unknown-trade-count sample confidence, issue #435) and its
 # follow-up 20261114101514 (true-zero trade counts, audit P1-2), in that order,
