@@ -747,9 +747,21 @@ function addReport(report: ConsistentReport, value: number | null): void {
   else if (report.value !== value) report.conflicting = true
 }
 
+/**
+ * Resolve a declared payload path. A canonical decimal segment indexes into an
+ * array (e.g. okx `data.0.ranks`, whose envelope wraps the board in a one-item
+ * array); every other segment must name an own key of an object.
+ */
 function exhaustionPayloadPath(payload: unknown, path: readonly string[]): unknown {
   let value = payload
   for (const segment of path) {
+    if (Array.isArray(value)) {
+      if (!/^(0|[1-9][0-9]{0,8})$/.test(segment)) return undefined
+      const index = Number(segment)
+      if (index >= value.length) return undefined
+      value = value[index]
+      continue
+    }
     if (
       value === null ||
       typeof value !== 'object' ||
@@ -816,6 +828,15 @@ function exhaustionPageFacts(
       )
     }
     endSignalValue = exhaustionSignalScalar(raw, `end signal ${signal.path.join('.')}`)
+    // A page count reported as a canonical decimal string (okx totalPage "10")
+    // is that integer; anything else is not a page count.
+    if (
+      signal.kind === 'page_count' &&
+      typeof endSignalValue === 'string' &&
+      /^(0|[1-9][0-9]{0,8})$/.test(endSignalValue)
+    ) {
+      endSignalValue = Number(endSignalValue)
+    }
     if (
       signal.kind === 'page_count' &&
       (typeof endSignalValue !== 'number' || endSignalValue < 0)
