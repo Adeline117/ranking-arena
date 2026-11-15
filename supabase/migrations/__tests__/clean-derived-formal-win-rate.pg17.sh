@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# PostgreSQL 17 proof for 20261113150757_clean_derived_formal_win_rate.sql
+# PostgreSQL 17 proof for 20261115142045_clean_derived_formal_win_rate_scoped_probe.sql
 # (issue #441). Builds the arena.* columns the migration reads with their real
 # types, seeds dirty on-chain fills, dirty BTCC derived ratios, exchange-owned
 # values, unprovable rows and pure-DEX / other-CEX controls, then proves:
@@ -14,7 +14,7 @@
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-MIGRATION="$ROOT_DIR/supabase/migrations/20261113150757_clean_derived_formal_win_rate.sql"
+MIGRATION="$ROOT_DIR/supabase/migrations/20261115142045_clean_derived_formal_win_rate_scoped_probe.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
