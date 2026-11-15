@@ -8,13 +8,23 @@
 #     render-predeploy-one 20260721120000_metric_trust_shadow_gate.sql
 #   dry-run-predeploy-one is a compatibility alias for the same render-only
 #   command. dry-run-all and dry-run-recovery are disabled.
-#   Every psql-backed write command, including apply-predeploy-one, is disabled
-#   pending production-channel governance.
+#   Inside an owner-opened launch window only (ADR-023 amendment 2026-11-14):
+#   ARENA_LAUNCH_WINDOW_CONFIRM=... DATABASE_URL=... \
+#     scripts/maintenance/apply-launch-migrations.sh \
+#       apply-predeploy-one <first-missing-manifest-migration.sql>
+#   ARENA_LAUNCH_WINDOW_CONFIRM=... DATABASE_URL=... \
+#     scripts/maintenance/apply-launch-migrations.sh \
+#       apply-single-file <single-file-or-postdeploy-migration.sql>
+#   The bulk psql commands (apply-predeploy, apply-postdeploy, recovery) stay
+#   disabled.
 #
-# ADR-023 keeps Supabase MCP apply_migration as the only approved production
-# channel. The psql-backed ordered emitter remains a preview and disposable-PG17
-# proof only until every production schema channel shares one serialization
-# boundary. The targeted preview performs no database access and only prints
+# ADR-023 names Supabase MCP apply_migration as the production channel for a
+# single reviewed file. The launch backlog is 91 predeploy files (2.9 MB): it
+# cannot be re-typed through that tool byte-exactly. Its 2026-11-14 amendment
+# therefore opens the psql-backed ordered emitter for one operator, one file
+# per invocation, under an explicit window attestation. Every invocation takes
+# the same session advisory lock and locks the ledger, so two operators cannot
+# interleave. The targeted preview performs no database access and only prints
 # SQL; it never sends the migration body to production. Preview bytes come from
 # one snapshot of the verified origin/main Git object, never the mutable
 # worktree. Manually executing rendered ROLLBACK SQL can still advance sequences
@@ -191,6 +201,7 @@ PREDEPLOY_MIGRATIONS=(
   20261114101605_first_screen_core_modules_sealed_only.sql
   20261114103025_hero_stats_sealed_public_cohort.sql
   20261114193017_rank_publication_requires_attempt_bound_evidence.sql
+  20261114211033_public_source_board_metric_contracts.sql
 )
 readonly -a PREDEPLOY_MIGRATIONS
 # The final six (season publication follow-ups, PR #419) must stay LAST: they
@@ -209,6 +220,10 @@ readonly -a PREDEPLOY_MIGRATIONS
 # season without it, and the old orchestrator already calls the replaced RPC
 # (an untrusted source then refuses that season instead of being isolated
 # until the new worker ships, which publishes nothing unbound either way).
+# 20261114211033 (board metric contracts for the newly captured public sources)
+# is inert for the deployed worker, which reads metric contracts only for
+# sources it already captures; its postdeploy partner 20261114211034 registers
+# their attempt-bound capture after the worker that implements it ships.
 #
 # 20261113014105 (unknown-trade-count sample confidence, issue #435) and its
 # follow-up 20261114101514 (true-zero trade counts, audit P1-2), in that order,
@@ -255,6 +270,10 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # cleans. It therefore runs only after the ingest-worker release carrying both
 # fixes has replaced every old writer, and before the next derive-boards run
 # and publication. It touches no table 192134 guards, so 192134 stays last.
+# 20261114211034 registers attempt-bound capture for the public sources whose
+# adapters gained captureLeaderboard; registered before that worker serves,
+# every Tier-A run of those sources would fail. It inserts capture-registry
+# rows only (no table 192134 guards) and requires predeploy 20261114211033.
 # 040440 forward replacement. V1_EXECUTION_STATUS requires the RAW-only
 # bridge SHA to be deployed and legacy callers drained before the legacy
 # position-history relations are frozen. Current main never reads or writes
@@ -267,6 +286,7 @@ POSTDEPLOY_MIGRATIONS=(
   20260716192000_social_edge_write_contract.sql
   20260717120000_trader_follows_composite_identity.sql
   20261113150757_clean_derived_formal_win_rate.sql
+  20261114211034_public_source_attempt_bound_capture_contracts.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
@@ -289,6 +309,32 @@ ADR023_SINGLE_FILE_MIGRATIONS=(
   20261111134937_record_provenance_clocks_prod_reader.sql
 )
 readonly -a ADR023_SINGLE_FILE_MIGRATIONS
+
+# Files that run through apply-single-file, in addition to POSTDEPLOY: the two
+# ADR-023 single-file replacements and the followers that the checklist pins to
+# the same slots (GMX CUTOVER right after its PREPARE; the record/publication
+# chain right after 20261111134937). The 2026-11-14 rehearsal applied them in
+# exactly this order at exactly these positions.
+SINGLE_FILE_CHANNEL_MIGRATIONS=(
+  20261111194845_fix_gmx_source_contract_current_population.sql
+  20260715232500_quarantine_gmx_mixed_pnl.sql
+  20261111134937_record_provenance_clocks_prod_reader.sql
+  20260803100000_record_surface_publication_substrate.sql
+  20260803101000_verified_position_history_publication_writer.sql
+)
+
+# ADR-023 amendment 2026-11-14. The value is deliberately not a secret: it is
+# an attestation the operator must type, recorded in docs/DECISIONS.md, that
+# the owner opened this window for a single serialized operator. Closing the
+# window means changing this constant.
+LAUNCH_WINDOW_ATTESTATION='adr-023-amendment-2026-11-14:single-operator-ordered-psql'
+
+require_launch_window() {
+  if [[ "${ARENA_LAUNCH_WINDOW_CONFIRM:-}" != "$LAUNCH_WINDOW_ATTESTATION" ]]; then
+    echo "$1 requires an owner-opened launch window: set ARENA_LAUNCH_WINDOW_CONFIRM to the ADR-023 amendment attestation" >&2
+    exit 2
+  fi
+}
 
 # Recovery repairs the immutable application snapshot whose original cutover
 # was exactly these 41 migrations. Keep this prerequisite frozen: later launch
@@ -1214,6 +1260,75 @@ run_sql_stream() {
   psql_with_database -X -q -v ON_ERROR_STOP=1
 }
 
+require_single_file_target() {
+  local target="$1"
+  local migration
+  for migration in "${SINGLE_FILE_CHANNEL_MIGRATIONS[@]}" "${POSTDEPLOY_MIGRATIONS[@]}"; do
+    if [[ "$migration" == "$target" ]]; then
+      return
+    fi
+  done
+  echo "apply-single-file target is not a single-file or postdeploy migration: $target" >&2
+  exit 2
+}
+
+# Bytes come from the verified release object, never the mutable worktree.
+snapshot_single_file() {
+  local target="$1"
+  local snapshot
+  local relative_path="supabase/migrations/$target"
+
+  snapshot="$(mktemp -d "${TMPDIR:-/tmp}/arena-single-file-snapshot.XXXXXX")"
+  ORDERED_PREDEPLOY_SNAPSHOT_DIR="$snapshot"
+  trap cleanup_ordered_predeploy_snapshot EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  if ! git -C "$ROOT" show "$ORDERED_PREDEPLOY_RELEASE_SHA:$relative_path" >"$snapshot/$target"; then
+    echo "verified release is missing migration object: $relative_path" >&2
+    exit 1
+  fi
+  shasum -a 256 "$snapshot/$target" | awk '{print $1}' >"$snapshot/.sha256-$target"
+  chmod 0400 "$snapshot/$target" "$snapshot/.sha256-$target"
+  chmod 0500 "$snapshot"
+  MIGRATIONS_DIR="$snapshot"
+}
+
+# One file, one transaction, under the same session advisory lock and ledger
+# lock as the ordered channel: refuses a version already in the ledger, runs
+# the body, records the exact body and hash.
+emit_single_file_transaction() {
+  local migration="$1"
+  local begin_statement
+  local lock_key='arena:production-schema-migration'
+
+  begin_statement="$(transaction_begin_for_migrations "$migration")"
+  printf '%s\n' \
+    "SET lock_timeout = '10s';" \
+    "SET statement_timeout = '15min';" \
+    "SELECT pg_catalog.pg_advisory_lock(" \
+    "  pg_catalog.hashtextextended('$lock_key', 0)" \
+    ');' \
+    "$begin_statement" \
+    "SET LOCAL lock_timeout = '10s';" \
+    "SET LOCAL statement_timeout = '15min';" \
+    "SET LOCAL idle_in_transaction_session_timeout = '60s';" \
+    'LOCK TABLE supabase_migrations.schema_migrations' \
+    '  IN SHARE ROW EXCLUSIVE MODE;' \
+    "SET LOCAL client_min_messages = 'warning';"
+  emit_migration "$migration"
+  printf '%s\n' \
+    'COMMIT;' \
+    'DO $arena_single_file_unlock$' \
+    'BEGIN' \
+    '  IF NOT pg_catalog.pg_advisory_unlock(' \
+    "    pg_catalog.hashtextextended('$lock_key', 0)" \
+    '  ) THEN' \
+    "    RAISE EXCEPTION 'single-file advisory unlock failed';" \
+    '  END IF;' \
+    'END' \
+    '$arena_single_file_unlock$;'
+}
+
 main() {
   local command="${1:-status}"
 
@@ -1221,9 +1336,14 @@ main() {
   # psql-backed schema write before environment parsing, ledger access or a
   # psql connection; no public environment literal can activate these paths.
   case "$command" in
-    apply-concurrent-recovery | apply-predeploy | apply-predeploy-one | apply-postdeploy | apply-recovery)
+    apply-concurrent-recovery | apply-predeploy | apply-postdeploy | apply-recovery)
       echo "$command is disabled by ADR-023 pending shared production-channel serialization" >&2
       exit 2
+      ;;
+    apply-predeploy-one | apply-single-file)
+      # Fail closed before environment parsing, git or psql unless the owner
+      # opened the window (ADR-023 amendment 2026-11-14).
+      require_launch_window "$command"
       ;;
     dry-run-all | dry-run-recovery)
       echo "$command is disabled because rollback is not a side-effect-free dry run" >&2
@@ -1250,8 +1370,43 @@ main() {
       printf '\\echo VERIFIED_RELEASE %s\n' "$ORDERED_PREDEPLOY_RELEASE_SHA"
       emit_ordered_predeploy_transaction 'ROLLBACK' "$migration"
       ;;
+    apply-predeploy-one)
+      if [[ "$#" != "2" ]]; then
+        echo "usage: $0 $command <manifest-migration.sql>" >&2
+        exit 2
+      fi
+      local migration="$2"
+      require_environment
+      require_production_project_ref
+      require_session_connection
+      prepare_ordered_predeploy_artifacts "$migration"
+      # Database-aware: the target must be the first missing manifest entry and
+      # every earlier entry must be exact in the ledger.
+      prepare_ordered_predeploy_target "$migration"
+      require_tip_checkout_cutover_for_target "$migration"
+      require_live_origin_main
+      printf 'APPLY %s at release %s\n' "$migration" "$ORDERED_PREDEPLOY_RELEASE_SHA" >&2
+      emit_ordered_predeploy_transaction 'COMMIT' "$migration" | run_sql_stream
+      ;;
+    apply-single-file)
+      if [[ "$#" != "2" ]]; then
+        echo "usage: $0 $command <single-file-or-postdeploy-migration.sql>" >&2
+        exit 2
+      fi
+      local migration="$2"
+      require_single_file_target "$migration"
+      require_environment
+      require_production_project_ref
+      require_session_connection
+      require_release_provenance "$migration"
+      snapshot_single_file "$migration"
+      validate_transactional_migration_file "$migration"
+      require_live_origin_main
+      printf 'APPLY %s at release %s\n' "$migration" "$ORDERED_PREDEPLOY_RELEASE_SHA" >&2
+      emit_single_file_transaction "$migration" | run_sql_stream
+      ;;
     *)
-      echo "usage: $0 {status|render-predeploy-one|dry-run-predeploy-one|dry-run-all|dry-run-recovery|apply-concurrent-recovery|apply-predeploy|apply-predeploy-one|apply-postdeploy|apply-recovery}" >&2
+      echo "usage: $0 {status|render-predeploy-one|apply-predeploy-one|apply-single-file|dry-run-predeploy-one|dry-run-all|dry-run-recovery|apply-concurrent-recovery|apply-predeploy|apply-predeploy-one|apply-postdeploy|apply-recovery}" >&2
       exit 2
       ;;
   esac

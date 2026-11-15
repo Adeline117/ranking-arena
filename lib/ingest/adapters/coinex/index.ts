@@ -31,7 +31,12 @@ import type {
 import { CopierPageCapReachedError } from '../../core/history-page-cap'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
-import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
+import { pageFetcher, replayJson } from '../../fetch/capture'
+import {
+  captureReplayLeaderboard,
+  collectionMeta,
+  requireEnvelopeValue,
+} from '../../fetch/replay-capture'
 import { extractCopierCandidateRecords } from '../../copier-candidate-conservation'
 import {
   parseCoinexHistory,
@@ -70,6 +75,31 @@ async function warmSession(session: FetchSession, src: SourceRow): Promise<void>
   warmedSessions.add(session)
 }
 
+function coinexListRequest(
+  src: SourceRow,
+  timeframe: RankingTimeframe,
+  pageIndex: number,
+  pageSize: number
+) {
+  const listUrl = endpoint(src, 'list', `${BASE}/traders`)
+  return {
+    url:
+      `${listUrl}?data_type=profit_rate&time_range=${TF_RANGE[timeframe]}` +
+      `&hide_full=0&page=${pageIndex}&limit=${pageSize}`,
+    method: 'GET' as const,
+    headers: HEADERS,
+  }
+}
+
+/** Source collection data.data counted before parser validation; data.total is the board. */
+const coinexLeaderboardMeta = collectionMeta({
+  label: 'coinex',
+  assertSuccess: requireEnvelopeValue('coinex', ['code'], [0]),
+  list: ['data', 'data'],
+  total: ['data', 'total'],
+  pageCount: ['data', 'total_page'],
+})
+
 const coinexAdapter: SourceAdapter = {
   slug: 'coinex',
   capabilities: {
@@ -81,53 +111,40 @@ const coinexAdapter: SourceAdapter = {
     copiers: true, // GET followers
   },
 
+  async captureLeaderboard(session, src, timeframe, options) {
+    const pageSize = src.page_size ?? 100
+    options?.signal?.throwIfAborted()
+    await warmSession(session, src)
+    options?.signal?.throwIfAborted()
+    return captureReplayLeaderboard(
+      { session, fetcher: pageFetcher(session), src, label: 'coinex', signal: options?.signal },
+      {
+        buildRequest: (pageIndex) => coinexListRequest(src, timeframe, pageIndex, pageSize),
+        publicRequest: { query: ['data_type', 'time_range', 'hide_full', 'page', 'limit'] },
+        pageBinding: { location: 'query', key: 'page' },
+        extractMeta: coinexLeaderboardMeta,
+        pageSize,
+      }
+    )
+  },
+
   async *listLeaderboard(
     session: FetchSession,
     src: SourceRow,
     timeframe: RankingTimeframe
   ): AsyncIterable<RawPage> {
-    await warmSession(session, src)
-    const fetcher = pageFetcher(session)
-    const listUrl = endpoint(src, 'list', `${BASE}/traders`)
-    const pageSize = src.page_size ?? 100
-    // Validation knob: src.meta.max_pages caps the crawl (smoke runs).
-    const maxPages = Number(src.meta.max_pages) || null
-
-    let pagesYielded = 0
-    for await (const page of replayPaged({
-      session,
-      fetcher,
-      buildRequest: (pageIndex) => ({
-        url:
-          `${listUrl}?data_type=profit_rate&time_range=${TF_RANGE[timeframe]}` +
-          `&hide_full=0&page=${pageIndex}&limit=${pageSize}`,
-        method: 'GET',
-        headers: HEADERS,
-      }),
-      extractMeta: (payload) => {
-        const parsed = parseCoinexLeaderboardPage(payload, dummyCtx(src))
-        return { rowCount: parsed.rows.length, reportedTotal: parsed.reportedTotal }
-      },
-      pageSize,
-    })) {
-      yield page
-      pagesYielded += 1
-      if (maxPages !== null && pagesYielded >= maxPages) return
-    }
-
-    // Empty-board guard (binance-web3 pattern, index.ts:94-103). CoinEx's board
-    // endpoint can answer HTTP 200 with {code:0, data:[]} when geo-gated or
-    // upstream-broken (observed 2026-06-29: empty in BOTH us-IP and SG regions).
-    // An active copy-trading board is never legitimately empty, so a zero-page
-    // crawl is a hard error — loud (logged + rate-limited Telegram alert via the
-    // tier-A processor) instead of a silent publish-nothing that only the
-    // count-check catches. Serving keeps the last good snapshot either way.
-    if (pagesYielded === 0) {
+    const capture = await coinexAdapter.captureLeaderboard!(session, src, timeframe)
+    // Empty-board guard (binance-web3 pattern). CoinEx's board endpoint can
+    // answer HTTP 200 with {code:0, data:[]} when geo-gated or upstream-broken
+    // (observed 2026-06-29). An active board is never legitimately empty, so
+    // a zero-page legacy crawl stays a loud error.
+    if (capture.parsePages.length === 0) {
       throw new Error(
-        `[coinex] empty board: tf${timeframe} returned 200 but 0 traders from ${listUrl} ` +
+        `[coinex] empty board: tf${timeframe} returned 200 but 0 traders ` +
           `— upstream endpoint/params likely changed (re-capture via scripts/ingest-capture-xhr.mts)`
       )
     }
+    yield* capture.parsePages
   },
 
   /**

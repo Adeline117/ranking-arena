@@ -146,11 +146,11 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     ...superseded,
   ]
 
-  // +3 found by the 2026-11-14 rehearsal, -3 already applied via MCP, +1 20261114193017
-  assert.equal(predeploy.length, 155)
+  // +3 found by the 2026-11-14 rehearsal, -3 already applied via MCP, +1 20261114193017, +1 20261114211033
+  assert.equal(predeploy.length, 156)
   // Season publication follow-ups stay last; 011058 must follow the Bitget-bot
   // freshness-authority rewrite slot (20261111134416, #415's replacement for 20260728124000).
-  assert.deepEqual(predeploy.slice(-9), [
+  assert.deepEqual(predeploy.slice(-10), [
     '20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql',
     '20261113011058_leaderboard_publication_source_isolation.sql',
     '20261113012028_public_snapshot_readers_sealed_freshness.sql',
@@ -160,6 +160,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20261114101605_first_screen_core_modules_sealed_only.sql',
     '20261114103025_hero_stats_sealed_public_cohort.sql',
     '20261114193017_rank_publication_requires_attempt_bound_evidence.sql',
+    '20261114211033_public_source_board_metric_contracts.sql',
   ])
   assert.ok(
     predeploy.indexOf('20261113011058_leaderboard_publication_source_isolation.sql') >
@@ -174,6 +175,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
     '20261113150757_clean_derived_formal_win_rate.sql',
+    '20261114211034_public_source_attempt_bound_capture_contracts.sql',
     '20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql',
   ])
   // Classified, never emitted: applied one file at a time via ADR-023 at the
@@ -233,9 +235,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20261113151848_sync_user_profile_email_from_auth.sql',
     '20261113151849_auth_user_has_password_rpc.sql',
   ])
-  assert.equal(new Set(all).size, 192)
+  assert.equal(new Set(all).size, 194)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-114), [
+  assert.deepEqual(predeploy.slice(-115), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -350,6 +352,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20261114101605_first_screen_core_modules_sealed_only.sql',
     '20261114103025_hero_stats_sealed_public_cohort.sql',
     '20261114193017_rank_publication_requires_attempt_bound_evidence.sql',
+    '20261114211033_public_source_board_metric_contracts.sql',
   ])
   assert.ok(predeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(predeploy.includes('20260718183500_harden_stripe_entitlement_null_validation.sql'))
@@ -439,7 +442,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes('20260729070500_leaderboard_score_input_manifest_v2.sql'))
   assert.ok(predeploy.includes('20260729071000_leaderboard_metric_trust_projection_v2.sql'))
   assert.ok(predeploy.includes('20260729071500_tier_a_one_phase_commit_guard.sql'))
-  assert.deepEqual(predeploy.slice(-42, -9), [
+  assert.deepEqual(predeploy.slice(-43, -10), [
     '20260729071500_tier_a_one_phase_commit_guard.sql',
     '20260729220908_season_scoped_leaderboard_count_cache.sql',
     '20260729223000_rerank_public_eligible_rows_only.sql',
@@ -771,22 +774,45 @@ test('transactional exact-ledger checks re-attest and lock every skipped prerequ
 test('every public write-shaped command fails closed before environment parsing', () => {
   const mainSource = source.slice(source.indexOf('main() {'))
   const rejection = mainSource.indexOf(
-    'apply-concurrent-recovery | apply-predeploy | apply-predeploy-one | apply-postdeploy | apply-recovery)'
+    'apply-concurrent-recovery | apply-predeploy | apply-postdeploy | apply-recovery)'
   )
+  // ADR-023 amendment 2026-11-14: the two single-target commands are gated by
+  // the owner-opened window attestation instead of being unconditionally off.
+  const windowGate = mainSource.indexOf('apply-predeploy-one | apply-single-file)')
   const environmentParsing = mainSource.indexOf('require_environment')
 
   assert.notEqual(rejection, -1)
   assert.notEqual(environmentParsing, -1)
   assert.ok(rejection < environmentParsing)
+  assert.notEqual(windowGate, -1)
+  assert.ok(windowGate < environmentParsing)
   assert.match(
     mainSource,
-    /apply-concurrent-recovery \| apply-predeploy \| apply-predeploy-one \| apply-postdeploy \| apply-recovery\)[\s\S]*disabled by ADR-023[\s\S]*exit 2/
+    /apply-predeploy-one \| apply-single-file\)[\s\S]*?require_launch_window "\$command"/
+  )
+  assert.match(
+    source,
+    /require_launch_window\(\) \{[\s\S]*?ARENA_LAUNCH_WINDOW_CONFIRM[\s\S]*?exit 2/
+  )
+  assert.match(
+    mainSource,
+    /apply-concurrent-recovery \| apply-predeploy \| apply-postdeploy \| apply-recovery\)[\s\S]*disabled by ADR-023[\s\S]*exit 2/
   )
   assert.match(
     mainSource,
     /dry-run-all \| dry-run-recovery\)[\s\S]*not a side-effect-free dry run[\s\S]*exit 2/
   )
-  assert.doesNotMatch(mainSource, /emit_ordered_predeploy_transaction 'COMMIT'/)
+  // The only committing emitters are the two window-gated single-target
+  // commands, each behind the production-endpoint and provenance checks.
+  assert.equal(mainSource.match(/emit_ordered_predeploy_transaction 'COMMIT'/g)?.length, 1)
+  for (const command of ['apply-predeploy-one', 'apply-single-file']) {
+    const body = mainSource.slice(mainSource.indexOf(`    ${command})\n`))
+    const section = body.slice(0, body.indexOf('\n      ;;'))
+    assert.match(section, /require_production_project_ref/)
+    assert.match(section, /require_session_connection/)
+    assert.match(section, /require_live_origin_main/)
+    assert.match(section, /\| run_sql_stream/)
+  }
 })
 
 test('single predeploy preview is Git-object-bound, offline and serialized before BEGIN', () => {
@@ -906,7 +932,9 @@ test('write-shaped commands exit 2 before any git or psql access', () => {
     const commands = [
       ['apply-concurrent-recovery'],
       ['apply-predeploy'],
+      // Without the window attestation these two stop before git or psql too.
       ['apply-predeploy-one', '20260716111600_atomic_group_application_review.sql'],
+      ['apply-single-file', '20261111194845_fix_gmx_source_contract_current_population.sql'],
       ['apply-postdeploy'],
       ['apply-recovery'],
       ['dry-run-all'],
@@ -918,7 +946,11 @@ test('write-shaped commands exit 2 before any git or psql access', () => {
       rmSync(psqlCalls, { force: true })
       const result = spawnSync('bash', [script, ...args], baseOptions)
       assert.equal(result.status, 2, result.stderr)
-      if (args[0].startsWith('apply-')) {
+      if (args[0] === 'apply-predeploy-one' || args[0] === 'apply-single-file') {
+        // No ARENA_LAUNCH_WINDOW_CONFIRM in this environment: the window gate
+        // refuses before any environment parsing, git or psql.
+        assert.match(result.stderr, /requires an owner-opened launch window/)
+      } else if (args[0].startsWith('apply-')) {
         assert.match(result.stderr, /disabled by ADR-023/)
       } else {
         assert.match(result.stderr, /not a side-effect-free dry run/)
@@ -1211,7 +1243,7 @@ test('recovery emitters remain internal while every public recovery path is disa
   assert.match(source, /CREATE INDEX CONCURRENTLY/)
   assert.match(
     source,
-    /apply-concurrent-recovery \| apply-predeploy \| apply-predeploy-one \| apply-postdeploy \| apply-recovery\)[\s\S]*exit 2/
+    /apply-concurrent-recovery \| apply-predeploy \| apply-postdeploy \| apply-recovery\)[\s\S]*exit 2/
   )
   assert.match(source, /dry-run-all \| dry-run-recovery\)[\s\S]*exit 2/)
 })

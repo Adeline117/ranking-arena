@@ -44,7 +44,12 @@ import type {
 } from '../../core/history-continuation'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
-import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
+import { pageFetcher, replayJson } from '../../fetch/capture'
+import {
+  captureReplayLeaderboard,
+  collectionMeta,
+  requireEnvelopeValue,
+} from '../../fetch/replay-capture'
 import { extractCopierCandidateRecords } from '../../copier-candidate-conservation'
 import {
   parseKucoinHistory,
@@ -79,6 +84,15 @@ async function warmSession(session: FetchSession, src: SourceRow): Promise<void>
   warmedSessions.add(session)
 }
 
+/** Upstream page meta: rows counted before parser validation; board population as reported. */
+const kucoinLeaderboardMeta = collectionMeta({
+  label: 'kucoin',
+  assertSuccess: requireEnvelopeValue('kucoin', ['success'], [true]),
+  list: ['data', 'items'],
+  total: ['data', 'totalNum'],
+  pageCount: ['data', 'totalPage'],
+})
+
 const kucoinAdapter: SourceAdapter = {
   slug: 'kucoin',
   capabilities: {
@@ -92,46 +106,48 @@ const kucoinAdapter: SourceAdapter = {
 
   /** Board is 30d-anchored; the timeframe argument only labels the snapshot
    *  (timeframes_native={30} — the query has no TF param). */
-  async *listLeaderboard(
-    session: FetchSession,
-    src: SourceRow,
-    _timeframe: RankingTimeframe
-  ): AsyncIterable<RawPage> {
+  async captureLeaderboard(session, src, timeframe, options) {
+    options?.signal?.throwIfAborted()
     await warmSession(session, src)
     const fetcher = pageFetcher(session)
+    options?.signal?.throwIfAborted()
     const listUrl = endpoint(src, 'list', `${BASE}/rn/leaderboard/query?lang=en_US`)
     const pageSize = src.page_size ?? 100
     const sortField =
       typeof src.meta.list_sort_field === 'string' ? src.meta.list_sort_field : 'ranking_score'
-    // Validation knob: src.meta.max_pages caps the crawl (smoke runs).
-    const maxPages = Number(src.meta.max_pages) || null
-
-    let pagesYielded = 0
-    for await (const page of replayPaged({
-      session,
-      fetcher,
-      buildRequest: (pageIndex) => ({
-        url: listUrl,
-        method: 'POST',
-        headers: POST_HEADERS,
-        body: {
-          criteria: [],
-          sort: { field: sortField, direction: 'DESC' },
-          hideFull: false,
-          currentPage: pageIndex,
-          pageSize,
+    return captureReplayLeaderboard(
+      { session, fetcher, src, label: 'kucoin', signal: options?.signal },
+      {
+        buildRequest: (pageIndex) => ({
+          url: listUrl,
+          method: 'POST',
+          headers: POST_HEADERS,
+          body: {
+            criteria: [],
+            sort: { field: sortField, direction: 'DESC' },
+            hideFull: false,
+            currentPage: pageIndex,
+            pageSize,
+          },
+        }),
+        publicRequest: {
+          query: ['lang'],
+          body: ['criteria', 'sort', 'hideFull', 'currentPage', 'pageSize'],
         },
-      }),
-      extractMeta: (payload) => {
-        const parsed = parseKucoinLeaderboardPage(payload, dummyCtx(src))
-        return { rowCount: parsed.rows.length, reportedTotal: parsed.reportedTotal }
-      },
-      pageSize,
-    })) {
-      yield page
-      pagesYielded += 1
-      if (maxPages !== null && pagesYielded >= maxPages) return
-    }
+        pageBinding: { location: 'body', path: ['currentPage'] },
+        extractMeta: kucoinLeaderboardMeta,
+        pageSize,
+      }
+    )
+  },
+
+  async *listLeaderboard(
+    session: FetchSession,
+    src: SourceRow,
+    timeframe: RankingTimeframe
+  ): AsyncIterable<RawPage> {
+    const capture = await kucoinAdapter.captureLeaderboard!(session, src, timeframe)
+    yield* capture.parsePages
   },
 
   /**

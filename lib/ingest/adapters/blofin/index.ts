@@ -57,7 +57,12 @@ import type {
 } from '../../core/types'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
-import { apiFetcher, replayJson, replayPaged } from '../../fetch/capture'
+import { apiFetcher, replayJson } from '../../fetch/capture'
+import {
+  captureReplayLeaderboard,
+  collectionMeta,
+  requireEnvelopeValue,
+} from '../../fetch/replay-capture'
 import {
   parseBlofinHistory,
   parseBlofinLeaderboardPage,
@@ -92,6 +97,15 @@ function listUrl(src: SourceRow): string {
   return override ?? LIST_PATHS[boardKey(src)]
 }
 
+/** Upstream page meta: rows counted before parser validation; board population as reported. */
+const blofinLeaderboardMeta = collectionMeta({
+  label: 'blofin',
+  assertSuccess: requireEnvelopeValue('blofin', ['code'], [200]),
+  list: ['data', 'trader_info'],
+  total: ['data', 'page_total'],
+  pageCount: ['data', 'pages'],
+})
+
 const blofinAdapter: SourceAdapter = {
   slug: 'blofin',
   capabilities: {
@@ -108,57 +122,67 @@ const blofinAdapter: SourceAdapter = {
     copiers: true,
   },
 
+  async captureLeaderboard(session, src, timeframe, options) {
+    options?.signal?.throwIfAborted()
+    const fetcher = apiFetcher(await session.api())
+    options?.signal?.throwIfAborted()
+    const url = listUrl(src)
+    const pageSize = src.page_size ?? 20
+    const rangeTime = RANGE_TIME[timeframe] ?? '2'
+    return captureReplayLeaderboard(
+      { session, fetcher, src, label: 'blofin', signal: options?.signal },
+      {
+        buildRequest: (pageIndex) => ({
+          url,
+          method: 'POST',
+          headers: HEADERS,
+          body: {
+            hide_full_portfolios: 0,
+            sort_field: 'roi',
+            range_time: rangeTime,
+            sort_order: 'DESC',
+            nick_name: '',
+            trading_bots_type: [],
+            tag_list: [],
+            page_num: pageIndex,
+            page_size: pageSize,
+            pnl_lower: '',
+            pnl_upper: '',
+            copier_pnl_lower: '',
+            copier_pnl_upper: '',
+          },
+        }),
+        publicRequest: {
+          body: [
+            'hide_full_portfolios',
+            'sort_field',
+            'range_time',
+            'sort_order',
+            'nick_name',
+            'trading_bots_type',
+            'tag_list',
+            'page_num',
+            'page_size',
+            'pnl_lower',
+            'pnl_upper',
+            'copier_pnl_lower',
+            'copier_pnl_upper',
+          ],
+        },
+        pageBinding: { location: 'body', path: ['page_num'] },
+        extractMeta: blofinLeaderboardMeta,
+        pageSize,
+      }
+    )
+  },
+
   async *listLeaderboard(
     session: FetchSession,
     src: SourceRow,
     timeframe: RankingTimeframe
   ): AsyncIterable<RawPage> {
-    const fetcher = apiFetcher(await session.api())
-    const url = listUrl(src)
-    const pageSize = src.page_size ?? 20
-    const rangeTime = RANGE_TIME[timeframe] ?? '2'
-    const maxPages = Number(src.meta.max_pages) || null
-
-    let pagesYielded = 0
-    for await (const page of replayPaged({
-      session,
-      fetcher,
-      buildRequest: (pageIndex) => ({
-        url,
-        method: 'POST',
-        headers: HEADERS,
-        body: {
-          hide_full_portfolios: 0,
-          sort_field: 'roi',
-          range_time: rangeTime,
-          sort_order: 'DESC',
-          nick_name: '',
-          trading_bots_type: [],
-          tag_list: [],
-          page_num: pageIndex,
-          page_size: pageSize,
-          pnl_lower: '',
-          pnl_upper: '',
-          copier_pnl_lower: '',
-          copier_pnl_upper: '',
-        },
-      }),
-      extractMeta: (payload) => {
-        const parsed = parseBlofinLeaderboardPage(payload, {
-          sourceSlug: src.slug,
-          currency: src.currency,
-          tfLabelMap: src.tf_label_map,
-          scrapedAt: new Date().toISOString(),
-          meta: src.meta,
-        })
-        return { rowCount: parsed.rows.length, reportedTotal: parsed.reportedTotal }
-      },
-      pageSize,
-    })) {
-      yield page
-      pagesYielded += 1
-      if (maxPages !== null && pagesYielded >= maxPages) return
-    }
+    const capture = await blofinAdapter.captureLeaderboard!(session, src, timeframe)
+    yield* capture.parsePages
   },
 
   /**

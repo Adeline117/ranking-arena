@@ -35,7 +35,12 @@ import type {
 import { CopierPageCapReachedError } from '../../core/history-page-cap'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
-import { apiFetcher, replayJson, replayPaged, type JsonFetcher } from '../../fetch/capture'
+import { apiFetcher, replayJson, type JsonFetcher } from '../../fetch/capture'
+import {
+  captureReplayLeaderboard,
+  collectionMeta,
+  requireEnvelopeValue,
+} from '../../fetch/replay-capture'
 import { extractCopierCandidateRecords } from '../../copier-candidate-conservation'
 import {
   parseBtccHistory,
@@ -61,6 +66,14 @@ async function btccFetcher(session: FetchSession): Promise<JsonFetcher> {
   return apiFetcher(await session.api())
 }
 
+/** Upstream page meta: rows counted before parser validation; board population as reported. */
+const btccLeaderboardMeta = collectionMeta({
+  label: 'btcc',
+  assertSuccess: requireEnvelopeValue('btcc', ['code'], [200]),
+  list: ['rows'],
+  total: ['total'],
+})
+
 const btccAdapter: SourceAdapter = {
   slug: 'btcc',
   capabilities: {
@@ -74,42 +87,41 @@ const btccAdapter: SourceAdapter = {
 
   /** Native board is 30d only — the scheduler only requests TFs from
    *  timeframes_native={30}; anything else would be a config error. */
-  async *listLeaderboard(
-    session: FetchSession,
-    src: SourceRow,
-    timeframe: RankingTimeframe
-  ): AsyncIterable<RawPage> {
+  async captureLeaderboard(session, src, timeframe, options) {
     if (timeframe !== 30) {
       throw new Error(
         `[btcc] native board is 30d only (got ${timeframe}d) — 7/90 are derived boards`
       )
     }
+    options?.signal?.throwIfAborted()
     const fetcher = await btccFetcher(session)
+    options?.signal?.throwIfAborted()
     const listUrl = endpoint(src, 'list', `${BASE}/trader/page`)
     const pageSize = src.page_size ?? 50
-    // Validation knob: src.meta.max_pages caps the crawl (smoke runs).
-    const maxPages = Number(src.meta.max_pages) || null
+    return captureReplayLeaderboard(
+      { session, fetcher, src, label: 'btcc', signal: options?.signal },
+      {
+        buildRequest: (pageIndex) => ({
+          url: listUrl,
+          method: 'POST',
+          headers: HEADERS,
+          body: { nickName: '', sortType: 1, pageNum: pageIndex, pageSize },
+        }),
+        publicRequest: { body: ['nickName', 'sortType', 'pageNum', 'pageSize'] },
+        pageBinding: { location: 'body', path: ['pageNum'] },
+        extractMeta: btccLeaderboardMeta,
+        pageSize,
+      }
+    )
+  },
 
-    let pagesYielded = 0
-    for await (const page of replayPaged({
-      session,
-      fetcher,
-      buildRequest: (pageIndex) => ({
-        url: listUrl,
-        method: 'POST',
-        headers: HEADERS,
-        body: { nickName: '', sortType: 1, pageNum: pageIndex, pageSize },
-      }),
-      extractMeta: (payload) => {
-        const parsed = parseBtccLeaderboardPage(payload, dummyCtx(src))
-        return { rowCount: parsed.rows.length, reportedTotal: parsed.reportedTotal }
-      },
-      pageSize,
-    })) {
-      yield page
-      pagesYielded += 1
-      if (maxPages !== null && pagesYielded >= maxPages) return
-    }
+  async *listLeaderboard(
+    session: FetchSession,
+    src: SourceRow,
+    timeframe: RankingTimeframe
+  ): AsyncIterable<RawPage> {
+    const capture = await btccAdapter.captureLeaderboard!(session, src, timeframe)
+    yield* capture.parsePages
   },
 
   /**
