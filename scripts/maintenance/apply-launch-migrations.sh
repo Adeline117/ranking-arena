@@ -315,13 +315,12 @@ SINGLE_FILE_CHANNEL_MIGRATIONS=(
   20260803100000_record_surface_publication_substrate.sql
   20260803101000_verified_position_history_publication_writer.sql
 )
-readonly -a SINGLE_FILE_CHANNEL_MIGRATIONS
 
 # ADR-023 amendment 2026-11-14. The value is deliberately not a secret: it is
 # an attestation the operator must type, recorded in docs/DECISIONS.md, that
 # the owner opened this window for a single serialized operator. Closing the
 # window means changing this constant.
-readonly LAUNCH_WINDOW_ATTESTATION='adr-023-amendment-2026-11-14:single-operator-ordered-psql'
+LAUNCH_WINDOW_ATTESTATION='adr-023-amendment-2026-11-14:single-operator-ordered-psql'
 
 require_launch_window() {
   if [[ "${ARENA_LAUNCH_WINDOW_CONFIRM:-}" != "$LAUNCH_WINDOW_ATTESTATION" ]]; then
