@@ -227,10 +227,10 @@ readonly -a PREDEPLOY_MIGRATIONS
 # their attempt-bound capture after the worker that implements it ships.
 # 20261115141050 (exhausted completeness mode) must follow 193017, whose
 # publication predicate it replaces, and 20260722050000, whose metric-trust
-# outcome authority it patches. It is inert until a source registers an
-# exhaustion contract (the registry it creates is empty), and the deployed
-# worker never writes 'end_signal_reached' or a completeness block, so it is
-# predeploy: the worker that captures exhausted boards needs it installed.
+# outcome authority it replaces (both pinned by prior-body sha256). It changes
+# no ledger table and is inert until a source registers an exhaustion contract
+# (its registry starts empty), so it is predeploy: the worker that records
+# exhaustion proofs calls arena.record_leaderboard_exhaustion_evidence.
 #
 # 20261113014105 (unknown-trade-count sample confidence, issue #435) and its
 # follow-up 20261114101514 (true-zero trade counts, audit P1-2), in that order,
