@@ -113,7 +113,12 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
+  // A pooler certificate that does not chain to the configured CA must read
+  // as a TLS trust failure, not as a generic database outage.
+  const { describeIngestTlsFailure } = await import('@/lib/ingest/db')
+  const tlsFailure = describeIngestTlsFailure(error)
+  if (tlsFailure) console.error(`[local-deploy-preflight] ${tlsFailure}`)
   console.error(
     '[local-deploy-preflight] failed:',
     error instanceof Error ? error.message : String(error)
