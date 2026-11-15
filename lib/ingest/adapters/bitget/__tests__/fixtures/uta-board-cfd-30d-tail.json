@@ -1,0 +1,142 @@
+{
+  "code": "200",
+  "data": {
+    "containActModel": false,
+    "data": [],
+    "maxShowSizes": 208,
+    "nextFlag": false,
+    "totals": 3,
+    "rows": [
+      {
+        "traderUid": "b0c00000000000000001",
+        "portfolioId": "1400000000000000001",
+        "type": 1,
+        "displayName": "Fixture C1",
+        "userName": "BGUSER-FIXTUREC1",
+        "headPic": "https://img.bgstatic.com/otc/images/fixture-c1.png",
+        "followCount": 0,
+        "maxFollowCount": 100,
+        "itemVoList": [
+          {
+            "comparedValue": "6.71",
+            "percentColumn": true,
+            "showColumnCode": "profit_rate",
+            "showColumnDesc": "收益率"
+          },
+          {
+            "comparedValue": "6.71",
+            "percentColumn": false,
+            "showColumnCode": "total_profit",
+            "showColumnDesc": "收益"
+          },
+          {
+            "comparedValue": "0.00",
+            "percentColumn": false,
+            "showColumnCode": "total_follow_profit",
+            "showColumnDesc": "跟单者收益"
+          },
+          {
+            "comparedValue": "106.71",
+            "percentColumn": false,
+            "showColumnCode": "aum",
+            "showColumnDesc": "资产管理规模"
+          },
+          {
+            "comparedValue": "75.00",
+            "percentColumn": true,
+            "showColumnCode": "winning_rate",
+            "showColumnDesc": "胜率"
+          }
+        ],
+        "canTrace": true
+      },
+      {
+        "traderUid": "b0c00000000000000002",
+        "portfolioId": "1400000000000000002",
+        "type": 2,
+        "displayName": "Fixture C2",
+        "userName": "BGUSER-FIXTUREC2",
+        "headPic": "https://img.bgstatic.com/otc/images/fixture-c2.png",
+        "followCount": 1,
+        "maxFollowCount": 10,
+        "itemVoList": [
+          {
+            "comparedValue": "6.37",
+            "percentColumn": true,
+            "showColumnCode": "profit_rate",
+            "showColumnDesc": "收益率"
+          },
+          {
+            "comparedValue": "67.79",
+            "percentColumn": false,
+            "showColumnCode": "total_profit",
+            "showColumnDesc": "收益"
+          },
+          {
+            "comparedValue": "28.26",
+            "percentColumn": false,
+            "showColumnCode": "total_follow_profit",
+            "showColumnDesc": "跟单者收益"
+          },
+          {
+            "comparedValue": "1696.82",
+            "percentColumn": false,
+            "showColumnCode": "aum",
+            "showColumnDesc": "资产管理规模"
+          },
+          {
+            "comparedValue": "53.84",
+            "percentColumn": true,
+            "showColumnCode": "winning_rate",
+            "showColumnDesc": "胜率"
+          }
+        ],
+        "canTrace": true
+      },
+      {
+        "traderUid": "b0c00000000000000003",
+        "portfolioId": "1400000000000000003",
+        "type": 1,
+        "displayName": "Fixture C3",
+        "userName": "BGUSER-FIXTUREC3",
+        "headPic": "https://img.bgstatic.com/otc/images/fixture-c3.png",
+        "followCount": 1,
+        "maxFollowCount": 100,
+        "itemVoList": [
+          {
+            "comparedValue": "6.36",
+            "percentColumn": true,
+            "showColumnCode": "profit_rate",
+            "showColumnDesc": "收益率"
+          },
+          {
+            "comparedValue": "88.68",
+            "percentColumn": false,
+            "showColumnCode": "total_profit",
+            "showColumnDesc": "收益"
+          },
+          {
+            "comparedValue": "-38.30",
+            "percentColumn": false,
+            "showColumnCode": "total_follow_profit",
+            "showColumnDesc": "跟单者收益"
+          },
+          {
+            "comparedValue": "3459.98",
+            "percentColumn": false,
+            "showColumnCode": "aum",
+            "showColumnDesc": "资产管理规模"
+          },
+          {
+            "comparedValue": "59.47",
+            "percentColumn": true,
+            "showColumnCode": "winning_rate",
+            "showColumnDesc": "胜率"
+          }
+        ],
+        "canTrace": true
+      }
+    ]
+  },
+  "params": []
+}
