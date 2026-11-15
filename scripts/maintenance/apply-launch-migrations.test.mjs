@@ -772,22 +772,45 @@ test('transactional exact-ledger checks re-attest and lock every skipped prerequ
 test('every public write-shaped command fails closed before environment parsing', () => {
   const mainSource = source.slice(source.indexOf('main() {'))
   const rejection = mainSource.indexOf(
-    'apply-concurrent-recovery | apply-predeploy | apply-predeploy-one | apply-postdeploy | apply-recovery)'
+    'apply-concurrent-recovery | apply-predeploy | apply-postdeploy | apply-recovery)'
   )
+  // ADR-023 amendment 2026-11-14: the two single-target commands are gated by
+  // the owner-opened window attestation instead of being unconditionally off.
+  const windowGate = mainSource.indexOf('apply-predeploy-one | apply-single-file)')
   const environmentParsing = mainSource.indexOf('require_environment')
 
   assert.notEqual(rejection, -1)
   assert.notEqual(environmentParsing, -1)
   assert.ok(rejection < environmentParsing)
+  assert.notEqual(windowGate, -1)
+  assert.ok(windowGate < environmentParsing)
   assert.match(
     mainSource,
-    /apply-concurrent-recovery \| apply-predeploy \| apply-predeploy-one \| apply-postdeploy \| apply-recovery\)[\s\S]*disabled by ADR-023[\s\S]*exit 2/
+    /apply-predeploy-one \| apply-single-file\)[\s\S]*?require_launch_window "\$command"/
+  )
+  assert.match(
+    source,
+    /require_launch_window\(\) \{[\s\S]*?ARENA_LAUNCH_WINDOW_CONFIRM[\s\S]*?exit 2/
+  )
+  assert.match(
+    mainSource,
+    /apply-concurrent-recovery \| apply-predeploy \| apply-postdeploy \| apply-recovery\)[\s\S]*disabled by ADR-023[\s\S]*exit 2/
   )
   assert.match(
     mainSource,
     /dry-run-all \| dry-run-recovery\)[\s\S]*not a side-effect-free dry run[\s\S]*exit 2/
   )
-  assert.doesNotMatch(mainSource, /emit_ordered_predeploy_transaction 'COMMIT'/)
+  // The only committing emitters are the two window-gated single-target
+  // commands, each behind the production-endpoint and provenance checks.
+  assert.equal(mainSource.match(/emit_ordered_predeploy_transaction 'COMMIT'/g)?.length, 1)
+  for (const command of ['apply-predeploy-one', 'apply-single-file']) {
+    const body = mainSource.slice(mainSource.indexOf(`    ${command})\n`))
+    const section = body.slice(0, body.indexOf('\n      ;;'))
+    assert.match(section, /require_production_project_ref/)
+    assert.match(section, /require_session_connection/)
+    assert.match(section, /require_live_origin_main/)
+    assert.match(section, /\| run_sql_stream/)
+  }
 })
 
 test('single predeploy preview is Git-object-bound, offline and serialized before BEGIN', () => {
@@ -907,7 +930,9 @@ test('write-shaped commands exit 2 before any git or psql access', () => {
     const commands = [
       ['apply-concurrent-recovery'],
       ['apply-predeploy'],
+      // Without the window attestation these two stop before git or psql too.
       ['apply-predeploy-one', '20260716111600_atomic_group_application_review.sql'],
+      ['apply-single-file', '20261111194845_fix_gmx_source_contract_current_population.sql'],
       ['apply-postdeploy'],
       ['apply-recovery'],
       ['dry-run-all'],
@@ -919,7 +944,11 @@ test('write-shaped commands exit 2 before any git or psql access', () => {
       rmSync(psqlCalls, { force: true })
       const result = spawnSync('bash', [script, ...args], baseOptions)
       assert.equal(result.status, 2, result.stderr)
-      if (args[0].startsWith('apply-')) {
+      if (args[0] === 'apply-predeploy-one' || args[0] === 'apply-single-file') {
+        // No ARENA_LAUNCH_WINDOW_CONFIRM in this environment: the window gate
+        // refuses before any environment parsing, git or psql.
+        assert.match(result.stderr, /requires an owner-opened launch window/)
+      } else if (args[0].startsWith('apply-')) {
         assert.match(result.stderr, /disabled by ADR-023/)
       } else {
         assert.match(result.stderr, /not a side-effect-free dry run/)
@@ -1212,7 +1241,7 @@ test('recovery emitters remain internal while every public recovery path is disa
   assert.match(source, /CREATE INDEX CONCURRENTLY/)
   assert.match(
     source,
-    /apply-concurrent-recovery \| apply-predeploy \| apply-predeploy-one \| apply-postdeploy \| apply-recovery\)[\s\S]*exit 2/
+    /apply-concurrent-recovery \| apply-predeploy \| apply-postdeploy \| apply-recovery\)[\s\S]*exit 2/
   )
   assert.match(source, /dry-run-all \| dry-run-recovery\)[\s\S]*exit 2/)
 })
