@@ -146,7 +146,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     ...superseded,
   ]
 
-  assert.equal(predeploy.length, 154)
+  assert.equal(predeploy.length, 154) // +3 found by the 2026-11-14 rehearsal, -3 already applied via MCP
   // Season publication follow-ups stay last; 011058 must follow the Bitget-bot
   // freshness-authority rewrite slot (20261111134416, #415's replacement for 20260728124000).
   assert.deepEqual(predeploy.slice(-8), [
@@ -227,8 +227,11 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260817050000_arena_bot_legacy_publication_isolation.sql',
     '20260817060000_trader_series_publication_isolation.sql',
     '20260817061000_legacy_raw_metric_publication_isolation.sql',
+    '20261113104533_trader_follows_hard_cap_lock.sql',
+    '20261113151848_sync_user_profile_email_from_auth.sql',
+    '20261113151849_auth_user_has_password_rpc.sql',
   ])
-  assert.equal(new Set(all).size, 188)
+  assert.equal(new Set(all).size, 191)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
   assert.deepEqual(predeploy.slice(-113), [
     '20260718120000_leaderboard_source_freshness.sql',
@@ -251,6 +254,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260721130000_raw_object_gc_outbox.sql',
     '20260721140000_idempotent_equivalent_refund_events.sql',
     '20260721150000_metric_trust_raw_artifact_identity.sql',
+    '20260721180903_metric_rankable_score_inputs_shadow.sql',
     '20260721175746_arena_score_inputs_publish_bundle.sql',
     '20260721210000_tip_checkout_lifecycle_atomic.sql',
     '20260721211000_tip_checkout_completion_identity.sql',
@@ -303,11 +307,13 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260729070500_leaderboard_score_input_manifest_v2.sql',
     '20260729071000_leaderboard_metric_trust_projection_v2.sql',
     '20260729071500_tier_a_one_phase_commit_guard.sql',
+    '20260729220908_season_scoped_leaderboard_count_cache.sql',
     '20260729223000_rerank_public_eligible_rows_only.sql',
     '20260729224000_rank_eligible_leaderboard_count_cache.sql',
     '20260729225000_token_trader_rank_authority.sql',
     '20261111133259_token_ranking_generation_barrier_cron_api.sql',
     '20261111133300_retire_legacy_token_rankings_cron_api.sql',
+    '20260730033000_token_trade_fact_authority_shadow.sql',
     '20261111135302_quarantine_bingx_rank_authority_blocked_spot.sql',
     '20260804050000_harden_serving_trader_resolver.sql',
     '20260804051000_harden_serving_source_capabilities.sql',
@@ -332,9 +338,6 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20261013094743_retire_v2_partition_cron_extend_arena_partitions.sql',
     '20261113014105_arena_score_unknown_trades_confidence.sql',
     '20261114101514_arena_score_true_zero_trades_confidence.sql',
-    '20261113104533_trader_follows_hard_cap_lock.sql',
-    '20261113151848_sync_user_profile_email_from_auth.sql',
-    '20261113151849_auth_user_has_password_rpc.sql',
     '20261114104438_sealed_publication_data_gap_summary.sql',
     '20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql',
     '20261113011058_leaderboard_publication_source_isolation.sql',
@@ -434,11 +437,14 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes('20260729071000_leaderboard_metric_trust_projection_v2.sql'))
   assert.ok(predeploy.includes('20260729071500_tier_a_one_phase_commit_guard.sql'))
   assert.deepEqual(predeploy.slice(-41, -8), [
+    '20260729071500_tier_a_one_phase_commit_guard.sql',
+    '20260729220908_season_scoped_leaderboard_count_cache.sql',
     '20260729223000_rerank_public_eligible_rows_only.sql',
     '20260729224000_rank_eligible_leaderboard_count_cache.sql',
     '20260729225000_token_trader_rank_authority.sql',
     '20261111133259_token_ranking_generation_barrier_cron_api.sql',
     '20261111133300_retire_legacy_token_rankings_cron_api.sql',
+    '20260730033000_token_trade_fact_authority_shadow.sql',
     '20261111135302_quarantine_bingx_rank_authority_blocked_spot.sql',
     '20260804050000_harden_serving_trader_resolver.sql',
     '20260804051000_harden_serving_source_capabilities.sql',
@@ -463,9 +469,6 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20261013094743_retire_v2_partition_cron_extend_arena_partitions.sql',
     '20261113014105_arena_score_unknown_trades_confidence.sql',
     '20261114101514_arena_score_true_zero_trades_confidence.sql',
-    '20261113104533_trader_follows_hard_cap_lock.sql',
-    '20261113151848_sync_user_profile_email_from_auth.sql',
-    '20261113151849_auth_user_has_password_rpc.sql',
     '20261114104438_sealed_publication_data_gap_summary.sql',
   ])
   assert.ok(!recoveryPrerequisites.includes('20260729223000_rerank_public_eligible_rows_only.sql'))
@@ -1236,6 +1239,10 @@ test('every superseded migration names a superseder and forward replacements tak
   const external = new Map([
     ['20260716104500_collection_read_write_boundaries.sql', '20260717230000'],
     ['20260808001418_atomic_group_channel_settings_update.sql', '20260808071456'],
+    // Applied through the ADR-023 MCP channel; the ledger holds the apply time.
+    ['20261113104533_trader_follows_hard_cap_lock.sql', '20261113233535'],
+    ['20261113151848_sync_user_profile_email_from_auth.sql', '20261113233625'],
+    ['20261113151849_auth_user_has_password_rpc.sql', '20261113233643'],
   ])
   const script = resolve(ROOT, 'scripts/maintenance/apply-launch-migrations.sh')
   for (const migration of superseded) {
@@ -1382,4 +1389,31 @@ test('ADR-023 single-file migrations are classified, never emitted, and their sl
     assert.ok(checklist.includes(anchor), `LAUNCH_CHECKLIST.md must place ${anchor}`)
   }
   assert.doesNotMatch(checklist, /17 个迁移都不在清单里/)
+})
+
+test('a manifest migration may carry one outer BEGIN/COMMIT or none, never a lone one', () => {
+  const source = readFileSync(
+    resolve(ROOT, 'scripts/maintenance/apply-launch-migrations.sh'),
+    'utf8'
+  )
+  assert.match(source, /"\$begin_count" == "0" && "\$commit_count" == "0"/)
+  // The 2026-11-14 rehearsal stopped here: this predeploy file has no
+  // transaction statements at all, and the runner refused to render it.
+  for (const migration of migrationArray('PREDEPLOY_MIGRATIONS')) {
+    const body = readFileSync(resolve(ROOT, 'supabase/migrations', migration), 'utf8')
+    const begins = (body.match(/^BEGIN;$/gm) ?? []).length
+    const commits = (body.match(/^COMMIT;$/gm) ?? []).length
+    assert.ok(
+      (begins === 1 && commits === 1) || (begins === 0 && commits === 0),
+      `${migration} has ${begins} BEGIN / ${commits} COMMIT`
+    )
+  }
+  const bare = readFileSync(
+    resolve(
+      ROOT,
+      'supabase/migrations/20261013094743_retire_v2_partition_cron_extend_arena_partitions.sql'
+    ),
+    'utf8'
+  )
+  assert.doesNotMatch(bare, /^(BEGIN|COMMIT);$/m)
 })
