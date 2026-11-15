@@ -73,7 +73,6 @@ describe('SG Redis roster deployment proof', () => {
         WORKER_NODE_ID: 'vps_sg',
         INGEST_REGIONS: 'vps_sg',
         INGEST_LOCAL_REGION: 'vps_sg',
-        INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED: 'true',
       })
     ).not.toThrow()
     for (const [key, value] of [
@@ -86,40 +85,25 @@ describe('SG Redis roster deployment proof', () => {
           WORKER_NODE_ID: 'vps_sg',
           INGEST_REGIONS: 'vps_sg',
           INGEST_LOCAL_REGION: 'vps_sg',
-          INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED: 'true',
           [key]: value,
         })
       ).toThrow('must be exactly vps_sg')
     }
-    for (const captureValue of [undefined, 'false']) {
-      expect(() =>
-        assertSgRuntimeEnvironment({
-          WORKER_NODE_ID: 'vps_sg',
-          INGEST_REGIONS: 'vps_sg',
-          INGEST_LOCAL_REGION: 'vps_sg',
-          INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED: captureValue,
-        })
-      ).toThrow('attempt-bound capture must be enabled')
-    }
   })
 
-  test('requires the box-local env file itself to carry the exact SG rollout contract', () => {
+  test('requires the box-local env file itself to carry the exact SG node contract', () => {
     const exact = {
       WORKER_NODE_ID: 'vps_sg',
       INGEST_REGIONS: 'vps_sg',
       INGEST_LOCAL_REGION: 'vps_sg',
-      INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED: 'true',
     }
     expect(() => assertSgRuntimeEnvironmentFile(exact)).not.toThrow()
     expect(() => assertSgRuntimeEnvironmentFile(undefined)).toThrow(
       'worker/.env could not be parsed'
     )
-    expect(() =>
-      assertSgRuntimeEnvironmentFile({
-        ...exact,
-        INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED: 'false',
-      })
-    ).toThrow('attempt-bound capture must be enabled')
+    expect(() => assertSgRuntimeEnvironmentFile({ ...exact, INGEST_REGIONS: 'local' })).toThrow(
+      'must be exactly vps_sg'
+    )
   })
 
   test('accepts the exact candidate identity and returns its heartbeat PID', () => {

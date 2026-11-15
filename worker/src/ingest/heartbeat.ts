@@ -155,7 +155,9 @@ function snapshotWorkerRuntimeIdentity(identity: WorkerRuntimeIdentity): WorkerR
 
 export function resolveWorkerRuntimeIdentity(): WorkerRuntimeIdentity {
   return snapshotWorkerRuntimeIdentity({
-    attempt_bound_capture: process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED === 'true',
+    // Attempt-bound capture is the only Tier-A path; the field stays on the
+    // wire so release readiness can still refuse an older worker reporting false.
+    attempt_bound_capture: true,
     node: workerNodeId(),
     pid: process.pid,
     release_id: resolveWorkerReleaseId(),

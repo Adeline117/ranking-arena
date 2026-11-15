@@ -1,10 +1,7 @@
 import { resolve } from 'node:path'
 import { config } from 'dotenv'
 import { mkdtemp, rm } from 'node:fs/promises'
-import {
-  assertAttemptBoundCaptureEnvironmentFile,
-  assertAttemptBoundCaptureRuntimeEnabled,
-} from './src/ingest/attempt-bound-capture-runtime'
+import { assertWorkerEnvironmentFileLoaded } from './src/ingest/worker-environment-file'
 
 const releaseDir = process.cwd()
 const envFile = resolve(releaseDir, 'worker', '.env')
@@ -14,8 +11,7 @@ const browserDir = resolve(releaseDir, '.playwright-browsers')
 // over the secret file. The file supplies only the worker's runtime secrets.
 const workerEnvironment = config({ path: envFile, override: false })
 
-assertAttemptBoundCaptureEnvironmentFile(workerEnvironment)
-assertAttemptBoundCaptureRuntimeEnabled(process.env)
+assertWorkerEnvironmentFileLoaded(workerEnvironment)
 
 if (process.env.PLAYWRIGHT_BROWSERS_PATH !== browserDir) {
   throw new Error('[local-deploy-preflight] browser path is not release-owned')
@@ -31,9 +27,6 @@ if (
 }
 if (process.env.INGEST_LOCAL_REGION !== 'local') {
   throw new Error('[local-deploy-preflight] INGEST_LOCAL_REGION must be local')
-}
-if (process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED !== 'true') {
-  throw new Error('[local-deploy-preflight] attempt-bound capture must be enabled')
 }
 const consumedRegions = (process.env.INGEST_REGIONS ?? '')
   .split(',')

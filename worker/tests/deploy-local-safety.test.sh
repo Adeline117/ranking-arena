@@ -206,7 +206,6 @@ make_old_release() {
     'WORKER_NODE_ID=mac-mini' \
     'INGEST_LOCAL_REGION=local' \
     'INGEST_REGIONS=local' \
-    'INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED=true' \
     'REDIS_URL=rediss://offline.invalid:6380' \
     > "$shared_dir/worker/.env"
   chmod 600 "$shared_dir/worker/.env"

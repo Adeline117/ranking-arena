@@ -1,10 +1,7 @@
 import { config } from 'dotenv'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import {
-  assertAttemptBoundCaptureEnvironmentFile,
-  assertAttemptBoundCaptureRuntimeEnabled,
-} from './src/ingest/attempt-bound-capture-runtime'
+import { assertWorkerEnvironmentFileLoaded } from './src/ingest/worker-environment-file'
 
 export function assertSgRuntimeEnvironment(
   env: Readonly<Record<string, string | undefined>>
@@ -17,9 +14,6 @@ export function assertSgRuntimeEnvironment(
   }
   if (env.INGEST_LOCAL_REGION !== 'vps_sg') {
     throw new Error('[sg-runtime-preflight] INGEST_LOCAL_REGION must be exactly vps_sg')
-  }
-  if (env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED !== 'true') {
-    throw new Error('[sg-runtime-preflight] attempt-bound capture must be enabled')
   }
 }
 
@@ -36,9 +30,8 @@ async function main(): Promise<void> {
     override: false,
     quiet: true,
   })
-  assertAttemptBoundCaptureEnvironmentFile(loaded)
+  assertWorkerEnvironmentFileLoaded(loaded)
   assertSgRuntimeEnvironmentFile(loaded.parsed)
-  assertAttemptBoundCaptureRuntimeEnabled(process.env)
   assertSgRuntimeEnvironment(process.env)
 
   const [

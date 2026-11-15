@@ -32,8 +32,7 @@ let createWorkerOwnershipHeartbeatFactory: typeof import('./ingest/heartbeat').c
 let resolveWorkerRuntimeIdentity: typeof import('./ingest/heartbeat').resolveWorkerRuntimeIdentity
 let startHeartbeat: typeof import('./ingest/heartbeat').startHeartbeat
 let assertMetricTrustWorkerReadiness: typeof import('./ingest/metric-trust-readiness').assertMetricTrustWorkerReadiness
-let assertAttemptBoundCaptureEnvironmentFile: typeof import('./ingest/attempt-bound-capture-runtime').assertAttemptBoundCaptureEnvironmentFile
-let assertAttemptBoundCaptureRuntimeEnabled: typeof import('./ingest/attempt-bound-capture-runtime').assertAttemptBoundCaptureRuntimeEnabled
+let assertWorkerEnvironmentFileLoaded: typeof import('./ingest/worker-environment-file').assertWorkerEnvironmentFileLoaded
 let assertPartitionedV4WorkerReadiness: typeof import('./ingest/attempt-bound-capture-readiness').assertPartitionedV4WorkerReadiness
 let startNativeIngestServing: typeof import('./ingest/startup-gate').startNativeIngestServing
 let routeJobWithSourceLease: typeof import('./ingest/source-job-routing').routeJobWithSourceLease
@@ -115,7 +114,7 @@ async function initializeRuntime(): Promise<void> {
     scheduler,
     heartbeat,
     metricTrust,
-    attemptRuntime,
+    workerEnvironmentFile,
     partitionedReadiness,
     startupGate,
     sourceRouting,
@@ -134,7 +133,7 @@ async function initializeRuntime(): Promise<void> {
     import('./ingest/scheduler'),
     import('./ingest/heartbeat'),
     import('./ingest/metric-trust-readiness'),
-    import('./ingest/attempt-bound-capture-runtime'),
+    import('./ingest/worker-environment-file'),
     import('./ingest/attempt-bound-capture-readiness'),
     import('./ingest/startup-gate'),
     import('./ingest/source-job-routing'),
@@ -163,8 +162,7 @@ async function initializeRuntime(): Promise<void> {
   resolveWorkerRuntimeIdentity = heartbeat.resolveWorkerRuntimeIdentity
   startHeartbeat = heartbeat.startHeartbeat
   assertMetricTrustWorkerReadiness = metricTrust.assertMetricTrustWorkerReadiness
-  assertAttemptBoundCaptureEnvironmentFile = attemptRuntime.assertAttemptBoundCaptureEnvironmentFile
-  assertAttemptBoundCaptureRuntimeEnabled = attemptRuntime.assertAttemptBoundCaptureRuntimeEnabled
+  assertWorkerEnvironmentFileLoaded = workerEnvironmentFile.assertWorkerEnvironmentFileLoaded
   assertPartitionedV4WorkerReadiness = partitionedReadiness.assertPartitionedV4WorkerReadiness
   startNativeIngestServing = startupGate.startNativeIngestServing
   routeJobWithSourceLease = sourceRouting.routeJobWithSourceLease
@@ -368,11 +366,9 @@ async function main(): Promise<void> {
   console.log('[ingest-worker] starting…')
 
   try {
-    // The box-local file is the rollout authority. Prove both its literal value
-    // and the effective process value so inherited PM2/shell state cannot mask
-    // a missing or disabled release flag.
-    assertAttemptBoundCaptureEnvironmentFile(workerEnvironment)
-    assertAttemptBoundCaptureRuntimeEnabled(process.env)
+    // The box-local file is the runtime authority; inherited PM2/shell state
+    // cannot stand in for a missing file.
+    assertWorkerEnvironmentFileLoaded(workerEnvironment)
 
     // No scheduler, BullMQ consumer, heartbeat, or authority attempt may start
     // until the production database proves the exact source-lineage contract.

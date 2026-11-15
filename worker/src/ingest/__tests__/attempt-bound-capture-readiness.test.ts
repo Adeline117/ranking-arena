@@ -26,10 +26,7 @@ import {
   validatePartitionedV4WorkerReadiness,
   type AttemptBoundCaptureReadinessClient,
 } from '../attempt-bound-capture-readiness'
-import {
-  assertAttemptBoundCaptureEnvironmentFile,
-  assertAttemptBoundCaptureRuntimeEnabled,
-} from '../attempt-bound-capture-runtime'
+import { assertWorkerEnvironmentFileLoaded } from '../worker-environment-file'
 
 function registryRow(product: 'futures' | 'spot'): Record<string, unknown> {
   const futures = product === 'futures'
@@ -125,32 +122,11 @@ function readyPayload(
 }
 
 describe('partitioned V4 worker startup readiness', () => {
-  it('accepts only the explicit lowercase true rollout authority', () => {
+  it('requires a loaded worker/.env (no capture rollout toggle remains)', () => {
+    expect(() => assertWorkerEnvironmentFileLoaded({ parsed: {} })).not.toThrow()
+    expect(() => assertWorkerEnvironmentFileLoaded({})).toThrow('worker/.env is unavailable')
     expect(() =>
-      assertAttemptBoundCaptureRuntimeEnabled({
-        INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED: 'true',
-      })
-    ).not.toThrow()
-
-    for (const value of [undefined, '', 'false', 'TRUE', '1', ' true']) {
-      expect(() =>
-        assertAttemptBoundCaptureRuntimeEnabled({
-          INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED: value,
-        })
-      ).toThrow('attempt-bound capture must be explicitly enabled')
-    }
-
-    expect(() =>
-      assertAttemptBoundCaptureEnvironmentFile({
-        parsed: { INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED: 'true' },
-      })
-    ).not.toThrow()
-    expect(() => assertAttemptBoundCaptureEnvironmentFile({})).toThrow('worker/.env is unavailable')
-    expect(() =>
-      assertAttemptBoundCaptureEnvironmentFile({
-        error: new Error('secret path'),
-        parsed: { INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED: 'true' },
-      })
+      assertWorkerEnvironmentFileLoaded({ error: new Error('secret path'), parsed: {} })
     ).toThrow('worker/.env is unavailable')
   })
 
@@ -765,15 +741,14 @@ SET statement_timeout = '5s'`)
   it('gates the ingest entrypoint before database, adapter, Redis, or authority work', () => {
     const source = readFileSync(join(process.cwd(), 'worker/src/ingest-worker.ts'), 'utf8')
     const main = source.slice(source.indexOf('async function main(): Promise<void>'))
-    const fileFlag = main.indexOf('assertAttemptBoundCaptureEnvironmentFile(workerEnvironment)')
-    const effectiveFlag = main.indexOf('assertAttemptBoundCaptureRuntimeEnabled(process.env)')
+    const environmentFile = main.indexOf('assertWorkerEnvironmentFileLoaded(workerEnvironment)')
     const metricGate = main.indexOf('await assertMetricTrustWorkerReadiness()')
     const v4Gate = main.indexOf('await assertPartitionedV4WorkerReadiness()')
     const adapterRegistration = main.indexOf("await import('@/lib/ingest/adapters/register')")
 
-    expect(fileFlag).toBeGreaterThan(-1)
-    expect(effectiveFlag).toBeGreaterThan(fileFlag)
-    expect(metricGate).toBeGreaterThan(effectiveFlag)
+    expect(environmentFile).toBeGreaterThan(-1)
+    expect(main).not.toContain('INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED')
+    expect(metricGate).toBeGreaterThan(environmentFile)
     expect(v4Gate).toBeGreaterThan(metricGate)
     expect(adapterRegistration).toBeGreaterThan(v4Gate)
     expect(main.indexOf('const redis = getConnection()')).toBeGreaterThan(v4Gate)

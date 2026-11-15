@@ -8,7 +8,8 @@ test('local preflight preserves one explicit logical-node and region contract', 
   assert.match(source, /config\(\{ path: envFile, override: false \}\)/)
   assert.match(source, /process\.env\.WORKER_NODE_ID !== expectedWorkerNodeId/)
   assert.match(source, /INGEST_LOCAL_REGION !== 'local'/)
-  assert.match(source, /INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED !== 'true'/)
+  // Attempt-bound capture is unconditional; there is no rollout toggle to check.
+  assert.doesNotMatch(source, /INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED/)
   assert.match(source, /JSON\.stringify\(\['local'\]\)/)
   assert.doesNotMatch(source, /\.sort\(\)/)
 })
