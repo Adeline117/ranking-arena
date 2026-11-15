@@ -1,0 +1,180 @@
+{
+  "code": "200",
+  "data": {
+    "containActModel": false,
+    "data": [],
+    "maxShowSizes": 9473,
+    "nextFlag": true,
+    "totals": 3,
+    "rows": [
+      {
+        "traderUid": "b0f00000000000000001",
+        "portfolioId": "1400000000000000001",
+        "type": 2,
+        "displayName": "Fixture F1",
+        "userName": "BGUSER-FIXTUREF1",
+        "traderNickName": "Fixture F1",
+        "headPic": "https://img.bgstatic.com/otc/images/fixture-f1.png",
+        "followCount": 82,
+        "maxFollowCount": 300,
+        "itemVoList": [
+          {
+            "comparedValue": "2178.44",
+            "percentColumn": true,
+            "showColumnCode": "profit_rate",
+            "showColumnDesc": "收益率"
+          },
+          {
+            "comparedValue": "285.61",
+            "percentColumn": false,
+            "showColumnCode": "total_income",
+            "showColumnDesc": "7日收益"
+          },
+          {
+            "comparedValue": "2538.76",
+            "percentColumn": false,
+            "showColumnCode": "total_follow_profit",
+            "showColumnDesc": "跟单者收益"
+          },
+          {
+            "comparedValue": "33609.39",
+            "percentColumn": false,
+            "showColumnCode": "total_follow_trade_amount",
+            "showColumnDesc": "资产管理规模"
+          },
+          {
+            "comparedValue": "0",
+            "percentColumn": true,
+            "showColumnCode": "max_retracement",
+            "showColumnDesc": "最大回撤"
+          },
+          {
+            "comparedValue": "100",
+            "percentColumn": true,
+            "showColumnCode": "winning_rate",
+            "showColumnDesc": "胜率"
+          },
+          {
+            "comparedValue": "0",
+            "percentColumn": false,
+            "showColumnCode": "score",
+            "showColumnDesc": "专家评分"
+          }
+        ],
+        "canTrace": true
+      },
+      {
+        "traderUid": "b0f00000000000000002",
+        "portfolioId": "1400000000000000002",
+        "type": 2,
+        "displayName": "Fixture F2",
+        "userName": "BGUSER-FIXTUREF2",
+        "traderNickName": "Fixture F2",
+        "headPic": "https://img.bgstatic.com/otc/images/fixture-f2.png",
+        "followCount": 75,
+        "maxFollowCount": 300,
+        "itemVoList": [
+          {
+            "comparedValue": "890.47",
+            "percentColumn": true,
+            "showColumnCode": "profit_rate",
+            "showColumnDesc": "收益率"
+          },
+          {
+            "comparedValue": "148.27",
+            "percentColumn": false,
+            "showColumnCode": "total_income",
+            "showColumnDesc": "7日收益"
+          },
+          {
+            "comparedValue": "562.7",
+            "percentColumn": false,
+            "showColumnCode": "total_follow_profit",
+            "showColumnDesc": "跟单者收益"
+          },
+          {
+            "comparedValue": "19508.64",
+            "percentColumn": false,
+            "showColumnCode": "total_follow_trade_amount",
+            "showColumnDesc": "资产管理规模"
+          },
+          {
+            "comparedValue": "0",
+            "percentColumn": true,
+            "showColumnCode": "max_retracement",
+            "showColumnDesc": "最大回撤"
+          },
+          {
+            "comparedValue": "100",
+            "percentColumn": true,
+            "showColumnCode": "winning_rate",
+            "showColumnDesc": "胜率"
+          },
+          {
+            "comparedValue": "0",
+            "percentColumn": false,
+            "showColumnCode": "score",
+            "showColumnDesc": "专家评分"
+          }
+        ],
+        "canTrace": true
+      },
+      {
+        "traderUid": "b0f00000000000000003",
+        "type": 1,
+        "displayName": "Fixture F3",
+        "userName": "BGUSER-FIXTUREF3",
+        "traderNickName": "Fixture F3",
+        "headPic": "https://img.bgstatic.com/otc/images/fixture-f3.png",
+        "followCount": 1,
+        "maxFollowCount": 600,
+        "itemVoList": [
+          {
+            "comparedValue": "436.98",
+            "percentColumn": true,
+            "showColumnCode": "profit_rate",
+            "showColumnDesc": "收益率"
+          },
+          {
+            "comparedValue": "51441.36",
+            "percentColumn": false,
+            "showColumnCode": "total_income",
+            "showColumnDesc": "7日收益"
+          },
+          {
+            "comparedValue": "-20.53",
+            "percentColumn": false,
+            "showColumnCode": "total_follow_profit",
+            "showColumnDesc": "跟单者收益"
+          },
+          {
+            "comparedValue": "28.81",
+            "percentColumn": false,
+            "showColumnCode": "total_follow_trade_amount",
+            "showColumnDesc": "资产管理规模"
+          },
+          {
+            "comparedValue": "71.02",
+            "percentColumn": true,
+            "showColumnCode": "max_retracement",
+            "showColumnDesc": "最大回撤"
+          },
+          {
+            "comparedValue": "64.51",
+            "percentColumn": true,
+            "showColumnCode": "winning_rate",
+            "showColumnDesc": "胜率"
+          },
+          {
+            "comparedValue": "14.35",
+            "percentColumn": false,
+            "showColumnCode": "score",
+            "showColumnDesc": "专家评分"
+          }
+        ],
+        "canTrace": true
+      }
+    ]
+  },
+  "params": []
+}

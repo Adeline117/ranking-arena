@@ -533,6 +533,32 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
       { metric: 'pnl', fieldPath: 'data.records[].sprofit' },
     ],
   }),
+  bitget_futures: boardHeadlineContract({
+    sourceId: 'bitget_futures',
+    methodology: 'bitget',
+    windowKeys: ALL_WINDOWS,
+    currency: 'USDT',
+    fields: [
+      { metric: 'roi', fieldPath: 'data.rows[].itemVoList[profit_rate].comparedValue' },
+      { metric: 'pnl', fieldPath: 'data.rows[].itemVoList[total_income].comparedValue' },
+    ],
+  }),
+  // Spot/CFD boards carry PnL as `total_profit`, which the parser does not
+  // read (headlinePnl stays null), so only ROI is a reviewed board metric.
+  bitget_spot: boardHeadlineContract({
+    sourceId: 'bitget_spot',
+    methodology: 'bitget',
+    windowKeys: ALL_WINDOWS,
+    currency: 'USDT',
+    fields: [{ metric: 'roi', fieldPath: 'data.rows[].itemVoList[profit_rate].comparedValue' }],
+  }),
+  bitget_cfd: boardHeadlineContract({
+    sourceId: 'bitget_cfd',
+    methodology: 'bitget',
+    windowKeys: ALL_WINDOWS,
+    currency: 'USDT',
+    fields: [{ metric: 'roi', fieldPath: 'data.rows[].itemVoList[profit_rate].comparedValue' }],
+  }),
   okx_web3_solana: boardHeadlineContract({
     sourceId: 'okx_web3_solana',
     methodology: 'okx-web3',

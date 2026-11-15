@@ -13,7 +13,6 @@
 
 import type {
   HistoryKind,
-  ParseCtx,
   RankingTimeframe,
   RawBundle,
   RawPage,
@@ -22,7 +21,12 @@ import type {
 } from '../../core/types'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
-import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
+import { pageFetcher, replayJson } from '../../fetch/capture'
+import {
+  captureReplayLeaderboard,
+  collectionMeta,
+  requireEnvelopeValue,
+} from '../../fetch/replay-capture'
 import {
   parseBitgetHistory,
   parseBitgetLeaderboardPage,
@@ -61,6 +65,24 @@ const UTA_HEADERS = {
   website: 'copy',
   terminaltype: '1',
 }
+
+/**
+ * UTA board page meta (public probe 2026-11-15, all three boards × 7/30/90):
+ * success envelope is the string code "200"; `data.rows` is the board page;
+ * `data.totals` is only this page's row count; `data.maxShowSizes` is the
+ * board population. Spot and CFD boards page out to exactly maxShowSizes
+ * distinct traders (cfd 30D 208 = 6×30+28, cfd 7D 204, spot 30D/7D 5416 =
+ * 180×30+16) and then serve an empty page. The futures board reports 9473 for
+ * every window while its flagged tail ends between pages 314 and 316 with
+ * replica-dependent rows, so its captures stop short of the reported total
+ * and stay non-complete (fail closed) rather than being certified by nextFlag.
+ */
+const bitgetLeaderboardMeta = collectionMeta({
+  label: 'bitget',
+  assertSuccess: requireEnvelopeValue('bitget', ['code'], ['200']),
+  list: ['data', 'rows'],
+  total: ['data', 'maxShowSizes'],
+})
 
 function endpoint(src: SourceRow, key: string, fallback: string): string {
   const endpoints = (src.meta.endpoints ?? {}) as Record<string, string>
@@ -146,44 +168,61 @@ const bitgetAdapter: SourceAdapter = {
       : null
   },
 
+  async captureLeaderboard(session, src, timeframe, options) {
+    options?.signal?.throwIfAborted()
+    await warmSession(session, src)
+    options?.signal?.throwIfAborted()
+    // The UTA API 403s external requests (signed tm/dy-token headers) but
+    // accepts same-origin in-page fetches without them — so replay runs
+    // through pageFetcher. Rapid unsigned requests get silently served
+    // EMPTY rows, which the paced gate's 2.5s budget avoids; an empty page
+    // before the reported population ends the capture non-complete.
+    const fetcher = pageFetcher(session)
+    const boardKey = (src.meta.boardKey as string) ?? 'futures'
+    const listUrl = endpoint(src, 'list', UTA_LIST_ENDPOINTS[boardKey])
+    const pageSize = src.page_size ?? 30
+    return captureReplayLeaderboard(
+      { session, fetcher, src, label: 'bitget', signal: options?.signal },
+      {
+        buildRequest: (pageIndex) => ({
+          url: listUrl,
+          method: 'POST',
+          headers: UTA_HEADERS,
+          body: {
+            pageNo: pageIndex,
+            pageSize,
+            sortRule: 2,
+            sortFlag: 0,
+            dataCycle: timeframe,
+            fullStatus: 1,
+            languageType: 1,
+          },
+        }),
+        publicRequest: {
+          body: [
+            'pageNo',
+            'pageSize',
+            'sortRule',
+            'sortFlag',
+            'dataCycle',
+            'fullStatus',
+            'languageType',
+          ],
+        },
+        pageBinding: { location: 'body', path: ['pageNo'] },
+        extractMeta: bitgetLeaderboardMeta,
+        pageSize,
+      }
+    )
+  },
+
   async *listLeaderboard(
     session: FetchSession,
     src: SourceRow,
     timeframe: RankingTimeframe
   ): AsyncIterable<RawPage> {
-    await warmSession(session, src)
-    // The UTA API 403s external requests (signed tm/dy-token headers) but
-    // accepts same-origin in-page fetches without them — so replay runs
-    // through pageFetcher. Rapid unsigned requests get silently served
-    // EMPTY rows, which the paced gate's 2.5s budget avoids.
-    const fetcher = pageFetcher(session)
-    const boardKey = (src.meta.boardKey as string) ?? 'futures'
-    const listUrl = endpoint(src, 'list', UTA_LIST_ENDPOINTS[boardKey])
-    const pageSize = src.page_size ?? 30
-
-    yield* replayPaged({
-      session,
-      fetcher,
-      buildRequest: (pageIndex) => ({
-        url: listUrl,
-        method: 'POST',
-        headers: UTA_HEADERS,
-        body: {
-          pageNo: pageIndex,
-          pageSize,
-          sortRule: 2,
-          sortFlag: 0,
-          dataCycle: timeframe,
-          fullStatus: 1,
-          languageType: 1,
-        },
-      }),
-      extractMeta: (payload) => {
-        const page = parseBitgetLeaderboardPage(payload, dummyCtx(src))
-        return { rowCount: page.rows.length, reportedTotal: page.reportedTotal }
-      },
-      pageSize,
-    })
+    const capture = await bitgetAdapter.captureLeaderboard!(session, src, timeframe)
+    yield* capture.parsePages
   },
 
   async getProfile(
@@ -387,17 +426,6 @@ const bitgetAdapter: SourceAdapter = {
   parsePositions: parseBitgetPositions,
 
   parseHistory: parseBitgetHistory,
-}
-
-/** Parse-time ctx for extractMeta inside the replay loop (counts only). */
-function dummyCtx(src: SourceRow): ParseCtx {
-  return {
-    sourceSlug: src.slug,
-    currency: src.currency,
-    tfLabelMap: src.tf_label_map,
-    scrapedAt: new Date().toISOString(),
-    meta: src.meta,
-  }
 }
 
 registerAdapter(bitgetAdapter)
