@@ -258,20 +258,11 @@ ALTER FUNCTION arena.require_rank_publication_evidence() OWNER TO postgres;
 REVOKE ALL ON FUNCTION arena.require_rank_publication_evidence()
   FROM PUBLIC, anon, authenticated, service_role;
 
-DO $fence$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_catalog.pg_trigger AS trigger_row
-    WHERE trigger_row.tgrelid = 'arena.leaderboard_rank_publications'::pg_catalog.regclass
-      AND trigger_row.tgname = 'rank_publication_requires_attempt_bound_evidence'
-  ) THEN
-    CREATE CONSTRAINT TRIGGER rank_publication_requires_attempt_bound_evidence
-      AFTER INSERT ON arena.leaderboard_rank_publications
-      DEFERRABLE INITIALLY DEFERRED
-      FOR EACH ROW EXECUTE FUNCTION arena.require_rank_publication_evidence();
-  END IF;
-END
-$fence$;
+-- Constraint triggers have no OR REPLACE; this migration installs it once.
+CREATE CONSTRAINT TRIGGER rank_publication_requires_attempt_bound_evidence
+  AFTER INSERT ON arena.leaderboard_rank_publications
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION arena.require_rank_publication_evidence();
 
 NOTIFY pgrst, 'reload schema';
 
