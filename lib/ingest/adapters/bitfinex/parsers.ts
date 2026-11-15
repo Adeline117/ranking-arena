@@ -34,6 +34,8 @@ export const BFX_MTS = 0
 export const BFX_USERNAME = 2
 export const BFX_RANK = 3
 export const BFX_VALUE = 6
+/** Username the rankings API serves for accounts that hide their handle. */
+export const BFX_ANONYMOUS_USERNAME = '-'
 
 type Row = unknown[]
 
@@ -88,7 +90,11 @@ export function parseBitfinexLeaderboardPage(raw: unknown, _ctx: ParseCtx): Pars
   for (let i = 0; i < boardRows.length; i++) {
     const row = boardRows[i]
     const username = row[BFX_USERNAME]
+    // "-" is the upstream placeholder for an anonymous account (probe
+    // 2026-11-15: 20 of 207 plu_diff:1w rows, each with its own rank/value).
+    // It is not an identity; keying it would merge them into one trader.
     if (typeof username !== 'string' || username.length === 0) continue
+    if (username === BFX_ANONYMOUS_USERNAME) continue
 
     const joined: Record<string, number> = {}
     for (const [key, byName] of extras) {
