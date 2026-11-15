@@ -37,7 +37,7 @@
 
 ### postdeploy 的数据修复
 
-`20261113150757_clean_derived_formal_win_rate.sql`（#441）：
+`20261115142045_clean_derived_formal_win_rate_scoped_probe.sql`（#441）：
 
 - 它不改契约，旧代码在它之后照常运行。问题是旧写入方会把它清理的值重新写脏：60f4cc288 之前的 BTCC 解析器和 bf3fa8a4d 之前的链上补全。
 - 所以它放在 postdeploy，并且只能在带这两个修复的 ingest worker 版本替换掉所有旧写入方之后应用。

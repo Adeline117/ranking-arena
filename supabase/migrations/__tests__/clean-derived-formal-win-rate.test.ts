@@ -3,7 +3,10 @@ import { resolve } from 'node:path'
 
 const root = process.cwd()
 const migration = readFileSync(
-  resolve(root, 'supabase/migrations/20261113150757_clean_derived_formal_win_rate.sql'),
+  resolve(
+    root,
+    'supabase/migrations/20261115142045_clean_derived_formal_win_rate_scoped_probe.sql'
+  ),
   'utf8'
 )
 const pg17 = readFileSync(
@@ -56,7 +59,7 @@ describe('derived formal win-rate cleanup (#441)', () => {
   })
 
   it('has a PG17 proof covering scope, idempotency and drift', () => {
-    expect(pg17).toContain('20261113150757_clean_derived_formal_win_rate.sql')
+    expect(pg17).toContain('20261115142045_clean_derived_formal_win_rate_scoped_probe.sql')
     expect(pg17).toContain("'hyperliquid'")
     expect(pg17).toContain("'gmx'")
     expect(pg17).toContain('cleanup touched % rows outside the provable dirty set')
@@ -75,7 +78,7 @@ describe('derived formal win-rate cleanup (#441)', () => {
         .map((line) => line.trim())
         .filter((line) => /^\d{14}_.+\.sql$/.test(line))
     }
-    const file = '20261113150757_clean_derived_formal_win_rate.sql'
+    const file = '20261115142045_clean_derived_formal_win_rate_scoped_probe.sql'
     const postdeploy = array('POSTDEPLOY_MIGRATIONS')
     expect(array('PREDEPLOY_MIGRATIONS')).not.toContain(file)
     expect(postdeploy).toContain(file)
