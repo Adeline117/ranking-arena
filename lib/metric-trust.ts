@@ -215,6 +215,39 @@ function registeredSourceContract(raw: unknown): MetricSourceContract {
   return metricSourceContractSchema.parse(raw)
 }
 
+/**
+ * Board headline values copied (unit-scaled at most) from the captured
+ * population page. Provenance only: these rows never feed public ranking.
+ */
+function boardHeadlineContract(input: {
+  sourceId: string
+  methodology: string
+  windowKeys: RankingWindowKey[]
+  currency: RankingCurrency
+  fields: Array<{ metric: 'roi' | 'pnl'; fieldPath: string; provenance?: MetricProvenance }>
+}): MetricSourceContract {
+  return registeredSourceContract({
+    sourceId: input.sourceId,
+    version: '1',
+    fields: input.fields.map((field) => ({
+      metric: field.metric,
+      fieldPath: field.fieldPath,
+      provenance: field.provenance ?? 'source_reported',
+      methodologyVersion: `${input.methodology}-board-${field.metric}@1`,
+      metricSetId: `${input.methodology}-board-roi-pnl@1`,
+      windowKeys: input.windowKeys,
+      valueUnit: field.metric === 'roi' ? 'percent' : 'currency',
+      currencies: [input.currency],
+      requiredRawRoles: DIRECT_RAW_ROLES,
+      sourcePayloadScope: 'population_snapshot',
+      maxFreshnessMs: 6 * 60 * 60 * 1000,
+      maxWindowEndLagMs: 5 * 60 * 1000,
+    })),
+  })
+}
+
+const ALL_WINDOWS: RankingWindowKey[] = ['7D', '30D', '90D']
+
 function registeredMethodContract(raw: unknown): RankingMethodContract {
   return rankingMethodContractSchema.parse(raw)
 }
@@ -367,6 +400,147 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
         maxFreshnessMs: 2 * 60 * 60 * 1000,
         maxWindowEndLagMs: 5 * 60 * 1000,
       },
+    ],
+  }),
+  coinex_futures: boardHeadlineContract({
+    sourceId: 'coinex_futures',
+    methodology: 'coinex',
+    windowKeys: ALL_WINDOWS,
+    currency: 'USDT',
+    fields: [
+      { metric: 'roi', fieldPath: 'data.data[].profit_rate' },
+      { metric: 'pnl', fieldPath: 'data.data[].profit_amount' },
+    ],
+  }),
+  htx_futures: boardHeadlineContract({
+    sourceId: 'htx_futures',
+    methodology: 'htx',
+    windowKeys: ['90D'],
+    currency: 'USDT',
+    fields: [
+      { metric: 'roi', fieldPath: 'data.itemList[].profitRate90' },
+      { metric: 'pnl', fieldPath: 'data.itemList[].profit90' },
+    ],
+  }),
+  htx_spot: boardHeadlineContract({
+    sourceId: 'htx_spot',
+    methodology: 'htx',
+    windowKeys: ['90D'],
+    currency: 'USDT',
+    fields: [
+      { metric: 'roi', fieldPath: 'data.itemList[].profitRate90' },
+      { metric: 'pnl', fieldPath: 'data.itemList[].profit90' },
+    ],
+  }),
+  kucoin_futures: boardHeadlineContract({
+    sourceId: 'kucoin_futures',
+    methodology: 'kucoin',
+    windowKeys: ['30D'],
+    currency: 'USDT',
+    fields: [
+      {
+        metric: 'roi',
+        fieldPath: 'data.items[].thirtyDayPnlRatio',
+        provenance: 'source_normalized',
+      },
+      { metric: 'pnl', fieldPath: 'data.items[].thirtyDayPnl' },
+    ],
+  }),
+  bybit_copytrade: boardHeadlineContract({
+    sourceId: 'bybit_copytrade',
+    methodology: 'bybit-copytrade',
+    windowKeys: ALL_WINDOWS,
+    currency: 'USDT',
+    fields: [{ metric: 'roi', fieldPath: 'result.leaderDetails[].metricValues[roi]' }],
+  }),
+  bybit_mt5: boardHeadlineContract({
+    sourceId: 'bybit_mt5',
+    methodology: 'bybit-mt5',
+    windowKeys: ALL_WINDOWS,
+    currency: 'USDx',
+    fields: [
+      { metric: 'roi', fieldPath: 'result.providerDetailsList[].roeE4' },
+      { metric: 'pnl', fieldPath: 'result.providerDetailsList[].masterPnlE8' },
+    ],
+  }),
+  gate_futures: boardHeadlineContract({
+    sourceId: 'gate_futures',
+    methodology: 'gate',
+    windowKeys: ALL_WINDOWS,
+    currency: 'USDT',
+    fields: [
+      { metric: 'roi', fieldPath: 'data.list[].profit_rate' },
+      { metric: 'pnl', fieldPath: 'data.list[].profit' },
+    ],
+  }),
+  gate_cfd: boardHeadlineContract({
+    sourceId: 'gate_cfd',
+    methodology: 'gate',
+    windowKeys: ALL_WINDOWS,
+    currency: 'USDx',
+    fields: [
+      { metric: 'roi', fieldPath: 'data.lists[].profit_rate' },
+      { metric: 'pnl', fieldPath: 'data.lists[].profit' },
+    ],
+  }),
+  blofin_futures: boardHeadlineContract({
+    sourceId: 'blofin_futures',
+    methodology: 'blofin',
+    windowKeys: ALL_WINDOWS,
+    currency: 'USDT',
+    fields: [
+      { metric: 'roi', fieldPath: 'data.trader_info[].roi' },
+      { metric: 'pnl', fieldPath: 'data.trader_info[].pnl' },
+    ],
+  }),
+  blofin_spot: boardHeadlineContract({
+    sourceId: 'blofin_spot',
+    methodology: 'blofin',
+    windowKeys: ALL_WINDOWS,
+    currency: 'USDT',
+    fields: [
+      { metric: 'roi', fieldPath: 'data.trader_info[].roi' },
+      { metric: 'pnl', fieldPath: 'data.trader_info[].pnl' },
+    ],
+  }),
+  btcc_futures: boardHeadlineContract({
+    sourceId: 'btcc_futures',
+    methodology: 'btcc',
+    windowKeys: ['30D'],
+    currency: 'USDT',
+    fields: [
+      { metric: 'roi', fieldPath: 'rows[].rateProfit' },
+      { metric: 'pnl', fieldPath: 'rows[].totalNetProfit' },
+    ],
+  }),
+  bitunix_futures: boardHeadlineContract({
+    sourceId: 'bitunix_futures',
+    methodology: 'bitunix',
+    windowKeys: ALL_WINDOWS,
+    currency: 'USDT',
+    fields: [
+      { metric: 'roi', fieldPath: 'data.records[].roi' },
+      { metric: 'pnl', fieldPath: 'data.records[].pl' },
+    ],
+  }),
+  lbank_futures: boardHeadlineContract({
+    sourceId: 'lbank_futures',
+    methodology: 'lbank',
+    windowKeys: ['7D', '30D'],
+    currency: 'USDT',
+    fields: [
+      { metric: 'roi', fieldPath: 'data.records[].sprofitRate' },
+      { metric: 'pnl', fieldPath: 'data.records[].sprofit' },
+    ],
+  }),
+  okx_web3_solana: boardHeadlineContract({
+    sourceId: 'okx_web3_solana',
+    methodology: 'okx-web3',
+    windowKeys: ALL_WINDOWS,
+    currency: 'USDC',
+    fields: [
+      { metric: 'roi', fieldPath: 'data.rankingInfos[].roi' },
+      { metric: 'pnl', fieldPath: 'data.rankingInfos[].pnl' },
     ],
   }),
 })
