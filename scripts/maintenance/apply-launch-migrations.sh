@@ -190,6 +190,7 @@ PREDEPLOY_MIGRATIONS=(
   20261113110430_rank_publication_source_evidence_binding.sql
   20261114101605_first_screen_core_modules_sealed_only.sql
   20261114103025_hero_stats_sealed_public_cohort.sql
+  20261114211033_public_source_board_metric_contracts.sql
 )
 readonly -a PREDEPLOY_MIGRATIONS
 # The final six (season publication follow-ups, PR #419) must stay LAST: they
@@ -202,6 +203,10 @@ readonly -a PREDEPLOY_MIGRATIONS
 # arena.public_sealed_rank_sources().
 # 20261114103025 (hero stats from the sealed cohort) keeps the RPC's return
 # shape, so either app version reads it; it needs the public serving view.
+# 20261114211033 (board metric contracts for the newly captured public sources)
+# is inert for the deployed worker, which reads metric contracts only for
+# sources it already captures; its postdeploy partner 20261114211034 registers
+# their attempt-bound capture after the worker that implements it ships.
 #
 # 20261113014105 (unknown-trade-count sample confidence, issue #435) and its
 # follow-up 20261114101514 (true-zero trade counts, audit P1-2), in that order,
@@ -248,6 +253,10 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # cleans. It therefore runs only after the ingest-worker release carrying both
 # fixes has replaced every old writer, and before the next derive-boards run
 # and publication. It touches no table 192134 guards, so 192134 stays last.
+# 20261114211034 registers attempt-bound capture for the public sources whose
+# adapters gained captureLeaderboard; registered before that worker serves,
+# every Tier-A run of those sources would fail. It inserts capture-registry
+# rows only (no table 192134 guards) and requires predeploy 20261114211033.
 # 040440 forward replacement. V1_EXECUTION_STATUS requires the RAW-only
 # bridge SHA to be deployed and legacy callers drained before the legacy
 # position-history relations are frozen. Current main never reads or writes
@@ -260,6 +269,7 @@ POSTDEPLOY_MIGRATIONS=(
   20260716192000_social_edge_write_contract.sql
   20260717120000_trader_follows_composite_identity.sql
   20261113150757_clean_derived_formal_win_rate.sql
+  20261114211034_public_source_attempt_bound_capture_contracts.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS

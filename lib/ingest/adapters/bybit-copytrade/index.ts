@@ -40,7 +40,6 @@
 
 import type {
   HistoryKind,
-  ParseCtx,
   RankingTimeframe,
   RawBundle,
   RawPage,
@@ -49,7 +48,12 @@ import type {
 } from '../../core/types'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
-import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
+import { pageFetcher, replayJson } from '../../fetch/capture'
+import {
+  captureReplayLeaderboard,
+  collectionMeta,
+  requireEnvelopeValue,
+} from '../../fetch/replay-capture'
 import {
   parseBybitCopytradeHistory,
   parseBybitCopytradeLeaderboardPage,
@@ -124,6 +128,15 @@ async function cached(
   return value
 }
 
+/** Upstream page meta: rows counted before parser validation; board population as reported. */
+const bybit_copytradeLeaderboardMeta = collectionMeta({
+  label: 'bybit-copytrade',
+  assertSuccess: requireEnvelopeValue('bybit-copytrade', ['retCode'], [0]),
+  list: ['result', 'leaderDetails'],
+  total: ['result', 'totalCount'],
+  pageCount: ['result', 'totalPageCount'],
+})
+
 const bybitCopytradeAdapter: SourceAdapter = {
   slug: 'bybit_copytrade',
   capabilities: {
@@ -135,40 +148,48 @@ const bybitCopytradeAdapter: SourceAdapter = {
     copiers: true, // GET common/other-follower (top 50 only)
   },
 
+  async captureLeaderboard(session, src, timeframe, options) {
+    options?.signal?.throwIfAborted()
+    await warmSession(session, src)
+    const fetcher = pageFetcher(session)
+    options?.signal?.throwIfAborted()
+    const listUrl = endpoint(src, 'list', `${BASE}/dynamic-leader-list`)
+    const pageSize = src.page_size ?? 16
+    return captureReplayLeaderboard(
+      { session, fetcher, src, label: 'bybit-copytrade', signal: options?.signal },
+      {
+        buildRequest: (pageIndex) => ({
+          url:
+            `${listUrl}?pageNo=${pageIndex}&pageSize=${pageSize}&userTag=` +
+            `&dataDuration=${TF_DURATION[timeframe]}&leaderTag=&code=&leaderLevel=`,
+          method: 'GET',
+          headers: HEADERS,
+        }),
+        publicRequest: {
+          query: [
+            'pageNo',
+            'pageSize',
+            'userTag',
+            'dataDuration',
+            'leaderTag',
+            'code',
+            'leaderLevel',
+          ],
+        },
+        pageBinding: { location: 'query', key: 'pageNo' },
+        extractMeta: bybit_copytradeLeaderboardMeta,
+        pageSize,
+      }
+    )
+  },
+
   async *listLeaderboard(
     session: FetchSession,
     src: SourceRow,
     timeframe: RankingTimeframe
   ): AsyncIterable<RawPage> {
-    await warmSession(session, src)
-    const fetcher = pageFetcher(session)
-    const listUrl = endpoint(src, 'list', `${BASE}/dynamic-leader-list`)
-    const pageSize = src.page_size ?? 16
-    // Validation knob: src.meta.max_pages caps the crawl (e.g. 20 pages for
-    // a smoke run). Early generator return — replayPaged never sees a
-    // truncation, so its completeness assertion stays scoped to real crawls.
-    const maxPages = Number(src.meta.max_pages) || null
-
-    let pagesYielded = 0
-    for await (const page of replayPaged({
-      session,
-      fetcher,
-      buildRequest: (pageIndex) => ({
-        url:
-          `${listUrl}?pageNo=${pageIndex}&pageSize=${pageSize}&userTag=` +
-          `&dataDuration=${TF_DURATION[timeframe]}&leaderTag=&code=&leaderLevel=`,
-        method: 'GET',
-        headers: HEADERS,
-      }),
-      extractMeta: (payload) => {
-        const parsed = parseBybitCopytradeLeaderboardPage(payload, dummyCtx(src))
-        return { rowCount: parsed.rows.length, reportedTotal: parsed.reportedTotal }
-      },
-      pageSize,
-    })) {
-      yield page
-      if (maxPages !== null && ++pagesYielded >= maxPages) return
-    }
+    const capture = await bybitCopytradeAdapter.captureLeaderboard!(session, src, timeframe)
+    yield* capture.parsePages
   },
 
   async getProfile(
@@ -280,16 +301,6 @@ const bybitCopytradeAdapter: SourceAdapter = {
 }
 
 /** Parse-time ctx for extractMeta inside the replay loop (counts only). */
-function dummyCtx(src: SourceRow): ParseCtx {
-  return {
-    sourceSlug: src.slug,
-    currency: src.currency,
-    tfLabelMap: src.tf_label_map,
-    scrapedAt: new Date().toISOString(),
-    meta: src.meta,
-  }
-}
-
 registerAdapter(bybitCopytradeAdapter)
 
 export { bybitCopytradeAdapter }
