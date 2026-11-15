@@ -1,10 +1,10 @@
 /**
  * Binance Wallet web3 pure parsers (spec §7 #11, §11.7).
  *
- * Input is the composite RAW payload the adapter stores per page:
- *   { board: <leaderboard/query response verbatim>, kolAddresses, timeframe }
- * kolAddresses is the KOL-board membership set (lowercase), captured once
- * per session and embedded so the KOL flag survives pure re-parse (§5.5).
+ * Input is one RAW page: the leaderboard/query response verbatim
+ * ({ code, data: { data, pages, size, current } }, attempt-bound capture),
+ * whose rows carry KOL membership in `tags`; or the legacy composite
+ * { board: <response>, kolAddresses, timeframe } with the KOL-board set.
  *
  * Unit ground truth (verified live 2026-06-12):
  *   - realizedPnlPercent and winRate are DECIMAL FRACTIONS → ×100
@@ -140,19 +140,44 @@ function web3BoardExtras(item: Dict): Record<string, unknown> | null {
   return Object.keys(ext).length > 0 ? ext : null
 }
 
+interface BoardPage {
+  items: Dict[]
+  /** Legacy composite only: the session's KOL-board membership (lowercase). */
+  kolAddresses: Set<string> | null
+  /** Legacy composite only: the embedded snapshot timeframe. */
+  embeddedTimeframe: number | null
+  /** RAW field-path prefix of the row array. */
+  rowsPath: string
+}
+
+function boardPage(raw: unknown): BoardPage {
+  const payload = (raw ?? {}) as { board?: unknown; kolAddresses?: unknown; timeframe?: unknown }
+  const legacy = payload.board !== undefined
+  const board = (legacy ? payload.board : payload) as { data?: unknown } | null
+  const data = (board?.data ?? {}) as Dict
+  return {
+    items: Array.isArray(data.data) ? (data.data as Dict[]) : [],
+    kolAddresses: legacy
+      ? new Set(
+          Array.isArray(payload.kolAddresses)
+            ? (payload.kolAddresses as unknown[]).map((a) => String(a).toLowerCase())
+            : []
+        )
+      : null,
+    embeddedTimeframe: legacy ? num(payload.timeframe) : null,
+    rowsPath: legacy ? 'board.data.data[]' : 'data.data[]',
+  }
+}
+
+function hasKolTag(item: Dict): boolean {
+  return Array.isArray(item.tags) && item.tags.includes('KOL')
+}
+
 export function parseBinanceWeb3LeaderboardPage(
   raw: unknown,
   _ctx: ParseCtx
 ): ParsedLeaderboardPage {
-  const payload = (raw ?? {}) as { board?: unknown; kolAddresses?: unknown }
-  const board = (payload.board ?? {}) as { data?: unknown }
-  const data = (board.data ?? {}) as Dict
-  const items = Array.isArray(data.data) ? (data.data as Dict[]) : []
-  const kol = new Set(
-    Array.isArray(payload.kolAddresses)
-      ? (payload.kolAddresses as unknown[]).map((a) => String(a).toLowerCase())
-      : []
-  )
+  const { items, kolAddresses, rowsPath } = boardPage(raw)
 
   const rows: ParsedLeaderboardRow[] = []
   for (const item of items) {
@@ -161,7 +186,7 @@ export function parseBinanceWeb3LeaderboardPage(
       .toLowerCase()
     if (!address.startsWith('0x')) continue // no identity → cannot publish
 
-    const isKol = kol.has(address)
+    const isKol = kolAddresses ? kolAddresses.has(address) : hasKolTag(item)
     const twitter = str(item.addressTwitterUrl)
     const headlineRoi = pct(item.realizedPnlPercent)
     const headlinePnl = num(item.realizedPnl)
@@ -178,13 +203,9 @@ export function parseBinanceWeb3LeaderboardPage(
       headlinePnl,
       headlineWinRate,
       headlineMetricSources: {
-        ...(headlineRoi === null
-          ? {}
-          : { roi: { fieldPath: 'board.data.data[].realizedPnlPercent' } }),
-        ...(headlinePnl === null ? {} : { pnl: { fieldPath: 'board.data.data[].realizedPnl' } }),
-        ...(headlineWinRate === null
-          ? {}
-          : { win_rate: { fieldPath: 'board.data.data[].winRate' } }),
+        ...(headlineRoi === null ? {} : { roi: { fieldPath: `${rowsPath}.realizedPnlPercent` } }),
+        ...(headlinePnl === null ? {} : { pnl: { fieldPath: `${rowsPath}.realizedPnl` } }),
+        ...(headlineWinRate === null ? {} : { win_rate: { fieldPath: `${rowsPath}.winRate` } }),
       },
       // Board IS the stats substrate (profile page is 202-gated and unneeded —
       // the board row carries the full §2.5d on-chain superset). NO headlineAum:
@@ -223,17 +244,15 @@ export function parseBinanceWeb3LeaderboardSeries(
   timeframe: RankingTimeframe
 ): Map<string, BoardSeriesBlock[]> {
   const out = new Map<string, BoardSeriesBlock[]>()
-  const payload = (raw ?? {}) as { board?: unknown; timeframe?: unknown }
-  const embeddedTimeframe = num(payload.timeframe)
-  if (embeddedTimeframe !== timeframe) {
+  const { items, kolAddresses, embeddedTimeframe } = boardPage(raw)
+  // A legacy composite embeds its timeframe; a verbatim response is bound to
+  // its period by the attempt-bound request evidence instead.
+  if (kolAddresses !== null && embeddedTimeframe !== timeframe) {
     throw new Error(
       `[binance_web3] leaderboard series timeframe mismatch: raw=${embeddedTimeframe}, expected=${timeframe}`
     )
   }
 
-  const board = (payload.board ?? {}) as { data?: unknown }
-  const data = (board.data ?? {}) as Dict
-  const items = Array.isArray(data.data) ? (data.data as Dict[]) : []
   for (const item of items) {
     const address = String(item.address ?? '')
       .trim()

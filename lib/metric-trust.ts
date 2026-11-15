@@ -354,13 +354,15 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
       },
     ],
   }),
+  // v2: attempt-bound capture stores the board response verbatim, so the
+  // headline fields sit at data.data[] (v1 read the legacy composite board.*).
   binance_web3_bsc: registeredSourceContract({
     sourceId: 'binance_web3_bsc',
-    version: '1',
+    version: '2',
     fields: [
       {
         metric: 'roi',
-        fieldPath: 'board.data.data[].realizedPnlPercent',
+        fieldPath: 'data.data[].realizedPnlPercent',
         provenance: 'source_reported',
         methodologyVersion: 'binance-web3-board-realized-pnl-percent@1',
         metricSetId: 'binance-web3-board-realized-pnl@1',
@@ -374,7 +376,7 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
       },
       {
         metric: 'pnl',
-        fieldPath: 'board.data.data[].realizedPnl',
+        fieldPath: 'data.data[].realizedPnl',
         provenance: 'source_reported',
         methodologyVersion: 'binance-web3-board-realized-pnl@1',
         metricSetId: 'binance-web3-board-realized-pnl@1',
