@@ -14,6 +14,11 @@
 -- its reviewed adapter, must not already be registered for V3, and must carry
 -- an active population metric contract for every native window in its own
 -- currency (Tier-A refuses an attempt-bound V3 window without one).
+--
+-- kucoin_futures is deliberately absent: its board is 30D-anchored (the
+-- request carries no window) while the seed declares native {7,30,90}, so a
+-- truthful 30D-only contract cannot cover it. It stays on the unregistered
+-- capture path until its native windows are corrected.
 
 BEGIN;
 
@@ -43,7 +48,6 @@ INSERT INTO attempt_bound_capture_seed VALUES
   ('gate_futures', 'gate'),
   ('htx_futures', 'htx'),
   ('htx_spot', 'htx'),
-  ('kucoin_futures', 'kucoin'),
   ('lbank_futures', 'lbank'),
   ('okx_web3_solana', 'okx_web3');
 

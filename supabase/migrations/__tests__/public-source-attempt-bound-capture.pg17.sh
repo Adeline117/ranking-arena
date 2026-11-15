@@ -173,7 +173,7 @@ INSERT INTO arena.sources VALUES
   (10, 'gate_futures', 'gate', '{7,30,90}', 'USDT'),
   (11, 'htx_futures', 'htx', '{90}', 'USDT'),
   (12, 'htx_spot', 'htx', '{90}', 'USDT'),
-  (13, 'kucoin_futures', 'kucoin', '{30}', 'USDT'),
+  (13, 'kucoin_futures', 'kucoin', '{7,30,90}', 'USDT'),
   (14, 'lbank_futures', 'lbank', '{7,30}', 'USDT'),
   (15, 'okx_web3_solana', 'okx_web3', '{7,30,90}', 'USDC'),
   (16, 'bitget_futures', 'bitget', '{7,30,90}', 'USDT');
@@ -250,7 +250,7 @@ expect_failure main "$METRICS" "metric contract replay" "board metric source con
 
 psql_db main -q -f "$CAPTURE"
 assert_equal "V3 registered for every present listed source, nothing else" \
-  "binance_futures,binance_spot,bitunix_futures,blofin_futures,blofin_spot,btcc_futures,bybit_copytrade,coinex_futures,gate_cfd,gate_futures,htx_futures,htx_spot,kucoin_futures,lbank_futures,okx_web3_solana" \
+  "binance_futures,binance_spot,bitunix_futures,blofin_futures,blofin_spot,btcc_futures,bybit_copytrade,coinex_futures,gate_cfd,gate_futures,htx_futures,htx_spot,lbank_futures,okx_web3_solana" \
   "$(psql_db main -Atqc "
     SELECT string_agg(source_row.slug, ',' ORDER BY source_row.slug)
       FROM arena.leaderboard_capture_contracts AS capture
@@ -266,9 +266,9 @@ expect_failure adapter_drift "$METRICS" "adapter drift" \
 assert_equal "refused metric registration leaves no rows" "2" \
   "$(psql_db adapter_drift -Atqc 'SELECT count(*) FROM arena.metric_source_contracts')"
 
-psql_db window_gap -q -c "UPDATE arena.sources SET timeframes_native = '{7,30,90}' WHERE slug = 'kucoin_futures'"
+psql_db window_gap -q -c "UPDATE arena.sources SET timeframes_native = '{7,30,90}' WHERE slug = 'lbank_futures'"
 psql_db window_gap -q -f "$METRICS"
 expect_failure window_gap "$CAPTURE" "native window without a contract" \
-  "attempt-bound capture needs a population metric contract for: kucoin_futures:7d, kucoin_futures:90d"
+  "attempt-bound capture needs a population metric contract for: lbank_futures:90d"
 
 echo "public source attempt-bound capture PG17 proof passed"
