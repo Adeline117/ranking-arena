@@ -11,10 +11,14 @@
  *
  *   GET www.okx.com/api/v5/copytrading/
  *     public-lead-traders?instType&sortType&page&limit=20&dataVer
- *         board, ~13 pages × 20; rank metrics are LAST-90-DAY figures
+ *         board, ~10 pages × 20; rank metrics are LAST-90-DAY figures
  *         (docs) → timeframes_native=[90], 7/30 are DERIVED boards from
  *         Tier-B profile stats (MEXC/BTCC pattern). dataVer from page 1
- *         is pinned across pages = consistent snapshot under pagination.
+ *         is pinned across pages = consistent snapshot under pagination
+ *         (probed 2026-11-15: an older retained dataVer is served and
+ *         echoed as that version; an unknown one falls back to the current
+ *         version and echoes it). The board reports totalPage (a string),
+ *         never a row total, so Tier-A proves it complete by exhaustion.
  *     public-stats?uniqueCode&lastDays            1/2/3 = 7/30/90 days
  *         (verified: profitDays+lossDays sum to exactly 7/30/90)
  *     public-pnl?uniqueCode&lastDays              daily cumulative pnl +
@@ -48,6 +52,9 @@ import type {
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { BlockedUpstreamError, isBlockedStatus } from '../../fetch/rate-limiter'
+import type { JsonFetcher, NumericLeaderboardPageMeta } from '../../fetch/capture'
+import { captureReplayLeaderboard, payloadPath } from '../../fetch/replay-capture'
+import type { LeaderboardExhaustionDeclaration } from '../../acquisition-exhaustion'
 import { assertSourceSurfaceSupported } from '../../core/surface-capabilities'
 import {
   parseOkxHistory,
@@ -64,7 +71,28 @@ import { okxPositionHistoryTerminalVerifier } from './history-terminal'
 
 const API_BASE = 'https://www.okx.com/api/v5/copytrading'
 const PAGE_LIMIT = 20 // public-lead-traders hard max
-const MAX_BOARD_PAGES = 60 // board is ~13 pages; hard safety cap
+const MAX_BOARD_PAGES = 60 // board is ~10 pages; hard safety cap
+const BOARD_HEADERS = {
+  accept: 'application/json',
+  'user-agent':
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
+    '(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+}
+
+/**
+ * Exhausted-completeness contract for okx_futures and okx_spot (registered
+ * per source in arena.leaderboard_exhaustion_contracts). The envelope wraps
+ * the board in a one-item `data` array: the board ends at the reported
+ * totalPage, and the dataVer token pins one snapshot across every page.
+ */
+export const OKX_LEADERBOARD_EXHAUSTION: LeaderboardExhaustionDeclaration = Object.freeze({
+  completeness_mode: 'exhausted' as const,
+  list_path: ['data', '0', 'ranks'],
+  row_key_path: ['uniqueCode'],
+  end_signal: { kind: 'page_count' as const, path: ['data', '0', 'totalPage'] },
+  board_version: { kind: 'token' as const, path: ['data', '0', 'dataVer'] },
+  max_duplicate_rows: 0,
+})
 const DEFAULT_HISTORY_MAX_PAGES = 5
 
 /** lastDays param: 1/2/3 = last 7/30/90 days (4=180d is not an Arena TF). */
@@ -100,14 +128,7 @@ function supportsSwapRecords(src: SourceRow): boolean {
 /** Paced plain-HTTP GET; OKX envelopes everything as {code,data,msg}. */
 async function fetchData(session: FetchSession, url: string): Promise<Dict[]> {
   return session.paced(async () => {
-    const res = await fetch(url, {
-      headers: {
-        accept: 'application/json',
-        'user-agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
-          '(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-      },
-    })
+    const res = await fetch(url, { headers: BOARD_HEADERS })
     if (isBlockedStatus(res.status)) throw new BlockedUpstreamError(res.status, url)
     if (!res.ok) throw new Error(`[okx] HTTP ${res.status} from ${url}`)
     const payload = (await res.json()) as { code?: unknown; data?: unknown; msg?: unknown }
@@ -116,6 +137,64 @@ async function fetchData(session: FetchSession, url: string): Promise<Dict[]> {
     }
     return Array.isArray(payload.data) ? (payload.data as Dict[]) : []
   })
+}
+
+/** Capture fetcher: no pacing or status throw (the capture records both). */
+const fetchBoardJson: JsonFetcher = async (template) => {
+  const response = await fetch(template.url, { headers: template.headers })
+  let json: unknown = null
+  try {
+    json = await response.json()
+  } catch {
+    // A non-JSON answer stays null; page validation records it as an upstream error.
+  }
+  return { status: response.status, json }
+}
+
+function boardBlock(payload: unknown): Dict {
+  const root = (payload ?? {}) as { code?: unknown; data?: unknown }
+  if (root.code !== '0') {
+    throw new TypeError(`[okx] leaderboard response code ${JSON.stringify(root.code)} is not "0"`)
+  }
+  if (!Array.isArray(root.data) || root.data.length !== 1) {
+    throw new TypeError('[okx] leaderboard response must wrap exactly one board block in data')
+  }
+  const block: unknown = root.data[0]
+  if (block === null || typeof block !== 'object' || Array.isArray(block)) {
+    throw new TypeError('[okx] leaderboard board block must be an object')
+  }
+  return block as Dict
+}
+
+/** Upstream page meta: OKX reports pages, never rows (exhausted mode). */
+function okxLeaderboardMeta(payload: unknown): NumericLeaderboardPageMeta {
+  const block = boardBlock(payload)
+  if (!Array.isArray(block.ranks)) {
+    throw new TypeError('[okx] leaderboard response must contain data[0].ranks')
+  }
+  if (block.ranks.length > PAGE_LIMIT) {
+    throw new TypeError(`[okx] leaderboard page holds more than ${PAGE_LIMIT} rows`)
+  }
+  const totalPage = Number(block.totalPage)
+  if (!Number.isSafeInteger(totalPage) || totalPage < 1 || totalPage > MAX_BOARD_PAGES) {
+    throw new TypeError(`[okx] leaderboard totalPage must be 1..${MAX_BOARD_PAGES}`)
+  }
+  return {
+    rowCount: block.ranks.length,
+    reportedPopulation: null,
+    reportedPageCount: null, // the declared end signal (data.0.totalPage) is the page count
+    reportedCurrentPage: null,
+    reportedPageSize: null,
+  }
+}
+
+function pinnedDataVer(firstPagePayload: unknown): string {
+  const dataVer = payloadPath(firstPagePayload, ['data'])
+  const value = Array.isArray(dataVer) ? (dataVer[0] as Dict | undefined)?.dataVer : undefined
+  if (typeof value !== 'string' || !/^[0-9]{1,32}$/.test(value)) {
+    throw new TypeError('[okx] page one did not report a pinnable dataVer')
+  }
+  return value
 }
 
 // ── Preference-currency, memoized per (session, trader) — TF-independent ──
@@ -168,64 +247,48 @@ const okxAdapter: SourceAdapter = {
   },
 
   /**
-   * 90d native board only (7/30 are derived downstream). Pages 1..totalPage
-   * with page 1's dataVer pinned; rows dedupe by uniqueCode then re-chunk
-   * into exact page_size chunks so Tier-A rank re-anchoring stays gap-free
-   * (binance-web3 pattern).
+   * 90d native board only (7/30 are derived downstream). Pages 1..totalPage,
+   * page 2+ pinned to page one's dataVer. Each RAW page is the upstream
+   * response verbatim; Tier-A dedupes by uniqueCode and the exhaustion proof
+   * refuses any cross-page duplicate or version change.
    */
+  async captureLeaderboard(session, src, timeframe, options) {
+    if (timeframe !== 90) {
+      throw new Error(`[okx] ${timeframe}d board is derived, not natively listed`)
+    }
+    if (src.page_size !== null && src.page_size !== PAGE_LIMIT) {
+      throw new TypeError(`[okx] source page_size must be ${PAGE_LIMIT} (the upstream limit)`)
+    }
+    const sortType = String(src.meta.sort_type ?? 'overview')
+    const listUrl = `${base(src)}/public-lead-traders`
+    const it = instType(src)
+    return captureReplayLeaderboard(
+      { session, fetcher: fetchBoardJson, src, label: 'okx', signal: options?.signal },
+      {
+        buildRequest: (pageIndex, { firstPagePayload }) => ({
+          url:
+            `${listUrl}?instType=${it}&sortType=${encodeURIComponent(sortType)}` +
+            `&limit=${PAGE_LIMIT}&page=${pageIndex}` +
+            (pageIndex === 1 ? '' : `&dataVer=${pinnedDataVer(firstPagePayload)}`),
+          method: 'GET',
+          headers: BOARD_HEADERS,
+        }),
+        publicRequest: { query: ['instType', 'sortType', 'limit', 'page', 'dataVer'] },
+        pageBinding: { location: 'query', key: 'page' },
+        extractMeta: okxLeaderboardMeta,
+        pageSize: PAGE_LIMIT,
+        exhaustion: OKX_LEADERBOARD_EXHAUSTION,
+      }
+    )
+  },
+
   async *listLeaderboard(
     session: FetchSession,
     src: SourceRow,
     timeframe: RankingTimeframe
   ): AsyncIterable<RawPage> {
-    if (timeframe !== 90) {
-      throw new Error(`[okx] ${timeframe}d board is derived, not natively listed`)
-    }
-    const sortType = String(src.meta.sort_type ?? 'overview')
-    const pageSize = src.page_size ?? PAGE_LIMIT
-    const maxPagesKnob = Number(src.meta.max_pages) || null
-
-    const seen = new Set<string>()
-    const rows: Dict[] = []
-    let dataVer: string | null = null
-    let totalPage: number | null = null
-    let lastUrl = ''
-    for (let page = 1; page <= Math.min(maxPagesKnob ?? totalPage ?? 1, MAX_BOARD_PAGES); page++) {
-      const url =
-        `${base(src)}/public-lead-traders?instType=${instType(src)}` +
-        `&sortType=${sortType}&limit=${PAGE_LIMIT}&page=${page}` +
-        (dataVer ? `&dataVer=${dataVer}` : '')
-      lastUrl = url
-      const data = await fetchData(session, url)
-      const block = (data[0] ?? {}) as { dataVer?: unknown; totalPage?: unknown; ranks?: unknown }
-      if (dataVer === null && typeof block.dataVer === 'string') dataVer = block.dataVer
-      if (totalPage === null) {
-        const reported = Number(block.totalPage)
-        totalPage = Number.isFinite(reported) && reported > 0 ? reported : 1
-      }
-      const ranks = Array.isArray(block.ranks) ? (block.ranks as Dict[]) : []
-      if (ranks.length === 0) break
-      for (const row of ranks) {
-        const code = String(row.uniqueCode ?? '')
-        if (!code || seen.has(code)) continue
-        seen.add(code)
-        rows.push(row)
-      }
-    }
-
-    const fetchedAt = new Date().toISOString()
-    for (let i = 0; i < rows.length; i += pageSize) {
-      yield {
-        pageIndex: Math.floor(i / pageSize) + 1,
-        payload: {
-          timeframe,
-          dataVer,
-          board: { ranks: rows.slice(i, i + pageSize) },
-        },
-        url: lastUrl,
-        fetchedAt,
-      }
-    }
+    const capture = await okxAdapter.captureLeaderboard!(session, src, timeframe)
+    yield* capture.parsePages
   },
 
   /**
