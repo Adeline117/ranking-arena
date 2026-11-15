@@ -39,7 +39,12 @@ import type {
 import { CopierPageCapReachedError } from '../../core/history-page-cap'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
-import { replayJson, replayPaged, type JsonFetcher } from '../../fetch/capture'
+import { replayJson, type JsonFetcher } from '../../fetch/capture'
+import {
+  captureReplayLeaderboard,
+  collectionMeta,
+  requireEnvelopeValue,
+} from '../../fetch/replay-capture'
 import { extractCopierCandidateRecords } from '../../copier-candidate-conservation'
 import {
   parseLbankHistory,
@@ -108,6 +113,15 @@ function lbankFetcher(session: FetchSession): JsonFetcher {
   }
 }
 
+/** Upstream page meta: rows counted before parser validation; board population as reported. */
+const lbankLeaderboardMeta = collectionMeta({
+  label: 'lbank',
+  assertSuccess: requireEnvelopeValue('lbank', ['code'], [200]),
+  list: ['data', 'records'],
+  total: ['data', 'total'],
+  pageCount: ['data', 'pages'],
+})
+
 const lbankAdapter: SourceAdapter = {
   slug: 'lbank',
   capabilities: {
@@ -122,40 +136,49 @@ const lbankAdapter: SourceAdapter = {
   /** One crawl per TF; the sortField prefix makes the server emit the
    *  window's s* headline fields (self-describing payloads — no composite
    *  wrapper needed for pure re-parsing). */
+  async captureLeaderboard(session, src, timeframe, options) {
+    options?.signal?.throwIfAborted()
+    await warmSession(session, src)
+    const fetcher = lbankFetcher(session)
+    options?.signal?.throwIfAborted()
+    const listUrl = endpoint(src, 'list', `${BASE}/stat/v1/getAll`)
+    const pageSize = src.page_size ?? 20
+    const sortField = TF_SORT[clampTf(timeframe)]
+    return captureReplayLeaderboard(
+      { session, fetcher, src, label: 'lbank', signal: options?.signal },
+      {
+        buildRequest: (pageIndex) => ({
+          url:
+            `${listUrl}?name=&size=${pageSize}&current=${pageIndex}&topFlag=0` +
+            `&hiddenFullFlag=0&sortField=${sortField}&sortDirection=1`,
+          method: 'GET',
+          headers: {},
+        }),
+        publicRequest: {
+          query: [
+            'name',
+            'size',
+            'current',
+            'topFlag',
+            'hiddenFullFlag',
+            'sortField',
+            'sortDirection',
+          ],
+        },
+        pageBinding: { location: 'query', key: 'current' },
+        extractMeta: lbankLeaderboardMeta,
+        pageSize,
+      }
+    )
+  },
+
   async *listLeaderboard(
     session: FetchSession,
     src: SourceRow,
     timeframe: RankingTimeframe
   ): AsyncIterable<RawPage> {
-    await warmSession(session, src)
-    const fetcher = lbankFetcher(session)
-    const listUrl = endpoint(src, 'list', `${BASE}/stat/v1/getAll`)
-    const pageSize = src.page_size ?? 20
-    const sortField = TF_SORT[clampTf(timeframe)]
-    // Validation knob: src.meta.max_pages caps the crawl (smoke runs).
-    const maxPages = Number(src.meta.max_pages) || null
-
-    let pagesYielded = 0
-    for await (const page of replayPaged({
-      session,
-      fetcher,
-      buildRequest: (pageIndex) => ({
-        url:
-          `${listUrl}?name=&size=${pageSize}&current=${pageIndex}&topFlag=0` +
-          `&hiddenFullFlag=0&sortField=${sortField}&sortDirection=1`,
-        method: 'GET',
-        headers: {},
-      }),
-      extractMeta: (payload) => {
-        const parsed = parseLbankLeaderboardPage(payload, dummyCtx(src))
-        return { rowCount: parsed.rows.length, reportedTotal: parsed.reportedTotal }
-      },
-      pageSize,
-    })) {
-      yield page
-      pagesYielded += 1
-      if (maxPages !== null && pagesYielded >= maxPages) return
-    }
+    const capture = await lbankAdapter.captureLeaderboard!(session, src, timeframe)
+    yield* capture.parsePages
   },
 
   /**

@@ -26,7 +26,6 @@
 
 import type {
   HistoryKind,
-  ParseCtx,
   RankingTimeframe,
   RawBundle,
   RawPage,
@@ -35,7 +34,12 @@ import type {
 } from '../../core/types'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
-import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
+import { pageFetcher, replayJson } from '../../fetch/capture'
+import {
+  captureReplayLeaderboard,
+  collectionMeta,
+  requireEnvelopeValue,
+} from '../../fetch/replay-capture'
 import {
   parseBybitMt5History,
   parseBybitMt5LeaderboardPage,
@@ -105,6 +109,14 @@ async function cached(
   return value
 }
 
+/** Upstream page meta: rows counted before parser validation; board population as reported. */
+const bybit_mt5LeaderboardMeta = collectionMeta({
+  label: 'bybit-mt5',
+  assertSuccess: requireEnvelopeValue('bybit-mt5', ['retCode'], [0]),
+  list: ['result', 'providerDetailsList'],
+  total: ['result', 'totalCount'],
+})
+
 const bybitMt5Adapter: SourceAdapter = {
   slug: 'bybit_mt5',
   capabilities: {
@@ -117,40 +129,40 @@ const bybitMt5Adapter: SourceAdapter = {
     copiers: false,
   },
 
+  async captureLeaderboard(session, src, timeframe, options) {
+    options?.signal?.throwIfAborted()
+    await warmSession(session, src)
+    const fetcher = pageFetcher(session)
+    options?.signal?.throwIfAborted()
+    const listUrl = endpoint(src, 'list', `${BASE}/common/dynamic-provider-list`)
+    const pageSize = src.page_size ?? 16
+    return captureReplayLeaderboard(
+      { session, fetcher, src, label: 'bybit-mt5', signal: options?.signal },
+      {
+        buildRequest: (pageIndex) => ({
+          url:
+            `${listUrl}?pageNo=${pageIndex}&pageSize=${pageSize}` +
+            `&dataDuration=${TF_DURATION[timeframe]}&providerTag=&countryCode=`,
+          method: 'GET',
+          headers: HEADERS,
+        }),
+        publicRequest: {
+          query: ['pageNo', 'pageSize', 'dataDuration', 'providerTag', 'countryCode'],
+        },
+        pageBinding: { location: 'query', key: 'pageNo' },
+        extractMeta: bybit_mt5LeaderboardMeta,
+        pageSize,
+      }
+    )
+  },
+
   async *listLeaderboard(
     session: FetchSession,
     src: SourceRow,
     timeframe: RankingTimeframe
   ): AsyncIterable<RawPage> {
-    await warmSession(session, src)
-    const fetcher = pageFetcher(session)
-    const listUrl = endpoint(src, 'list', `${BASE}/common/dynamic-provider-list`)
-    const pageSize = src.page_size ?? 16
-    // Validation knob: src.meta.max_pages caps the crawl (e.g. 20 pages for
-    // a smoke run). Early generator return — replayPaged never sees a
-    // truncation, so its completeness assertion stays scoped to real crawls.
-    const maxPages = Number(src.meta.max_pages) || null
-
-    let pagesYielded = 0
-    for await (const page of replayPaged({
-      session,
-      fetcher,
-      buildRequest: (pageIndex) => ({
-        url:
-          `${listUrl}?pageNo=${pageIndex}&pageSize=${pageSize}` +
-          `&dataDuration=${TF_DURATION[timeframe]}&providerTag=&countryCode=`,
-        method: 'GET',
-        headers: HEADERS,
-      }),
-      extractMeta: (payload) => {
-        const parsed = parseBybitMt5LeaderboardPage(payload, dummyCtx(src))
-        return { rowCount: parsed.rows.length, reportedTotal: parsed.reportedTotal }
-      },
-      pageSize,
-    })) {
-      yield page
-      if (maxPages !== null && ++pagesYielded >= maxPages) return
-    }
+    const capture = await bybitMt5Adapter.captureLeaderboard!(session, src, timeframe)
+    yield* capture.parsePages
   },
 
   async getProfile(
@@ -255,16 +267,6 @@ const bybitMt5Adapter: SourceAdapter = {
 }
 
 /** Parse-time ctx for extractMeta inside the replay loop (counts only). */
-function dummyCtx(src: SourceRow): ParseCtx {
-  return {
-    sourceSlug: src.slug,
-    currency: src.currency,
-    tfLabelMap: src.tf_label_map,
-    scrapedAt: new Date().toISOString(),
-    meta: src.meta,
-  }
-}
-
 registerAdapter(bybitMt5Adapter)
 
 export { bybitMt5Adapter }

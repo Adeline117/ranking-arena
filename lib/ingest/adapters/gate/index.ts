@@ -40,7 +40,12 @@ import type {
 } from '../../core/history-continuation'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
-import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
+import { pageFetcher, replayJson } from '../../fetch/capture'
+import {
+  captureReplayLeaderboard,
+  collectionMeta,
+  requireEnvelopeValue,
+} from '../../fetch/replay-capture'
 import {
   parseGateHistory,
   parseGateLeaderboardPage,
@@ -97,6 +102,32 @@ async function cached(
   return value
 }
 
+/** Every list query parameter is public board semantics (filters, sort, cycle, page). */
+const GATE_LIST_PUBLIC_REQUEST = {
+  query: [
+    'sub_website_id',
+    'order_by',
+    'sort_by',
+    'is_curated',
+    'private_type',
+    'cycle',
+    'label_ids',
+    'status',
+    'style_label_code',
+    'full_ranking',
+    'smart_filter',
+    'profit_type',
+    'cycle_type',
+    'max_profit',
+    'min_profit',
+    'max_follow_profit',
+    'min_follow_profit',
+    'page',
+    'page_size',
+    'is_favorite',
+  ],
+} as const
+
 function futListUrl(src: SourceRow, tf: RankingTimeframe, pageIndex: number): string {
   const base = endpoint(src, 'list', `${B}/apiw/v2/copy/leader/list`)
   const pageSize = src.page_size ?? 12
@@ -118,6 +149,18 @@ function cfdListUrl(src: SourceRow, tf: RankingTimeframe, pageIndex: number): st
   )
 }
 
+/** Upstream page meta: rows counted before parser validation; board population as reported.
+ *  The futures board answers data.list, the TradFi (CFD) board data.lists. */
+function gateLeaderboardMeta(collection: 'list' | 'lists') {
+  return collectionMeta({
+    label: 'gate',
+    assertSuccess: requireEnvelopeValue('gate', ['code'], [0]),
+    list: ['data', collection],
+    total: ['data', 'totalcount'],
+    pageCount: ['data', 'pagecount'],
+  })
+}
+
 const gateAdapter: SourceAdapter = {
   slug: 'gate',
   capabilities: {
@@ -129,48 +172,39 @@ const gateAdapter: SourceAdapter = {
     copiers: true, // futures top-10 only; cfd public/followers
   },
 
+  async captureLeaderboard(session, src, timeframe, options) {
+    options?.signal?.throwIfAborted()
+    await warmSession(session, src)
+    const fetcher = pageFetcher(session)
+    options?.signal?.throwIfAborted()
+    const board = boardKey(src)
+    const pageSize = src.page_size ?? 12
+    return captureReplayLeaderboard(
+      { session, fetcher, src, label: 'gate', signal: options?.signal },
+      {
+        buildRequest: (pageIndex) => ({
+          url:
+            board === 'cfd'
+              ? cfdListUrl(src, timeframe, pageIndex)
+              : futListUrl(src, timeframe, pageIndex),
+          method: 'GET',
+          headers: HEADERS,
+        }),
+        publicRequest: GATE_LIST_PUBLIC_REQUEST,
+        pageBinding: { location: 'query', key: 'page' },
+        extractMeta: gateLeaderboardMeta(board === 'cfd' ? 'lists' : 'list'),
+        pageSize,
+      }
+    )
+  },
+
   async *listLeaderboard(
     session: FetchSession,
     src: SourceRow,
     timeframe: RankingTimeframe
   ): AsyncIterable<RawPage> {
-    await warmSession(session, src)
-    const fetcher = pageFetcher(session)
-    const board = boardKey(src)
-    const pageSize = src.page_size ?? 12
-    // Validation knob: src.meta.max_pages caps the crawl (smoke runs). Early
-    // generator return — replayPaged never sees a truncation, so its
-    // completeness assertion stays scoped to real crawls.
-    const maxPages = Number(src.meta.max_pages) || null
-
-    let pagesYielded = 0
-    for await (const page of replayPaged({
-      session,
-      fetcher,
-      buildRequest: (pageIndex) => ({
-        url:
-          board === 'cfd'
-            ? cfdListUrl(src, timeframe, pageIndex)
-            : futListUrl(src, timeframe, pageIndex),
-        method: 'GET',
-        headers: HEADERS,
-      }),
-      extractMeta: (payload) => {
-        const parsed = parseGateLeaderboardPage(payload, {
-          sourceSlug: src.slug,
-          currency: src.currency,
-          tfLabelMap: src.tf_label_map,
-          scrapedAt: new Date().toISOString(),
-          meta: src.meta,
-        })
-        return { rowCount: parsed.rows.length, reportedTotal: parsed.reportedTotal }
-      },
-      pageSize,
-    })) {
-      yield page
-      pagesYielded += 1
-      if (maxPages !== null && pagesYielded >= maxPages) return
-    }
+    const capture = await gateAdapter.captureLeaderboard!(session, src, timeframe)
+    yield* capture.parsePages
   },
 
   /**

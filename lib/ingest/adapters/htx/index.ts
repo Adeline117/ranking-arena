@@ -36,7 +36,12 @@ import type {
 } from '../../core/types'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
-import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
+import { pageFetcher, replayJson } from '../../fetch/capture'
+import {
+  captureReplayLeaderboard,
+  collectionMeta,
+  requireEnvelopeValue,
+} from '../../fetch/replay-capture'
 import {
   parseHtxHistory,
   parseHtxLeaderboardPage,
@@ -83,6 +88,14 @@ async function warmSession(session: FetchSession, src: SourceRow): Promise<void>
   warmedSessions.add(session)
 }
 
+/** Upstream page meta: rows counted before parser validation; board population as reported. */
+const htxLeaderboardMeta = collectionMeta({
+  label: 'htx',
+  assertSuccess: requireEnvelopeValue('htx', ['code'], [200]),
+  list: ['data', 'itemList'],
+  total: ['data', 'totalNum'],
+})
+
 const htxAdapter: SourceAdapter = {
   slug: 'htx',
   capabilities: {
@@ -96,38 +109,37 @@ const htxAdapter: SourceAdapter = {
 
   /** Boards are 90d-only (timeframes_native={90}); the timeframe argument
    *  only labels the snapshot — the rank endpoint has no TF param. */
-  async *listLeaderboard(
-    session: FetchSession,
-    src: SourceRow,
-    _timeframe: RankingTimeframe
-  ): AsyncIterable<RawPage> {
+  async captureLeaderboard(session, src, timeframe, options) {
+    options?.signal?.throwIfAborted()
     await warmSession(session, src)
     const fetcher = pageFetcher(session)
+    options?.signal?.throwIfAborted()
     const listUrl = endpoint(src, 'list', `${apiBase(src)}/rank`)
     const pageSize = src.page_size ?? 50 // server cap: 50 (100 → HTTP 500)
     const rankType = Number(src.meta.list_rank_type) || 1
-    // Validation knob: src.meta.max_pages caps the crawl (smoke runs).
-    const maxPages = Number(src.meta.max_pages) || null
+    return captureReplayLeaderboard(
+      { session, fetcher, src, label: 'htx', signal: options?.signal },
+      {
+        buildRequest: (pageIndex) => ({
+          url: `${listUrl}?rankType=${rankType}&pageNo=${pageIndex}&pageSize=${pageSize}`,
+          method: 'GET',
+          headers: HEADERS,
+        }),
+        publicRequest: { query: ['rankType', 'pageNo', 'pageSize'] },
+        pageBinding: { location: 'query', key: 'pageNo' },
+        extractMeta: htxLeaderboardMeta,
+        pageSize,
+      }
+    )
+  },
 
-    let pagesYielded = 0
-    for await (const page of replayPaged({
-      session,
-      fetcher,
-      buildRequest: (pageIndex) => ({
-        url: `${listUrl}?rankType=${rankType}&pageNo=${pageIndex}&pageSize=${pageSize}`,
-        method: 'GET',
-        headers: HEADERS,
-      }),
-      extractMeta: (payload) => {
-        const parsed = parseHtxLeaderboardPage(payload, dummyCtx(src))
-        return { rowCount: parsed.rows.length, reportedTotal: parsed.reportedTotal }
-      },
-      pageSize,
-    })) {
-      yield page
-      pagesYielded += 1
-      if (maxPages !== null && pagesYielded >= maxPages) return
-    }
+  async *listLeaderboard(
+    session: FetchSession,
+    src: SourceRow,
+    timeframe: RankingTimeframe
+  ): AsyncIterable<RawPage> {
+    const capture = await htxAdapter.captureLeaderboard!(session, src, timeframe)
+    yield* capture.parsePages
   },
 
   /**

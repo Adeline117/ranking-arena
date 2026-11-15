@@ -61,6 +61,9 @@
 3. **恢复环境**：准备约 100GB 的隔离 PG17，认证旧备份和新备份。
 4. **迁移顺序**：分类已完成；解决上一节"仍需 owner 定的冲突"，按上一节的位置安排两段 ADR-023 单文件迁移。
 5. **排练**：先在 staging 按顺序应用迁移并部署同一个提交。
+   - **部署前的两项只读取证**（owner 授权精确查询后由发布负责人执行）：
+     - **连接池证书链**：在每台 worker 主机上，用 `worker/certs/supabase-root-ca.crt` 跑 `openssl s_client -starttls postgres … -verify_return_error`（命令见 #474），必须得到 `Verify return code: 0 (ok)`，否则不部署。
+     - **采集总数对账**：对 #477 新增 attempt-bound 采集的 14 个来源，各做一次真实采集，比对上游报告的总数和实际翻页取到的行数。不一致的来源在新 worker 上会直接停发；先修来源配置（page_size、原生窗口），或把它移出采集契约。
 6. **生产**：按 ADR-023 单文件应用迁移，部署 staging 验证过的同一提交。
 7. **观察**：网页金丝雀、支付金丝雀，写入截止后至少等待 48 小时再开放榜单。
 8. **恢复 worker**：单 worker 金丝雀，观察完整调度周期后再扩容。
@@ -74,6 +77,13 @@
 - **不展示过期数据**：空窗期不回退到 8 月的旧排名，也不放宽新鲜度闸门。显示现有的如实空状态（`rankingsRefreshingTitle` / `rankingsRefreshingDesc`："Rankings are being refreshed… We only publish rankings after the latest exchange data passes verification"）。
 - **不对外宣传，直到有数据**：执行顺序第 7–9 步完成之前（worker 单实例金丝雀跑完整调度周期，首个周期通过校验并发布，核心接口和新鲜度连续 24 小时正常），不做公开宣传，也不解除 NO-GO。
 - **缩短空窗**：生产迁移和部署完成后，立即按第 8 步恢复 worker；它是空窗长短的唯一决定因素。
+
+## 发布强制信任证据（#476，暂缓合并）
+
+owner 已决定发布必须有采集证据（attempt-bound）。#476 已实现但**暂不合并**：目前约 30 个来源中只有 15 个能产出证据（binance_futures + #477 的 14 个），被隔离的来源正好卡在半数线，合并后很可能每季整季拒发。
+
+- 合并条件：能产出证据的来源明显过半，且核心来源（okx_futures、bitget_futures、hyperliquid 等）中至少有可用的替代覆盖。
+- 未覆盖来源及原因见 #477 描述（不报总数、截断子集、翻页依赖、组合信封等），需要逐个改采集方式或接受其退出公开榜。
 
 ## 上线前要确认的产品问题
 
