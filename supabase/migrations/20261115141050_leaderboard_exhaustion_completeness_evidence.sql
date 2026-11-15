@@ -3,44 +3,46 @@
 -- Description: Second completeness mode for attempt-bound leaderboard
 --   evidence: "exhausted" (lib/ingest/acquisition-exhaustion.ts).
 --
--- Until now an acquisition could finish 'complete' only when the upstream
--- reported a population equal to the accepted rows. Many boards report no
--- total and signal their end by exhaustion (a continuation flag, a reported
--- page count, or a short final page), sometimes with a board version token.
--- This migration lets such a board be complete, and attempt-bound trusted,
--- only under a proof as strict as the total mode:
+-- A board's acquisition could be trusted only when the upstream reported a
+-- population equal to the accepted rows. Many boards report no total and
+-- signal their end by exhaustion (a continuation flag, a reported page count,
+-- or a short final page), sometimes with a board version token. Their
+-- acquisition outcome stays truthful and unchanged: terminal 'unknown',
+-- acquisition 'complete', population 'unknown', reason 'population_unknown'
+-- (no reported total). This migration adds a separate, append-only exhaustion
+-- proof that publication accepts in place of the reported total, under a
+-- check as strict as the total mode:
 --
 -- * arena.leaderboard_exhaustion_contracts: the reviewed per-source capture
---   contract (append-only). It declares the completeness mode, the row-array
---   and row-key paths, the exact end-signal path, the board-version check and
---   the tolerated cross-page duplicates. Empty here; each source is
---   registered by its own reviewed migration.
--- * arena.leaderboard_exhaustion_completeness_holds(...): the DB check of the
---   manifest's completeness block (carried in the manifest RAW meta,
---   meta.acquisition_attempt.completeness, immutable once an outcome binds it):
---   declaration = registered contract; one page entry per source page,
---   ordinals contiguous from one, well-formed request/response/row-key
---   hashes, row counts summing to the observed population; the end signal
---   says "more" on every page but the last and "end" on the last; duplicate
---   row keys = observed - distinct, within the allowance, distinct = accepted
---   rows, zero rejected rows; one version token on every page, or page one
---   re-read with identical row keys.
--- * arena.leaderboard_acquisition_outcomes: termination reason
---   'end_signal_reached'; the terminal-shape CHECK gains an exhausted
---   'complete' branch (no reported population, observed = accepted +
---   deduplicated), and a BEFORE INSERT trigger refuses any 'complete' outcome
---   without a consistent reported population unless the check above holds.
--- * public.rank_publication_trust_evidence (20261114193017) re-checks it:
---   a complete outcome binds a board only with a consistent reported
---   population or holding exhaustion evidence.
--- * arena.validate_metric_trust_attempt_outcome_authority (20260722050000)
---   accepts an exhausted outcome (reported population NULL, observed =
---   fetched + deduplicated) only when the same check holds.
+--   contract. It declares the completeness mode, row-array and row-key paths,
+--   the exact end-signal path, the board-version check and the tolerated
+--   cross-page duplicates. Empty here; each source is registered by its own
+--   reviewed migration.
+-- * arena.leaderboard_exhaustion_completeness_holds(...): checks the manifest's
+--   completeness block (manifest RAW meta.acquisition_attempt.completeness,
+--   immutable once an outcome binds the RAW): declaration = registered
+--   contract; one entry per source page, ordinals contiguous from one,
+--   well-formed request/response/row-key hashes, row counts summing to the
+--   observed population; the end signal says "more" on every page but the
+--   last and "end" on the last; duplicate row keys = observed - distinct,
+--   within the allowance, distinct = accepted rows, zero rejected rows; one
+--   version token on every page, or page one re-read with identical row keys.
+-- * arena.leaderboard_acquisition_exhaustion_evidence +
+--   arena.record_leaderboard_exhaustion_evidence(attempt_id): the worker
+--   records the proof for a finished outcome; the function refuses (23514)
+--   unless the outcome is an exhausted shape and the check holds.
+-- * public.rank_publication_trust_evidence (20261114193017): a board binds to
+--   a 'complete' outcome, or to an exhausted outcome whose recorded proof
+--   still holds.
+-- * arena.validate_metric_trust_attempt_outcome_authority (20260722050000):
+--   a verified metric-trust run may cite an exhausted outcome (reported
+--   population NULL, observed = fetched + deduplicated) only under the same
+--   proof; the reported-total branch is unchanged.
 --
--- PREDEPLOY, after 20261114193017. Inert until a source is registered: with
--- the registry empty no outcome can take the new branch, and every existing
--- outcome satisfies the rewritten constraints. The deployed worker never
--- produces 'end_signal_reached' or a completeness block.
+-- PREDEPLOY, after 20261114193017. Inert until a source registers a contract:
+-- with the registry empty no proof can be recorded, so publication and
+-- metric-trust authority accept exactly what they accepted before. No table,
+-- column or constraint of the acquisition ledger changes.
 --
 -- Generated only; not applied to any environment.
 
@@ -51,10 +53,6 @@ SET LOCAL statement_timeout = '2min';
 SET LOCAL search_path = pg_catalog, pg_temp;
 
 DO $preflight$
-DECLARE
-  v_terminal_def text;
-  v_reason_defs text[];
-  v_validator_src text;
 BEGIN
   IF pg_catalog.to_regclass('arena.sources') IS NULL
      OR pg_catalog.to_regclass('arena.raw_objects') IS NULL
@@ -76,38 +74,27 @@ BEGIN
     RAISE EXCEPTION 'exhaustion completeness requires the acquisition ledger, metric-trust authority (20260722050000) and attempt-bound publication evidence (20261114193017)';
   END IF;
 
-  IF pg_catalog.to_regclass('arena.leaderboard_exhaustion_contracts') IS NOT NULL THEN
+  IF pg_catalog.to_regclass('arena.leaderboard_exhaustion_contracts') IS NOT NULL
+     OR pg_catalog.to_regclass('arena.leaderboard_acquisition_exhaustion_evidence') IS NOT NULL THEN
     RAISE EXCEPTION 'exhaustion completeness evidence already exists';
   END IF;
 
-  -- The constraints and the validator are rewritten from their exact
-  -- reviewed definitions; any drift stops the migration.
-  SELECT pg_catalog.pg_get_constraintdef(constraint_row.oid, false)
-    INTO STRICT v_terminal_def
-    FROM pg_catalog.pg_constraint AS constraint_row
-   WHERE constraint_row.conrelid = 'arena.leaderboard_acquisition_outcomes'::pg_catalog.regclass
-     AND constraint_row.conname = 'leaderboard_acquisition_terminal_shape'
-     AND constraint_row.contype = 'c';
-  SELECT pg_catalog.array_agg(pg_catalog.pg_get_constraintdef(constraint_row.oid, false))
-    INTO v_reason_defs
-    FROM pg_catalog.pg_constraint AS constraint_row
-   WHERE constraint_row.conrelid = 'arena.leaderboard_acquisition_outcomes'::pg_catalog.regclass
-     AND constraint_row.conname = 'leaderboard_acquisition_outcomes_termination_reason_check'
-     AND constraint_row.contype = 'c';
-  SELECT function_row.prosrc
-    INTO STRICT v_validator_src
-    FROM pg_catalog.pg_proc AS function_row
-   WHERE function_row.oid =
-         'arena.validate_metric_trust_attempt_outcome_authority()'::pg_catalog.regprocedure;
-
-  IF pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(v_terminal_def, 'UTF8')), 'hex')
-       IS DISTINCT FROM 'ca906c1b1555528791a65d3872f9543e288ccc5555dd4b1be1dfabd1bd17eed7'
-     OR pg_catalog.cardinality(v_reason_defs) IS DISTINCT FROM 1
-     OR pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(v_reason_defs[1], 'UTF8')), 'hex')
-       IS DISTINCT FROM '01700df4bde40a8135dc9cb5e183a20f7ed6a5ff08b488c289b0786cb42029f8'
-     OR pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(v_validator_src, 'UTF8')), 'hex')
-       IS DISTINCT FROM '63565ea00912b9ba4660aa23c4772f8d19100f1507246405631f378fe36880af' THEN
-    RAISE EXCEPTION 'acquisition outcome constraints or metric-trust outcome authority drifted from 20260722030000/20260722050000';
+  -- Both replaced functions must be their exact reviewed bodies.
+  IF (
+       SELECT pg_catalog.encode(
+                pg_catalog.sha256(pg_catalog.convert_to(function_row.prosrc, 'UTF8')), 'hex')
+         FROM pg_catalog.pg_proc AS function_row
+        WHERE function_row.oid =
+              'arena.validate_metric_trust_attempt_outcome_authority()'::pg_catalog.regprocedure
+     ) IS DISTINCT FROM '63565ea00912b9ba4660aa23c4772f8d19100f1507246405631f378fe36880af'
+     OR (
+       SELECT pg_catalog.encode(
+                pg_catalog.sha256(pg_catalog.convert_to(function_row.prosrc, 'UTF8')), 'hex')
+         FROM pg_catalog.pg_proc AS function_row
+        WHERE function_row.oid =
+              'public.rank_publication_trust_evidence(bigint[])'::pg_catalog.regprocedure
+     ) IS DISTINCT FROM 'a7975512ed092ec784a5a22bcd7bff6c7b52f1480d1fb6c1ec8d1a6e059d5c8c' THEN
+    RAISE EXCEPTION 'metric-trust outcome authority (20260722050000) or publication trust predicate (20261114193017) drifted';
   END IF;
 END
 $preflight$;
@@ -404,13 +391,13 @@ BEGIN
               AND v_end_values @> pg_catalog.jsonb_build_array(page.value->'end_signal_value')
          )
          OR NOT (
-           (p_termination_reason = 'end_signal_reached' AND (v_last->>'row_count')::integer > 0)
+           (p_termination_reason = 'cursor_exhausted' AND (v_last->>'row_count')::integer > 0)
            OR (p_termination_reason = 'empty_page' AND (v_last->>'row_count')::integer = 0)
          ) THEN
         RETURN false;
       END IF;
     WHEN 'page_count' THEN
-      IF p_termination_reason IS DISTINCT FROM 'end_signal_reached'
+      IF p_termination_reason IS DISTINCT FROM 'reported_page_count_reached'
          OR (v_last->>'row_count')::integer < 1
          OR EXISTS (
            SELECT 1
@@ -487,9 +474,45 @@ BEGIN
 END
 $function$;
 
--- One outcome: complete, no reported population, V3 manifest RAW whose
--- completeness block holds against the registered contract.
-CREATE FUNCTION arena.leaderboard_outcome_exhaustion_bound(p_attempt_seq bigint)
+-- ── Recorded exhaustion proof per outcome (append-only) ──
+
+CREATE TABLE arena.leaderboard_acquisition_exhaustion_evidence (
+  attempt_seq bigint PRIMARY KEY
+    REFERENCES arena.leaderboard_acquisition_outcomes(attempt_seq) ON DELETE RESTRICT,
+  source_id smallint NOT NULL REFERENCES arena.sources(id) ON DELETE RESTRICT,
+  timeframe smallint NOT NULL CHECK (timeframe IN (7, 30, 90)),
+  source_run_id text NOT NULL CHECK (
+    source_run_id ~ '^[0-9a-f]{64}$' AND source_run_id <> pg_catalog.repeat('0', 64)
+  ),
+  manifest_raw_object_id bigint NOT NULL CHECK (manifest_raw_object_id > 0),
+  completeness_contract text NOT NULL CHECK (
+    completeness_contract = 'arena.ingest.leaderboard-exhaustion-completeness@1'
+  ),
+  recorded_at timestamptz NOT NULL DEFAULT pg_catalog.now()
+);
+
+COMMENT ON TABLE arena.leaderboard_acquisition_exhaustion_evidence IS
+  'Exhausted-mode completeness proof for one acquisition outcome; written only by arena.record_leaderboard_exhaustion_evidence. Append-only.';
+
+CREATE TRIGGER leaderboard_acquisition_exhaustion_evidence_append_only
+  BEFORE UPDATE OR DELETE ON arena.leaderboard_acquisition_exhaustion_evidence
+  FOR EACH ROW EXECUTE FUNCTION arena.reject_leaderboard_exhaustion_contract_mutation();
+CREATE TRIGGER leaderboard_acquisition_exhaustion_evidence_no_truncate
+  BEFORE TRUNCATE ON arena.leaderboard_acquisition_exhaustion_evidence
+  FOR EACH STATEMENT EXECUTE FUNCTION arena.reject_leaderboard_exhaustion_contract_mutation();
+
+ALTER TABLE arena.leaderboard_acquisition_exhaustion_evidence ENABLE ROW LEVEL SECURITY;
+ALTER TABLE arena.leaderboard_acquisition_exhaustion_evidence FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE arena.leaderboard_acquisition_exhaustion_evidence
+  FROM PUBLIC, anon, authenticated, service_role;
+GRANT SELECT ON TABLE arena.leaderboard_acquisition_exhaustion_evidence TO service_role;
+CREATE POLICY leaderboard_acquisition_exhaustion_evidence_service_read
+  ON arena.leaderboard_acquisition_exhaustion_evidence
+  FOR SELECT TO service_role USING (true);
+
+-- The exhausted outcome shape plus a holding proof (no recorded row needed:
+-- the recorder and every reader share this one check).
+CREATE FUNCTION arena.leaderboard_outcome_exhaustion_holds(p_attempt_seq bigint)
 RETURNS boolean
 LANGUAGE sql
 STABLE
@@ -513,9 +536,22 @@ AS $function$
       JOIN arena.raw_objects AS manifest
         ON manifest.id = outcome.manifest_raw_object_id
      WHERE outcome.attempt_seq = p_attempt_seq
-       AND outcome.terminal_state = 'complete'
+       AND outcome.terminal_state = 'unknown'
+       AND outcome.acquisition_state = 'complete'
+       AND outcome.population_state = 'unknown'
+       AND outcome.capture_evidence_state = 'verified'
        AND outcome.population_report_state = 'unknown'
        AND outcome.reported_population IS NULL
+       AND outcome.reason_code = 'population_unknown'
+       AND outcome.termination_reason IN (
+         'cursor_exhausted', 'reported_page_count_reached', 'short_page', 'empty_page'
+       )
+       AND outcome.source_run_id IS NOT NULL
+       AND outcome.source_payload_raw_object_id IS NOT NULL
+       AND outcome.diagnostic_raw_object_id IS NULL
+       AND outcome.failure_stage IS NULL
+       AND NOT outcome.caller_limited
+       AND NOT outcome.safety_limited
        AND attempt.capture_contract = 'arena.ingest.leaderboard-acquisition-manifest@3'
        AND manifest.meta->>'data_contract' = 'arena.ingest.leaderboard-acquisition-manifest@3'
        AND manifest.trust_artifact_role = 'population_manifest'
@@ -525,148 +561,74 @@ AS $function$
   ), false)
 $function$;
 
--- ── Outcome ledger: new termination reason and the exhausted complete branch ──
+-- Bound = proof recorded for the outcome and still holding.
+CREATE FUNCTION arena.leaderboard_outcome_exhaustion_bound(p_attempt_seq bigint)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SET search_path = pg_catalog, pg_temp
+AS $function$
+  SELECT EXISTS (
+           SELECT 1
+             FROM arena.leaderboard_acquisition_exhaustion_evidence AS evidence
+            WHERE evidence.attempt_seq = p_attempt_seq
+         )
+         AND arena.leaderboard_outcome_exhaustion_holds(p_attempt_seq)
+$function$;
 
-DO $outcome_constraints$
-DECLARE
-  v_terminal_def text;
-BEGIN
-  SELECT pg_catalog.pg_get_constraintdef(constraint_row.oid, false)
-    INTO STRICT v_terminal_def
-    FROM pg_catalog.pg_constraint AS constraint_row
-   WHERE constraint_row.conrelid = 'arena.leaderboard_acquisition_outcomes'::pg_catalog.regclass
-     AND constraint_row.conname = 'leaderboard_acquisition_terminal_shape';
-  IF pg_catalog.left(v_terminal_def, 6) IS DISTINCT FROM 'CHECK ' THEN
-    RAISE EXCEPTION 'unexpected terminal shape definition';
-  END IF;
-
-  EXECUTE pg_catalog.format(
-    $sql$
-    ALTER TABLE arena.leaderboard_acquisition_outcomes
-      DROP CONSTRAINT leaderboard_acquisition_outcomes_termination_reason_check,
-      DROP CONSTRAINT leaderboard_acquisition_terminal_shape,
-      ADD CONSTRAINT leaderboard_acquisition_outcomes_termination_reason_check CHECK (
-        termination_reason IS NULL
-        OR termination_reason IN (
-          'reported_population_reached',
-          'reported_page_count_reached',
-          'short_page',
-          'empty_page',
-          'cursor_exhausted',
-          'single_snapshot',
-          'end_signal_reached',
-          'degenerate_page',
-          'caller_limit',
-          'safety_limit',
-          'upstream_error',
-          'unknown'
-        )
-      ),
-      ADD CONSTRAINT leaderboard_acquisition_terminal_shape CHECK (
-        %s
-        OR (
-          terminal_state = 'complete'
-          AND acquisition_state = 'complete'
-          AND population_state = 'verified'
-          AND capture_evidence_state = 'verified'
-          AND termination_reason IN ('end_signal_reached', 'short_page', 'empty_page')
-          AND capture_started_at IS NOT NULL
-          AND source_run_id IS NOT NULL
-          AND source_payload_raw_object_id IS NOT NULL
-          AND manifest_raw_object_id IS NOT NULL
-          AND diagnostic_raw_object_id IS NULL
-          AND source_page_count IS NOT NULL
-          AND source_page_count > 0
-          AND population_report_state = 'unknown'
-          AND reported_population IS NULL
-          AND page_count_report_state IN ('consistent', 'unknown')
-          AND (
-            page_count_report_state <> 'consistent'
-            OR termination_reason = 'empty_page'
-               AND source_page_count IN (reported_page_count, reported_page_count + 1)
-            OR termination_reason <> 'empty_page'
-               AND source_page_count = reported_page_count
-          )
-          AND observed_population IS NOT NULL
-          AND accepted_population IS NOT NULL
-          AND rejected_row_count IS NOT NULL
-          AND deduplicated_row_count IS NOT NULL
-          AND accepted_population > 0
-          AND rejected_row_count = 0
-          AND observed_population = accepted_population + deduplicated_row_count
-          AND NOT caller_limited
-          AND NOT safety_limited
-          AND failure_stage IS NULL
-          AND reason_code IS NULL
-        )
-      )
-    $sql$,
-    pg_catalog.substr(v_terminal_def, 7)
-  );
-END
-$outcome_constraints$;
-
--- The shape alone cannot read the manifest: a complete outcome without a
--- consistent reported population must carry holding exhaustion evidence.
--- Sorts after ..._reject_direct_row_mutation, so unauthorized inserts are
--- refused before this reads any NEW-selected RAW row.
-CREATE FUNCTION arena.require_leaderboard_exhaustion_evidence()
-RETURNS trigger
+CREATE FUNCTION arena.record_leaderboard_exhaustion_evidence(p_attempt_id uuid)
+RETURNS arena.leaderboard_acquisition_exhaustion_evidence
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, pg_temp
+SET lock_timeout = '5s'
+SET statement_timeout = '30s'
 AS $function$
 DECLARE
-  v_source_id smallint;
-  v_capture_contract text;
-  v_manifest_meta jsonb;
-  v_manifest_contract_ok boolean;
+  v_attempt arena.leaderboard_acquisition_attempts%ROWTYPE;
+  v_outcome arena.leaderboard_acquisition_outcomes%ROWTYPE;
+  v_row arena.leaderboard_acquisition_exhaustion_evidence%ROWTYPE;
 BEGIN
-  IF NEW.terminal_state IS DISTINCT FROM 'complete'
-     OR NEW.population_report_state = 'consistent' THEN
-    RETURN NEW;
+  SELECT * INTO v_attempt
+    FROM arena.leaderboard_acquisition_attempts
+   WHERE attempt_id = p_attempt_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'leaderboard acquisition attempt does not exist'
+      USING ERRCODE = '23503';
+  END IF;
+  PERFORM arena.lock_leaderboard_acquisition_source_window(
+    v_attempt.source_id, v_attempt.timeframe
+  );
+
+  SELECT * INTO v_row
+    FROM arena.leaderboard_acquisition_exhaustion_evidence
+   WHERE attempt_seq = v_attempt.attempt_seq;
+  IF FOUND THEN
+    RETURN v_row;
   END IF;
 
-  SELECT attempt.source_id, attempt.capture_contract
-    INTO v_source_id, v_capture_contract
-    FROM arena.leaderboard_acquisition_attempts AS attempt
-   WHERE attempt.attempt_seq = NEW.attempt_seq;
-  SELECT manifest.meta,
-         manifest.trust_artifact_role = 'population_manifest'
-         AND manifest.source_run_id = NEW.source_run_id
-         AND manifest.content_hash = NEW.source_run_id
-         AND NOT manifest.quarantined
-    INTO v_manifest_meta, v_manifest_contract_ok
-    FROM arena.raw_objects AS manifest
-   WHERE manifest.id = NEW.manifest_raw_object_id;
-
-  IF v_capture_contract IS DISTINCT FROM 'arena.ingest.leaderboard-acquisition-manifest@3'
-     OR v_manifest_meta->>'data_contract' IS DISTINCT FROM
-        'arena.ingest.leaderboard-acquisition-manifest@3'
-     OR v_manifest_contract_ok IS NOT TRUE
-     OR NOT arena.leaderboard_exhaustion_completeness_holds(
-       v_source_id,
-       v_manifest_meta->'acquisition_attempt'->'completeness',
-       NEW.termination_reason,
-       NEW.source_page_count,
-       NEW.population_report_state,
-       NEW.observed_population,
-       NEW.accepted_population,
-       NEW.rejected_row_count,
-       NEW.deduplicated_row_count
-     ) THEN
-    RAISE EXCEPTION 'a complete acquisition without a reported population requires holding exhaustion evidence'
+  SELECT * INTO v_outcome
+    FROM arena.leaderboard_acquisition_outcomes
+   WHERE attempt_seq = v_attempt.attempt_seq;
+  IF NOT FOUND OR NOT arena.leaderboard_outcome_exhaustion_holds(v_attempt.attempt_seq) THEN
+    RAISE EXCEPTION 'acquisition % has no holding exhaustion evidence', p_attempt_id
       USING ERRCODE = '23514';
   END IF;
-  RETURN NEW;
+
+  INSERT INTO arena.leaderboard_acquisition_exhaustion_evidence (
+    attempt_seq, source_id, timeframe, source_run_id, manifest_raw_object_id,
+    completeness_contract
+  ) VALUES (
+    v_attempt.attempt_seq, v_attempt.source_id, v_attempt.timeframe,
+    v_outcome.source_run_id, v_outcome.manifest_raw_object_id,
+    'arena.ingest.leaderboard-exhaustion-completeness@1'
+  )
+  RETURNING * INTO STRICT v_row;
+  RETURN v_row;
 END
 $function$;
 
-CREATE TRIGGER leaderboard_acquisition_outcomes_require_exhaustion_evidence
-  BEFORE INSERT ON arena.leaderboard_acquisition_outcomes
-  FOR EACH ROW EXECUTE FUNCTION arena.require_leaderboard_exhaustion_evidence();
-
--- ── Publication predicate (20261114193017) re-checks the completeness mode ──
+-- ── Publication predicate (20261114193017): either completeness mode ──
 
 CREATE OR REPLACE FUNCTION public.rank_publication_trust_evidence(p_snapshot_ids bigint[])
 RETURNS TABLE (
@@ -701,14 +663,13 @@ AS $function$
         'arena.ingest.leaderboard-acquisition-manifest@3',
         'arena.ingest.leaderboard-acquisition-manifest@4'
       )
-      AND outcome.terminal_state = 'complete'
       AND outcome.source_run_id IS NOT NULL
       AND outcome.manifest_raw_object_id IS NOT NULL
       AND outcome.source_payload_raw_object_id = snapshot.raw_object_id
-      -- Completeness mode: a consistent reported total, or exhaustion
-      -- evidence that still holds against the registered contract.
+      -- Completeness mode: a complete outcome (reported total equal to the
+      -- accepted rows), or an exhausted outcome whose recorded proof holds.
       AND (
-        outcome.population_report_state = 'consistent'
+        outcome.terminal_state = 'complete'
         OR arena.leaderboard_outcome_exhaustion_bound(outcome.attempt_seq)
       )
     ORDER BY outcome.attempt_seq DESC
@@ -717,56 +678,224 @@ AS $function$
   ORDER BY requested.id
 $function$;
 
--- ── Metric-trust run authority (20260722050000) accepts exhausted outcomes ──
+-- ── Metric-trust run authority (20260722050000): either completeness mode ──
 
-DO $metric_trust_authority$
+CREATE OR REPLACE FUNCTION arena.validate_metric_trust_attempt_outcome_authority()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+SET lock_timeout = '5s'
+AS $function$
 DECLARE
-  v_definition text;
-  v_report_from constant text :=
-    E'     AND terminal.population_report_state = ''consistent''\n';
-  v_report_to constant text :=
-    E'     AND terminal.population_report_state IN (''consistent'', ''unknown'')\n';
-  v_counts_from constant text :=
-    E'     AND terminal.observed_population = NEW.fetched_population\n'
-    || E'     AND terminal.accepted_population = NEW.fetched_population\n'
-    || E'     AND terminal.rejected_row_count = 0\n'
-    || E'     AND terminal.deduplicated_row_count = 0\n';
-  v_counts_to constant text :=
-    E'     AND terminal.accepted_population = NEW.fetched_population\n'
-    || E'     AND terminal.rejected_row_count = 0\n'
-    || E'     AND (\n'
-    || E'       (\n'
-    || E'         terminal.population_report_state = ''consistent''\n'
-    || E'         AND terminal.observed_population = NEW.fetched_population\n'
-    || E'         AND terminal.deduplicated_row_count = 0\n'
-    || E'       )\n'
-    || E'       OR (\n'
-    || E'         terminal.population_report_state = ''unknown''\n'
-    || E'         AND NEW.reported_population IS NULL\n'
-    || E'         AND terminal.observed_population =\n'
-    || E'             NEW.fetched_population + terminal.deduplicated_row_count\n'
-    || E'         AND arena.leaderboard_outcome_exhaustion_bound(terminal.attempt_seq)\n'
-    || E'       )\n'
-    || E'     )\n';
+  v_manifest_contract text;
+  v_manifest_meta jsonb;
+  v_manifest_content_hash text;
+  v_manifest_storage_path text;
+  v_manifest_quarantined boolean;
+  v_population_content_hash text;
+  v_population_storage_path text;
+  v_population_quarantined boolean;
+  v_source_slug text;
+  v_source_adapter_slug text;
+  v_source_status text;
+  v_source_serving_mode text;
+  v_source_currency text;
+  v_source_fetch_region text;
+  v_registered_adapter_slug text;
+  v_registered_binding_contract text;
+  v_requires_runner_git_sha boolean;
 BEGIN
-  v_definition := pg_catalog.pg_get_functiondef(
-    'arena.validate_metric_trust_attempt_outcome_authority()'::pg_catalog.regprocedure
-  );
-  IF (pg_catalog.length(v_definition) - pg_catalog.length(pg_catalog.replace(v_definition, v_report_from, '')))
-       / pg_catalog.length(v_report_from) IS DISTINCT FROM 1
-     OR (pg_catalog.length(v_definition) - pg_catalog.length(pg_catalog.replace(v_definition, v_counts_from, '')))
-       / pg_catalog.length(v_counts_from) IS DISTINCT FROM 1 THEN
-    RAISE EXCEPTION 'metric-trust outcome authority does not contain the reviewed population predicates exactly once';
-  END IF;
-  EXECUTE pg_catalog.replace(
-    pg_catalog.replace(v_definition, v_report_from, v_report_to),
-    v_counts_from,
-    v_counts_to
-  );
-END
-$metric_trust_authority$;
+  SELECT manifest.meta->>'data_contract'
+    INTO STRICT v_manifest_contract
+    FROM arena.raw_objects AS manifest
+   WHERE manifest.id = NEW.manifest_raw_object_id;
 
--- ── Ownership and grants: internal helpers have no API surface ──
+  -- 040000 intentionally keeps existing v2 workers and in-flight v2 attempts
+  -- valid. Retirement must be represented by a later explicit policy; it may
+  -- not be inferred merely from the simultaneous v3 registry row.
+  IF v_manifest_contract =
+     'arena.ingest.leaderboard-acquisition-manifest@2' THEN
+    RETURN NEW;
+  END IF;
+
+  IF v_manifest_contract IS DISTINCT FROM
+     'arena.ingest.leaderboard-acquisition-manifest@3' THEN
+    RAISE EXCEPTION 'metric-trust manifest contract is not registered for trusted publication'
+     USING ERRCODE = '23514';
+  END IF;
+
+  -- v2 returned before this point and therefore keeps its original serving
+  -- and concurrency semantics. For v3, serialize before reading
+  -- latest_terminal. The 042 outcome serializer holds this same lock until
+  -- COMMIT, closing the validate-to-insert race without a duplicate trigger.
+  PERFORM arena.lock_leaderboard_acquisition_source_window(
+    NEW.source_id,
+    NEW.timeframe
+  );
+
+  -- A trigger query that waits for a concurrent outcome must take a fresh
+  -- READ COMMITTED snapshot after the advisory fence is acquired. Reject
+  -- transaction-wide snapshots rather than authorizing against stale state.
+  IF pg_catalog.current_setting('transaction_isolation') IS DISTINCT FROM
+     'read committed' THEN
+    RAISE EXCEPTION 'attempt-bound metric-trust publication requires READ COMMITTED isolation'
+      USING ERRCODE = '25001';
+  END IF;
+
+  SELECT
+    manifest.meta,
+    manifest.content_hash,
+    manifest.storage_path,
+    manifest.quarantined,
+    population.content_hash,
+    population.storage_path,
+    population.quarantined
+  INTO STRICT
+    v_manifest_meta,
+    v_manifest_content_hash,
+    v_manifest_storage_path,
+    v_manifest_quarantined,
+    v_population_content_hash,
+    v_population_storage_path,
+    v_population_quarantined
+  FROM arena.raw_objects AS manifest
+  CROSS JOIN arena.raw_objects AS population
+  WHERE manifest.id = NEW.manifest_raw_object_id
+    AND population.id = NEW.population_raw_object_id;
+
+  SELECT
+    source.slug,
+    source.adapter_slug,
+    source.status,
+    source.serving_mode,
+    source.currency,
+    source.fetch_region,
+    capture.adapter_slug,
+    capture.attempt_binding_contract,
+    capture.requires_runner_git_sha
+  INTO STRICT
+    v_source_slug,
+    v_source_adapter_slug,
+    v_source_status,
+    v_source_serving_mode,
+    v_source_currency,
+    v_source_fetch_region,
+    v_registered_adapter_slug,
+    v_registered_binding_contract,
+    v_requires_runner_git_sha
+  FROM arena.sources AS source
+  JOIN arena.leaderboard_capture_contracts AS capture
+    ON capture.source_id = source.id
+   AND capture.capture_contract = v_manifest_contract
+  WHERE source.id = NEW.source_id
+  FOR SHARE OF source;
+
+  IF v_registered_adapter_slug IS DISTINCT FROM v_source_adapter_slug
+     OR v_registered_binding_contract IS DISTINCT FROM
+        'arena.ingest.leaderboard-acquisition-attempt-binding@1'
+     OR NOT v_requires_runner_git_sha
+     OR v_manifest_quarantined
+     OR v_population_quarantined
+     OR v_manifest_content_hash IS DISTINCT FROM NEW.source_run_id THEN
+    RAISE EXCEPTION 'attempt-bound metric-trust RAW or registry identity is invalid'
+      USING ERRCODE = '23514';
+  END IF;
+
+  PERFORM 1
+    FROM arena.latest_terminal_leaderboard_acquisitions AS terminal
+   WHERE terminal.source_id = NEW.source_id
+     AND terminal.timeframe = NEW.timeframe
+     AND terminal.source_slug = v_source_slug
+     AND terminal.adapter_slug = v_source_adapter_slug
+     AND terminal.source_status = 'active'
+     AND terminal.source_status = v_source_status
+     AND terminal.source_serving_mode = v_source_serving_mode
+     AND terminal.source_currency = v_source_currency
+     AND terminal.source_fetch_region = v_source_fetch_region
+     AND terminal.worker_region IS NOT NULL
+     AND terminal.worker_region = terminal.source_fetch_region
+     AND terminal.worker_region = v_source_fetch_region
+     AND terminal.capture_contract = v_manifest_contract
+     AND terminal.attempt_binding_contract = v_registered_binding_contract
+     AND terminal.attempt_id::text =
+         v_manifest_meta->'acquisition_attempt'->>'attempt_id'
+     AND terminal.attempt_seq::text =
+         v_manifest_meta->'acquisition_attempt'->>'attempt_seq'
+     AND terminal.observation_cycle_id IS NOT DISTINCT FROM
+         v_manifest_meta->>'observation_cycle_id'
+     AND terminal.runner_git_sha IS NOT NULL
+     AND terminal.runner_git_sha IS NOT DISTINCT FROM
+         v_manifest_meta->'acquisition_attempt'->>'runner_git_sha'
+     AND terminal.recorded_started_at = NEW.started_at
+     AND terminal.acquisition_state = 'complete'
+     AND terminal.acquisition_state = NEW.acquisition_state
+     AND terminal.capture_evidence_state = 'verified'
+     AND terminal.termination_reason IS NOT NULL
+     AND terminal.capture_started_at = NEW.started_at
+     AND terminal.capture_completed_at = NEW.completed_at
+     AND terminal.source_run_id = NEW.source_run_id
+     AND terminal.source_payload_raw_object_id = NEW.population_raw_object_id
+     AND terminal.source_payload_content_hash = v_population_content_hash
+     AND terminal.source_payload_storage_path = v_population_storage_path
+     AND terminal.manifest_raw_object_id = NEW.manifest_raw_object_id
+     AND terminal.manifest_content_hash = v_manifest_content_hash
+     AND terminal.manifest_storage_path = v_manifest_storage_path
+     AND terminal.diagnostic_raw_object_id IS NULL
+     AND terminal.diagnostic_content_hash IS NULL
+     AND terminal.diagnostic_storage_path IS NULL
+     AND terminal.source_page_count IS NOT NULL
+     AND terminal.source_page_count > 0
+     AND terminal.accepted_population = NEW.fetched_population
+     AND terminal.rejected_row_count = 0
+     AND NOT terminal.caller_limited
+     AND terminal.caller_limited = NEW.caller_limited
+     AND NOT terminal.safety_limited
+     AND terminal.failure_stage IS NULL
+     -- Completeness mode (20261115141050): a reported total equal to the
+     -- accepted rows, or exhaustion evidence recorded for this outcome.
+     AND (
+       (
+         terminal.terminal_state = 'complete'
+         AND terminal.population_state = 'verified'
+         AND NEW.population_state = 'verified'
+         AND terminal.reported_population IS NOT DISTINCT FROM NEW.reported_population
+         AND terminal.population_report_state = 'consistent'
+         AND terminal.observed_population = NEW.fetched_population
+         AND terminal.deduplicated_row_count = 0
+         AND terminal.reason_code IS NULL
+       )
+       OR (
+         terminal.terminal_state = 'unknown'
+         AND terminal.population_state = 'unknown'
+         AND NEW.population_state = 'verified'
+         AND terminal.population_report_state = 'unknown'
+         AND terminal.reported_population IS NULL
+         AND NEW.reported_population IS NULL
+         AND terminal.observed_population =
+             NEW.fetched_population + terminal.deduplicated_row_count
+         AND terminal.reason_code = 'population_unknown'
+         AND arena.leaderboard_outcome_exhaustion_bound(terminal.attempt_seq)
+       )
+     );
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'v3 metric-trust run is not authorized by the exact latest terminal outcome'
+      USING ERRCODE = '23514';
+  END IF;
+
+  RETURN NEW;
+EXCEPTION
+  WHEN NO_DATA_FOUND THEN
+    RAISE EXCEPTION 'attempt-bound metric-trust authority identity does not exist'
+      USING ERRCODE = '23503';
+  WHEN TOO_MANY_ROWS THEN
+    RAISE EXCEPTION 'attempt-bound metric-trust authority identity is ambiguous'
+      USING ERRCODE = '23514';
+END
+$function$;
+
+-- ── Ownership and grants ──
 
 ALTER FUNCTION arena.leaderboard_exhaustion_path_valid(jsonb) OWNER TO postgres;
 ALTER FUNCTION arena.leaderboard_exhaustion_scalar_valid(jsonb) OWNER TO postgres;
@@ -778,9 +907,13 @@ ALTER FUNCTION arena.reject_leaderboard_exhaustion_contract_mutation() OWNER TO 
 ALTER FUNCTION arena.leaderboard_exhaustion_completeness_holds(
   smallint, jsonb, text, integer, text, integer, integer, integer, integer
 ) OWNER TO postgres;
+ALTER FUNCTION arena.leaderboard_outcome_exhaustion_holds(bigint) OWNER TO postgres;
 ALTER FUNCTION arena.leaderboard_outcome_exhaustion_bound(bigint) OWNER TO postgres;
-ALTER FUNCTION arena.require_leaderboard_exhaustion_evidence() OWNER TO postgres;
+ALTER FUNCTION arena.record_leaderboard_exhaustion_evidence(uuid) OWNER TO postgres;
+ALTER FUNCTION arena.validate_metric_trust_attempt_outcome_authority() OWNER TO postgres;
+ALTER FUNCTION public.rank_publication_trust_evidence(bigint[]) OWNER TO postgres;
 ALTER TABLE arena.leaderboard_exhaustion_contracts OWNER TO postgres;
+ALTER TABLE arena.leaderboard_acquisition_exhaustion_evidence OWNER TO postgres;
 
 REVOKE ALL ON FUNCTION arena.leaderboard_exhaustion_path_valid(jsonb)
   FROM PUBLIC, anon, authenticated, service_role;
@@ -799,13 +932,15 @@ REVOKE ALL ON FUNCTION arena.reject_leaderboard_exhaustion_contract_mutation()
 REVOKE ALL ON FUNCTION arena.leaderboard_exhaustion_completeness_holds(
   smallint, jsonb, text, integer, text, integer, integer, integer, integer
 ) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION arena.leaderboard_outcome_exhaustion_holds(bigint)
+  FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION arena.leaderboard_outcome_exhaustion_bound(bigint)
   FROM PUBLIC, anon, authenticated, service_role;
-REVOKE ALL ON FUNCTION arena.require_leaderboard_exhaustion_evidence()
+REVOKE ALL ON FUNCTION arena.record_leaderboard_exhaustion_evidence(uuid)
   FROM PUBLIC, anon, authenticated, service_role;
-
--- CREATE OR REPLACE keeps the predicate's 20261114193017 ACL; restate it.
-ALTER FUNCTION public.rank_publication_trust_evidence(bigint[]) OWNER TO postgres;
+GRANT EXECUTE ON FUNCTION arena.record_leaderboard_exhaustion_evidence(uuid) TO service_role;
+REVOKE ALL ON FUNCTION arena.validate_metric_trust_attempt_outcome_authority()
+  FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.rank_publication_trust_evidence(bigint[])
   FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.rank_publication_trust_evidence(bigint[]) TO service_role;

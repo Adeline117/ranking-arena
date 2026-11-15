@@ -36,6 +36,7 @@ import {
   assessLeaderboardNativeWindowRequest,
   type NativeWindowRequestEvidence,
 } from '../leaderboard-request-evidence'
+import { ledgerOutcomeStatesForManifest } from '../acquisition-attempts'
 import type { LeaderboardRawArtifactSetReceipt } from '../raw'
 import { strictCanonicalSha256 } from '../strict-canonical-json'
 import type { IngestQueryExecutor } from '../db'
@@ -888,6 +889,12 @@ async function assertAttemptBoundAcquisitionOutcome(
 
   const populationReport = manifest.population.reports.population
   const pageCountReport = manifest.population.reports.page_count
+  // Total mode: one 'complete' outcome. Exhausted mode: the truthful
+  // population-unknown outcome plus its recorded exhaustion proof.
+  const ledger = ledgerOutcomeStatesForManifest(manifest)
+  if (ledger.terminalState !== 'complete' && !ledger.exhaustionVerified) {
+    throw publicationError(failureDetail)
+  }
   const expected = {
     attempt_id: manifest.acquisition_attempt.attempt_id,
     attempt_seq: manifest.acquisition_attempt.attempt_seq,
@@ -901,9 +908,11 @@ async function assertAttemptBoundAcquisitionOutcome(
     runner_git_sha: manifest.runner_git_sha,
     started_at: manifest.started_at,
     completed_at: manifest.completed_at,
-    terminal_state: 'complete',
-    acquisition_state: manifest.assessment.acquisition_state,
-    population_state: manifest.assessment.population_state,
+    terminal_state: ledger.terminalState,
+    acquisition_state: ledger.acquisitionState,
+    population_state: ledger.populationState,
+    reason_code: ledger.reasonCode,
+    exhausted: ledger.exhaustionVerified,
     capture_evidence_state: manifest.capture_evidence_state,
     termination_reason: manifest.termination_reason,
     source_run_id: prepared.sourceRunId,
@@ -945,6 +954,8 @@ async function assertAttemptBoundAcquisitionOutcome(
            terminal_state text,
            acquisition_state text,
            population_state text,
+           reason_code text,
+           exhausted boolean,
            capture_evidence_state text,
            termination_reason text,
            source_run_id text,
@@ -1008,7 +1019,16 @@ async function assertAttemptBoundAcquisitionOutcome(
         AND terminal.safety_limited = expected.safety_limited
         AND terminal.diagnostic_raw_object_id IS NULL
         AND terminal.failure_stage IS NULL
-        AND terminal.reason_code IS NULL`,
+        AND terminal.reason_code IS NOT DISTINCT FROM expected.reason_code
+        AND (
+          NOT expected.exhausted
+          OR EXISTS (
+            SELECT 1
+              FROM arena.leaderboard_acquisition_exhaustion_evidence AS evidence
+             WHERE evidence.attempt_seq = terminal.attempt_seq
+               AND evidence.source_run_id = terminal.source_run_id
+          )
+        )`,
     [JSON.stringify(expected)]
   )
 

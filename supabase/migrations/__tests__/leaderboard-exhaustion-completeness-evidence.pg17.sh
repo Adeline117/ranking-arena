@@ -4,15 +4,18 @@
 # outcome authority) and 20261114193017 (publication trust predicate) run on
 # stub base tables; every outcome below goes through the real finish RPC.
 #
-#   + a registered flag/token board finishes complete without a reported
-#     total, binds rank_publication_trust_evidence, and authorizes its
-#     metric-trust run; a total-mode board still binds (regression)
+#   + a registered flag/token board finishes with the truthful outcome
+#     (unknown / acquisition complete / population unknown), records its
+#     exhaustion proof, binds rank_publication_trust_evidence, and authorizes
+#     a verified metric-trust run; a total-mode board still binds
 #   + cross-page duplicates within the declared allowance bind
-#   - missing end signal, gap in pages, duplicates above the allowance,
-#     version change, unregistered declaration, no completeness block:
-#     the finish refuses (23514) and no outcome is written
-#   - a re-read whose row keys differ refuses
-#   - malformed declarations are refused; the registry is append-only
+#   - missing end signal, early end, gap in pages, page-count mismatch,
+#     duplicates above the allowance, version change, unregistered
+#     declaration, no completeness block, moved re-read: recording refuses
+#     (23514), nothing is recorded, the board does not bind
+#   - an exhausted outcome without a recorded proof binds nothing and
+#     authorizes no metric-trust run
+#   - malformed declarations are refused; registry and proofs are append-only
 #   - replaying the migration refuses
 
 set -Eeuo pipefail
@@ -299,7 +302,7 @@ BEGIN
     'caller_limited', false,
     'safety_limited', false,
     'acquisition_state', 'complete',
-    'population_state', 'verified'
+    'population_state', CASE WHEN p_reported IS NULL THEN 'unknown' ELSE 'verified' END
   ) || CASE WHEN p_completeness IS NULL THEN '{}'::jsonb
             ELSE jsonb_build_object('completeness', p_completeness) END;
 
@@ -343,13 +346,16 @@ RETURNS text LANGUAGE sql AS \$\$
   SELECT outcome.terminal_state
     FROM public.exhaustion_cases AS c
     CROSS JOIN LATERAL arena.finish_leaderboard_acquisition_attempt(
-      c.attempt_id, 'complete', 'complete', 'verified', 'verified',
+      c.attempt_id,
+      CASE WHEN c.summary->>'reported_population' IS NULL THEN 'unknown' ELSE 'complete' END,
+      'complete', c.summary->>'population_state', 'verified',
       c.summary->>'termination_reason', c.started_at, c.completed_at,
       c.source_run_id, c.payload_id, c.manifest_id, NULL,
       (c.summary->>'reported_population')::int, c.summary->>'population_report_state',
       (c.summary->>'source_page_count')::int, NULL, 'unknown',
       (c.summary->>'observed_population')::int, (c.summary->>'accepted_population')::int,
-      0, (c.summary->>'deduplicated_row_count')::int, false, false, NULL, NULL
+      0, (c.summary->>'deduplicated_row_count')::int, false, false, NULL,
+      CASE WHEN c.summary->>'reported_population' IS NULL THEN 'population_unknown' END
     ) AS outcome
    WHERE c.attempt_id = p_attempt_id
 \$\$;
@@ -372,81 +378,90 @@ trust_bound() {
   psql_cmd -Atqc "SELECT trust_bound FROM public.rank_publication_trust_evidence(ARRAY[$1]::bigint[])"
 }
 
-# ── Positive: flag + token board, no reported total ──
-
-start_case 100 end_signal_reached 2 3 3 \
-  "public.exhaustion_completeness('[[2,true,\"v1\"],[1,false,\"v1\"]]', 3)"
-assert_equal "exhausted board finishes complete" "complete" \
-  "$(psql_cmd -Atqc "SELECT public.finish_exhaustion_case('$CASE_ID')")"
-assert_equal "exhausted board binds the publication predicate" "t" "$(trust_bound 100)"
-GOOD_CASE="$CASE_ID"
-
-# Metric-trust run authority accepts the exhausted outcome (reported NULL).
-psql_cmd -q -c "
-  INSERT INTO arena.metric_trust_runs (
-    source_run_id, source_id, timeframe, snapshot_id, snapshot_scraped_at,
-    population_raw_object_id, manifest_raw_object_id, started_at, completed_at,
-    reported_population, fetched_population, caller_limited, acquisition_state, population_state)
-  SELECT c.source_run_id, 1, 30, s.id, s.scraped_at, c.payload_id, c.manifest_id,
-         c.started_at, c.completed_at, NULL, 3, false, 'complete', 'verified'
-    FROM public.exhaustion_cases AS c JOIN arena.leaderboard_snapshots AS s ON s.id = c.snapshot_id
-   WHERE c.attempt_id = '$GOOD_CASE'" >/dev/null
-echo "ok: metric-trust run authorized by the exhausted outcome"
-
-# ── Positive: duplicates within the declared allowance (max 1) ──
-
-start_case 101 end_signal_reached 2 3 2 \
-  "public.exhaustion_completeness('[[2,true,\"v1\"],[1,false,\"v1\"]]', 2)"
-assert_equal "one cross-page duplicate within the allowance" "complete" \
-  "$(psql_cmd -Atqc "SELECT public.finish_exhaustion_case('$CASE_ID')")"
-assert_equal "deduplicated board binds" "t" "$(trust_bound 101)"
+record_sql() {
+  echo "SELECT attempt_seq FROM arena.record_leaderboard_exhaustion_evidence('$1')"
+}
 metric_run_sql() {
+  # metric_run_sql <attempt_id> <reported> <fetched>
   echo "INSERT INTO arena.metric_trust_runs (
     source_run_id, source_id, timeframe, snapshot_id, snapshot_scraped_at,
     population_raw_object_id, manifest_raw_object_id, started_at, completed_at,
     reported_population, fetched_population, caller_limited, acquisition_state, population_state)
-  SELECT c.source_run_id, 1, 30, s.id, s.scraped_at, c.payload_id, c.manifest_id,
+  SELECT c.source_run_id, s.source_id, 30, s.id, s.scraped_at, c.payload_id, c.manifest_id,
          c.started_at, c.completed_at, $2, $3, false, 'complete', 'verified'
     FROM public.exhaustion_cases AS c JOIN arena.leaderboard_snapshots AS s ON s.id = c.snapshot_id
    WHERE c.attempt_id = '$1'"
 }
-expect_failure "metric-trust run claiming a reported total for an exhausted outcome" \
-  "$(metric_run_sql "$CASE_ID" 2 2)" \
+
+# ── Positive: flag + token board, no reported total ──
+
+start_case 100 cursor_exhausted 2 3 3 \
+  "public.exhaustion_completeness('[[2,true,\"v1\"],[1,false,\"v1\"]]', 3)"
+assert_equal "exhausted board keeps the truthful ledger outcome" "unknown" \
+  "$(psql_cmd -Atqc "SELECT public.finish_exhaustion_case('$CASE_ID')")"
+assert_equal "an unrecorded proof binds nothing" "f" "$(trust_bound 100)"
+expect_failure "metric-trust run before the proof is recorded" \
+  "$(metric_run_sql "$CASE_ID" NULL 3)" \
   "v3 metric-trust run is not authorized by the exact latest terminal outcome" "23514"
+psql_cmd -q -c "SET ROLE service_role; $(record_sql "$CASE_ID")" >/dev/null
+psql_cmd -q -c "$(record_sql "$CASE_ID")" >/dev/null
+assert_equal "recording is idempotent" "1" "$(psql_cmd -Atqc "
+  SELECT count(*) FROM arena.leaderboard_acquisition_exhaustion_evidence AS e
+    JOIN arena.leaderboard_acquisition_attempts AS a USING (attempt_seq)
+   WHERE a.attempt_id = '$CASE_ID'")"
+assert_equal "exhausted board binds the publication predicate" "t" "$(trust_bound 100)"
+expect_failure "metric-trust run claiming a reported total for an exhausted outcome" \
+  "$(metric_run_sql "$CASE_ID" 3 3)" \
+  "v3 metric-trust run is not authorized by the exact latest terminal outcome" "23514"
+psql_cmd -q -c "$(metric_run_sql "$CASE_ID" NULL 3)" >/dev/null
+echo "ok: verified metric-trust run authorized by the exhausted proof"
+expect_failure "proof update" \
+  "UPDATE arena.leaderboard_acquisition_exhaustion_evidence SET recorded_at = now()" \
+  "append-only" "42501"
+
+# ── Positive: duplicates within the declared allowance (max 1) ──
+
+start_case 101 cursor_exhausted 2 3 2 \
+  "public.exhaustion_completeness('[[2,true,\"v1\"],[1,false,\"v1\"]]', 2)"
+psql_cmd -q -c "SELECT public.finish_exhaustion_case('$CASE_ID')" >/dev/null
+psql_cmd -q -c "$(record_sql "$CASE_ID")" >/dev/null
+assert_equal "one cross-page duplicate within the allowance binds" "t" "$(trust_bound 101)"
 psql_cmd -q -c "$(metric_run_sql "$CASE_ID" NULL 2)" >/dev/null
 echo "ok: metric-trust run authorized for observed = fetched + deduplicated"
 
-# ── Negatives: the finish refuses, nothing is written ──
+# ── Negatives: recording refuses, nothing binds ──
 
 refuse_case() {
   local label="$1"
   shift
   start_case "$@"
-  expect_failure "$label" "SELECT public.finish_exhaustion_case('$CASE_ID')" \
-    "requires holding exhaustion evidence" "23514"
-  assert_equal "$label leaves no outcome" "0" "$(psql_cmd -Atqc "
-    SELECT count(*) FROM arena.leaderboard_acquisition_outcomes AS o
+  psql_cmd -q -c "SELECT public.finish_exhaustion_case('$CASE_ID')" >/dev/null
+  expect_failure "$label" "$(record_sql "$CASE_ID")" "has no holding exhaustion evidence" "23514"
+  assert_equal "$label records no proof" "0" "$(psql_cmd -Atqc "
+    SELECT count(*) FROM arena.leaderboard_acquisition_exhaustion_evidence AS e
       JOIN arena.leaderboard_acquisition_attempts AS a USING (attempt_seq)
      WHERE a.attempt_id = '$CASE_ID'")"
   assert_equal "$label snapshot is not trust-bound" "f" "$(trust_bound "$1")"
 }
 
-refuse_case "missing end signal on the last page" 110 end_signal_reached 2 3 3 \
+refuse_case "missing end signal on the last page" 110 cursor_exhausted 2 3 3 \
   "public.exhaustion_completeness('[[2,true,\"v1\"],[1,true,\"v1\"]]', 3)"
-refuse_case "end signal before the last page" 111 end_signal_reached 2 3 3 \
+refuse_case "end signal before the last page" 111 cursor_exhausted 2 3 3 \
   "public.exhaustion_completeness('[[2,false,\"v1\"],[1,false,\"v1\"]]', 3)"
-refuse_case "gap in pages" 112 end_signal_reached 2 3 3 \
+refuse_case "gap in pages" 112 cursor_exhausted 2 3 3 \
   "public.exhaustion_completeness('[[2,true,\"v1\"],[1,false,\"v1\"]]', 3, p_ordinal_offset => 1)"
-refuse_case "page count differs from the source pages" 113 end_signal_reached 3 3 3 \
+refuse_case "page count differs from the source pages" 113 cursor_exhausted 3 3 3 \
   "public.exhaustion_completeness('[[2,true,\"v1\"],[1,false,\"v1\"]]', 3)"
-refuse_case "duplicates above the allowance" 114 end_signal_reached 3 4 2 \
+refuse_case "duplicates above the allowance" 114 cursor_exhausted 3 4 2 \
   "public.exhaustion_completeness('[[2,true,\"v1\"],[1,true,\"v1\"],[1,false,\"v1\"]]', 2)"
-refuse_case "board version changed between pages" 115 end_signal_reached 2 3 3 \
+refuse_case "board version changed between pages" 115 cursor_exhausted 2 3 3 \
   "public.exhaustion_completeness('[[2,true,\"v1\"],[1,false,\"v2\"]]', 3)"
-refuse_case "declaration differs from the registered contract" 116 end_signal_reached 2 3 3 \
+refuse_case "declaration differs from the registered contract" 116 cursor_exhausted 2 3 3 \
   "public.exhaustion_completeness('[[2,true,\"v1\"],[1,false,\"v1\"]]', 3,
      p_declaration => jsonb_set('$DECLARATION'::jsonb, '{max_duplicate_rows}', '5'))"
-refuse_case "no completeness block" 117 end_signal_reached 2 3 3 "NULL"
+refuse_case "termination that is not the declared end signal" 117 short_page 2 3 3 \
+  "public.exhaustion_completeness('[[2,true,\"v1\"],[1,false,\"v1\"]]', 3)"
+refuse_case "no completeness block" 118 cursor_exhausted 2 3 3 "NULL"
 
 # first_page_reread: the re-read must yield page one's row keys.
 REREAD_DECLARATION='{"completeness_mode":"exhausted","list_path":["data","rows"],"row_key_path":["uid"],"end_signal":{"kind":"short_page"},"board_version":{"kind":"first_page_reread"},"max_duplicate_rows":0}'
@@ -457,7 +472,7 @@ psql_cmd -q -c "INSERT INTO arena.leaderboard_capture_contracts
   VALUES (2, 'arena.ingest.leaderboard-acquisition-manifest@3', 'binance_web3',
           'arena.ingest.leaderboard-acquisition-attempt-binding@1', true)"
 reread_case() {
-  # reread_case <snapshot> <reread row-key seed>
+  # reread_case <snapshot> <re-read row-key seed>
   case_n=$((case_n + 1))
   CASE_ID="$(printf '00000000-0000-4000-8000-%012d' "$case_n")"
   psql_cmd -q >/dev/null <<SQL
@@ -471,14 +486,15 @@ SELECT public.prepare_exhaustion_case('$CASE_ID', $1, 'short_page', 2, 3, 3,
       'http_status', 200,
       'row_keys_sha256', encode(sha256(convert_to('$2', 'UTF8')), 'hex'))),
     '$REREAD_DECLARATION'::jsonb));
+SELECT public.finish_exhaustion_case('$CASE_ID');
 SQL
 }
 reread_case 120 page-one
-assert_equal "stable re-read board finishes complete" "complete" \
-  "$(psql_cmd -Atqc "SELECT public.finish_exhaustion_case('$CASE_ID')")"
+psql_cmd -q -c "$(record_sql "$CASE_ID")" >/dev/null
+assert_equal "stable re-read board binds" "t" "$(trust_bound 120)"
 reread_case 121 moved-board
-expect_failure "re-read with different row keys" \
-  "SELECT public.finish_exhaustion_case('$CASE_ID')" "requires holding exhaustion evidence" "23514"
+expect_failure "re-read with different row keys" "$(record_sql "$CASE_ID")" \
+  "has no holding exhaustion evidence" "23514"
 
 # ── Regression: a total-mode board still binds; its finish is unchanged ──
 
@@ -491,7 +507,11 @@ SELECT public.prepare_exhaustion_case('00000000-0000-4000-8000-000000000999', 14
 SQL
 assert_equal "total-mode board finishes complete" "complete" \
   "$(psql_cmd -Atqc "SELECT public.finish_exhaustion_case('00000000-0000-4000-8000-000000000999')")"
+expect_failure "recording a proof for a total-mode outcome" \
+  "$(record_sql 00000000-0000-4000-8000-000000000999)" "has no holding exhaustion evidence" "23514"
 assert_equal "total-mode board binds the publication predicate" "t" "$(trust_bound 140)"
+psql_cmd -q -c "$(metric_run_sql 00000000-0000-4000-8000-000000000999 1 1)" >/dev/null
+echo "ok: total-mode metric-trust run still authorized"
 assert_equal "earlier exhausted board still binds" "t" "$(trust_bound 100)"
 
 echo "leaderboard exhaustion completeness PG17 proof passed"

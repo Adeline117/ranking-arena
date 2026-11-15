@@ -114,7 +114,7 @@ describe('exhausted completeness capture', () => {
       flagDeclaration
     )
 
-    expect(capture.terminationReason).toBe('end_signal_reached')
+    expect(capture.terminationReason).toBe('cursor_exhausted')
     // Page 2+ carry page one's version token, and it is persisted in RAW.
     expect(requests[1].url).toContain('dataVer=v1')
     expect(capture.sourcePages[1].rawPage.url).toContain('dataVer=v1')
@@ -130,9 +130,16 @@ describe('exhausted completeness capture', () => {
 
     const result = evidence(capture, flagDeclaration)
     expect(result).toMatchObject({ completenessMode: 'exhausted', trustBound: true })
+    // The ledger stays truthful (no reported total); the proof binds instead.
+    expect(result.built.manifest.assessment).toEqual({
+      acquisition_state: 'complete',
+      population_state: 'verified',
+    })
     expect(result.projection).toMatchObject({
-      terminalState: 'complete',
-      populationState: 'verified',
+      terminalState: 'unknown',
+      populationState: 'unknown',
+      reasonCode: 'population_unknown',
+      exhaustionVerified: true,
       populationReportState: 'unknown',
       reportedPopulation: null,
       acceptedPopulation: 5,
@@ -170,7 +177,7 @@ describe('exhausted completeness capture', () => {
     )
     const result = evidence(capture, flagDeclaration)
     expect(result.trustBound).toBe(false)
-    expect(result.projection.terminalState).toBe('unknown')
+    expect(result.projection.exhaustionVerified).toBe(false)
   })
 
   it('rejects cross-page duplicates above the allowance and accepts them within it', async () => {
@@ -259,7 +266,11 @@ describe('exhausted completeness capture', () => {
       pageCount
     )
     expect(requests).toHaveLength(2)
-    expect(capture.terminationReason).toBe('end_signal_reached')
+    expect(capture.terminationReason).toBe('reported_page_count_reached')
+    expect(capture.sourcePages.map((p) => p.sourceReports.page_count)).toEqual([
+      { state: 'reported', value: 2 },
+      { state: 'reported', value: 2 },
+    ])
     expect(evidence(capture, pageCount).trustBound).toBe(true)
   })
 

@@ -1211,22 +1211,38 @@ export async function processTierA(
         failureStage = 'attempt_finalize'
         failureReason = 'attempt_finalize_failed'
         throwIfTierACancelled(executionSignal)
-        await execution.withClaimedWrite((transaction) =>
-          finishLeaderboardAcquisitionAttemptInTransaction(transaction, executionBinding, {
-            kind: 'manifest',
-            attempt,
-            projection: artifactSet.projection,
-            sourcePayloadRawObjectId: artifactSet.sourcePayload.id,
-            manifestRawObjectId: artifactSet.populationManifest.id,
-          })
-        )
+        await execution.withClaimedWrite(async (transaction) => {
+          const outcome = await finishLeaderboardAcquisitionAttemptInTransaction(
+            transaction,
+            executionBinding,
+            {
+              kind: 'manifest',
+              attempt,
+              projection: artifactSet.projection,
+              sourcePayloadRawObjectId: artifactSet.sourcePayload.id,
+              manifestRawObjectId: artifactSet.populationManifest.id,
+            }
+          )
+          // Exhausted mode: the outcome records no reported total; its
+          // exhaustion proof is recorded atomically with it (the DB re-checks it).
+          if (artifactSet.projection.exhaustionVerified) {
+            await transaction.query(
+              'SELECT 1 FROM arena.record_leaderboard_exhaustion_evidence($1)',
+              [attempt.attemptId]
+            )
+          }
+          return outcome
+        })
         throwIfTierACancelled(executionSignal)
         attemptLifecycle = 'terminal'
 
         // The failed/partial response is now durable and terminal. Preserve
         // the upstream error for retry classification, but never publish it.
         if (capturedError) throw capturedError
-        if (artifactSet.projection.terminalState !== 'complete') {
+        if (
+          artifactSet.projection.terminalState !== 'complete' &&
+          !artifactSet.projection.exhaustionVerified
+        ) {
           throw new Error(
             `acquisition trust gate FAILED: acquisition=` +
               `${artifactSet.projection.acquisitionState}, population=` +

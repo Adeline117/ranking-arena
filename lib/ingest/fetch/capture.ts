@@ -278,7 +278,7 @@ export type NumericLeaderboardTerminationReason = Extract<
   | 'reported_page_count_reached'
   | 'short_page'
   | 'empty_page'
-  | 'end_signal_reached'
+  | 'cursor_exhausted'
   | 'degenerate_page'
   | 'caller_limit'
   | 'safety_limit'
@@ -1105,8 +1105,18 @@ export async function captureNumericLeaderboard(
             '[ingest] an exhausted capture must not report a population; use the total mode'
           )
         }
+        const facts = exhaustionPageFacts(exhaustion, payload, meta.rowCount)
+        if (exhaustion.end_signal.kind === 'page_count') {
+          // The declared page-count path is the page-count report.
+          if (meta.reportedPageCount !== null && meta.reportedPageCount !== facts.endSignalValue) {
+            throw new TypeError(
+              '[ingest] exhausted capture page count disagrees with the page meta'
+            )
+          }
+          meta.reportedPageCount = facts.endSignalValue as number
+        }
         exhaustionPages.push({
-          ...exhaustionPageFacts(exhaustion, payload, meta.rowCount),
+          ...facts,
           requestSha256,
           responseSha256: strictCanonicalSha256(payload),
           rowCount: meta.rowCount,
@@ -1174,11 +1184,17 @@ export async function captureNumericLeaderboard(
       const endSignal = exhaustion.end_signal
       const endValue = exhaustionPages[exhaustionPages.length - 1].endSignalValue
       if (
-        (endSignal.kind === 'flag' &&
-          endSignal.end_values.some((end) => Object.is(end, endValue))) ||
-        (endSignal.kind === 'page_count' && typeof endValue === 'number' && pageIndex >= endValue)
+        endSignal.kind === 'flag' &&
+        endSignal.end_values.some((end) => Object.is(end, endValue))
       ) {
-        return finishExhausted('end_signal_reached')
+        return finishExhausted('cursor_exhausted')
+      }
+      if (
+        endSignal.kind === 'page_count' &&
+        typeof endValue === 'number' &&
+        pageIndex >= endValue
+      ) {
+        return finishExhausted('reported_page_count_reached')
       }
       if (endSignal.kind === 'short_page' && pageSize !== null && meta.rowCount < pageSize) {
         return finishExhausted('short_page')
@@ -1376,7 +1392,7 @@ function partitionCaptureIsComplete(capture: NumericLeaderboardCapture, pageSize
       )
     case 'empty_page':
       return lastPage.sourceRowCount === 0 && populationMatches && pageCountMatches
-    case 'end_signal_reached': // partitions never declare exhaustion
+    case 'cursor_exhausted': // partitions never declare exhaustion
     case 'degenerate_page':
     case 'caller_limit':
     case 'safety_limit':
@@ -1495,7 +1511,7 @@ function appendPartitionCapture(
   }
 
   const terminationReason = capture.terminationReason
-  if (terminationReason === 'end_signal_reached') {
+  if (terminationReason === 'cursor_exhausted') {
     throw new TypeError('[ingest] partitioned numeric capture cannot end on an exhaustion signal')
   }
   state.topologyPartitions.push({

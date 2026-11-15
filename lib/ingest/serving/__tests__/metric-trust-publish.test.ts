@@ -869,6 +869,8 @@ describe('Tier-A metric trust transaction writer', () => {
       terminal_state: 'complete',
       acquisition_state: 'complete',
       population_state: 'verified',
+      reason_code: null,
+      exhausted: false,
       capture_evidence_state: 'verified',
       termination_reason: 'reported_population_reached',
       source_run_id: prepared.sourceRunId,

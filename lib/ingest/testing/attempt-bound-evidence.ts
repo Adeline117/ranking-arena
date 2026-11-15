@@ -6,8 +6,9 @@
  * Adapter tests call `attemptBoundEvidenceForCapture` with the capture their
  * `captureLeaderboard` returned, the accepted/rejected counts from
  * validateLeaderboardRows, and (exhausted mode) the declaration the source's
- * migration registers. `trustBound` is true only when the DB predicate would
- * bind the board; `reason` says which condition failed.
+ * migration registers. `trustBound` is true only when the DB would bind the
+ * board (complete outcome, or exhausted outcome whose proof the DB records
+ * and re-checks); `reason` says which condition failed.
  *
  * Not used by production code.
  */
@@ -122,18 +123,18 @@ export function attemptBoundEvidenceForCapture(
     reason,
   })
 
-  if (projection.terminalState !== 'complete') {
-    return fail(
-      `terminal ${projection.terminalState} (population ${projection.populationState})`,
-      'none'
-    )
-  }
-  if (projection.populationReportState === 'consistent') {
+  if (projection.terminalState === 'complete') {
     return { built, projection, completenessMode: 'reported_total', trustBound: true, reason: null }
   }
-  // Exhausted: arena.leaderboard_outcome_exhaustion_bound.
+  // Exhausted: the ledger keeps population unknown; the recorded proof
+  // (arena.record_leaderboard_exhaustion_evidence -> ..._exhaustion_bound) binds.
   const completeness = manifest.completeness
-  if (!completeness) return fail('complete without a reported total or exhaustion proof', 'none')
+  if (!projection.exhaustionVerified || !completeness) {
+    return fail(
+      `terminal ${projection.terminalState} (population ${projection.populationState}) without a holding exhaustion proof`,
+      completeness ? 'exhausted' : 'none'
+    )
+  }
   if (
     !input.registeredExhaustion ||
     strictCanonicalJson(input.registeredExhaustion) !==

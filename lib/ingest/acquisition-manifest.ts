@@ -44,7 +44,6 @@ const terminationReasons = [
   'empty_page',
   'cursor_exhausted',
   'single_snapshot',
-  'end_signal_reached',
   'degenerate_page',
   'caller_limit',
   'safety_limit',
@@ -795,6 +794,20 @@ function isNaturalTermination(
         !hasContradictoryContinuation
       )
     case 'cursor_exhausted':
+      if (position.kind === 'page_index') {
+        // A numeric board's continuation flag (exhausted mode) is exhausted.
+        const completeness = manifestCompleteness(manifest)
+        return (
+          completeness !== null &&
+          completeness.declaration.end_signal.kind === 'flag' &&
+          populationReport.state === 'unknown' &&
+          pageCountMatchesTerminal &&
+          exhaustionEndSignalHolds(
+            completeness,
+            exhaustionFacts(manifest, populationReport, terminationReason)
+          )
+        )
+      }
       return (
         position.kind === 'cursor' &&
         position.response_next_cursor_sha256 === null &&
@@ -808,20 +821,6 @@ function isNaturalTermination(
         populationMatchesTerminal &&
         pageCountMatchesTerminal
       )
-    case 'end_signal_reached': {
-      // Only an exhausted-mode capture can end on a source end signal.
-      const completeness = manifestCompleteness(manifest)
-      return (
-        completeness !== null &&
-        position.kind === 'page_index' &&
-        populationReport.state === 'unknown' &&
-        pageCountMatchesTerminal &&
-        exhaustionEndSignalHolds(
-          completeness,
-          exhaustionFacts(manifest, populationReport, terminationReason)
-        )
-      )
-    }
     case 'degenerate_page':
     case 'caller_limit':
     case 'safety_limit':
@@ -1471,7 +1470,6 @@ function validateLimitTerminationPriority(
     'short_page',
     'cursor_exhausted',
     'single_snapshot',
-    'end_signal_reached',
   ]
   const naturalReason = naturalReasons.find((reason) =>
     isNaturalTermination(manifest, populationReport, pageCountReport, reason)

@@ -241,13 +241,13 @@ export function exhaustionEndSignalHolds(
       if (!isEnd(last.end_signal_value)) return false
       if (pages.slice(0, -1).some((page) => isEnd(page.end_signal_value))) return false
       return (
-        (facts.termination_reason === 'end_signal_reached' && last.row_count > 0) ||
+        (facts.termination_reason === 'cursor_exhausted' && last.row_count > 0) ||
         (facts.termination_reason === 'empty_page' && last.row_count === 0)
       )
     }
     case 'page_count':
       return (
-        facts.termination_reason === 'end_signal_reached' &&
+        facts.termination_reason === 'reported_page_count_reached' &&
         last.row_count > 0 &&
         pages.every((page) => page.end_signal_value === pages.length)
       )
