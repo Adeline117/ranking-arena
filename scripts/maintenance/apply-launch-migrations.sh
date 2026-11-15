@@ -202,6 +202,7 @@ PREDEPLOY_MIGRATIONS=(
   20261114103025_hero_stats_sealed_public_cohort.sql
   20261114193017_rank_publication_requires_attempt_bound_evidence.sql
   20261114211033_public_source_board_metric_contracts.sql
+  20261115141050_leaderboard_exhaustion_completeness_evidence.sql
 )
 readonly -a PREDEPLOY_MIGRATIONS
 # The final six (season publication follow-ups, PR #419) must stay LAST: they
@@ -224,6 +225,12 @@ readonly -a PREDEPLOY_MIGRATIONS
 # is inert for the deployed worker, which reads metric contracts only for
 # sources it already captures; its postdeploy partner 20261114211034 registers
 # their attempt-bound capture after the worker that implements it ships.
+# 20261115141050 (exhausted completeness mode) must follow 193017, whose
+# publication predicate it replaces, and 20260722050000, whose metric-trust
+# outcome authority it patches. It is inert until a source registers an
+# exhaustion contract (the registry it creates is empty), and the deployed
+# worker never writes 'end_signal_reached' or a completeness block, so it is
+# predeploy: the worker that captures exhausted boards needs it installed.
 #
 # 20261113014105 (unknown-trade-count sample confidence, issue #435) and its
 # follow-up 20261114101514 (true-zero trade counts, audit P1-2), in that order,
