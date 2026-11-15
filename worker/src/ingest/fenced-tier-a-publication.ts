@@ -528,30 +528,6 @@ async function bindSnapshotToAttemptEvidence(
   }
 }
 
-/** Claimed Tier-A snapshot publication; never falls back to a region-only transaction. */
-export async function publishClaimedLeaderboardSnapshot(
-  input: PublishSnapshotInput,
-  context: AuthorizedConsumedRegionContext,
-  execution: SourceJobExecutionAuthority,
-  signal?: AbortSignal
-): Promise<PublishSnapshotResult> {
-  if (input.isDerived === true) {
-    throw publicationFenceError('source_timeframe_not_native')
-  }
-  const result = await withClaimedTierAPublication(
-    input.src,
-    [input.timeframe],
-    input.rows,
-    context,
-    execution,
-    (transaction, sourceAuthorityGuard) =>
-      publishLeaderboardSnapshotInTransaction(transaction, input, sourceAuthorityGuard),
-    signal
-  )
-  reportCommittedBaselineShift(input, result)
-  return result
-}
-
 /** Claimed Tier-A trusted snapshot publication; no region-only compatibility fallback. */
 export async function publishClaimedTrustedLeaderboardSnapshot(
   input: PublishTrustedSnapshotInput,
