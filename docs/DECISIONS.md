@@ -398,6 +398,65 @@ runtime shape—not that the historical directory can rebuild a clean database.
 
 ---
 
+## ADR-024：监控与被监控分离——定时任务按职责划分调度者
+
+**Date:** 2026-11-14
+**Status:** Accepted（V1 解除后落地；V1 期间不新增任何排期）
+
+### 背景
+
+2026-11-12 审计的头号根因：数据停更两个月无人知晓，因为监控与被监控共用同一个
+V1 开关、同一台主机、同一个告警通道。当前 28 个 `withCron` 路由即使放开 V1 门也
+没有任何调度源（vercel.json 无 crons）。
+
+### 决策
+
+- **数据类任务**（采集、打分发布、分区维护、新鲜度哨兵、日报）只在 ingest/arena
+  worker 内由 BullMQ 调度，主节点 + SG 备节点（maintenance-standby）。
+- **监控类任务**（compute-leaderboard-watchdog、worker-heartbeat-check、meta-monitor、
+  data-reconciliation）不得与 worker 同主机、同开关：由 **Vercel crons** 调度，
+  通过 worker 写入的心跳/进度水位与封存时间判断，不反向触发 worker。
+- **最外层死人开关**：`public-freshness-probe.yml`（GitHub Actions）每 30 分钟探公开
+  API，并 ping 外部心跳检查服务；它停跑由外部服务告警。三层互不共享开关和主机。
+- Vercel 侧监控 cron 告警走 Telegram + GitHub issue 双通道。
+
+### 后果
+
+- ✅ 任一层停摆都能被另一层发现；不再有“开关一关全瞎”。
+- ⚠️ 恢复时需在 vercel.json 增加监控类 crons，并由 owner 打开对应 V1 cron 门；
+  外部心跳服务的 ping URL 需配置为仓库 secret `FRESHNESS_PROBE_DEADMAN_URL`。
+
+---
+
+## ADR-025：防篡改证据的保留期——凭证永久，明细 13 个月后归档
+
+**Date:** 2026-11-14
+**Status:** Accepted（归档与移出主库在运维窗口执行）
+
+### 背景
+
+发布证据链（Tier-A 收据、metric-trust run/observation、发布证据、封存 proof）由
+append-only 触发器保护，按设计不可删除；快照保留清理因此只能删“未被证据绑定”的
+快照。按 5 小时一轮、约 32 源估算，每个周期每年新增约 5.6 万快照、约 1700 万条
+明细与等量 observation，主库会无界增长。禁用触发器做删除已被迁移安全门禁拒绝，
+也违背防篡改目的。
+
+### 决策
+
+- **永久保留（体量小）**：封存 proof、发布证据、Tier-A 收据、metric-trust run。
+- **主库保留 13 个月**：leaderboard_entries 与 metric_trust_observations 等明细。
+- **13 个月以上**：按月分区整体导出到**加密**冷存储（R2，私有桶，见 R2 公开桶事故教训），
+  校验行数与摘要后，由 owner 在运维窗口执行分区 DETACH（迁移门禁对 DETACH/DROP
+  要求人工评审，属有意设计）。归档摘要写回主库，保证证据链可追溯到冷存储对象。
+- 不引入任何关闭 append-only 触发器的清理路径。
+
+### 后果
+
+- ✅ 证据链完整可审计，主库体量有上界（约 13 个月明细）。
+- ⚠️ 需要实现月度归档导出工具与校验，并在运维窗口执行；超过 13 个月的明细查询需走冷存储。
+
+---
+
 ## Pending Decisions
 
 ### Should we add WebSocket for real-time rankings?
