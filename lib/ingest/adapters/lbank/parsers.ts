@@ -18,7 +18,7 @@
  *   om* = one-month fixed copies; bare profitRate/profit/winRate = all-time
  * topFlag=1 is the curated "Top Lead traders" carousel — never crawled.
  *
- * Profile endpoints (base uuapi.rerrkvifj.com/futures-follow-center/trader):
+ * Profile endpoints (base www.lbank.com/lbk-api/futures-follow-center/trader):
  *   stat/v1/{openId}/head/info               identity + bio + slots
  *   stat/v1/get?type={1w,1m,all}&traderId=   Performance block per window
  *   stat/v1/queryProfitRate (POST {openId, periodType})  PnL% chart
