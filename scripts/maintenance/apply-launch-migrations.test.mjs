@@ -149,7 +149,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   // +3 found by the 2026-11-14 rehearsal, -3 already applied via MCP, +1 20261114211033
   assert.equal(predeploy.length, 155)
   // Season publication follow-ups stay last; 011058 must follow the Bitget-bot
-  // freshness-authority rewrite slot (20261111134416, #415's replacement for 20260728124000).
+  // freshness-authority rewrite slot (20261115013558, the replacement for 20260728124000).
   assert.deepEqual(predeploy.slice(-9), [
     '20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql',
     '20261113011058_leaderboard_publication_source_isolation.sql',
@@ -164,7 +164,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(
     predeploy.indexOf('20261113011058_leaderboard_publication_source_isolation.sql') >
       predeploy.indexOf(
-        '20261111134416_quarantine_bitget_bot_cumulative_rank_authority_prod_reader.sql'
+        '20261115013558_quarantine_bitget_bot_cumulative_rank_authority_join_order.sql'
       )
   )
   // 040440's forward replacement freezes legacy position history only after the
@@ -230,11 +230,12 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260817050000_arena_bot_legacy_publication_isolation.sql',
     '20260817060000_trader_series_publication_isolation.sql',
     '20260817061000_legacy_raw_metric_publication_isolation.sql',
+    '20261111134416_quarantine_bitget_bot_cumulative_rank_authority_prod_reader.sql',
     '20261113104533_trader_follows_hard_cap_lock.sql',
     '20261113151848_sync_user_profile_email_from_auth.sql',
     '20261113151849_auth_user_has_password_rpc.sql',
   ])
-  assert.equal(new Set(all).size, 193)
+  assert.equal(new Set(all).size, 194)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
   assert.deepEqual(predeploy.slice(-114), [
     '20260718120000_leaderboard_source_freshness.sql',
@@ -291,7 +292,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql',
     '20261111134210_bitget_bots_canonical_timeframe_partial_seed.sql',
     '20260728123000_arena_bot_header_canonical_snapshot.sql',
-    '20261111134416_quarantine_bitget_bot_cumulative_rank_authority_prod_reader.sql',
+    '20261115013558_quarantine_bitget_bot_cumulative_rank_authority_join_order.sql',
     '20260729010000_api_keys_server_authority.sql',
     '20260729011000_leaderboard_rank_manifest_attestation_substrate.sql',
     '20260729012000_partitioned_bot_acquisition_manifest_v4.sql',
@@ -407,7 +408,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   )
   assert.ok(
     predeploy.includes(
-      '20261111134416_quarantine_bitget_bot_cumulative_rank_authority_prod_reader.sql'
+      '20261115013558_quarantine_bitget_bot_cumulative_rank_authority_join_order.sql'
     )
   )
   assert.ok(predeploy.includes('20260729010000_api_keys_server_authority.sql'))
