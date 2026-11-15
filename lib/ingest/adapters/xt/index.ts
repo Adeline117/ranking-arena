@@ -5,11 +5,16 @@
  * Endpoints (verified by live capture 2026-06-11):
  *   futures board:  GET /fapi/user/v1/public/copy-trade/leader-list-v3
  *                     ?page&ps&days={7|30|90}&sortType=INCOME&sortDirection=DESC
- *                     — result.{total, items}; real page+ps pagination (ps≤100).
+ *                     — result.{total, items}; real page+ps pagination. ps up to
+ *                     at least 1000 is honoured (probed 2026-11-15: total 1969 =
+ *                     2 pages of ps=1000, 1969 distinct accountIds, page three
+ *                     empty; a page-one re-read had the same set, reordered).
  *   spot board:     GET /sapi/v4/account/public/copy-trade/leader-list-v2
  *                     ?sortType=INCOME_RATE&days&sortDirection=DESC&limit
  *                     — `limit` returns the top-N (page/offset ignored); fetched
  *                     in ONE big-limit request, placeholders dropped by the parser.
+ *                     No attempt-bound capture: the board cannot be proven
+ *                     complete (see captureLeaderboard).
  *   profile (both): GET .../leader-detail-v2?accountId — identity + overview
  *
  * The "View All Traders" link (spec §11.13) is the SPA route to these full
@@ -42,7 +47,12 @@ import type {
 import { CopierPageCapReachedError } from '../../core/history-page-cap'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
-import { apiFetcher, replayJson, replayPaged } from '../../fetch/capture'
+import { apiFetcher, replayJson } from '../../fetch/capture'
+import {
+  captureReplayLeaderboard,
+  collectionMeta,
+  requireEnvelopeValue,
+} from '../../fetch/replay-capture'
 import {
   parseXtHistory,
   parseXtLeaderboardPage,
@@ -66,6 +76,14 @@ function base(src: SourceRow): string {
   return override ?? BASES[boardKey(src)]
 }
 
+/** Futures page meta: rows before parser validation; board population as reported. */
+const xtFuturesLeaderboardMeta = collectionMeta({
+  label: 'xt',
+  assertSuccess: requireEnvelopeValue('xt', ['returnCode'], [0]),
+  list: ['result', 'items'],
+  total: ['result', 'total'],
+})
+
 const xtAdapter: SourceAdapter = {
   slug: 'xt',
   capabilities: {
@@ -86,19 +104,11 @@ const xtAdapter: SourceAdapter = {
     src: SourceRow,
     timeframe: RankingTimeframe
   ): AsyncIterable<RawPage> {
-    const fetcher = apiFetcher(await session.api())
-    const ctx = () => ({
-      sourceSlug: src.slug,
-      currency: src.currency,
-      tfLabelMap: src.tf_label_map,
-      scrapedAt: new Date().toISOString(),
-      meta: src.meta,
-    })
-
     // Spot: a single big-limit fetch covers the small board; the API ignores
     // page/offset and pads the tail with all-zero placeholders (dropped by
-    // the parser). No real pagination, so no replayPaged.
+    // the parser). No real pagination and no attempt-bound capture.
     if (boardKey(src) === 'spot') {
+      const fetcher = apiFetcher(await session.api())
       const limit = Number(src.meta.spot_limit) || 200
       const url =
         `${base(src)}/leader-list-v2?sortType=INCOME_RATE&days=${timeframe}` +
@@ -108,33 +118,58 @@ const xtAdapter: SourceAdapter = {
       return
     }
 
-    // Futures: real page+ps pagination with result.total for the completeness
-    // assertion. ps up to 100 keeps the crawl to ~19 pages for ~1,873 traders.
-    const ps = src.page_size ?? 100
-    const listUrl = `${base(src)}/leader-list-v3`
-    const maxPages = Number(src.meta.max_pages) || null
+    const capture = await xtAdapter.captureLeaderboard!(session, src, timeframe)
+    yield* capture.parsePages
+  },
 
-    let pagesYielded = 0
-    for await (const page of replayPaged({
-      session,
-      fetcher,
-      buildRequest: (pageIndex) => ({
-        url:
-          `${listUrl}?page=${pageIndex}&ps=${ps}&sortType=INCOME&days=${timeframe}` +
-          `&sortDirection=DESC&canFollow=false&nickName=&elite=false`,
-        method: 'GET',
-        headers: HEADERS,
-      }),
-      extractMeta: (payload) => {
-        const parsed = parseXtLeaderboardPage(payload, ctx())
-        return { rowCount: parsed.rows.length, reportedTotal: parsed.reportedTotal }
-      },
-      pageSize: ps,
-    })) {
-      yield page
-      pagesYielded += 1
-      if (maxPages !== null && pagesYielded >= maxPages) return
+  /**
+   * Futures board in total mode: page+ps pages (ps = sources.page_size) until
+   * the accepted rows reach result.total.
+   *
+   * Spot has no attempt-bound capture. leader-list-v2 ignores page/offset;
+   * limit=1000 returns the whole board (hasNext false) but 198 of its 201
+   * rows were all-zero placeholder leaders (probed 2026-11-15) that the
+   * parser drops by design (spec §5.6), so accepted rows can never equal the
+   * upstream population and neither completeness mode can hold.
+   */
+  async captureLeaderboard(session, src, timeframe, options) {
+    if (boardKey(src) === 'spot') {
+      throw new Error(
+        '[xt] spot board has no attempt-bound capture: its placeholder rows are dropped, so completeness cannot be proven'
+      )
     }
+    options?.signal?.throwIfAborted()
+    const fetcher = apiFetcher(await session.api())
+    options?.signal?.throwIfAborted()
+    const ps = src.page_size ?? 1000
+    const listUrl = `${base(src)}/leader-list-v3`
+    return captureReplayLeaderboard(
+      { session, fetcher, src, label: 'xt', signal: options?.signal },
+      {
+        buildRequest: (pageIndex) => ({
+          url:
+            `${listUrl}?page=${pageIndex}&ps=${ps}&sortType=INCOME&days=${timeframe}` +
+            `&sortDirection=DESC&canFollow=false&nickName=&elite=false`,
+          method: 'GET',
+          headers: HEADERS,
+        }),
+        publicRequest: {
+          query: [
+            'page',
+            'ps',
+            'sortType',
+            'days',
+            'sortDirection',
+            'canFollow',
+            'nickName',
+            'elite',
+          ],
+        },
+        pageBinding: { location: 'query', key: 'page' },
+        extractMeta: xtFuturesLeaderboardMeta,
+        pageSize: ps,
+      }
+    )
   },
 
   async getProfile(
