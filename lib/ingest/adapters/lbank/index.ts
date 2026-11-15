@@ -3,14 +3,15 @@
  * Board URL: https://www.lbank.com/copy-trading?tab=all
  * Profile URL: /copy-trading/lead-trader/{openId}
  *
- * FETCH MODEL: the API host (uuapi.rerrkvifj.com) rejects in-page
- * cross-origin fetch ({"error_code":10006,"msg":"not open path"}) but
- * accepts APIRequestContext replay carrying the page's own captured request
- * headers (ex-client-type/ex-client-source/source/versionflage — verified
- * 2026-06-11). warmSession captures one live futures-follow-center request
+ * FETCH MODEL: the site serves futures-follow-center same-origin under
+ * www.lbank.com/lbk-api (board and profile pages, verified 2026-11-15). The
+ * former host uuapi.rerrkvifj.com now answers this service with
+ * {"error_code":10006,"msg":"not open path"} even with the page's headers.
+ * Replay is APIRequestContext carrying the page's own captured request
+ * headers: warmSession captures one live futures-follow-center request
  * during the board page load; every replay merges those headers.
  *
- * Endpoints (base uuapi.rerrkvifj.com/futures-follow-center/trader):
+ * Endpoints (base www.lbank.com/lbk-api/futures-follow-center/trader):
  *   list:      GET stat/v1/getAll?name=&size&current&topFlag=0
  *                &hiddenFullFlag=0&sortField={rankingValue|owRankingValue}
  *                &sortDirection=1
@@ -53,7 +54,7 @@ import {
   parseLbankProfile,
 } from './parsers'
 
-const BASE = 'https://uuapi.rerrkvifj.com/futures-follow-center/trader'
+const BASE = 'https://www.lbank.com/lbk-api/futures-follow-center/trader'
 
 /** TF → board sortField (window selector) / stat type / chart periodType. */
 const TF_SORT: Record<number, string> = { 7: 'owRankingValue', 30: 'rankingValue' }

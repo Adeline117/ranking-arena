@@ -70,10 +70,26 @@ function boardKey(src: SourceRow): 'futures' | 'cfd' {
  *  after is same-origin JSON replay (spec §2.2). */
 const warmedSessions = new WeakSet<FetchSession>()
 
+/**
+ * The warm page must sit on the API origin: replay is in-page same-origin
+ * fetch against ${B}. A board URL on another host cannot warm the session
+ * (the gate_cfd seed w.gate.com no longer resolves, probe 2026-11-15), so it
+ * falls back to the board's own page on the API origin.
+ */
+function gateWarmUrl(src: SourceRow): string {
+  const fallback = boardKey(src) === 'cfd' ? `${B}/zh/copytrading/tradfi` : `${B}/zh/copytrading`
+  if (!src.leaderboard_url) return fallback
+  try {
+    return new URL(src.leaderboard_url).origin === B ? src.leaderboard_url : fallback
+  } catch {
+    return fallback
+  }
+}
+
 async function warmSession(session: FetchSession, src: SourceRow): Promise<void> {
   if (warmedSessions.has(session)) return
   const page = await session.page()
-  const url = src.leaderboard_url ?? `${B}/zh/copytrading`
+  const url = gateWarmUrl(src)
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 })
   await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {
     // best-effort — a busy page still yields valid cookies

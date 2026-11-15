@@ -1,5 +1,6 @@
 import type { ParseCtx, RawPage, SourceRow } from '../../../core/types'
 import type { FetchSession, ReplayRequestTemplate } from '../../../fetch/types'
+import { LeaderboardCaptureUpstreamError } from '../../../fetch/capture'
 import { coinexAdapter } from '../index'
 import { parseCoinexHistory } from '../parsers'
 
@@ -143,5 +144,39 @@ describe('CoinEx copier pagination', () => {
     await expect(copiers(fetchSession)).rejects.toThrow(
       'empty copier page still claims continuation'
     )
+  })
+})
+
+describe('CoinEx board capture', () => {
+  const board = (rows: number, total: number) => ({
+    code: 0,
+    message: 'Success',
+    data: {
+      has_next: false,
+      curr_page: 1,
+      count: rows,
+      data: Array.from({ length: rows }, (_, index) => ({ trader_id: `coinex-${index}` })),
+      total,
+      total_page: rows === 0 ? 0 : 1,
+    },
+  })
+
+  it('fails an empty geo-gated board as upstream_error instead of a complete zero-row board', async () => {
+    // Live answer from a US IP 2026-11-15: code 0, data [], total 0.
+    const { fetchSession } = session([board(0, 0)])
+    const failure = await coinexAdapter.captureLeaderboard!(fetchSession, src, 30).then(
+      () => null,
+      (error: unknown) => error
+    )
+    expect(failure).toBeInstanceOf(LeaderboardCaptureUpstreamError)
+    expect((failure as LeaderboardCaptureUpstreamError).capture.terminationReason).toBe(
+      'upstream_error'
+    )
+  })
+
+  it('still terminates a populated board on its reported total', async () => {
+    const { fetchSession } = session([board(2, 2)])
+    const capture = await coinexAdapter.captureLeaderboard!(fetchSession, src, 30)
+    expect(capture.terminationReason).toBe('reported_population_reached')
   })
 })

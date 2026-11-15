@@ -91,14 +91,28 @@ function coinexListRequest(
   }
 }
 
-/** Source collection data.data counted before parser validation; data.total is the board. */
-const coinexLeaderboardMeta = collectionMeta({
+/**
+ * Source collection data.data counted before parser validation; data.total is
+ * the board. An active board is never empty: the geo-gated answer is
+ * {code:0, data:{data:[], total:0}} (observed 2026-06-29, again from a US IP
+ * 2026-11-15), and a reported total of 0 would otherwise bind as a complete
+ * zero-row board. It is an upstream error, never an empty board.
+ */
+const coinexCollectionMeta = collectionMeta({
   label: 'coinex',
   assertSuccess: requireEnvelopeValue('coinex', ['code'], [0]),
   list: ['data', 'data'],
   total: ['data', 'total'],
   pageCount: ['data', 'total_page'],
 })
+
+function coinexLeaderboardMeta(payload: unknown) {
+  const meta = coinexCollectionMeta(payload)
+  if (meta.reportedPopulation === 0) {
+    throw new TypeError('[coinex] leaderboard answered an empty board (data.total=0)')
+  }
+  return meta
+}
 
 const coinexAdapter: SourceAdapter = {
   slug: 'coinex',
