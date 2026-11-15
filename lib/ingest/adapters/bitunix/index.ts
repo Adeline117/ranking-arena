@@ -34,7 +34,12 @@ import type {
 import { CopierPageCapReachedError } from '../../core/history-page-cap'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
-import { apiFetcher, replayJson, replayPaged, type JsonFetcher } from '../../fetch/capture'
+import { apiFetcher, replayJson, type JsonFetcher } from '../../fetch/capture'
+import {
+  captureReplayLeaderboard,
+  collectionMeta,
+  requireEnvelopeValue,
+} from '../../fetch/replay-capture'
 import { extractCopierCandidateRecords } from '../../copier-candidate-conservation'
 import {
   parseBitunixHistory,
@@ -68,6 +73,15 @@ async function bitunixFetcher(session: FetchSession): Promise<JsonFetcher> {
   return apiFetcher(await session.api())
 }
 
+/** Upstream page meta: rows counted before parser validation; board population as reported. */
+const bitunixLeaderboardMeta = collectionMeta({
+  label: 'bitunix',
+  assertSuccess: requireEnvelopeValue('bitunix', ['code'], [0]),
+  list: ['data', 'records'],
+  total: ['data', 'total'],
+  pageCount: ['data', 'totalPage'],
+})
+
 const bitunixAdapter: SourceAdapter = {
   slug: 'bitunix',
   capabilities: {
@@ -81,45 +95,46 @@ const bitunixAdapter: SourceAdapter = {
 
   /** One crawl per TF — statisticType makes the server emit window-scoped
    *  headline fields (self-describing payloads, pure re-parse safe). */
+  async captureLeaderboard(session, src, timeframe, options) {
+    options?.signal?.throwIfAborted()
+    const fetcher = await bitunixFetcher(session)
+    options?.signal?.throwIfAborted()
+    const listUrl = endpoint(src, 'list', `${BASE}/trader/list`)
+    const pageSize = src.page_size ?? 100
+    const orderType = typeof src.meta.list_order_by === 'string' ? src.meta.list_order_by : 'PL'
+    return captureReplayLeaderboard(
+      { session, fetcher, src, label: 'bitunix', signal: options?.signal },
+      {
+        buildRequest: (pageIndex) => ({
+          url: listUrl,
+          method: 'POST',
+          headers: HEADERS,
+          body: {
+            statisticType: TF_STAT[timeframe],
+            oderType: orderType, // sic — Bitunix's own param name
+            nickname: '',
+            page: pageIndex,
+            pageSize,
+            version: 1,
+          },
+        }),
+        publicRequest: {
+          body: ['statisticType', 'oderType', 'nickname', 'page', 'pageSize', 'version'],
+        },
+        pageBinding: { location: 'body', path: ['page'] },
+        extractMeta: bitunixLeaderboardMeta,
+        pageSize,
+      }
+    )
+  },
+
   async *listLeaderboard(
     session: FetchSession,
     src: SourceRow,
     timeframe: RankingTimeframe
   ): AsyncIterable<RawPage> {
-    const fetcher = await bitunixFetcher(session)
-    const listUrl = endpoint(src, 'list', `${BASE}/trader/list`)
-    const pageSize = src.page_size ?? 100
-    const orderType = typeof src.meta.list_order_by === 'string' ? src.meta.list_order_by : 'PL'
-    // Validation knob: src.meta.max_pages caps the crawl (smoke runs).
-    const maxPages = Number(src.meta.max_pages) || null
-
-    let pagesYielded = 0
-    for await (const page of replayPaged({
-      session,
-      fetcher,
-      buildRequest: (pageIndex) => ({
-        url: listUrl,
-        method: 'POST',
-        headers: HEADERS,
-        body: {
-          statisticType: TF_STAT[timeframe],
-          oderType: orderType, // sic — Bitunix's own param name
-          nickname: '',
-          page: pageIndex,
-          pageSize,
-          version: 1,
-        },
-      }),
-      extractMeta: (payload) => {
-        const parsed = parseBitunixLeaderboardPage(payload, dummyCtx(src))
-        return { rowCount: parsed.rows.length, reportedTotal: parsed.reportedTotal }
-      },
-      pageSize,
-    })) {
-      yield page
-      pagesYielded += 1
-      if (maxPages !== null && pagesYielded >= maxPages) return
-    }
+    const capture = await bitunixAdapter.captureLeaderboard!(session, src, timeframe)
+    yield* capture.parsePages
   },
 
   /** Profile bundle per TF (2 replayed requests): 帶單表現 + 帶單員總覽. */
