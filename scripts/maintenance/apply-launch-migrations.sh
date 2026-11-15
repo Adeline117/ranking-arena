@@ -141,7 +141,7 @@ PREDEPLOY_MIGRATIONS=(
   20260725017500_leaderboard_rank_generation_atomic_batch_writer.sql
   20261111134210_bitget_bots_canonical_timeframe_partial_seed.sql
   20260728123000_arena_bot_header_canonical_snapshot.sql
-  20261111134416_quarantine_bitget_bot_cumulative_rank_authority_prod_reader.sql
+  20261115013558_quarantine_bitget_bot_cumulative_rank_authority_join_order.sql
   20260729010000_api_keys_server_authority.sql
   20260729011000_leaderboard_rank_manifest_attestation_substrate.sql
   20260729012000_partitioned_bot_acquisition_manifest_v4.sql
@@ -208,7 +208,7 @@ readonly -a PREDEPLOY_MIGRATIONS
 # The final six (season publication follow-ups, PR #419) must stay LAST: they
 # need the public serving authority (20260816184500), and 20261113011058
 # rewrites the freshness authority after the Bitget-bot quarantine
-# (20261111134416, which replaces 20260728124000 in its slot). They follow
+# (20261115013558, which replaces 20260728124000 in its slot). They follow
 # #415's reordered manifest (2026-11-11 whole-database rehearsal order).
 # 20261114101605 (profile readers: sealed boards only, no stale stats) follows
 # them: it replaces the two readers 20261113012028 rewrote and needs its
@@ -429,6 +429,10 @@ readonly -a RECOVERY_MIGRATIONS
 #   whole-database rehearsal passed 113/113 with these replacements).
 # - 20260715231500 and 20260803090000 likewise fail on production state; their
 #   replacements are ADR-023 single-file migrations (see above), not ordered.
+# - 20261111134416 (the first replacement for 20260728124000) never finished on
+#   production: one join over arena.leaderboard_entries looped ~1.4M times and
+#   hit the file's own 2-minute statement_timeout. 20261115013558 is the same
+#   body with that join order pinned and takes the slot.
 # - 20261113104533, 20261113151848 and 20261113151849 were applied to production
 #   on 2026-11-13 through the ADR-023 MCP single-file channel, which records the
 #   apply time as the ledger version (233535 / 233625 / 233643). Replaying
@@ -453,6 +457,7 @@ SUPERSEDED_MIGRATIONS=(
   20260817050000_arena_bot_legacy_publication_isolation.sql
   20260817060000_trader_series_publication_isolation.sql
   20260817061000_legacy_raw_metric_publication_isolation.sql
+  20261111134416_quarantine_bitget_bot_cumulative_rank_authority_prod_reader.sql
   20261113104533_trader_follows_hard_cap_lock.sql
   20261113151848_sync_user_profile_email_from_auth.sql
   20261113151849_auth_user_has_password_rpc.sql
@@ -466,7 +471,8 @@ superseder_version() {
     20260716104500_collection_read_write_boundaries.sql) printf '%s' 20260717230000 ;;
     20260725017250_normalize_leaderboard_rank_max_drawdown.sql) printf '%s' 20261111185914 ;;
     20260728122000_bitget_bots_canonical_timeframe.sql) printf '%s' 20261111134210 ;;
-    20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql) printf '%s' 20261111134416 ;;
+    20260728124000_quarantine_bitget_bot_cumulative_rank_authority.sql) printf '%s' 20261115013558 ;;
+    20261111134416_quarantine_bitget_bot_cumulative_rank_authority_prod_reader.sql) printf '%s' 20261115013558 ;;
     20260729061000_tier_a_execution_claim_enforcement.sql) printf '%s' 20261111192134 ;;
     20260729230000_token_ranking_generation_barrier.sql) printf '%s' 20261111133259 ;;
     20260804043000_retire_legacy_token_rankings.sql) printf '%s' 20261111133300 ;;
