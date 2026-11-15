@@ -97,6 +97,7 @@ PREDEPLOY_MIGRATIONS=(
   20260721130000_raw_object_gc_outbox.sql
   20260721140000_idempotent_equivalent_refund_events.sql
   20260721150000_metric_trust_raw_artifact_identity.sql
+  20260721180903_metric_rankable_score_inputs_shadow.sql
   20260721175746_arena_score_inputs_publish_bundle.sql
   20260721210000_tip_checkout_lifecycle_atomic.sql
   20260721211000_tip_checkout_completion_identity.sql
@@ -149,11 +150,13 @@ PREDEPLOY_MIGRATIONS=(
   20260729070500_leaderboard_score_input_manifest_v2.sql
   20260729071000_leaderboard_metric_trust_projection_v2.sql
   20260729071500_tier_a_one_phase_commit_guard.sql
+  20260729220908_season_scoped_leaderboard_count_cache.sql
   20260729223000_rerank_public_eligible_rows_only.sql
   20260729224000_rank_eligible_leaderboard_count_cache.sql
   20260729225000_token_trader_rank_authority.sql
   20261111133259_token_ranking_generation_barrier_cron_api.sql
   20261111133300_retire_legacy_token_rankings_cron_api.sql
+  20260730033000_token_trade_fact_authority_shadow.sql
   20261111135302_quarantine_bingx_rank_authority_blocked_spot.sql
   20260804050000_harden_serving_trader_resolver.sql
   20260804051000_harden_serving_source_capabilities.sql
@@ -178,9 +181,6 @@ PREDEPLOY_MIGRATIONS=(
   20261013094743_retire_v2_partition_cron_extend_arena_partitions.sql
   20261113014105_arena_score_unknown_trades_confidence.sql
   20261114101514_arena_score_true_zero_trades_confidence.sql
-  20261113104533_trader_follows_hard_cap_lock.sql
-  20261113151848_sync_user_profile_email_from_auth.sql
-  20261113151849_auth_user_has_password_rpc.sql
   20261114104438_sealed_publication_data_gap_summary.sql
   20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql
   20261113011058_leaderboard_publication_source_isolation.sql
@@ -213,15 +213,12 @@ readonly -a PREDEPLOY_MIGRATIONS
 # manifest substrate created earlier in this same run never seals a manifest
 # under the old definition digest, and a failure stops the release before the
 # new scorer ships instead of leaving TS and PG17 diverged after it.
-# 20261113151848/151849 (#422, additive email-sync trigger + backfill and a
-# service_role-only password-status RPC) are predeploy: the new account routes
-# call auth_user_has_password, and without it they fail closed (require a
-# password, the old behavior) rather than break.
-# 20261113104533 (trader-follow hard-cap trigger) is predeploy because the
-# follow route from before 896ebfec3 stays correct under it: that route already
-# rejects at >= 100, and a raced insert surfaces as a 500 (no extra row)
-# instead of the new route's 429. Both sit before the final six, which do not
-# depend on them.
+# 20260721180903, 20260729220908 and 20260730033000 were in no array and not in
+# the production ledger until the 2026-11-14 whole-database rehearsal: 180903
+# creates arena.metric_rankable_score_inputs_shadow, a hard preflight
+# prerequisite of 20260729064500; 220908 creates the season-scoped count-cache
+# refresh that 20260729224000 and the app call; 033000 is an additive token
+# shadow substrate with no reader. Each sits in its chronological slot.
 # 20261114104438 (data gap summary judged on sealed publication, audit P2-2)
 # only replaces the body of a cron/admin-only reader; it needs the public
 # serving view (20260816151614/184500) and sits before the final six, which do
@@ -372,6 +369,11 @@ readonly -a RECOVERY_MIGRATIONS
 #   whole-database rehearsal passed 113/113 with these replacements).
 # - 20260715231500 and 20260803090000 likewise fail on production state; their
 #   replacements are ADR-023 single-file migrations (see above), not ordered.
+# - 20261113104533, 20261113151848 and 20261113151849 were applied to production
+#   on 2026-11-13 through the ADR-023 MCP single-file channel, which records the
+#   apply time as the ledger version (233535 / 233625 / 233643). Replaying
+#   151848 would also fail there: it drops the trigger it created on
+#   auth.users, and postgres holds TRIGGER on that table but does not own it.
 SUPERSEDED_MIGRATIONS=(
   20260715231500_fix_gmx_source_contract.sql
   20260716104500_collection_read_write_boundaries.sql
@@ -391,6 +393,9 @@ SUPERSEDED_MIGRATIONS=(
   20260817050000_arena_bot_legacy_publication_isolation.sql
   20260817060000_trader_series_publication_isolation.sql
   20260817061000_legacy_raw_metric_publication_isolation.sql
+  20261113104533_trader_follows_hard_cap_lock.sql
+  20261113151848_sync_user_profile_email_from_auth.sql
+  20261113151849_auth_user_has_password_rpc.sql
 )
 readonly -a SUPERSEDED_MIGRATIONS
 
@@ -414,6 +419,9 @@ superseder_version() {
     20260817050000_arena_bot_legacy_publication_isolation.sql) printf '%s' 20261111132447 ;;
     20260817060000_trader_series_publication_isolation.sql) printf '%s' 20261111132448 ;;
     20260817061000_legacy_raw_metric_publication_isolation.sql) printf '%s' 20261111132450 ;;
+    20261113104533_trader_follows_hard_cap_lock.sql) printf '%s' 20261113233535 ;;
+    20261113151848_sync_user_profile_email_from_auth.sql) printf '%s' 20261113233625 ;;
+    20261113151849_auth_user_has_password_rpc.sql) printf '%s' 20261113233643 ;;
     *)
       echo "superseded migration has no superseder: $1" >&2
       exit 1
@@ -493,8 +501,12 @@ validate_transactional_migration_file() {
   transaction_mode_count="${transaction_mode_count:-0}"
   repeatable_read_count="${repeatable_read_count:-0}"
   read_committed_count="${read_committed_count:-0}"
-  if [[ "$begin_count" != "1" || "$commit_count" != "1" ]]; then
-    echo "migration must contain one exact outer BEGIN/COMMIT: $migration" >&2
+  # Either one exact outer BEGIN/COMMIT (stripped below so the runner owns the
+  # transaction) or none at all: a file with no transaction statements is
+  # already a plain body the runner can wrap. A lone BEGIN or COMMIT is not.
+  if ! { [[ "$begin_count" == "1" && "$commit_count" == "1" ]] ||
+    [[ "$begin_count" == "0" && "$commit_count" == "0" ]]; }; then
+    echo "migration must contain one exact outer BEGIN/COMMIT or none: $migration" >&2
     exit 1
   fi
   if ((
