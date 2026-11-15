@@ -423,6 +423,7 @@ function buildAttemptBoundCaptureManifest(
       built: buildLeaderboardAcquisitionManifestV3({
         ...captureManifestInput({ ...input, capture: input.capture }),
         acquisition_attempt: acquisitionAttempt,
+        ...(input.capture.completeness ? { completeness: input.capture.completeness } : {}),
       }),
     }
   }
