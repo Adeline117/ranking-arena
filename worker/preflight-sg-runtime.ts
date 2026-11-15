@@ -60,7 +60,10 @@ async function main(): Promise<void> {
 
 const invokedPath = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : undefined
 if (invokedPath === import.meta.url) {
-  void main().catch((error) => {
+  void main().catch(async (error) => {
+    const { describeIngestTlsFailure } = await import('@/lib/ingest/db')
+    const tlsFailure = describeIngestTlsFailure(error)
+    if (tlsFailure) console.error(`[sg-runtime-preflight] ${tlsFailure}`)
     console.error(error instanceof Error ? error.message : '[sg-runtime-preflight] failed')
     process.exit(1)
   })
