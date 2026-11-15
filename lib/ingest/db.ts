@@ -12,6 +12,7 @@
  */
 
 import { readFileSync } from 'fs'
+import { resolve as resolvePath } from 'path'
 import type { ConnectionOptions } from 'tls'
 import { Pool, types, type PoolClient, type QueryResult, type QueryResultRow } from 'pg'
 
@@ -50,42 +51,95 @@ export const INGEST_DB_KEEPALIVE_INITIAL_DELAY_MS = 10_000
 
 /**
  * TLS for the ingest pool (service-level write credentials over Supavisor).
+ * Both worker pools (ingest + rank-publication) are built by createWorkerPool,
+ * so this one policy covers both.
  *
  *   - local URLs (127.0.0.1/localhost): no TLS.
- *   - INGEST_DATABASE_CA_CERT=/path/to/ca.pem (e.g. Supabase's downloadable
- *     "SSL certificate"): verify the server against that CA.
- *   - INGEST_DATABASE_TLS_VERIFY=true without a CA: verify against the
- *     Node/system trust store.
- *   - otherwise: LEGACY encrypted-but-unverified TLS (rejectUnauthorized:false),
- *     kept as the default so existing Mac/SG deployments do not lose their DB
- *     connection on upgrade (the Supabase pooler cert is not chained to a public
- *     root). It is a MITM exposure: set INGEST_DATABASE_CA_CERT in deployment.
- *     INGEST_DATABASE_TLS_VERIFY=false explicitly opts into the legacy mode and
- *     silences the warning.
+ *   - default: verify the server against the Supabase root CA bundled at
+ *     worker/certs/supabase-root-ca.crt (resolved from the worker's cwd, which
+ *     is the release/repo root for every PM2, Docker and preflight entrypoint).
+ *     Node also checks the hostname, i.e. libpq `verify-full` — what Supabase's
+ *     docs show for the session pooler host. The bundle holds Supabase Root 2021
+ *     CA (2021 key, from the dashboard's public download URL) and its 2025
+ *     re-key (from Supabase's own CLI, which pins both for pooler hosts).
+ *   - INGEST_DATABASE_CA_CERT=/path/to/ca.pem overrides the bundled CA path.
+ *   - A missing/unreadable/non-PEM CA file throws: fail closed, never downgrade.
+ *   - INGEST_DATABASE_TLS_VERIFY=false is the ONLY opt-out: LEGACY
+ *     encrypted-but-unverified TLS (MITM exposure; createWorkerPool warns).
+ *     Any other non-empty value except `true` is rejected.
  */
-export type IngestTlsMode = 'none' | 'verify-ca' | 'verify-system' | 'unverified'
+export type IngestTlsMode = 'none' | 'verify-ca' | 'unverified'
+
+export const BUNDLED_INGEST_CA_CERT = 'worker/certs/supabase-root-ca.crt'
 
 export function resolveIngestSsl(
   url: string,
   env: NodeJS.ProcessEnv = process.env,
-  readCa: (path: string) => string = (path) => readFileSync(path, 'utf8')
-): { mode: IngestTlsMode; ssl: ConnectionOptions | undefined } {
+  readCa: (path: string) => string = (path) => readFileSync(path, 'utf8'),
+  cwd: string = process.cwd()
+): { mode: IngestTlsMode; ssl: ConnectionOptions | undefined; caPath?: string } {
   if (url.includes('127.0.0.1') || url.includes('localhost')) {
     return { mode: 'none', ssl: undefined }
   }
-  const caPath = env.INGEST_DATABASE_CA_CERT?.trim()
+  const override = env.INGEST_DATABASE_CA_CERT?.trim()
   const verify = env.INGEST_DATABASE_TLS_VERIFY?.trim().toLowerCase()
-  if (caPath) {
-    if (verify === 'false') {
+  if (verify === 'false') {
+    if (override) {
       throw new Error(
         '[ingest] INGEST_DATABASE_CA_CERT is set but INGEST_DATABASE_TLS_VERIFY=false — refusing an ambiguous TLS config'
       )
     }
-    // Throws (fail closed) when the configured CA file is missing/unreadable.
-    return { mode: 'verify-ca', ssl: { ca: readCa(caPath), rejectUnauthorized: true } }
+    return { mode: 'unverified', ssl: { rejectUnauthorized: false } }
   }
-  if (verify === 'true') return { mode: 'verify-system', ssl: { rejectUnauthorized: true } }
-  return { mode: 'unverified', ssl: { rejectUnauthorized: false } }
+  if (verify && verify !== 'true') {
+    throw new Error(
+      `[ingest] INGEST_DATABASE_TLS_VERIFY must be unset, "true" or "false" (got "${verify}")`
+    )
+  }
+  const caPath = resolvePath(cwd, override || BUNDLED_INGEST_CA_CERT)
+  let ca: string
+  try {
+    ca = readCa(caPath)
+  } catch (error) {
+    throw new Error(
+      `[ingest] DB TLS CA certificate is not readable at ${caPath} — refusing to connect ` +
+        'without verification (set INGEST_DATABASE_CA_CERT to the Supabase CA path)',
+      { cause: error }
+    )
+  }
+  if (!ca.includes('-----BEGIN CERTIFICATE-----')) {
+    throw new Error(`[ingest] DB TLS CA file ${caPath} contains no PEM certificate`)
+  }
+  return { mode: 'verify-ca', ssl: { ca, rejectUnauthorized: true }, caPath }
+}
+
+const TLS_VERIFY_ERROR_CODES = new Set([
+  'SELF_SIGNED_CERT_IN_CHAIN',
+  'DEPTH_ZERO_SELF_SIGNED_CERT',
+  'UNABLE_TO_GET_ISSUER_CERT',
+  'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+  'CERT_HAS_EXPIRED',
+  'CERT_UNTRUSTED',
+  'ERR_TLS_CERT_ALTNAME_INVALID',
+])
+
+/**
+ * Readiness diagnostics: turn a pooler certificate-verification failure into
+ * an actionable message (null for any other error). Preflights print it so a
+ * CA/chain mismatch is never mistaken for a credential or network outage.
+ */
+export function describeIngestTlsFailure(error: unknown): string | null {
+  const code =
+    error && typeof error === 'object' && 'code' in error ? String(error.code) : undefined
+  if (!code || !TLS_VERIFY_ERROR_CODES.has(code)) return null
+  return (
+    `[ingest] DB TLS verification FAILED (${code}): the pooler certificate does not ` +
+    `verify against the configured CA (default ${BUNDLED_INGEST_CA_CERT}, override ` +
+    'INGEST_DATABASE_CA_CERT). Confirm the chain with `openssl s_client -starttls postgres ' +
+    '-connect <pooler-host>:5432 -CAfile <ca> -verify_return_error`; do not ship with ' +
+    'INGEST_DATABASE_TLS_VERIFY=false without an owner decision.'
+  )
 }
 
 function ingestDatabaseUrl(): string {
@@ -118,13 +172,10 @@ function ingestDatabaseUrl(): string {
 
 function createWorkerPool(url: string, max: number, label: string): Pool {
   const tls = resolveIngestSsl(url)
-  if (
-    tls.mode === 'unverified' &&
-    process.env.INGEST_DATABASE_TLS_VERIFY?.trim().toLowerCase() !== 'false'
-  ) {
+  if (tls.mode === 'unverified') {
     console.warn(
-      `[${label}] DB TLS certificate is NOT verified (legacy default). Set ` +
-        'INGEST_DATABASE_CA_CERT=/path/to/supabase-ca.pem to verify the pooler certificate.'
+      `[${label}] DB TLS certificate is NOT verified (INGEST_DATABASE_TLS_VERIFY=false legacy ` +
+        'opt-out). Unset it to verify the pooler against the bundled Supabase CA.'
     )
   }
 
