@@ -2,8 +2,9 @@
  * Toobit Futures copy-trading adapter (spec §7 #25, §9 open item 2).
  *
  * PURE HTTP — no Playwright. The bapi answers plain fetch() (verified
- * live 2026-06-12 FROM THE SG VPS; fetch_region='vps_sg', the VPS worker
- * runs INGEST_LOCAL_REGION=vps_sg so fetches exit from SG). Endpoints
+ * live 2026-06-12 from the SG VPS and 2026-11-15 from the local Mac;
+ * migration 20261115170535 moves toobit_futures from fetch_region='vps_sg'
+ * to 'local', so the local worker fetches it). Endpoints
  * were extracted from the SPA bundle (app.*.js api map) because the
  * /copytrading page renders a landing carousel only:
  *
