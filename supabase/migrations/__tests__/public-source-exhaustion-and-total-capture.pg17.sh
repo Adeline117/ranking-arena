@@ -15,6 +15,10 @@
 #   - adapter drift, an uncovered native window and a currency the contract
 #     does not cover refuse the whole migration and leave no rows
 #   + an absent source is skipped
+#
+# It then proves 20261115170535 (postdeploy activation of okx_futures,
+# okx_spot, toobit_futures and xt_futures as local, publicly ranked sources)
+# on the post-160917 state; see the section at the end.
 
 set -Eeuo pipefail
 
@@ -391,3 +395,138 @@ assert_equal "absent sources skipped, the rest registered" \
              WHERE s.slug NOT IN ('binance_futures', 'lbank_futures'))")"
 
 echo "public source exhaustion and total capture PG17 proof passed"
+
+# ── 20261115170535: activate okx/toobit/xt as local, publicly ranked sources ──
+#
+#   + on the post-160917 state the four flip to active/serving/local, nothing
+#     else changes, and they join arena_freshness_expected_sources (real
+#     20260718134000) with exactly their native windows
+#   - a replay refuses and changes nothing
+#   - a drifted status / serving_mode / region / window / adapter, a missing
+#     row, or a missing 160917 capture registration refuses with no write
+
+ACTIVATION="$MIGRATIONS/20261115170535_activate_local_public_sources.sql"
+
+expect_activation_failure() {
+  local db="$1" label="$2" expected="$3"
+  if psql_db "$db" -q -f "$ACTIVATION" >"$ERROR_FILE" 2>&1; then
+    echo "FAIL: $label unexpectedly succeeded" >&2
+    exit 1
+  fi
+  if [[ "$(<"$ERROR_FILE")" != *"$expected"* ]]; then
+    echo "FAIL: $label failed for the wrong reason; expected: $expected" >&2
+    cat "$ERROR_FILE" >&2
+    exit 1
+  fi
+  echo "ok: $label refused"
+}
+
+sources_state() {
+  psql_db "$1" -Atqc "
+    SELECT string_agg(slug || ':' || status || ':' || serving_mode || ':' || fetch_region ||
+                      ':' || timeframes_native::text || ':' || COALESCE(page_size::text, ''),
+                      '|' ORDER BY slug)
+      FROM arena.sources"
+}
+
+four_state() {
+  psql_db "$1" -Atqc "
+    SELECT string_agg(slug || ':' || status || ':' || serving_mode || ':' || fetch_region,
+                      '|' ORDER BY slug)
+      FROM arena.sources
+     WHERE slug IN ('okx_futures', 'okx_spot', 'toobit_futures', 'xt_futures')"
+}
+
+# Post-160917 state for the success, replay and drift cases.
+for db in act_main act_status act_serving act_region act_window act_adapter; do
+  "$PG_BIN/createdb" -h "$SOCKET_DIR" -p "$PORT" -T main "$db"
+done
+# Pre-160917 state with 160917's source corrections applied by hand, so only
+# the missing capture/exhaustion registration (or a missing row) differs.
+for db in act_no_capture act_missing_row; do
+  "$PG_BIN/createdb" -h "$SOCKET_DIR" -p "$PORT" -T postgres "$db"
+  psql_db "$db" -q -c "
+    UPDATE arena.sources SET timeframes_native = '{90}' WHERE slug IN ('okx_futures', 'okx_spot');
+    UPDATE arena.sources SET page_size = 1000 WHERE slug IN ('toobit_futures', 'xt_futures');"
+done
+
+assert_equal "seed pre-state of the four (after 160917)" \
+  "okx_futures:blocked_pending_vps:legacy:vps_sg|okx_spot:blocked_pending_vps:legacy:vps_sg|toobit_futures:blocked_pending_vps:legacy:vps_sg|xt_futures:inactive:legacy:local" \
+  "$(four_state act_main)"
+
+# The real expected-source authority, on a minimal exchanges dimension.
+psql_db act_main -q <<'SQL'
+CREATE TABLE arena.exchanges (id smallint PRIMARY KEY, name text NOT NULL);
+INSERT INTO arena.exchanges VALUES (1, 'Exchange');
+ALTER TABLE arena.sources ADD COLUMN exchange_id smallint NOT NULL DEFAULT 1
+  REFERENCES arena.exchanges(id);
+SQL
+psql_db act_main -q -f "$MIGRATIONS/20260718134000_freshness_expected_sources.sql" >/dev/null
+
+expected_four() {
+  psql_db act_main -Atqc "
+    SELECT COALESCE(string_agg(registry_slug || ':' || season_id, ',' ORDER BY registry_slug, season_id), '')
+      FROM public.arena_freshness_expected_sources()
+     WHERE registry_slug IN ('okx_futures', 'okx_spot', 'toobit_futures', 'xt_futures')"
+}
+assert_equal "before activation none of the four is an expected source" "" "$(expected_four)"
+
+OTHERS_BEFORE="$(psql_db act_main -Atqc "
+  SELECT string_agg(s::text, '|' ORDER BY s.id) FROM arena.sources AS s
+   WHERE slug NOT IN ('okx_futures', 'okx_spot', 'toobit_futures', 'xt_futures')")"
+REGISTRY_BEFORE="$(registry_rows act_main)"
+
+psql_db act_main -q -f "$ACTIVATION"
+echo "ok: activation applies on the post-160917 seed state"
+
+assert_equal "the four are active/serving/local" \
+  "okx_futures:active:serving:local|okx_spot:active:serving:local|toobit_futures:active:serving:local|xt_futures:active:serving:local" \
+  "$(four_state act_main)"
+assert_equal "no other source row changed" "$OTHERS_BEFORE" "$(psql_db act_main -Atqc "
+  SELECT string_agg(s::text, '|' ORDER BY s.id) FROM arena.sources AS s
+   WHERE slug NOT IN ('okx_futures', 'okx_spot', 'toobit_futures', 'xt_futures')")"
+assert_equal "activation writes no contract rows" "$REGISTRY_BEFORE" "$(registry_rows act_main)"
+assert_equal "the four join the expected set with their native windows only" \
+  "okx_futures:90D,okx_spot:90D,toobit_futures:30D,toobit_futures:7D,toobit_futures:90D,xt_futures:30D,xt_futures:7D,xt_futures:90D" \
+  "$(expected_four)"
+
+ACTIVATED="$(sources_state act_main)"
+expect_activation_failure act_main "activation replay" \
+  "local public source activation pre-state drift: okx_futures, okx_spot, toobit_futures, xt_futures"
+assert_equal "refused activation replay changes nothing" "$ACTIVATED" "$(sources_state act_main)"
+
+drift_case() {
+  local db="$1" label="$2" sql="$3" expected="$4"
+  psql_db "$db" -q -c "$sql"
+  local before
+  before="$(sources_state "$db")"
+  expect_activation_failure "$db" "$label" "$expected"
+  assert_equal "refused $label leaves every source row as it was" "$before" "$(sources_state "$db")"
+}
+
+drift_case act_status "status drift" \
+  "UPDATE arena.sources SET status = 'inactive' WHERE slug = 'okx_spot'" \
+  "local public source activation pre-state drift: okx_spot"
+drift_case act_serving "serving_mode drift" \
+  "UPDATE arena.sources SET serving_mode = 'shadow' WHERE slug = 'xt_futures'" \
+  "local public source activation pre-state drift: xt_futures"
+drift_case act_region "region drift" \
+  "UPDATE arena.sources SET fetch_region = 'vps_jp' WHERE slug = 'toobit_futures'" \
+  "local public source activation pre-state drift: toobit_futures"
+drift_case act_window "native window drift" \
+  "UPDATE arena.sources SET timeframes_native = '{7,30,90}' WHERE slug = 'okx_futures'" \
+  "local public source activation pre-state drift: okx_futures"
+drift_case act_adapter "adapter drift" \
+  "UPDATE arena.sources SET adapter_slug = 'xt_v2' WHERE slug = 'xt_futures'" \
+  "local public source activation pre-state drift: xt_futures"
+drift_case act_missing_row "missing source row" \
+  "DELETE FROM arena.sources WHERE slug = 'okx_spot'" \
+  "local public source activation pre-state drift: okx_spot"
+
+NO_CAPTURE_BEFORE="$(sources_state act_no_capture)"
+expect_activation_failure act_no_capture "activation before 160917 registers capture" \
+  "requires the 20261115160917 V3 capture contract for: okx_futures, okx_spot, toobit_futures, xt_futures"
+assert_equal "refused pre-160917 activation leaves every source row as it was" \
+  "$NO_CAPTURE_BEFORE" "$(sources_state act_no_capture)"
+
+echo "local public source activation PG17 proof passed"

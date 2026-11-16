@@ -288,6 +288,13 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # those sources would fail, so it is postdeploy, after 211034. It requires
 # predeploy 20261115141050 (exhaustion registry) and 20261114211033 (kucoin's
 # contract) and touches no table 192134 guards, so 192134 stays last.
+# 20261115170535 activates okx_futures, okx_spot, toobit_futures and
+# xt_futures (owner decision 2026-11-15) as active/serving sources on the
+# `local` region. An active source is scheduled for Tier-A at once and Tier-A
+# fails closed without a deployed capture and its registration, so it follows
+# the worker release and 160917 (its preflight requires 160917's capture and
+# exhaustion rows and post-160917 windows/page_size). It updates arena.sources
+# only (no table 192134 guards), so 192134 stays last.
 # 040440 forward replacement. V1_EXECUTION_STATUS requires the RAW-only
 # bridge SHA to be deployed and legacy callers drained before the legacy
 # position-history relations are frozen. Current main never reads or writes
@@ -302,6 +309,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261115142045_clean_derived_formal_win_rate_scoped_probe.sql
   20261114211034_public_source_attempt_bound_capture_contracts.sql
   20261115160917_public_source_exhaustion_and_total_capture_contracts.sql
+  20261115170535_activate_local_public_sources.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
