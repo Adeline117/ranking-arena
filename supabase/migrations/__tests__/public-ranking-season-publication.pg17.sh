@@ -22,6 +22,7 @@
 #   20261113010326 release_leaderboard_rank_generation_lease_after_seal
 #   20261113011058 leaderboard_publication_source_isolation
 #   20261113110430 rank_publication_source_evidence_binding
+#   20261114193017 rank_publication_requires_attempt_bound_evidence
 # leaderboard_ranks itself is created in the reviewed codec layout of
 # 20261111140053 (the forward repair that rebuilds it in production).
 
@@ -46,6 +47,7 @@ CHAIN=(
   20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql
   20261113011058_leaderboard_publication_source_isolation.sql
   20261113110430_rank_publication_source_evidence_binding.sql
+  20261114193017_rank_publication_requires_attempt_bound_evidence.sql
 )
 
 for executable in initdb pg_ctl psql; do
@@ -347,6 +349,50 @@ FROM (VALUES
   (301, 31, 1), (301, 32, 2)
 ) AS input(snapshot_id, trader_id, rank)
 JOIN arena.leaderboard_snapshots AS snapshot ON snapshot.id = input.snapshot_id;
+
+-- Minimal acquisition ledger (20260722030000): the columns the attempt-bound
+-- evidence predicate reads. fixture_bind() records one terminal outcome whose
+-- source payload RAW is the snapshot's RAW, as Tier-A attempt-bound capture does.
+CREATE TABLE arena.leaderboard_acquisition_attempts (
+  attempt_seq bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  source_id smallint NOT NULL,
+  timeframe smallint NOT NULL,
+  capture_contract text NOT NULL
+);
+CREATE TABLE arena.leaderboard_acquisition_outcomes (
+  attempt_seq bigint PRIMARY KEY REFERENCES arena.leaderboard_acquisition_attempts(attempt_seq),
+  terminal_state text NOT NULL,
+  source_run_id text,
+  source_payload_raw_object_id bigint,
+  manifest_raw_object_id bigint
+);
+CREATE FUNCTION public.fixture_bind(
+  p_snapshot_id bigint,
+  p_contract text DEFAULT 'arena.ingest.leaderboard-acquisition-manifest@3',
+  p_terminal_state text DEFAULT 'complete',
+  p_run_char text DEFAULT 'b'
+) RETURNS void LANGUAGE sql AS $$
+  UPDATE arena.leaderboard_snapshots
+     SET raw_object_id = COALESCE(raw_object_id, 9000000 + p_snapshot_id)
+   WHERE id = p_snapshot_id;
+  WITH attempt AS (
+    INSERT INTO arena.leaderboard_acquisition_attempts (source_id, timeframe, capture_contract)
+    SELECT source_id, timeframe, p_contract FROM arena.leaderboard_snapshots WHERE id = p_snapshot_id
+    RETURNING attempt_seq
+  )
+  INSERT INTO arena.leaderboard_acquisition_outcomes
+  SELECT attempt.attempt_seq, p_terminal_state, pg_catalog.repeat(p_run_char, 64),
+         snapshot.raw_object_id, snapshot.raw_object_id + 1
+  FROM attempt, arena.leaderboard_snapshots AS snapshot WHERE snapshot.id = p_snapshot_id;
+$$;
+-- binance and bybit capture through V3, hyperliquid through V4.
+DO $bind$
+BEGIN
+  PERFORM public.fixture_bind(101);
+  PERFORM public.fixture_bind(201);
+  PERFORM public.fixture_bind(301, 'arena.ingest.leaderboard-acquisition-manifest@4');
+END
+$bind$;
 SQL
 
 for migration in "${CHAIN[@]}"; do
@@ -403,16 +449,77 @@ assert_equal "isolation events are append-only" "rejected" "$(psql_db -Atqc "
   && echo deleted || echo rejected)"
 
 # ---------------------------------------------------------------------------
-# Positive: bybit publishes a fresh board -> it rejoins; the whole season is served.
+# Trust predicate: only a terminal 'complete' attempt-bound (@3/@4) outcome
+# whose source payload is the snapshot's RAW binds a PASSED board.
+# ---------------------------------------------------------------------------
+assert_equal "trust predicate: bound V3/V4, every other shape unbound" \
+  "101:1,301:1,901:0,902:0,903:0,904:0,905:0,906:0" "$(psql_db -Atq <<'SQL'
+BEGIN;
+INSERT INTO arena.leaderboard_snapshots VALUES
+  (901, 2, 90, now() - interval '90 hours', 3, true, NULL),
+  (902, 2, 90, now() - interval '90 hours', 3, true, 9902),
+  (903, 2, 90, now() - interval '90 hours', 3, true, NULL),
+  (904, 2, 90, now() - interval '90 hours', 3, true, NULL),
+  (905, 2, 90, now() - interval '90 hours', 3, false, NULL),
+  (906, 2, 30, now() - interval '90 hours', 3, true, NULL);
+-- 901: no RAW at all; 902: RAW without any acquisition outcome.
+DO $bind$
+BEGIN
+  PERFORM public.fixture_bind(903, p_terminal_state => 'partial');
+  PERFORM public.fixture_bind(904, 'arena.ingest.leaderboard-acquisition-manifest@2');
+  PERFORM public.fixture_bind(905);
+END
+$bind$;
+-- 906: a complete outcome exists, but for the 90D window, not the 30D board.
+UPDATE arena.leaderboard_snapshots SET raw_object_id = 9906 WHERE id = 906;
+INSERT INTO arena.leaderboard_acquisition_attempts (source_id, timeframe, capture_contract)
+VALUES (2, 90, 'arena.ingest.leaderboard-acquisition-manifest@3');
+INSERT INTO arena.leaderboard_acquisition_outcomes
+SELECT pg_catalog.max(attempt_seq), 'complete', repeat('e', 64), 9906, 9907
+FROM arena.leaderboard_acquisition_attempts;
+SET LOCAL ROLE service_role;
+SELECT pg_catalog.string_agg(snapshot_id || ':' || trust_bound::int, ',' ORDER BY snapshot_id)
+FROM public.rank_publication_trust_evidence(ARRAY[101, 301, 901, 902, 903, 904, 905, 906]::bigint[]);
+ROLLBACK;
+SQL
+)"
+assert_equal "trust predicate is not anon-callable" "f" "$(psql_db -Atqc "
+  SELECT pg_catalog.has_function_privilege('anon',
+    'public.rank_publication_trust_evidence(bigint[])', 'EXECUTE')")"
+
+# ---------------------------------------------------------------------------
+# Untrusted: bybit publishes a fresh PASSED board WITHOUT attempt-bound
+# evidence (count check only) -> bybit stays isolated as 'untrusted'.
 # ---------------------------------------------------------------------------
 psql_db -q <<'SQL'
 INSERT INTO arena.leaderboard_snapshots VALUES
-  (202, 2, 90, pg_catalog.statement_timestamp() - interval '30 minutes', 3, true);
+  (202, 2, 90, pg_catalog.statement_timestamp() - interval '30 minutes', 3, true, 9202);
 INSERT INTO arena.leaderboard_entries (snapshot_id, scraped_at, trader_id, rank)
 SELECT 202, scraped_at, input.trader_id, input.rank
 FROM arena.leaderboard_snapshots, (VALUES (21, 1), (22, 2), (23, 3)) AS input(trader_id, rank)
 WHERE id = 202;
 SQL
+OUT="$(publish 90D)"
+assert_equal "count-check-only source is isolated, not published" "true" "$(json_field "$OUT" ok)"
+[[ "$(json_field "$OUT" result.isolatedSources)" == '[{"source":"bybit","reasons":["untrusted"],'* ]] || {
+  echo "untrusted source is not isolated: $OUT" >&2
+  exit 1
+}
+assert_equal "untrusted source is not served" "0|5" "$(psql_db -Atqc "
+  SELECT pg_catalog.count(*) FILTER (WHERE source = 'bybit') || '|' || pg_catalog.count(*)
+  FROM public.public_ranked_leaderboard WHERE season_id = '90D'")"
+assert_equal "untrusted isolation is recorded" "bybit:{untrusted}" "$(psql_db -Atqc "
+  SELECT filter_source || ':' || reasons::text
+  FROM arena.leaderboard_publication_source_isolations WHERE season_id = '90D'")"
+assert_equal "only attempt-bound sources are bound to the cohort" \
+  '{"hyperliquid":"attempt_bound","binance_futures":"attempt_bound"}' \
+  "$(json_field "$OUT" result.evidenceGrades)"
+
+# ---------------------------------------------------------------------------
+# Positive: bybit's board gains attempt-bound evidence -> it rejoins; the
+# whole season is served.
+# ---------------------------------------------------------------------------
+psql_db -qc "SELECT public.fixture_bind(202)" >/dev/null
 
 OUT="$(publish 90D)"
 assert_equal "fresh season publishes" "true" "$(json_field "$OUT" ok)"
@@ -428,12 +535,12 @@ assert_equal "isolation rows cleared, restore event recorded" "0|1" "$(psql_db -
            WHERE filter_source = 'bybit' AND action = 'restored')")"
 assert_equal "public view row count" "7" "$(view_count)"
 assert_equal "every source is bound with its evidence grade" \
-  '{"bybit":"count_check_only","hyperliquid":"count_check_only","binance_futures":"count_check_only"}' \
+  '{"bybit":"attempt_bound","hyperliquid":"attempt_bound","binance_futures":"attempt_bound"}' \
   "$(json_field "$OUT" result.evidenceGrades)"
 assert_equal "evidence rows bind the exact passed snapshots" "binance_futures:{101},bybit:{202},hyperliquid:{301}" \
   "$(psql_db -Atqc "SELECT string_agg(source || ':' || snapshot_ids::text, ',' ORDER BY source)
      FROM arena.leaderboard_rank_publication_source_evidence WHERE score_cohort_id = '$COHORT_ONE'")"
-assert_equal "anon sees the served evidence level per source" "binance_futures:count_check_only,bybit:count_check_only,hyperliquid:count_check_only" \
+assert_equal "anon sees the served evidence level per source" "binance_futures:attempt_bound,bybit:attempt_bound,hyperliquid:attempt_bound" \
   "$(psql_db -Atqc "SET ROLE anon; SELECT string_agg(source || ':' || evidence_grade, ',' ORDER BY source)
      FROM public.public_ranked_leaderboard_source_evidence WHERE season_id = '90D'")"
 if psql_db -qc "DELETE FROM arena.leaderboard_rank_publication_source_evidence" >/dev/null 2>&1; then
@@ -444,6 +551,46 @@ EVIDENCE_ERROR="$(psql_db -Atqc "SELECT public.record_leaderboard_rank_publicati
 [[ "$EVIDENCE_ERROR" == *"only by the transaction that sealed the cohort"* ]] || {
   echo "evidence was recordable outside the sealing transaction: $EVIDENCE_ERROR" >&2; exit 1
 }
+assert_equal "V4 attempt-bound board is traceable to its run/manifest/RAW" \
+  "{301}|{9000301}|{$(printf 'b%.0s' {1..64})}|{9000302}" \
+  "$(psql_db -Atqc "SELECT snapshot_ids::text || '|' || raw_object_ids::text
+       || '|' || source_run_ids::text || '|' || manifest_raw_object_ids::text
+     FROM arena.leaderboard_rank_publication_source_evidence
+     WHERE score_cohort_id = '$COHORT_ONE' AND source = 'hyperliquid'")"
+
+# Database side: even a caller that skips the orchestrator cannot bind an
+# unbound board, and a sealed cohort without evidence cannot COMMIT.
+psql_db -q <<'SQL'
+INSERT INTO arena.leaderboard_snapshots VALUES
+  (203, 2, 90, pg_catalog.statement_timestamp() - interval '70 hours', 3, true, 9203);
+SQL
+UNBOUND_ERROR="$(psql_db -Atq 2>&1 <<'SQL' || true
+BEGIN;
+INSERT INTO arena.leaderboard_rank_publications (id, season_id, request_sha256, source_count, trader_count, proofs)
+VALUES ('00000000-0000-4000-8000-0000000000e1', '90D', repeat('e', 64), 1, 0,
+        '[{"source":"bybit"}]'::jsonb);
+SELECT public.record_leaderboard_rank_publication_evidence('90D',
+  '00000000-0000-4000-8000-0000000000e1', '[{"source":"bybit","snapshot_ids":[203]}]'::jsonb);
+COMMIT;
+SQL
+)"
+[[ "$UNBOUND_ERROR" == *"requires attempt-bound evidence: bybit has 0 of 1 boards bound"* ]] || {
+  echo "an unbound board was bound as publication evidence: $UNBOUND_ERROR" >&2; exit 1
+}
+NO_EVIDENCE_ERROR="$(psql_db -Atq 2>&1 <<'SQL' || true
+BEGIN;
+INSERT INTO arena.leaderboard_rank_publications (id, season_id, request_sha256, source_count, trader_count, proofs)
+VALUES ('00000000-0000-4000-8000-0000000000e2', '90D', repeat('e', 64), 1, 0,
+        '[{"source":"bybit"}]'::jsonb);
+COMMIT;
+SQL
+)"
+[[ "$NO_EVIDENCE_ERROR" == *"lacks attempt-bound evidence for: bybit"* ]] || {
+  echo "a seal without evidence committed: $NO_EVIDENCE_ERROR" >&2; exit 1
+}
+assert_equal "neither refused seal left a receipt" "0" "$(psql_db -Atqc "
+  SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_publications
+  WHERE id IN ('00000000-0000-4000-8000-0000000000e1', '00000000-0000-4000-8000-0000000000e2')")"
 
 # Ranks are 1..N, follow arena_score DESC, and every row carries the cohort.
 assert_equal "view rank order matches arena_score" "t" "$(psql_db -Atqc "
@@ -598,13 +745,10 @@ SELECT 102, scraped_at, input.trader_id, input.rank
 FROM arena.leaderboard_snapshots, (VALUES (11, 1), (12, 2), (14, 3)) AS input(trader_id, rank)
 WHERE id = 102;
 SQL
-# Attempt-bound capture for binance's new board: a metric-trust run exists.
-psql_db -q <<'SQL'
-CREATE TABLE arena.metric_trust_runs (
-  source_run_id text PRIMARY KEY, snapshot_id bigint NOT NULL, manifest_raw_object_id bigint NOT NULL
-);
+# Attempt-bound capture for binance's new board (RAW 9001, manifest 9002).
+psql_db -q >/dev/null <<'SQL'
 UPDATE arena.leaderboard_snapshots SET raw_object_id = 9001 WHERE id = 102;
-INSERT INTO arena.metric_trust_runs VALUES (repeat('a', 64), 102, 9002);
+SELECT public.fixture_bind(102, p_run_char => 'a');
 SQL
 OUT="$(publish 90D)"
 assert_equal "second cycle publishes" "true" "$(json_field "$OUT" ok)"
@@ -619,7 +763,7 @@ assert_equal "view serves only the new cohort" "7|0|1" "$(psql_db -Atqc "
 assert_equal "every served row is the new cohort" "7" "$(psql_db -Atqc "
   SELECT pg_catalog.count(*) FROM public.leaderboard_ranks
   WHERE season_id = '90D' AND rank_publication_id = '$COHORT_TWO'")"
-assert_equal "generation sequence advanced past the foreign claim" "4" \
+assert_equal "generation sequence advanced past the foreign claim" "5" \
   "$(json_field "$OUT" result.generationSeq)"
 assert_equal "second cycle released its lease" "true" "$(json_field "$OUT" result.leaseReleased)"
 assert_equal "attempt-bound source is graded and traceable to run/manifest/RAW" \
@@ -635,7 +779,7 @@ assert_equal "attempt-bound source is graded and traceable to run/manifest/RAW" 
 # ---------------------------------------------------------------------------
 OUT="$(publish 90D)"
 assert_equal "immediate re-publication succeeds" "true" "$(json_field "$OUT" ok)"
-assert_equal "immediate re-publication is generation 5" "5" "$(json_field "$OUT" result.generationSeq)"
+assert_equal "immediate re-publication is generation 6" "6" "$(json_field "$OUT" result.generationSeq)"
 assert_equal "view still serves 7 rows" "7" "$(view_count)"
 
 # ---------------------------------------------------------------------------

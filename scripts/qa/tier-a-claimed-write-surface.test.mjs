@@ -38,7 +38,6 @@ function productionSources(directory) {
 test('Tier-A publication and attempt clients expose claimed transaction paths only', () => {
   const publication = read('worker/src/ingest/fenced-tier-a-publication.ts')
   for (const name of [
-    'publishClaimedLeaderboardSnapshot',
     'publishClaimedTrustedLeaderboardSnapshot',
     'publishClaimedAttemptBoundLeaderboardSnapshot',
     'publishClaimedBoardSeries',
@@ -46,6 +45,8 @@ test('Tier-A publication and attempt clients expose claimed transaction paths on
     assert.match(publication, new RegExp(`export async function ${name}\\(`))
   }
   assert.doesNotMatch(publication, /\bpublishFenced[A-Za-z]+\b|\bwithFencedTierAPublication\b/)
+  // Publication requires attempt-bound evidence: no count-check-only snapshot path.
+  assert.doesNotMatch(publication, /\bpublishClaimedLeaderboardSnapshot\b/)
 
   const attempts = read('lib/ingest/acquisition-attempts.ts')
   assert.match(attempts, /export async function startLeaderboardAcquisitionAttemptInTransaction\(/)

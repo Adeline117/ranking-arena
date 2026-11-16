@@ -33,21 +33,18 @@ const mockGetAdapter = jest.fn()
 const mockOpenSession = jest.fn()
 const mockSessionClose = jest.fn()
 const mockWriteRawObject = jest.fn()
-const mockWriteLeaderboardRawArtifactSet = jest.fn()
 const mockWriteAttemptBoundLeaderboardRawArtifactSet = jest.fn()
 const mockFindRegisteredAttemptBoundContract = jest.fn()
 const mockStartLeaderboardAcquisitionAttempt = jest.fn()
 const mockFinishLeaderboardAcquisitionAttempt = jest.fn()
 const mockRecordFieldInventory = jest.fn()
 const mockValidateLeaderboardRows = jest.fn()
-const mockPublishLeaderboardSnapshot = jest.fn()
 const mockPublishTrustedLeaderboardSnapshot = jest.fn()
 const mockPublishAttemptBoundLeaderboardSnapshot = jest.fn()
 const mockHasRegisteredLeaderboardMetricTrust = jest.fn()
 const mockPublishFencedBoardSeries = jest.fn()
 const mockJobUpdateData = jest.fn()
 const mockDirectJobUpdateData = jest.fn()
-const mockResolveDeployedSha = jest.fn()
 const mockClaimSourceJobExecutionAuthority = jest.fn()
 const mockExecutionAssertActive = jest.fn()
 const mockExecutionClose = jest.fn()
@@ -81,18 +78,6 @@ jest.mock('@/lib/ingest/raw', () => ({
     if (runTransaction) {
       await runTransaction(async (transaction: unknown) => {
         mockRawPointerTransaction('raw', transaction)
-      })
-    }
-    return result
-  },
-  writeLeaderboardRawArtifactSet: async (
-    input: unknown,
-    runTransaction?: (operation: (transaction: unknown) => Promise<unknown>) => Promise<unknown>
-  ) => {
-    const result = await mockWriteLeaderboardRawArtifactSet(input)
-    if (runTransaction) {
-      await runTransaction(async (transaction: unknown) => {
-        mockRawPointerTransaction('artifact', transaction)
       })
     }
     return result
@@ -156,15 +141,6 @@ jest.mock('@/worker/src/ingest/fenced-tier-a-publication', () => ({
     mockPublicationExecution('series', execution)
     return mockPublishFencedBoardSeries(src, series, traderIds, context, options)
   },
-  publishClaimedLeaderboardSnapshot: (
-    input: unknown,
-    context: unknown,
-    execution: unknown,
-    _signal?: unknown
-  ) => {
-    mockPublicationExecution('snapshot', execution)
-    return mockPublishLeaderboardSnapshot(input, context)
-  },
   publishClaimedTrustedLeaderboardSnapshot: (
     input: unknown,
     context: unknown,
@@ -191,9 +167,6 @@ jest.mock('@/lib/ingest/serving/metric-trust-publish', () => ({
 const mockNoteTierAPublished = jest.fn()
 jest.mock('@/worker/src/ingest/progress', () => ({
   noteTierAPublished: () => mockNoteTierAPublished(),
-}))
-jest.mock('@/worker/src/ingest/heartbeat', () => ({
-  resolveDeployedSha: () => mockResolveDeployedSha(),
 }))
 jest.mock('@/worker/src/ingest/source-job-execution-authority', () => ({
   claimSourceJobExecutionAuthority: (...args: unknown[]) =>
@@ -517,10 +490,14 @@ function makeJob(data: TierJobData = { sourceSlug: src.slug }): Job<TierJobData>
   return testJob as unknown as Job<TierJobData>
 }
 
+// The source the current test's attempts are recorded for (every Tier-A
+// window is attempt-bound).
+let activeSource: SourceRow = src
+
 function attemptFromStart(
   input: StartLeaderboardAcquisitionAttemptInput,
   sequence: number,
-  source: SourceRow = binanceSrc
+  source: SourceRow = activeSource
 ): LeaderboardAcquisitionAttempt {
   return Object.freeze({
     attemptSeq: sequence,
@@ -564,6 +541,24 @@ function attemptBoundRawReceipt(input: {
   }
 }
 
+/** Each attempt-bound RAW write, projected to its manifest-level fields. */
+function attemptBoundRawWrites() {
+  return mockWriteAttemptBoundLeaderboardRawArtifactSet.mock.calls.map(
+    ([input]: [
+      {
+        attempt: LeaderboardAcquisitionAttempt
+        built: { sourceRunId: string; manifest: Record<string, unknown> }
+        sourcePages: RawPage[]
+      },
+    ]) => ({
+      sourcePages: input.sourcePages,
+      sourceRunId: input.built.sourceRunId,
+      manifest: input.built.manifest,
+      observationCycleId: input.attempt.observationCycleId,
+    })
+  )
+}
+
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolve!: () => void
   const promise = new Promise<void>((settle) => {
@@ -576,12 +571,11 @@ describe('Tier-A board-series publication guard', () => {
   let job: Job<TierJobData>
   let expectedCycleId: string
   const originalIngestLocalRegion = process.env.INGEST_LOCAL_REGION
-  const originalAttemptBoundCaptureEnabled = process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED
 
   beforeEach(() => {
     jest.clearAllMocks()
     process.env.INGEST_LOCAL_REGION = 'local'
-    process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED = 'true'
+    activeSource = src
     mockJobUpdateData.mockResolvedValue(undefined)
     mockDirectJobUpdateData.mockResolvedValue(undefined)
     mockBullReplaceDataIfOwned.mockImplementation((nextData: unknown) =>
@@ -634,8 +628,9 @@ describe('Tier-A board-series publication guard', () => {
     mockRecordExecutionWindowReceipt.mockResolvedValue(Object.freeze({ recorded: true }))
     job = makeJob()
     expectedCycleId = `tier-a:${src.slug}:${job.id}:${job.timestamp}`
-    mockResolveDeployedSha.mockReturnValue('c'.repeat(40))
-    mockFindRegisteredAttemptBoundContract.mockResolvedValue(null)
+    mockFindRegisteredAttemptBoundContract.mockResolvedValue(
+      ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT
+    )
     let nextAttemptSequence = 41
     mockStartLeaderboardAcquisitionAttempt.mockImplementation(
       async (input: StartLeaderboardAcquisitionAttemptInput) =>
@@ -668,18 +663,6 @@ describe('Tier-A board-series publication guard', () => {
       storagePath: 'xt_futures/tier_a/raw.json.gz',
       contentHash: 'a'.repeat(64),
     })
-    mockWriteLeaderboardRawArtifactSet.mockResolvedValue({
-      sourcePayload: {
-        id: 9101,
-        storagePath: 'xt_futures/tier_a_trust/source.json.gz',
-        contentHash: 'b'.repeat(64),
-      },
-      populationManifest: {
-        id: 9102,
-        storagePath: 'xt_futures/tier_a_trust/manifest.json.gz',
-        contentHash: 'c'.repeat(64),
-      },
-    })
     mockRecordFieldInventory.mockResolvedValue(undefined)
     mockValidateLeaderboardRows.mockImplementation((rows: ParsedLeaderboardRow[]) => ({
       valid: rows,
@@ -687,8 +670,9 @@ describe('Tier-A board-series publication guard', () => {
     }))
     mockHasRegisteredLeaderboardMetricTrust.mockReturnValue(true)
     mockGetAdapter.mockReturnValue({
+      captureLeaderboard: jest.fn(async () => capturedLeaderboard()),
       listLeaderboard: async function* () {
-        yield page
+        throw new Error('Tier-A must never use the uncaptured stream')
       },
       parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
       parseLeaderboardSeries: () =>
@@ -705,13 +689,6 @@ describe('Tier-A board-series publication guard', () => {
             ],
           ],
         ]),
-    })
-    mockPublishLeaderboardSnapshot.mockResolvedValue({
-      snapshotId: 777,
-      scrapedAt: '2026-07-16 00:01:02.123456+00',
-      verdict: { passed: true, baselineUsed: 1, deviationPct: 0 },
-      published: true,
-      traderIds: new Map([[row.exchangeTraderId, 42]]),
     })
     mockPublishTrustedLeaderboardSnapshot.mockResolvedValue({
       snapshotId: 777,
@@ -743,11 +720,6 @@ describe('Tier-A board-series publication guard', () => {
   afterAll(() => {
     if (originalIngestLocalRegion === undefined) delete process.env.INGEST_LOCAL_REGION
     else process.env.INGEST_LOCAL_REGION = originalIngestLocalRegion
-    if (originalAttemptBoundCaptureEnabled === undefined) {
-      delete process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED
-    } else {
-      process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED = originalAttemptBoundCaptureEnabled
-    }
   })
 
   function configureAttemptBoundSource(
@@ -757,6 +729,7 @@ describe('Tier-A board-series publication guard', () => {
   ) {
     job = makeJob({ sourceSlug: binanceSrc.slug })
     expectedCycleId = `tier-a:${binanceSrc.slug}:${job.id}:${job.timestamp}`
+    activeSource = binanceSrc
     mockGetSourceBySlug.mockResolvedValue(binanceSrc)
     mockNativeRankingTimeframes.mockReturnValue(timeframes)
     mockFindRegisteredAttemptBoundContract.mockResolvedValue(
@@ -778,6 +751,7 @@ describe('Tier-A board-series publication guard', () => {
   ) {
     job = makeJob({ sourceSlug: bitgetBotsSrc.slug })
     expectedCycleId = `tier-a:${bitgetBotsSrc.slug}:${job.id}:${job.timestamp}`
+    activeSource = bitgetBotsSrc
     mockGetSourceBySlug.mockResolvedValue(bitgetBotsSrc)
     mockNativeRankingTimeframes.mockReturnValue([30])
     mockFindRegisteredAttemptBoundContract.mockResolvedValue(
@@ -836,7 +810,6 @@ describe('Tier-A board-series publication guard', () => {
     )
     expect(mockOpenSession).not.toHaveBeenCalled()
     expect(mockWriteRawObject).not.toHaveBeenCalled()
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
   })
 
   it('claims execution before opening a session and a claim failure opens nothing', async () => {
@@ -888,35 +861,41 @@ describe('Tier-A board-series publication guard', () => {
     await expect(processTierA(job)).resolves.toHaveLength(1)
 
     expect(mockExecutionAssertActive).toHaveBeenCalled()
-    expect(mockPublishLeaderboardSnapshot).toHaveBeenCalledTimes(1)
+    expect(mockPublishTrustedLeaderboardSnapshot).toHaveBeenCalledTimes(1)
     expect(mockExecutionClose).toHaveBeenCalledWith('completed')
   })
 
-  it('keeps a registered v3 contract inert without explicit rollout approval', async () => {
-    delete process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED
-    mockFindRegisteredAttemptBoundContract.mockResolvedValue(
-      ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT
+  it('fails before any claim or session when the adapter has no capture implementation', async () => {
+    mockGetAdapter.mockReturnValue({
+      listLeaderboard: async function* () {
+        yield page
+      },
+      parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
+      parseLeaderboardSeries: () => new Map(),
+    })
+
+    await expect(processTierA(job)).rejects.toThrow(
+      'xt_futures adapter has no attempt-bound capture implementation'
     )
 
-    await expect(processTierA(job)).resolves.toEqual([
-      expect.objectContaining({ timeframe: 30, snapshotId: 777, passed: true }),
-    ])
-
     expect(mockFindRegisteredAttemptBoundContract).not.toHaveBeenCalled()
-    expect(mockStartLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
-    expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).not.toHaveBeenCalled()
+    expect(mockClaimSourceJobExecutionAuthority).not.toHaveBeenCalled()
+    expect(mockOpenSession).not.toHaveBeenCalled()
+    expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
   })
 
-  it('fails an explicit v4 rollout before registry lookup, session, or capture when disabled', async () => {
-    const captureLeaderboard = configureV4Source()
-    delete process.env.INGEST_ATTEMPT_BOUND_CAPTURE_ENABLED
+  it('fails before any claim or session when the v3 capture contract is not registered', async () => {
+    mockFindRegisteredAttemptBoundContract.mockResolvedValue(null)
 
-    await expect(processTierA(job)).rejects.toThrow('v4 capture rollout is not enabled')
+    await expect(processTierA(job)).rejects.toThrow(
+      'xt_futures v3 capture contract is not exactly registered'
+    )
 
-    expect(mockFindRegisteredAttemptBoundContract).not.toHaveBeenCalled()
+    expect(mockClaimSourceJobExecutionAuthority).not.toHaveBeenCalled()
     expect(mockStartLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
     expect(mockOpenSession).not.toHaveBeenCalled()
-    expect(captureLeaderboard).not.toHaveBeenCalled()
+    expect(mockWriteRawObject).not.toHaveBeenCalled()
+    expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
   })
 
   it('fails an explicit v4 adapter when its exact registry contract is absent', async () => {
@@ -997,7 +976,6 @@ describe('Tier-A board-series publication guard', () => {
       expect.any(Object)
     )
     expect(mockHasRegisteredLeaderboardMetricTrust).not.toHaveBeenCalled()
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockJobUpdateData).toHaveBeenCalledTimes(1)
   })
@@ -1026,7 +1004,6 @@ describe('Tier-A board-series publication guard', () => {
       })
     )
     expect(mockPublishAttemptBoundLeaderboardSnapshot).toHaveBeenCalledTimes(1)
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockRecordExecutionWindowReceipt).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
@@ -1080,8 +1057,7 @@ describe('Tier-A board-series publication guard', () => {
       })
     )
     expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).not.toHaveBeenCalled()
-    expect(mockWriteLeaderboardRawArtifactSet).not.toHaveBeenCalled()
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).not.toHaveBeenCalled()
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
   })
 
@@ -1172,8 +1148,7 @@ describe('Tier-A board-series publication guard', () => {
       })
     )
     expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).not.toHaveBeenCalled()
-    expect(mockWriteLeaderboardRawArtifactSet).not.toHaveBeenCalled()
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).not.toHaveBeenCalled()
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
   })
 
@@ -1222,7 +1197,6 @@ describe('Tier-A board-series publication guard', () => {
         projection: expect.objectContaining({ terminalState: 'unknown' }),
       })
     )
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
   })
 
@@ -1242,7 +1216,7 @@ describe('Tier-A board-series publication guard', () => {
             30,
             {
               id: 777,
-              rawObjectId: 9001,
+              rawObjectId: 9261,
               scrapedAt: '2026-07-16T00:01:02.123Z',
             },
           ],
@@ -1252,26 +1226,22 @@ describe('Tier-A board-series publication guard', () => {
     // openSession(src) is the fetch-layer's source-scoped, single-slot
     // unsuffixed lane. Do not bypass it with a raw profile suffix override.
     expect(mockOpenSession).toHaveBeenCalledWith(src)
-    expect(mockWriteRawObject).toHaveBeenCalledWith(
-      expect.objectContaining({
-        timeframe: 30,
-        meta: { pageCount: 1, observation_cycle_id: expectedCycleId },
-      })
-    )
-    expect(mockPublishLeaderboardSnapshot).toHaveBeenCalledWith(
+    expect(mockWriteRawObject).not.toHaveBeenCalled()
+    expect(mockPublishTrustedLeaderboardSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({
         timeframe: 30,
         observationCycleId: expectedCycleId,
       }),
       expect.objectContaining({ consumedRegion: 'local' })
     )
-    expect(mockRecordExecutionWindowReceipt).not.toHaveBeenCalled()
-    expect(mockJobUpdateData).not.toHaveBeenCalled()
+    expect(mockRecordExecutionWindowReceipt).toHaveBeenCalledTimes(1)
+    expect(mockJobUpdateData).toHaveBeenCalledTimes(1)
     expect(mockSessionClose).toHaveBeenCalledTimes(1)
   })
 
   it('rejects a cross-timeframe series block before snapshot publication or checkpoint', async () => {
     mockGetAdapter.mockReturnValue({
+      captureLeaderboard: jest.fn(async () => capturedLeaderboard()),
       listLeaderboard: async function* () {
         yield page
       },
@@ -1308,7 +1278,6 @@ describe('Tier-A board-series publication guard', () => {
         message: '[tier-a] board series block crossed its snapshot timeframe',
       })
     )
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockPublishFencedBoardSeries).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
@@ -1321,6 +1290,7 @@ describe('Tier-A board-series publication guard', () => {
     })
     const parseLeaderboardSeries = jest.fn(() => new Map())
     mockGetAdapter.mockReturnValue({
+      captureLeaderboard: jest.fn(async () => capturedLeaderboard()),
       listLeaderboard: async function* () {
         yield page
       },
@@ -1344,7 +1314,6 @@ describe('Tier-A board-series publication guard', () => {
     )
     expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
     expect(parseLeaderboardSeries).not.toHaveBeenCalled()
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockPublishFencedBoardSeries).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
@@ -1393,7 +1362,7 @@ describe('Tier-A board-series publication guard', () => {
     expect(parseLeaderboard).toHaveBeenCalledWith(parsePage.payload, expect.any(Object))
     expect(parseLeaderboard).not.toHaveBeenCalledWith(terminalPage.payload, expect.any(Object))
     expect(mockWriteRawObject).not.toHaveBeenCalled()
-    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
+    expect(attemptBoundRawWrites()).toContainEqual(
       expect.objectContaining({
         sourcePages,
         observationCycleId: expectedCycleId,
@@ -1402,9 +1371,9 @@ describe('Tier-A board-series publication guard', () => {
         }),
       })
     )
-    const artifactInput = mockWriteLeaderboardRawArtifactSet.mock.calls[0][0]
+    const artifactInput = attemptBoundRawWrites()[0]
     expect(artifactInput.sourceRunId).toBe(strictCanonicalSha256(artifactInput.manifest))
-    expect(mockWriteLeaderboardRawArtifactSet.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(mockWriteAttemptBoundLeaderboardRawArtifactSet.mock.invocationCallOrder[0]).toBeLessThan(
       mockPublishTrustedLeaderboardSnapshot.mock.invocationCallOrder[0]
     )
     expect(mockPublishTrustedLeaderboardSnapshot).toHaveBeenCalledWith(
@@ -1421,56 +1390,13 @@ describe('Tier-A board-series publication guard', () => {
           sourceRunId: artifactInput.sourceRunId,
           manifest: artifactInput.manifest,
           artifacts: expect.objectContaining({
-            sourcePayload: expect.objectContaining({ id: 9101 }),
-            populationManifest: expect.objectContaining({ id: 9102 }),
+            sourcePayload: expect.objectContaining({ id: 9261 }),
+            populationManifest: expect.objectContaining({ id: 9262 }),
           }),
         }),
       }),
       expect.objectContaining({ consumedRegion: 'local' })
     )
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
-  })
-
-  it('keeps captured artifacts but uses legacy publication when no metric trust contract is registered', async () => {
-    const captureLeaderboard = jest.fn(async () => capturedLeaderboard())
-    mockHasRegisteredLeaderboardMetricTrust.mockReturnValue(false)
-    mockGetAdapter.mockReturnValue({
-      captureLeaderboard,
-      listLeaderboard: async function* () {
-        throw new Error('legacy stream must not run')
-      },
-      parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
-      parseLeaderboardSeries: () => new Map(),
-    })
-
-    await expect(processTierA(job)).resolves.toHaveLength(1)
-
-    expect(captureLeaderboard).toHaveBeenCalledTimes(1)
-    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledTimes(1)
-    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
-      expect.objectContaining({
-        observationCycleId: expectedCycleId,
-        manifest: expect.objectContaining({
-          assessment: { acquisition_state: 'complete', population_state: 'verified' },
-        }),
-      })
-    )
-    expect(mockHasRegisteredLeaderboardMetricTrust).toHaveBeenCalledWith(src, 30)
-    expect(mockWriteLeaderboardRawArtifactSet.mock.invocationCallOrder[0]).toBeLessThan(
-      mockPublishLeaderboardSnapshot.mock.invocationCallOrder[0]
-    )
-    expect(mockPublishLeaderboardSnapshot).toHaveBeenCalledWith(
-      expect.objectContaining({
-        src,
-        timeframe: 30,
-        rows: [row],
-        rejects: [],
-        rawObjectId: 9101,
-        observationCycleId: expectedCycleId,
-      }),
-      expect.objectContaining({ consumedRegion: 'local' })
-    )
-    expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
   })
 
   it('anchors capture ranks to observed source rows when configured page size is unknown', async () => {
@@ -1515,7 +1441,7 @@ describe('Tier-A board-series publication guard', () => {
       }),
       expect.objectContaining({ consumedRegion: 'local' })
     )
-    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
+    expect(attemptBoundRawWrites()).toContainEqual(
       expect.objectContaining({
         manifest: expect.objectContaining({
           source: expect.objectContaining({ configured_page_size: null }),
@@ -1572,7 +1498,7 @@ describe('Tier-A board-series publication guard', () => {
       ])
     )
     expect(rowsAtValidation.some((candidate) => candidate.rank === 10)).toBe(false)
-    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
+    expect(attemptBoundRawWrites()).toContainEqual(
       expect.objectContaining({
         manifest: expect.objectContaining({
           assessment: { acquisition_state: 'complete', population_state: 'partial' },
@@ -1580,7 +1506,6 @@ describe('Tier-A board-series publication guard', () => {
       })
     )
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -1677,28 +1602,8 @@ describe('Tier-A board-series publication guard', () => {
         expect.objectContaining({ jobType: 'tier_a_failure' })
       )
       expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
-      expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     }
   )
-
-  it('freezes one runner SHA before a multi-window capture cycle', async () => {
-    mockNativeRankingTimeframes.mockReturnValue([7, 30])
-    mockResolveDeployedSha.mockReturnValueOnce('d'.repeat(40)).mockReturnValueOnce('e'.repeat(40))
-    const captureLeaderboard = jest.fn(async () => capturedLeaderboard())
-    mockGetAdapter.mockReturnValue({
-      captureLeaderboard,
-      listLeaderboard: async function* () {
-        throw new Error('legacy stream must not run')
-      },
-      parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
-      parseLeaderboardSeries: () => new Map(),
-    })
-
-    await expect(processTierA(job)).resolves.toHaveLength(2)
-
-    expect(captureLeaderboard).toHaveBeenCalledTimes(2)
-    expect(mockResolveDeployedSha).toHaveBeenCalledTimes(1)
-  })
 
   it('keeps partial capture out of the legacy count gate and serving', async () => {
     const captureLeaderboard = jest.fn(async () => {
@@ -1748,14 +1653,13 @@ describe('Tier-A board-series publication guard', () => {
       'acquisition trust gate FAILED: acquisition=partial, population=partial'
     )
     expect(mockWriteRawObject).not.toHaveBeenCalled()
-    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
+    expect(attemptBoundRawWrites()).toContainEqual(
       expect.objectContaining({
         manifest: expect.objectContaining({
           assessment: { acquisition_state: 'partial', population_state: 'partial' },
         }),
       })
     )
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
   })
 
@@ -1808,51 +1712,13 @@ describe('Tier-A board-series publication guard', () => {
       'acquisition trust gate FAILED: acquisition=unknown, population=unknown'
     )
     expect(mockWriteRawObject).not.toHaveBeenCalled()
-    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
+    expect(attemptBoundRawWrites()).toContainEqual(
       expect.objectContaining({
         manifest: expect.objectContaining({
           assessment: { acquisition_state: 'unknown', population_state: 'unknown' },
         }),
       })
     )
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
-    expect(mockJobUpdateData).not.toHaveBeenCalled()
-  })
-
-  it('persists a missing-runner manifest as unknown before refusing publication', async () => {
-    mockResolveDeployedSha.mockReturnValue('unknown-deployment')
-    mockGetAdapter.mockReturnValue({
-      captureLeaderboard: async () => capturedLeaderboard(),
-      listLeaderboard: async function* () {
-        throw new Error('legacy stream must not run')
-      },
-      parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
-      parseLeaderboardSeries: () => new Map(),
-    })
-    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
-
-    let failure: unknown
-    try {
-      await processTierA(job)
-    } catch (error) {
-      failure = error
-    } finally {
-      errorSpy.mockRestore()
-    }
-
-    expect(failure).toBeInstanceOf(AggregateError)
-    expect((failure as AggregateError).errors[0].message).toContain(
-      'acquisition trust gate FAILED: acquisition=unknown, population=unknown'
-    )
-    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
-      expect.objectContaining({
-        manifest: expect.objectContaining({
-          runner_git_sha: null,
-          assessment: { acquisition_state: 'unknown', population_state: 'unknown' },
-        }),
-      })
-    )
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
   })
 
@@ -1919,7 +1785,7 @@ describe('Tier-A board-series publication guard', () => {
     expect((wrapped.cause as LeaderboardCaptureUpstreamError).capture).toBe(failedCapture)
     expect((failure as AggregateError).errors[1].message).toBe('browser close failed')
     expect(mockWriteRawObject).not.toHaveBeenCalled()
-    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
+    expect(attemptBoundRawWrites()).toContainEqual(
       expect.objectContaining({
         sourcePages: [failedRawPage],
         manifest: expect.objectContaining({
@@ -1932,7 +1798,6 @@ describe('Tier-A board-series publication guard', () => {
         }),
       })
     )
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
   })
 
@@ -1994,7 +1859,7 @@ describe('Tier-A board-series publication guard', () => {
     expect(((failure as AggregateError).errors[0] as Error & { cause?: unknown }).cause).toBe(
       upstream
     )
-    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
+    expect(attemptBoundRawWrites()).toContainEqual(
       expect.objectContaining({
         manifest: expect.objectContaining({
           termination_reason: 'upstream_error',
@@ -2008,7 +1873,6 @@ describe('Tier-A board-series publication guard', () => {
         }),
       })
     )
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
   })
 
   it('persists a real first-request transport failure as unavailable and unknown', async () => {
@@ -2066,7 +1930,7 @@ describe('Tier-A board-series publication guard', () => {
     expect(wrapped.cause).toBeInstanceOf(LeaderboardCaptureUpstreamError)
     expect(wrapped.cause).toMatchObject({ status: null, cause: transportError })
     expect(mockWriteRawObject).not.toHaveBeenCalled()
-    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
+    expect(attemptBoundRawWrites()).toContainEqual(
       expect.objectContaining({
         sourcePages: [],
         manifest: expect.objectContaining({
@@ -2081,7 +1945,6 @@ describe('Tier-A board-series publication guard', () => {
         }),
       })
     )
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
   })
 
   it('keeps a series-parser bug from erasing valid population evidence', async () => {
@@ -2111,7 +1974,7 @@ describe('Tier-A board-series publication guard', () => {
     expect(((failure as AggregateError).errors[0] as Error & { cause?: unknown }).cause).toBe(
       seriesError
     )
-    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledWith(
+    expect(attemptBoundRawWrites()).toContainEqual(
       expect.objectContaining({
         manifest: expect.objectContaining({
           assessment: { acquisition_state: 'complete', population_state: 'verified' },
@@ -2119,7 +1982,6 @@ describe('Tier-A board-series publication guard', () => {
       })
     )
     expect(mockWriteRawObject).not.toHaveBeenCalled()
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
   })
 
@@ -2128,7 +1990,7 @@ describe('Tier-A board-series publication guard', () => {
     const attempted: number[] = []
     let upstream: LeaderboardCaptureUpstreamError | null = null
     const persistenceError = new Error('artifact database unavailable')
-    mockWriteLeaderboardRawArtifactSet.mockRejectedValueOnce(persistenceError)
+    mockWriteAttemptBoundLeaderboardRawArtifactSet.mockRejectedValueOnce(persistenceError)
     mockGetAdapter.mockReturnValue({
       captureLeaderboard: async (_session: unknown, _source: SourceRow, timeframe: number) => {
         attempted.push(timeframe)
@@ -2182,7 +2044,6 @@ describe('Tier-A board-series publication guard', () => {
     expect(failure).toBeInstanceOf(AggregateError)
     expect((failure as AggregateError).errors).toEqual([upstream, persistenceError])
     expect(attempted).toEqual([30])
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
     expect(mockSessionClose).toHaveBeenCalledTimes(1)
   })
@@ -2219,7 +2080,7 @@ describe('Tier-A board-series publication guard', () => {
     expect(failure).toBeInstanceOf(AggregateError)
     expect((failure as AggregateError).errors).toEqual([parserError])
     expect(attempted).toEqual([30])
-    expect(mockWriteLeaderboardRawArtifactSet).not.toHaveBeenCalled()
+    expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).not.toHaveBeenCalled()
     expect(mockWriteRawObject).toHaveBeenCalledWith({
       sourceId: src.id,
       sourceSlug: src.slug,
@@ -2249,7 +2110,6 @@ describe('Tier-A board-series publication guard', () => {
         }),
       }),
     })
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
   })
 
@@ -2279,29 +2139,8 @@ describe('Tier-A board-series publication guard', () => {
 
     expect(failure).toBeInstanceOf(AggregateError)
     expect((failure as AggregateError).errors).toEqual([parserError, persistenceError])
-    expect(mockWriteLeaderboardRawArtifactSet).not.toHaveBeenCalled()
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
+    expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
-  })
-
-  it('keeps adapters without capture capability on the legacy stream', async () => {
-    const listLeaderboard = jest.fn(async function* () {
-      yield page
-    })
-    mockGetAdapter.mockReturnValue({
-      listLeaderboard,
-      parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
-      parseLeaderboardSeries: () => new Map(),
-    })
-
-    await expect(processTierA(job)).resolves.toHaveLength(1)
-
-    expect(listLeaderboard).toHaveBeenCalledTimes(1)
-    expect(mockWriteRawObject).toHaveBeenCalledWith(
-      expect.objectContaining({ payload: [page], meta: expect.objectContaining({ pageCount: 1 }) })
-    )
-    expect(mockWriteLeaderboardRawArtifactSet).not.toHaveBeenCalled()
-    expect(mockResolveDeployedSha).not.toHaveBeenCalled()
   })
 
   it('uses exact-cycle database receipts to resume and repairs an absent Redis hint', async () => {
@@ -2340,9 +2179,12 @@ describe('Tier-A board-series publication guard', () => {
     } as unknown as TierJobData)
     mockNativeRankingTimeframes.mockReturnValue([7, 30, 90])
     mockGetAdapter.mockReturnValue({
-      listLeaderboard: async function* (_session: unknown, _src: SourceRow, timeframe: number) {
+      captureLeaderboard: jest.fn(async (_session: unknown, _src: SourceRow, timeframe: number) => {
         attempted.push(timeframe)
-        yield page
+        return capturedLeaderboard()
+      }),
+      listLeaderboard: async function* () {
+        throw new Error('Tier-A must never use the uncaptured stream')
       },
       parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
       parseLeaderboardSeries: () => new Map(),
@@ -2351,9 +2193,14 @@ describe('Tier-A board-series publication guard', () => {
     await expect(processTierA(job)).resolves.toHaveLength(3)
 
     expect(attempted).toEqual([7, 30, 90])
-    expect(mockJobUpdateData.mock.calls.map(([data]) => data.completedTimeframes)).toEqual([[]])
-    expect(job.data.completedTimeframes).toEqual([])
-    expect(mockRecordExecutionWindowReceipt).not.toHaveBeenCalled()
+    expect(mockJobUpdateData.mock.calls.map(([data]) => data.completedTimeframes)).toEqual([
+      [],
+      [7],
+      [7, 30],
+      [7, 30, 90],
+    ])
+    expect(job.data.completedTimeframes).toEqual([7, 30, 90])
+    expect(mockRecordExecutionWindowReceipt).toHaveBeenCalledTimes(3)
   })
 
   it('closes completed without opening a browser when every native receipt exists', async () => {
@@ -2448,7 +2295,7 @@ describe('Tier-A board-series publication guard', () => {
       errorSpy.mockRestore()
     }
 
-    expect(mockPublishLeaderboardSnapshot).toHaveBeenCalledTimes(1)
+    expect(mockPublishTrustedLeaderboardSnapshot).toHaveBeenCalledTimes(1)
     expect(mockPublishFencedBoardSeries).toHaveBeenCalledTimes(1)
     expect(mockJobUpdateData).not.toHaveBeenCalled()
     expect(job.data).toEqual({ sourceSlug: src.slug })
@@ -2629,27 +2476,19 @@ describe('Tier-A board-series publication guard', () => {
     const attempted: number[] = []
     mockNativeRankingTimeframes.mockReturnValue([7, 30, 90])
     mockGetAdapter.mockReturnValue({
-      listLeaderboard: async function* (_session: unknown, _src: SourceRow, timeframe: number) {
+      captureLeaderboard: jest.fn(async (_session: unknown, _src: SourceRow, timeframe: number) => {
         attempted.push(timeframe)
         if (timeframe === 7) throw new Error('upstream 503')
-        yield page
+        return capturedLeaderboard()
+      }),
+      listLeaderboard: async function* () {
+        throw new Error('Tier-A must never use the uncaptured stream')
       },
       parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
       parseLeaderboardSeries: () => new Map(),
     })
-    mockWriteRawObject
-      .mockResolvedValueOnce({
-        id: 9030,
-        storagePath: 'xt_futures/tier_a/30.json.gz',
-        contentHash: 'b'.repeat(64),
-      })
-      .mockResolvedValueOnce({
-        id: 9090,
-        storagePath: 'xt_futures/tier_a/90.json.gz',
-        contentHash: 'c'.repeat(64),
-      })
-    mockPublishLeaderboardSnapshot.mockImplementation(
-      async (input: { timeframe: number; rawObjectId: number }) => ({
+    mockPublishTrustedLeaderboardSnapshot.mockImplementation(
+      async (input: { timeframe: number }) => ({
         snapshotId: input.timeframe === 30 ? 730 : 790,
         scrapedAt: '2026-07-16 00:01:02.123456+00',
         verdict: {
@@ -2673,23 +2512,19 @@ describe('Tier-A board-series publication guard', () => {
     }
 
     expect(attempted).toEqual([7, 30, 90])
-    expect(mockPublishLeaderboardSnapshot.mock.calls.map(([input]) => input.timeframe)).toEqual([
-      30, 90,
-    ])
+    expect(
+      mockPublishTrustedLeaderboardSnapshot.mock.calls.map(([input]) => input.timeframe)
+    ).toEqual([30, 90])
     expect(failure).toBeInstanceOf(AggregateError)
     expect((failure as AggregateError).errors).toHaveLength(2)
     expect((failure as Error).message).toContain('2/3 native windows failed (7d, 30d)')
     expect((failure as Error).message).toContain('1 succeeded')
-    expect(mockJobUpdateData).not.toHaveBeenCalled()
-    expect(mockRecordExecutionWindowReceipt).not.toHaveBeenCalled()
-    expect(job.data).toEqual({ sourceSlug: src.slug })
+    // Only the published window is receipted and checkpointed.
+    expect(mockRecordExecutionWindowReceipt).toHaveBeenCalledTimes(1)
+    expect(job.data.completedTimeframes).toEqual([90])
     expect(mockSessionClose).toHaveBeenCalledTimes(1)
     expect(mockExecutionClose).toHaveBeenCalledWith('failed')
-
-    for (const [input] of mockWriteRawObject.mock.calls) {
-      expect(input.meta.observation_cycle_id).toBe(expectedCycleId)
-    }
-    for (const [input] of mockPublishLeaderboardSnapshot.mock.calls) {
+    for (const [input] of mockPublishTrustedLeaderboardSnapshot.mock.calls) {
       expect(input.observationCycleId).toBe(expectedCycleId)
     }
   })
@@ -2807,7 +2642,6 @@ describe('Tier-A board-series publication guard', () => {
       'execution:close:completed',
     ])
     expect(mockOpenSession).toHaveBeenCalledTimes(1)
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockStartLeaderboardAcquisitionAttempt.mock.calls.map(([input]) => input)).toEqual([
       expect.objectContaining({
         sourceId: binanceSrc.id,
@@ -2885,7 +2719,6 @@ describe('Tier-A board-series publication guard', () => {
     const pending = processTierA(job)
     await finishCalled
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockPublishFencedBoardSeries).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
 
@@ -2897,13 +2730,11 @@ describe('Tier-A board-series publication guard', () => {
 
   it('binds a registered attempt to the database-attested execution SHA', async () => {
     configureAttemptBoundSource()
-    mockResolveDeployedSha.mockReturnValue('unknown-deployment')
 
     await expect(processTierA(job)).resolves.toHaveLength(1)
     expect(mockStartLeaderboardAcquisitionAttempt).toHaveBeenCalledWith(
       expect.objectContaining({ runnerGitSha: 'c'.repeat(40) })
     )
-    expect(mockResolveDeployedSha).not.toHaveBeenCalled()
   })
 
   it('records execution provenance separately from the consumed queue authority', async () => {
@@ -2954,12 +2785,12 @@ describe('Tier-A board-series publication guard', () => {
       processTierAInRegion(job, createAuthorizedTestContext('local', 'local'), controller.signal)
     ).resolves.toHaveLength(1)
 
-    expect(mockPublishLeaderboardSnapshot).toHaveBeenCalledWith(
+    expect(mockPublishTrustedLeaderboardSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({ src, timeframe: 30 }),
       expect.objectContaining({ consumedRegion: 'local' })
     )
-    expect(mockPublicationExecution).toHaveBeenCalledWith('snapshot', expect.any(Object))
-    expect(mockJobUpdateData).not.toHaveBeenCalled()
+    expect(mockPublicationExecution).toHaveBeenCalledWith('trusted-snapshot', expect.any(Object))
+    expect(mockJobUpdateData).toHaveBeenCalledTimes(1)
     expect(mockSessionClose).toHaveBeenCalledTimes(1)
   })
 
@@ -2979,8 +2810,11 @@ describe('Tier-A board-series publication guard', () => {
     const sessionFailure = new Error('session close failed')
     const executionCloseFailure = new Error('execution close failed')
     mockGetAdapter.mockReturnValue({
-      listLeaderboard: async function* () {
+      captureLeaderboard: jest.fn(async () => {
         throw processingFailure
+      }),
+      listLeaderboard: async function* () {
+        throw new Error('Tier-A must never use the uncaptured stream')
       },
       parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
       parseLeaderboardSeries: () => new Map(),
@@ -3033,7 +2867,6 @@ describe('Tier-A board-series publication guard', () => {
     expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).not.toHaveBeenCalled()
     expect(mockFinishLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
     expect(mockExecutionClose).toHaveBeenCalledWith('revoked')
   })
@@ -3276,7 +3109,6 @@ describe('Tier-A board-series publication guard', () => {
       expect(finishInput.kind).toBe('manifest')
       expect(finishInput.projection).toMatchObject({ terminalState, reasonCode })
       expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
-      expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
       expect(mockPublishFencedBoardSeries).not.toHaveBeenCalled()
       expect(mockJobUpdateData).not.toHaveBeenCalled()
     }
@@ -3387,16 +3219,21 @@ describe('Tier-A board-series publication guard', () => {
     job = makeJob({ sourceSlug: spotSrc.slug })
     mockGetSourceBySlug.mockResolvedValue(spotSrc)
     mockFindRegisteredAttemptBoundContract.mockResolvedValue(null)
+    const captureLeaderboard = jest.fn(async () => capturedLeaderboard())
     mockGetAdapter.mockReturnValue({
-      captureLeaderboard: async () => capturedLeaderboard(),
+      captureLeaderboard,
       listLeaderboard: async function* () {
-        throw new Error('capture path should handle this fixture')
+        throw new Error('Tier-A must never use the uncaptured stream')
       },
       parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
       parseLeaderboardSeries: () => new Map(),
     })
 
-    await expect(processTierA(job)).resolves.toHaveLength(1)
+    // A shared capture method is not a registration: the unregistered source
+    // fails closed instead of publishing without attempt-bound evidence.
+    await expect(processTierA(job)).rejects.toThrow(
+      'binance_spot v3 capture contract is not exactly registered'
+    )
 
     expect(mockFindRegisteredAttemptBoundContract).toHaveBeenCalledWith({
       sourceId: spotSrc.id,
@@ -3404,8 +3241,9 @@ describe('Tier-A board-series publication guard', () => {
       captureContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
     })
     expect(mockStartLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
+    expect(captureLeaderboard).not.toHaveBeenCalled()
     expect(mockWriteAttemptBoundLeaderboardRawArtifactSet).not.toHaveBeenCalled()
-    expect(mockWriteLeaderboardRawArtifactSet).toHaveBeenCalledTimes(1)
+    expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
   })
 
   it('finishes each evidence-less upstream failure before beginning the next window', async () => {
@@ -3634,7 +3472,6 @@ describe('Tier-A board-series publication guard', () => {
       expect.objectContaining({ kind: 'manifest' })
     )
     expect(mockPublishTrustedLeaderboardSnapshot).not.toHaveBeenCalled()
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
     expect(mockJobUpdateData).not.toHaveBeenCalled()
   })
 
@@ -3672,11 +3509,13 @@ describe('Tier-A board-series publication guard', () => {
       parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
     })
 
-    await expect(processTierA(job)).rejects.toThrow('adapter has no capture implementation')
+    await expect(processTierA(job)).rejects.toThrow(
+      'adapter has no attempt-bound capture implementation'
+    )
+    expect(mockFindRegisteredAttemptBoundContract).not.toHaveBeenCalled()
     expect(mockStartLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
     expect(mockOpenSession).not.toHaveBeenCalled()
     expect(mockWriteRawObject).not.toHaveBeenCalled()
-    expect(mockPublishLeaderboardSnapshot).not.toHaveBeenCalled()
   })
 
   it('does not acquire the Tier-A profile lane before timeframe preparation succeeds', async () => {

@@ -9,9 +9,11 @@
  * before parser validation plus the upstream-reported population).
  *
  * Nothing here decides trust. The manifest assessment
- * (acquisition-manifest.ts) still requires natural termination, a consistent
- * reported population equal to the accepted rows, and zero rejected or
- * deduplicated rows before an attempt can finish `complete`.
+ * (acquisition-manifest.ts) still requires natural termination and either a
+ * consistent reported population equal to the accepted rows with zero
+ * rejected or deduplicated rows (total mode), or a holding exhaustion proof
+ * (`exhaustion`, acquisition-exhaustion.ts) before an attempt can finish
+ * `complete`.
  */
 
 import {
@@ -24,6 +26,7 @@ import {
 } from './capture'
 import type { FetchSession, ReplayRequestTemplate } from './types'
 import type { SourceRow } from '../core/types'
+import type { LeaderboardExhaustionDeclaration } from '../acquisition-exhaustion'
 
 /** Request fields that are public, non-credential board semantics. */
 export interface PublicLeaderboardRequestAllowlist {
@@ -34,14 +37,25 @@ export interface PublicLeaderboardRequestAllowlist {
 }
 
 export interface ReplayLeaderboardCaptureSpec {
-  /** The adapter's existing per-page request builder (1-based page index). */
-  buildRequest: (pageIndex: number) => ReplayRequestTemplate
+  /**
+   * The adapter's existing per-page request builder (1-based page index).
+   * `context.firstPagePayload` is page one's response (null for page one).
+   */
+  buildRequest: (pageIndex: number, context: { firstPagePayload: unknown }) => ReplayRequestTemplate
   publicRequest: PublicLeaderboardRequestAllowlist
   pageBinding: LeaderboardNumericPageBinding
   extractMeta: (payload: unknown, requestPageIndex: number) => NumericLeaderboardPageMeta
   /** Request page size; must equal arena.sources.page_size for short-page proof. */
   pageSize: number
   isDegenerate?: (payload: unknown) => boolean
+  /**
+   * Completeness mode. Absent: the board is complete only when its accepted
+   * rows equal the reported total (`extractMeta` reports a population).
+   * Present: `completeness_mode: 'exhausted'` (no reported total; see
+   * acquisition-exhaustion.ts). It must equal the source's reviewed
+   * arena.leaderboard_exhaustion_contracts row or publication refuses it.
+   */
+  exhaustion?: LeaderboardExhaustionDeclaration
 }
 
 function recordOf(value: unknown): Record<string, unknown> | null {
@@ -197,6 +211,7 @@ export function captureReplayLeaderboard(
     extractMeta: spec.extractMeta,
     pageSize: spec.pageSize,
     isDegenerate: spec.isDegenerate,
+    exhaustion: spec.exhaustion ?? null,
     callerPageCap: replayCaptureCallerPageCap(input.src.meta.max_pages, input.label),
   })
 }

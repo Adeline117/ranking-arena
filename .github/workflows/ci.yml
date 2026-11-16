@@ -552,6 +552,16 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:public-source-capture-contracts-pg17
 
+      - name: Prove exhausted/total-mode public-source capture registration
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:public-source-exhaustion-capture-pg17
+
+      - name: Prove exhausted-completeness evidence (end signal, pages, dups, version)
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:exhaustion-completeness-pg17
+
       - name: Upload coverage artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'

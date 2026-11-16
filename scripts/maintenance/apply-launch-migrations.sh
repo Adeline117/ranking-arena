@@ -200,7 +200,9 @@ PREDEPLOY_MIGRATIONS=(
   20261113110430_rank_publication_source_evidence_binding.sql
   20261114101605_first_screen_core_modules_sealed_only.sql
   20261114103025_hero_stats_sealed_public_cohort.sql
+  20261114193017_rank_publication_requires_attempt_bound_evidence.sql
   20261114211033_public_source_board_metric_contracts.sql
+  20261115141050_leaderboard_exhaustion_completeness_evidence.sql
 )
 readonly -a PREDEPLOY_MIGRATIONS
 # The final six (season publication follow-ups, PR #419) must stay LAST: they
@@ -213,10 +215,22 @@ readonly -a PREDEPLOY_MIGRATIONS
 # arena.public_sealed_rank_sources().
 # 20261114103025 (hero stats from the sealed cohort) keeps the RPC's return
 # shape, so either app version reads it; it needs the public serving view.
+# 20261114193017 (publication requires attempt-bound evidence, audit-2 P1-4)
+# replaces 20261113110430's evidence RPC and adds a deferred seal fence, so it
+# must follow 110430. It is predeploy: the new orchestrator refuses every
+# season without it, and the old orchestrator already calls the replaced RPC
+# (an untrusted source then refuses that season instead of being isolated
+# until the new worker ships, which publishes nothing unbound either way).
 # 20261114211033 (board metric contracts for the newly captured public sources)
 # is inert for the deployed worker, which reads metric contracts only for
 # sources it already captures; its postdeploy partner 20261114211034 registers
 # their attempt-bound capture after the worker that implements it ships.
+# 20261115141050 (exhausted completeness mode) must follow 193017, whose
+# publication predicate it replaces, and 20260722050000, whose metric-trust
+# outcome authority it replaces (both pinned by prior-body sha256). It changes
+# no ledger table and is inert until a source registers an exhaustion contract
+# (its registry starts empty), so it is predeploy: the worker that records
+# exhaustion proofs calls arena.record_leaderboard_exhaustion_evidence.
 #
 # 20261113014105 (unknown-trade-count sample confidence, issue #435) and its
 # follow-up 20261114101514 (true-zero trade counts, audit P1-2), in that order,
@@ -267,6 +281,13 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # adapters gained captureLeaderboard; registered before that worker serves,
 # every Tier-A run of those sources would fail. It inserts capture-registry
 # rows only (no table 192134 guards) and requires predeploy 20261114211033.
+# 20261115160917 registers the next public sources the same way (V3 capture
+# for total-mode and exhausted-mode boards, their metric and exhaustion
+# contracts, and the source windows/currency/page_size those captures need).
+# Registered before the worker that ships the captures, every Tier-A run of
+# those sources would fail, so it is postdeploy, after 211034. It requires
+# predeploy 20261115141050 (exhaustion registry) and 20261114211033 (kucoin's
+# contract) and touches no table 192134 guards, so 192134 stays last.
 # 040440 forward replacement. V1_EXECUTION_STATUS requires the RAW-only
 # bridge SHA to be deployed and legacy callers drained before the legacy
 # position-history relations are frozen. Current main never reads or writes
@@ -280,6 +301,7 @@ POSTDEPLOY_MIGRATIONS=(
   20260717120000_trader_follows_composite_identity.sql
   20261115142045_clean_derived_formal_win_rate_scoped_probe.sql
   20261114211034_public_source_attempt_bound_capture_contracts.sql
+  20261115160917_public_source_exhaustion_and_total_capture_contracts.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS

@@ -2,6 +2,14 @@ import { z } from 'zod'
 
 import type { RankingTimeframe, RawPage, SourceRow } from './core/types'
 import {
+  exhaustionBindingIssues,
+  exhaustionCompletenessHolds,
+  exhaustionEndSignalHolds,
+  leaderboardExhaustionCompletenessSchema,
+  type LeaderboardExhaustionCompleteness,
+  type LeaderboardExhaustionManifestFacts,
+} from './acquisition-exhaustion'
+import {
   STRICT_CANONICAL_JSON_CONTRACT,
   strictCanonicalJson,
   strictCanonicalSha256,
@@ -381,11 +389,16 @@ const durableManifestV3StructuralSchema = durableManifestStructuralSchema
   .extend({
     data_contract: z.literal(LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT),
     acquisition_attempt: acquisitionAttemptBindingSchema,
+    /** Present only for an exhausted-mode capture (acquisition-exhaustion.ts). */
+    completeness: leaderboardExhaustionCompletenessSchema.optional(),
   })
   .strict()
 
 const buildV3InputSchema = buildInputSchema
-  .extend({ acquisition_attempt: acquisitionAttemptBindingSchema })
+  .extend({
+    acquisition_attempt: acquisitionAttemptBindingSchema,
+    completeness: leaderboardExhaustionCompletenessSchema.optional(),
+  })
   .strict()
 
 const partitionedNumericBuildPartitionSchema = z
@@ -529,6 +542,8 @@ export interface BuildLeaderboardAcquisitionManifestV3Input extends BuildLeaderb
     attempt_id: string
     attempt_seq: number
   }
+  /** Exhausted-mode completeness evidence from the capture (absent = reported-total mode). */
+  completeness?: LeaderboardExhaustionCompleteness
 }
 
 export type BuildLeaderboardAcquisitionManifestV4Input = Omit<
@@ -671,6 +686,34 @@ function pageResponseMetadataMatches(
   return true
 }
 
+function manifestCompleteness(
+  manifest: LeaderboardAcquisitionManifestLike
+): LeaderboardExhaustionCompleteness | null {
+  return 'completeness' in manifest && manifest.completeness ? manifest.completeness : null
+}
+
+function exhaustionFacts(
+  manifest: LeaderboardAcquisitionManifestLike,
+  populationReport: AggregateReport,
+  terminationReason: TerminationReason = manifest.termination_reason
+): LeaderboardExhaustionManifestFacts {
+  return {
+    termination_reason: terminationReason,
+    configured_page_size: manifest.source.configured_page_size,
+    population_report_state: populationReport.state,
+    source_pages: manifest.source_pages.map((page) => ({
+      ordinal: page.ordinal,
+      request_sha256: page.request_sha256,
+      payload_sha256: page.payload.sha256,
+      source_row_count: page.source_row_count,
+    })),
+    observed_row_count: manifest.population.observed_row_count,
+    accepted_population: manifest.population.accepted_population,
+    rejected_row_count: manifest.population.rejected_row_count,
+    deduplicated_row_count: manifest.population.deduplicated_row_count,
+  }
+}
+
 function hasVerifiedCaptureFoundation(manifest: LeaderboardAcquisitionManifestLike): boolean {
   return (
     manifest.capture_evidence_state === 'verified' &&
@@ -751,6 +794,20 @@ function isNaturalTermination(
         !hasContradictoryContinuation
       )
     case 'cursor_exhausted':
+      if (position.kind === 'page_index') {
+        // A numeric board's continuation flag (exhausted mode) is exhausted.
+        const completeness = manifestCompleteness(manifest)
+        return (
+          completeness !== null &&
+          completeness.declaration.end_signal.kind === 'flag' &&
+          populationReport.state === 'unknown' &&
+          pageCountMatchesTerminal &&
+          exhaustionEndSignalHolds(
+            completeness,
+            exhaustionFacts(manifest, populationReport, terminationReason)
+          )
+        )
+      }
       return (
         position.kind === 'cursor' &&
         position.response_next_cursor_sha256 === null &&
@@ -797,6 +854,19 @@ function deriveAssessment(
     !isNaturalTermination(manifest, populationReport, pageCountReport)
   ) {
     return { acquisition_state: 'unknown', population_state: 'unknown' }
+  }
+
+  const completeness = manifestCompleteness(manifest)
+  if (completeness !== null) {
+    return {
+      acquisition_state: 'complete',
+      population_state: exhaustionCompletenessHolds(
+        completeness,
+        exhaustionFacts(manifest, populationReport)
+      )
+        ? 'verified'
+        : 'unknown',
+    }
   }
 
   if (populationReport.state !== 'consistent') {
@@ -1653,6 +1723,25 @@ function validateManifestInvariants(
   } catch (error) {
     addIssue(ctx, ['population', 'reports'], (error as Error).message)
   }
+  const completeness = manifestCompleteness(manifest)
+  if (completeness !== null) {
+    if (manifest.capture_evidence_state !== 'verified') {
+      addIssue(ctx, ['completeness'], 'exhausted completeness requires verified capture evidence')
+    }
+    if (populationReport.state !== 'unknown') {
+      addIssue(
+        ctx,
+        ['completeness'],
+        'exhausted completeness is only for boards without a reported population'
+      )
+    }
+    for (const issue of exhaustionBindingIssues(
+      completeness,
+      exhaustionFacts(manifest, populationReport)
+    )) {
+      addIssue(ctx, ['completeness'], issue)
+    }
+  }
   if (!isPartitionedNumericManifest(manifest)) {
     validateLimitTerminationPriority(manifest, populationReport, pageCountReport, ctx)
   } else {
@@ -1904,14 +1993,24 @@ export function buildLeaderboardAcquisitionManifestV3(
   rawInput: BuildLeaderboardAcquisitionManifestV3Input
 ): BuiltLeaderboardAcquisitionManifestV3 {
   const input = buildV3InputSchema.parse(rawInput)
-  const { acquisition_attempt: acquisitionAttempt, ...legacyInput } = input
+  const { acquisition_attempt: acquisitionAttempt, completeness, ...legacyInput } = input
   const legacy = buildLeaderboardAcquisitionManifest(legacyInput)
   const { data_contract: _legacyContract, ...body } = legacy.manifest
-  const manifest = parseLeaderboardAcquisitionManifestV3({
+  const structural: LeaderboardAcquisitionManifestV3 = {
     ...body,
     data_contract: LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT,
     acquisition_attempt: acquisitionAttempt,
-  })
+    ...(completeness ? { completeness } : {}),
+  }
+  if (completeness) {
+    // The legacy body cannot see exhaustion evidence; assess it on the V3 body.
+    structural.assessment = deriveAssessment(
+      structural,
+      body.population.reports.population,
+      body.population.reports.page_count
+    )
+  }
+  const manifest = parseLeaderboardAcquisitionManifestV3(structural)
   const canonicalJson = strictCanonicalJson(manifest)
   return {
     manifest,

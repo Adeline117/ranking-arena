@@ -175,6 +175,13 @@ export interface LeaderboardManifestOutcomeProjection {
   safetyLimited: boolean
   failureStage: null
   reasonCode: LeaderboardAcquisitionReasonCode | null
+  /**
+   * Exhausted mode: the manifest's exhaustion proof holds. The ledger still
+   * records the truth (acquisition complete, population unknown, no reported
+   * total); the worker then records the proof
+   * (arena.record_leaderboard_exhaustion_evidence) and publication accepts it.
+   */
+  exhaustionVerified: boolean
 }
 
 interface ManifestFinishInput {
@@ -752,6 +759,37 @@ function terminalStateForManifest(
   return 'unknown'
 }
 
+/**
+ * The acquisition-ledger states of a manifest. A verified exhaustion proof is
+ * not a reported population, so the ledger keeps population 'unknown' and
+ * terminal 'unknown' (reason population_unknown); `exhaustionVerified` carries
+ * the proof to the evidence recorder.
+ */
+export function ledgerOutcomeStatesForManifest(manifest: LeaderboardAcquisitionManifestLike): {
+  terminalState: LeaderboardManifestOutcomeProjection['terminalState']
+  acquisitionState: LeaderboardAcquisitionState
+  populationState: LeaderboardPopulationState
+  reasonCode: LeaderboardAcquisitionReasonCode | null
+  exhaustionVerified: boolean
+} {
+  const exhaustionVerified =
+    'completeness' in manifest &&
+    manifest.completeness !== undefined &&
+    manifest.assessment.acquisition_state === 'complete' &&
+    manifest.assessment.population_state === 'verified'
+  const ledger: LeaderboardAcquisitionManifestLike = exhaustionVerified
+    ? { ...manifest, assessment: { acquisition_state: 'complete', population_state: 'unknown' } }
+    : manifest
+  const terminalState = terminalStateForManifest(ledger)
+  return {
+    terminalState,
+    acquisitionState: ledger.assessment.acquisition_state,
+    populationState: ledger.assessment.population_state,
+    reasonCode: reasonCodeForManifest(ledger, terminalState),
+    exhaustionVerified,
+  }
+}
+
 function projectParsedLeaderboardManifestOutcome(
   attempt: LeaderboardAcquisitionAttempt,
   built:
@@ -780,7 +818,8 @@ function projectParsedLeaderboardManifestOutcome(
   ) {
     throw new TypeError('[ingest] acquisition manifest does not bind the durable attempt')
   }
-  const terminalState = terminalStateForManifest(manifest)
+  const ledger = ledgerOutcomeStatesForManifest(manifest)
+  const terminalState = ledger.terminalState
   const populationReport = manifest.population.reports.population
   const pageCountReport = manifest.population.reports.page_count
   const binding = Object.freeze({
@@ -795,8 +834,8 @@ function projectParsedLeaderboardManifestOutcome(
     [MANIFEST_PROJECTION_BRAND]: true as const,
     binding,
     terminalState,
-    acquisitionState: manifest.assessment.acquisition_state,
-    populationState: manifest.assessment.population_state,
+    acquisitionState: ledger.acquisitionState,
+    populationState: ledger.populationState,
     captureEvidenceState: manifest.capture_evidence_state,
     terminationReason: manifest.termination_reason,
     sourceRunId: built.sourceRunId,
@@ -812,7 +851,8 @@ function projectParsedLeaderboardManifestOutcome(
     callerLimited: manifest.caller_limited,
     safetyLimited: manifest.safety_limited,
     failureStage: null,
-    reasonCode: reasonCodeForManifest(manifest, terminalState),
+    reasonCode: ledger.reasonCode,
+    exhaustionVerified: ledger.exhaustionVerified,
   })
 }
 

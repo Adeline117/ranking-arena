@@ -95,6 +95,30 @@ describe('parseBitfinexLeaderboardPage', () => {
     expect(parseBitfinexLeaderboardPage({}, ctx).rows).toHaveLength(0)
   })
 
+  it('drops anonymous "-" rows instead of merging them into one trader', () => {
+    // Shape of the live plu_diff:1w answer (2026-11-15): hidden accounts keep
+    // their own rank and value but all share the username "-".
+    const live = {
+      boardKey: 'plu_diff',
+      boards: {
+        plu_diff: {
+          ts: 1,
+          rows: [
+            [1, null, 'countyourmoney', 1, null, null, 28_817_096.16, null, 1],
+            [1, null, '-', 2, null, null, 9_000_000, null, 0],
+            [1, null, 'Bobby-Big-Size', 3, null, null, 16_672_429.04, null, 1],
+            [1, null, '-', 4, null, null, -37_942_081.48, null, 0],
+          ],
+        },
+      },
+    }
+    const page = parseBitfinexLeaderboardPage(live, ctx)
+    expect(page.rows.map((r) => [r.exchangeTraderId, r.rank])).toEqual([
+      ['countyourmoney', 1],
+      ['Bobby-Big-Size', 3],
+    ])
+  })
+
   it('falls back to positional rank when the rank index is malformed', () => {
     const doctored = {
       boardKey: 'plu_diff',

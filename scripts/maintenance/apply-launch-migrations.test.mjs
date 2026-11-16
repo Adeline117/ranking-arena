@@ -146,11 +146,11 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     ...superseded,
   ]
 
-  // +3 found by the 2026-11-14 rehearsal, -3 already applied via MCP, +1 20261114211033
-  assert.equal(predeploy.length, 155)
+  // +3 found by the 2026-11-14 rehearsal, -3 already applied via MCP, +1 20261114193017, +1 20261114211033, +1 20261115141050
+  assert.equal(predeploy.length, 157)
   // Season publication follow-ups stay last; 011058 must follow the Bitget-bot
   // freshness-authority rewrite slot (20261115013558, the replacement for 20260728124000).
-  assert.deepEqual(predeploy.slice(-9), [
+  assert.deepEqual(predeploy.slice(-11), [
     '20261113010326_release_leaderboard_rank_generation_lease_after_seal.sql',
     '20261113011058_leaderboard_publication_source_isolation.sql',
     '20261113012028_public_snapshot_readers_sealed_freshness.sql',
@@ -159,7 +159,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20261113110430_rank_publication_source_evidence_binding.sql',
     '20261114101605_first_screen_core_modules_sealed_only.sql',
     '20261114103025_hero_stats_sealed_public_cohort.sql',
+    '20261114193017_rank_publication_requires_attempt_bound_evidence.sql',
     '20261114211033_public_source_board_metric_contracts.sql',
+    '20261115141050_leaderboard_exhaustion_completeness_evidence.sql',
   ])
   assert.ok(
     predeploy.indexOf('20261113011058_leaderboard_publication_source_isolation.sql') >
@@ -175,6 +177,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260717120000_trader_follows_composite_identity.sql',
     '20261115142045_clean_derived_formal_win_rate_scoped_probe.sql',
     '20261114211034_public_source_attempt_bound_capture_contracts.sql',
+    '20261115160917_public_source_exhaustion_and_total_capture_contracts.sql',
     '20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql',
   ])
   // Classified, never emitted: applied one file at a time via ADR-023 at the
@@ -236,9 +239,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20261113151848_sync_user_profile_email_from_auth.sql',
     '20261113151849_auth_user_has_password_rpc.sql',
   ])
-  assert.equal(new Set(all).size, 195)
+  assert.equal(new Set(all).size, 198)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-114), [
+  assert.deepEqual(predeploy.slice(-116), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -352,7 +355,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20261113110430_rank_publication_source_evidence_binding.sql',
     '20261114101605_first_screen_core_modules_sealed_only.sql',
     '20261114103025_hero_stats_sealed_public_cohort.sql',
+    '20261114193017_rank_publication_requires_attempt_bound_evidence.sql',
     '20261114211033_public_source_board_metric_contracts.sql',
+    '20261115141050_leaderboard_exhaustion_completeness_evidence.sql',
   ])
   assert.ok(predeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(predeploy.includes('20260718183500_harden_stripe_entitlement_null_validation.sql'))
@@ -442,7 +447,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   assert.ok(predeploy.includes('20260729070500_leaderboard_score_input_manifest_v2.sql'))
   assert.ok(predeploy.includes('20260729071000_leaderboard_metric_trust_projection_v2.sql'))
   assert.ok(predeploy.includes('20260729071500_tier_a_one_phase_commit_guard.sql'))
-  assert.deepEqual(predeploy.slice(-42, -9), [
+  assert.deepEqual(predeploy.slice(-44, -11), [
     '20260729071500_tier_a_one_phase_commit_guard.sql',
     '20260729220908_season_scoped_leaderboard_count_cache.sql',
     '20260729223000_rerank_public_eligible_rows_only.sql',

@@ -1,0 +1,184 @@
+{
+  "_comment": "Sanitized from a live public-lead-traders probe (2026-11-15): ids/nicknames/avatars replaced, rows trimmed; totalPage rewritten to the fixture page count.",
+  "pages": [
+    {
+      "code": "0",
+      "msg": "",
+      "data": [
+        {
+          "dataVer": "20261116060001",
+          "totalPage": "2",
+          "ranks": [
+            {
+              "accCopyTraderNum": "919",
+              "aum": "37087.6314913347488331",
+              "ccy": "USDT",
+              "copyState": "0",
+              "copyTraderNum": "175",
+              "leadDays": "761",
+              "maxCopyTraderNum": "600",
+              "nickName": "trader-1",
+              "pnl": "113281.3665578101073201",
+              "pnlRatio": "0.1317",
+              "pnlRatios": [
+                {
+                  "beginTs": "1794758400000",
+                  "pnlRatio": "0.1286"
+                },
+                {
+                  "beginTs": "1794326400000",
+                  "pnlRatio": "0.2366"
+                },
+                {
+                  "beginTs": "1793894400000",
+                  "pnlRatio": "0.2889"
+                }
+              ],
+              "portLink": "https://static.okx.com/cdn/okx/avatar/trader-1.png",
+              "tradFiTrader": false,
+              "traderInsts": ["FIL-USDT", "ADA-USDT", "ZIL-USDT"],
+              "uniqueCode": "F7A439D682904E33",
+              "winRatio": "0.5111"
+            },
+            {
+              "accCopyTraderNum": "144",
+              "aum": "4060.5368693117813601",
+              "ccy": "USDT",
+              "copyState": "0",
+              "copyTraderNum": "24",
+              "leadDays": "423",
+              "maxCopyTraderNum": "300",
+              "nickName": "trader-2",
+              "pnl": "34412.055365134987654",
+              "pnlRatio": "0.1017",
+              "pnlRatios": [
+                {
+                  "beginTs": "1794758400000",
+                  "pnlRatio": "0.1001"
+                },
+                {
+                  "beginTs": "1794326400000",
+                  "pnlRatio": "0.2073"
+                },
+                {
+                  "beginTs": "1793894400000",
+                  "pnlRatio": "0.2368"
+                }
+              ],
+              "portLink": "https://static.okx.com/cdn/okx/avatar/trader-2.png",
+              "tradFiTrader": false,
+              "traderInsts": ["FIL-USDT", "ADA-USDT", "ZIL-USDT"],
+              "uniqueCode": "37B098DBABB3A88B",
+              "winRatio": "0.5222"
+            },
+            {
+              "accCopyTraderNum": "555",
+              "aum": "108641.8819174803169679",
+              "ccy": "USDT",
+              "copyState": "0",
+              "copyTraderNum": "51",
+              "leadDays": "277",
+              "maxCopyTraderNum": "300",
+              "nickName": "trader-3",
+              "pnl": "16923.1737837828221155",
+              "pnlRatio": "0.164",
+              "pnlRatios": [
+                {
+                  "beginTs": "1794758400000",
+                  "pnlRatio": "0.164"
+                },
+                {
+                  "beginTs": "1794326400000",
+                  "pnlRatio": "0.1655"
+                },
+                {
+                  "beginTs": "1793894400000",
+                  "pnlRatio": "0.1666"
+                }
+              ],
+              "portLink": "https://static.okx.com/cdn/okx/avatar/trader-3.png",
+              "tradFiTrader": false,
+              "traderInsts": ["XASTS-USDT", "BTC-USDT", "ETH-USDT"],
+              "uniqueCode": "AC50043D087A9E35",
+              "winRatio": "0.5455"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "0",
+      "msg": "",
+      "data": [
+        {
+          "dataVer": "20261116060001",
+          "totalPage": "2",
+          "ranks": [
+            {
+              "accCopyTraderNum": "4",
+              "aum": "110700.3928996758560855",
+              "ccy": "USDT",
+              "copyState": "0",
+              "copyTraderNum": "2",
+              "leadDays": "1049",
+              "maxCopyTraderNum": "300",
+              "nickName": "trader-4",
+              "pnl": "2875.3275992996414864",
+              "pnlRatio": "0.0115",
+              "pnlRatios": [
+                {
+                  "beginTs": "1794758400000",
+                  "pnlRatio": "0.0116"
+                },
+                {
+                  "beginTs": "1794326400000",
+                  "pnlRatio": "0.019"
+                },
+                {
+                  "beginTs": "1793894400000",
+                  "pnlRatio": "0.0217"
+                }
+              ],
+              "portLink": "https://static.okx.com/cdn/okx/avatar/trader-4.png",
+              "tradFiTrader": false,
+              "traderInsts": ["FIL-USDT", "ADA-USDT", "ZIL-USDT"],
+              "uniqueCode": "EC23FF4AED28C5C3",
+              "winRatio": "0.5111"
+            },
+            {
+              "accCopyTraderNum": "0",
+              "aum": "76321.5532961758538326",
+              "ccy": "USDT",
+              "copyState": "0",
+              "copyTraderNum": "0",
+              "leadDays": "52",
+              "maxCopyTraderNum": "300",
+              "nickName": "trader-5",
+              "pnl": "-10529.2061856489000043",
+              "pnlRatio": "-0.056",
+              "pnlRatios": [
+                {
+                  "beginTs": "1794758400000",
+                  "pnlRatio": "-0.056"
+                },
+                {
+                  "beginTs": "1794585600000",
+                  "pnlRatio": "-0.0507"
+                },
+                {
+                  "beginTs": "1794412800000",
+                  "pnlRatio": "-0.0388"
+                }
+              ],
+              "portLink": "https://static.okx.com/cdn/okx/avatar/trader-5.png",
+              "tradFiTrader": false,
+              "traderInsts": ["FIL-USDT", "ADA-USDT", "ZIL-USDT"],
+              "uniqueCode": "D87C1761CFFF8F4C",
+              "winRatio": "0.5152"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

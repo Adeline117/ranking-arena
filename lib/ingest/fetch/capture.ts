@@ -29,6 +29,12 @@ import {
   type LeaderboardPartitionedNumericParserPageBinding,
   type LeaderboardPartitionedNumericParserTransformation,
 } from '../acquisition-manifest'
+import {
+  LEADERBOARD_EXHAUSTION_COMPLETENESS_CONTRACT,
+  leaderboardExhaustionDeclarationSchema,
+  type LeaderboardExhaustionCompleteness,
+  type LeaderboardExhaustionDeclaration,
+} from '../acquisition-exhaustion'
 import type { FetchSession, ReplayRequestTemplate } from './types'
 import type { RawPage } from '../core/types'
 import { strictCanonicalJson, strictCanonicalSha256 } from '../strict-canonical-json'
@@ -272,6 +278,7 @@ export type NumericLeaderboardTerminationReason = Extract<
   | 'reported_page_count_reached'
   | 'short_page'
   | 'empty_page'
+  | 'cursor_exhausted'
   | 'degenerate_page'
   | 'caller_limit'
   | 'safety_limit'
@@ -318,6 +325,11 @@ export interface LeaderboardCapture {
     LeaderboardAcquisitionParserTransformation,
     { kind: 'identity_projection' }
   >
+  /**
+   * Exhausted-mode completeness evidence; present only when the capture
+   * declared `exhaustion` and every source page was a success answer.
+   */
+  completeness?: LeaderboardExhaustionCompleteness
 }
 
 export type NumericLeaderboardCapture = LeaderboardCapture
@@ -432,8 +444,13 @@ export interface CaptureNumericLeaderboardOptions {
   session: FetchSession
   fetcher: JsonFetcher
   signal?: AbortSignal
-  /** Actual request, which may contain credentials and is never persisted. */
-  buildRequest: (pageIndex: number) => ReplayRequestTemplate
+  /**
+   * Actual request, which may contain credentials and is never persisted.
+   * `firstPagePayload` is page one's response (null while building page one),
+   * for boards whose later requests carry a token from page one (okx dataVer);
+   * any such field must be allowlisted in the public projection.
+   */
+  buildRequest: (pageIndex: number, context: { firstPagePayload: unknown }) => ReplayRequestTemplate
   /**
    * Required allowlisted public projection. Build this separately; never copy
    * an authenticated actual URL/body wholesale. This URL is persisted in RAW.
@@ -454,11 +471,17 @@ export interface CaptureNumericLeaderboardOptions {
   safetyPageCap?: number
   /** Test hook; production uses canonical UTC timestamps from Date. */
   now?: () => string
+  /**
+   * Exhausted completeness: the source reports no population, so the board is
+   * proven complete by its declared end signal, row identity, and stability.
+   * Must equal the source's registered arena.leaderboard_exhaustion_contracts row.
+   */
+  exhaustion?: LeaderboardExhaustionDeclaration | null
 }
 
 export type CapturePartitionedNumericLeaderboardPartition = Omit<
   CaptureNumericLeaderboardOptions,
-  'session' | 'fetcher' | 'now' | 'pageSize' | 'signal'
+  'session' | 'fetcher' | 'now' | 'pageSize' | 'signal' | 'exhaustion'
 > & {
   partitionId: string
   /** V4 parser bindings require one positive page size shared by every partition. */
@@ -725,6 +748,121 @@ function addReport(report: ConsistentReport, value: number | null): void {
 }
 
 /**
+ * Resolve a declared payload path. A canonical decimal segment indexes into an
+ * array (e.g. okx `data.0.ranks`, whose envelope wraps the board in a one-item
+ * array); every other segment must name an own key of an object.
+ */
+function exhaustionPayloadPath(payload: unknown, path: readonly string[]): unknown {
+  let value = payload
+  for (const segment of path) {
+    if (Array.isArray(value)) {
+      if (!/^(0|[1-9][0-9]{0,8})$/.test(segment)) return undefined
+      const index = Number(segment)
+      if (index >= value.length) return undefined
+      value = value[index]
+      continue
+    }
+    if (
+      value === null ||
+      typeof value !== 'object' ||
+      Array.isArray(value) ||
+      !Object.prototype.hasOwnProperty.call(value, segment)
+    ) {
+      return undefined
+    }
+    value = (value as Record<string, unknown>)[segment]
+  }
+  return value
+}
+
+function exhaustionRowKey(row: unknown, path: readonly string[], index: number): string {
+  const value = exhaustionPayloadPath(row, path)
+  if (typeof value === 'string' && value.length > 0 && value.trim() === value) return value
+  if (typeof value === 'number' && Number.isSafeInteger(value) && !Object.is(value, -0)) {
+    return String(value)
+  }
+  throw new TypeError(
+    `[ingest] exhausted capture row ${index + 1} has no stable key at ${path.join('.')}`
+  )
+}
+
+function exhaustionSignalScalar(value: unknown, label: string): string | number | boolean | null {
+  if (
+    value === null ||
+    typeof value === 'boolean' ||
+    (typeof value === 'string' && value.length <= 256) ||
+    (typeof value === 'number' && Number.isSafeInteger(value) && !Object.is(value, -0))
+  ) {
+    return value
+  }
+  throw new TypeError(`[ingest] exhausted capture ${label} must be a JSON scalar`)
+}
+
+interface ExhaustionPageFacts {
+  rowKeys: string[]
+  rowKeysSha256: string
+  endSignalValue: string | number | boolean | null
+  versionTokenSha256: string | null
+}
+
+/** Read the declared exhaustion facts of one success page; any absence fails the page. */
+function exhaustionPageFacts(
+  declaration: LeaderboardExhaustionDeclaration,
+  payload: unknown,
+  rowCount: number
+): ExhaustionPageFacts {
+  const list = exhaustionPayloadPath(payload, declaration.list_path)
+  if (!Array.isArray(list) || list.length !== rowCount) {
+    throw new TypeError(
+      `[ingest] exhausted capture row array ${declaration.list_path.join('.')} must hold the page rows`
+    )
+  }
+  const rowKeys = list.map((row, index) => exhaustionRowKey(row, declaration.row_key_path, index))
+  let endSignalValue: string | number | boolean | null = null
+  const signal = declaration.end_signal
+  if (signal.kind !== 'short_page') {
+    const raw = exhaustionPayloadPath(payload, signal.path)
+    if (raw === undefined) {
+      throw new TypeError(
+        `[ingest] exhausted capture end signal ${signal.path.join('.')} is missing`
+      )
+    }
+    endSignalValue = exhaustionSignalScalar(raw, `end signal ${signal.path.join('.')}`)
+    // A page count reported as a canonical decimal string (okx totalPage "10")
+    // is that integer; anything else is not a page count.
+    if (
+      signal.kind === 'page_count' &&
+      typeof endSignalValue === 'string' &&
+      /^(0|[1-9][0-9]{0,8})$/.test(endSignalValue)
+    ) {
+      endSignalValue = Number(endSignalValue)
+    }
+    if (
+      signal.kind === 'page_count' &&
+      (typeof endSignalValue !== 'number' || endSignalValue < 0)
+    ) {
+      throw new TypeError('[ingest] exhausted capture page count must be a non-negative integer')
+    }
+  }
+  let versionTokenSha256: string | null = null
+  if (declaration.board_version.kind === 'token') {
+    const token = exhaustionPayloadPath(payload, declaration.board_version.path)
+    if (!((typeof token === 'string' && token.length > 0) || typeof token === 'number')) {
+      throw new TypeError(
+        `[ingest] exhausted capture board version ${declaration.board_version.path.join('.')} is missing`
+      )
+    }
+    versionTokenSha256 = strictCanonicalSha256(token)
+  }
+  return {
+    rowKeys,
+    rowKeysSha256: strictCanonicalSha256(rowKeys),
+    endSignalValue,
+    versionTokenSha256,
+  }
+}
+
+/**
  * Collect one numeric Tier-A board without losing the evidence needed to
  * distinguish natural completion from caller/safety truncation. This helper
  * does not publish or assess rank eligibility; it only returns captured facts.
@@ -738,6 +876,15 @@ export async function captureNumericLeaderboard(
   const pageSize = opts.pageSize
   const pageBinding = canonicalFrozenSnapshot(opts.pageBinding) as LeaderboardNumericPageBinding
   const now = opts.now ?? (() => new Date().toISOString())
+  const exhaustion =
+    opts.exhaustion === undefined || opts.exhaustion === null
+      ? null
+      : (canonicalFrozenSnapshot(
+          leaderboardExhaustionDeclarationSchema.parse(opts.exhaustion)
+        ) as LeaderboardExhaustionDeclaration)
+  if (exhaustion?.end_signal.kind === 'short_page' && pageSize === null) {
+    throw new TypeError('[ingest] short_page exhaustion requires the capture page size')
+  }
 
   assertSafeInteger(safetyPageCap, 'safety page cap', 1)
   if (callerPageCap !== null) assertSafeInteger(callerPageCap, 'caller page cap', 1)
@@ -754,10 +901,44 @@ export async function captureNumericLeaderboard(
   const populationReport: ConsistentReport = { value: null, conflicting: false }
   const pageCountReport: ConsistentReport = { value: null, conflicting: false }
   let rowsSeen = 0
+  const exhaustionPages: Array<
+    ExhaustionPageFacts & { requestSha256: string; responseSha256: string; rowCount: number }
+  > = []
+  let firstPagePayload: unknown = null
+  let reread: NonNullable<
+    Extract<
+      LeaderboardExhaustionCompleteness['board_version'],
+      { kind: 'first_page_reread' }
+    >['reread']
+  > | null = null
+  const completenessEvidence = (): LeaderboardExhaustionCompleteness | null => {
+    if (exhaustion === null || exhaustionPages.length !== sourcePages.length) return null
+    const keys = exhaustionPages.flatMap((page) => page.rowKeys)
+    const distinct = new Set(keys).size
+    return {
+      data_contract: LEADERBOARD_EXHAUSTION_COMPLETENESS_CONTRACT,
+      declaration: exhaustion,
+      pages: exhaustionPages.map((page, index) => ({
+        ordinal: index + 1,
+        request_sha256: page.requestSha256,
+        response_sha256: page.responseSha256,
+        row_count: page.rowCount,
+        row_keys_sha256: page.rowKeysSha256,
+        end_signal_value: page.endSignalValue,
+        version_token_sha256: page.versionTokenSha256,
+      })),
+      row_keys: { observed: keys.length, distinct, duplicate: keys.length - distinct },
+      board_version:
+        exhaustion.board_version.kind === 'token'
+          ? { kind: 'token' }
+          : { kind: 'first_page_reread', reread },
+    }
+  }
   const finish = (
     terminationReason: NumericLeaderboardTerminationReason
-  ): NumericLeaderboardCapture =>
-    deepFreezeJson({
+  ): NumericLeaderboardCapture => {
+    const completeness = terminationReason === 'upstream_error' ? null : completenessEvidence()
+    return deepFreezeJson({
       sourcePages: [...sourcePages],
       parsePages: [...parsePages],
       terminationReason,
@@ -769,11 +950,54 @@ export async function captureNumericLeaderboard(
         kind: 'identity_projection',
         source_page_ordinals: [...parseSourceOrdinals],
       },
+      ...(completeness ? { completeness } : {}),
     }) as NumericLeaderboardCapture
+  }
+  /**
+   * first_page_reread: after a natural end, request page one again. A failed
+   * re-read leaves stability unproven (reread null), never a thrown capture.
+   */
+  const finishExhausted = async (
+    terminationReason: NumericLeaderboardTerminationReason
+  ): Promise<NumericLeaderboardCapture> => {
+    if (exhaustion?.board_version.kind === 'first_page_reread') {
+      throwIfCaptureCancelled(opts.signal)
+      const template = canonicalRequestTemplate(buildRequest(1, { firstPagePayload }))
+      const publicRequest = leaderboardPublicRequestProjection(
+        projectPublicRequest(template, 1),
+        pageBinding
+      )
+      assertPublicProjectionOfActualRequest(template, publicRequest)
+      try {
+        const fetched = await session.paced(async () => {
+          throwIfCaptureCancelled(opts.signal)
+          return fetcher(template)
+        })
+        throwIfCaptureCancelled(opts.signal)
+        const json = canonicalFrozenSnapshot(fetched.json)
+        const ok =
+          Number.isSafeInteger(fetched.status) && fetched.status >= 200 && fetched.status <= 299
+        const meta = ok ? extractMeta(json, 1) : null
+        const facts = meta ? exhaustionPageFacts(exhaustion, json, meta.rowCount) : null
+        reread = facts
+          ? {
+              request_sha256: strictCanonicalSha256(publicRequest),
+              response_sha256: strictCanonicalSha256(json),
+              http_status: fetched.status,
+              row_keys_sha256: facts.rowKeysSha256,
+            }
+          : null
+      } catch {
+        throwIfCaptureCancelled(opts.signal)
+        reread = null
+      }
+    }
+    return finish(terminationReason)
+  }
 
   for (let pageIndex = 1; pageIndex <= safetyPageCap; pageIndex += 1) {
     throwIfCaptureCancelled(opts.signal)
-    const template = canonicalRequestTemplate(buildRequest(pageIndex))
+    const template = canonicalRequestTemplate(buildRequest(pageIndex, { firstPagePayload }))
     const publicRequest = leaderboardPublicRequestProjection(
       projectPublicRequest(template, pageIndex),
       pageBinding
@@ -896,6 +1120,29 @@ export async function captureNumericLeaderboard(
       assertOptionalReport(meta.reportedPageCount, 'reported page count')
       assertOptionalReport(meta.reportedCurrentPage, 'reported current page')
       assertOptionalReport(meta.reportedPageSize, 'reported page size')
+      if (exhaustion !== null) {
+        if (meta.reportedPopulation !== null) {
+          throw new TypeError(
+            '[ingest] an exhausted capture must not report a population; use the total mode'
+          )
+        }
+        const facts = exhaustionPageFacts(exhaustion, payload, meta.rowCount)
+        if (exhaustion.end_signal.kind === 'page_count') {
+          // The declared page-count path is the page-count report.
+          if (meta.reportedPageCount !== null && meta.reportedPageCount !== facts.endSignalValue) {
+            throw new TypeError(
+              '[ingest] exhausted capture page count disagrees with the page meta'
+            )
+          }
+          meta.reportedPageCount = facts.endSignalValue as number
+        }
+        exhaustionPages.push({
+          ...facts,
+          requestSha256,
+          responseSha256: strictCanonicalSha256(payload),
+          rowCount: meta.rowCount,
+        })
+      }
     } catch (cause) {
       const validationError =
         cause instanceof Error
@@ -938,8 +1185,10 @@ export async function captureNumericLeaderboard(
       },
     })
 
+    if (pageIndex === 1) firstPagePayload = payload
+
     if (meta.rowCount === 0) {
-      return finish('empty_page')
+      return exhaustion ? finishExhausted('empty_page') : finish('empty_page')
     }
 
     if (isDegenerate?.(payload)) {
@@ -950,6 +1199,35 @@ export async function captureNumericLeaderboard(
     assertSafeInteger(rowsSeen, 'cumulative source row count', 0)
     parsePages.push(rawPage)
     parseSourceOrdinals.push(sourcePages.length)
+
+    if (exhaustion !== null) {
+      // Exhausted mode ends only on the declared end signal (or its short page).
+      const endSignal = exhaustion.end_signal
+      const endValue = exhaustionPages[exhaustionPages.length - 1].endSignalValue
+      if (
+        endSignal.kind === 'flag' &&
+        endSignal.end_values.some((end) => Object.is(end, endValue))
+      ) {
+        return finishExhausted('cursor_exhausted')
+      }
+      if (
+        endSignal.kind === 'page_count' &&
+        typeof endValue === 'number' &&
+        pageIndex >= endValue
+      ) {
+        return finishExhausted('reported_page_count_reached')
+      }
+      if (endSignal.kind === 'short_page' && pageSize !== null && meta.rowCount < pageSize) {
+        return finishExhausted('short_page')
+      }
+      if (callerPageCap !== null && callerPageCap <= safetyPageCap && pageIndex >= callerPageCap) {
+        return finish('caller_limit')
+      }
+      if (pageIndex >= safetyPageCap) {
+        return finish('safety_limit')
+      }
+      continue
+    }
 
     if (
       !populationReport.conflicting &&
@@ -1135,6 +1413,7 @@ function partitionCaptureIsComplete(capture: NumericLeaderboardCapture, pageSize
       )
     case 'empty_page':
       return lastPage.sourceRowCount === 0 && populationMatches && pageCountMatches
+    case 'cursor_exhausted': // partitions never declare exhaustion
     case 'degenerate_page':
     case 'caller_limit':
     case 'safety_limit':
@@ -1252,11 +1531,15 @@ function appendPartitionCapture(
     partitionParserOrdinals.push(state.parsePages.length)
   }
 
+  const terminationReason = capture.terminationReason
+  if (terminationReason === 'cursor_exhausted') {
+    throw new TypeError('[ingest] partitioned numeric capture cannot end on an exhaustion signal')
+  }
   state.topologyPartitions.push({
     partition_id: partition.partitionId,
     source_page_ordinals: partitionSourceOrdinals,
     parser_page_ordinals: partitionParserOrdinals,
-    termination_reason: capture.terminationReason,
+    termination_reason: terminationReason,
     capture_config: partition.captureConfig,
   })
   state.completed.push({ capture, pageSize: partition.pageSize })

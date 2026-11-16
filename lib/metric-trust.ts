@@ -354,6 +354,10 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
       },
     ],
   }),
+  // v1 stays registered: metric_source_contracts is append-only and has no
+  // reviewed deactivation path, so a v2 with the verbatim-RAW field paths
+  // (data.data[]) would drift from the active v1 rows. Until then attempt-bound
+  // RAW observations record field_lineage_mismatch (shadow quality only).
   binance_web3_bsc: registeredSourceContract({
     sourceId: 'binance_web3_bsc',
     version: '1',
@@ -531,6 +535,72 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
     fields: [
       { metric: 'roi', fieldPath: 'data.records[].sprofitRate' },
       { metric: 'pnl', fieldPath: 'data.records[].sprofit' },
+    ],
+  }),
+  okx_futures: boardHeadlineContract({
+    sourceId: 'okx_futures',
+    methodology: 'okx',
+    windowKeys: ['90D'],
+    currency: 'USDT',
+    fields: [
+      { metric: 'roi', fieldPath: 'data[0].ranks[].pnlRatio' },
+      { metric: 'pnl', fieldPath: 'data[0].ranks[].pnl' },
+    ],
+  }),
+  okx_spot: boardHeadlineContract({
+    sourceId: 'okx_spot',
+    methodology: 'okx',
+    windowKeys: ['90D'],
+    currency: 'USDT',
+    fields: [
+      { metric: 'roi', fieldPath: 'data[0].ranks[].pnlRatio' },
+      { metric: 'pnl', fieldPath: 'data[0].ranks[].pnl' },
+    ],
+  }),
+  bitget_futures: boardHeadlineContract({
+    sourceId: 'bitget_futures',
+    methodology: 'bitget',
+    windowKeys: ALL_WINDOWS,
+    currency: 'USDT',
+    fields: [
+      { metric: 'roi', fieldPath: 'data.rows[].itemVoList[profit_rate].comparedValue' },
+      { metric: 'pnl', fieldPath: 'data.rows[].itemVoList[total_income].comparedValue' },
+    ],
+  }),
+  // Spot/CFD boards carry PnL as `total_profit`, which the parser does not
+  // read (headlinePnl stays null), so only ROI is a reviewed board metric.
+  bitget_spot: boardHeadlineContract({
+    sourceId: 'bitget_spot',
+    methodology: 'bitget',
+    windowKeys: ALL_WINDOWS,
+    currency: 'USDT',
+    fields: [{ metric: 'roi', fieldPath: 'data.rows[].itemVoList[profit_rate].comparedValue' }],
+  }),
+  bitget_cfd: boardHeadlineContract({
+    sourceId: 'bitget_cfd',
+    methodology: 'bitget',
+    windowKeys: ALL_WINDOWS,
+    currency: 'USDT',
+    fields: [{ metric: 'roi', fieldPath: 'data.rows[].itemVoList[profit_rate].comparedValue' }],
+  }),
+  toobit_futures: boardHeadlineContract({
+    sourceId: 'toobit_futures',
+    methodology: 'toobit',
+    windowKeys: ALL_WINDOWS,
+    currency: 'USDT',
+    fields: [
+      { metric: 'roi', fieldPath: 'data.list[].leaderAvgProfitRatio' },
+      { metric: 'pnl', fieldPath: 'data.list[].pnl' },
+    ],
+  }),
+  xt_futures: boardHeadlineContract({
+    sourceId: 'xt_futures',
+    methodology: 'xt',
+    windowKeys: ALL_WINDOWS,
+    currency: 'USDT',
+    fields: [
+      { metric: 'roi', fieldPath: 'result.items[].incomeRate' },
+      { metric: 'pnl', fieldPath: 'result.items[].income' },
     ],
   }),
   okx_web3_solana: boardHeadlineContract({

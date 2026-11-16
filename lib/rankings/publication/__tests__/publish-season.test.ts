@@ -245,13 +245,34 @@ describe('publishLeaderboardSeason gate', () => {
 
   function harness(
     boards: unknown[],
-    options: { sources?: string[]; isolationSupported?: boolean } = {}
+    options: {
+      sources?: string[]
+      isolationSupported?: boolean
+      trustEvidenceInstalled?: boolean
+      untrustedSnapshotIds?: number[]
+    } = {}
   ) {
     const statements: string[] = []
+    const parameters: unknown[][] = []
     const sources = options.sources ?? ['binance_futures', 'bybit']
+    const untrusted = new Set(options.untrustedSnapshotIds ?? [])
     const executor: RankPublicationSqlExecutor = {
-      async query(text) {
+      async query(text, values) {
         statements.push(text)
+        parameters.push([...(values ?? [])])
+        if (text.includes('leaderboard-rank-publication-evidence@2')) {
+          return {
+            rows: [{ supported: options.trustEvidenceInstalled !== false }] as never[],
+            rowCount: 1,
+          }
+        }
+        if (text.includes('FROM public.rank_publication_trust_evidence(')) {
+          const ids = (values?.[0] ?? []) as number[]
+          return {
+            rows: ids.map((id) => ({ snapshot_id: String(id), trust_bound: !untrusted.has(id) })),
+            rowCount: ids.length,
+          } as never
+        }
         if (text.includes('leaderboard-publication-source-isolation@1')) {
           return {
             rows: [{ supported: options.isolationSupported === true }] as never[],
@@ -290,8 +311,67 @@ describe('publishLeaderboardSeason gate', () => {
         }
       },
     }
-    return { statements, database, rolledBack: () => rolledBack }
+    return { statements, parameters, database, rolledBack: () => rolledBack }
   }
+
+  it('refuses before any isolation, claim or write when the evidence chain is not installed', async () => {
+    const { statements, database } = harness(
+      [passedBoard('binance_futures', 1), passedBoard('bybit', 2)],
+      { isolationSupported: true, trustEvidenceInstalled: false }
+    )
+    const scoreCohort = jest.fn()
+    await expect(publishLeaderboardSeason('90D', { database, scoreCohort })).rejects.toMatchObject({
+      code: 'trust_evidence_not_installed',
+    })
+    expect(scoreCohort).not.toHaveBeenCalled()
+    expect(statements.some((text) => /leaderboard_publication_source_isolations/.test(text))).toBe(
+      false
+    )
+    expect(statements.some((text) => /claim_leaderboard_rank_generation/.test(text))).toBe(false)
+  })
+
+  it('isolates a fresh source whose PASSED board lacks attempt-bound evidence', async () => {
+    const { statements, parameters, database } = harness(
+      [passedBoard('binance_futures', 1), passedBoard('bybit', 2), passedBoard('hyperliquid', 3)],
+      {
+        sources: ['binance_futures', 'bybit', 'hyperliquid'],
+        isolationSupported: true,
+        untrustedSnapshotIds: [2],
+      }
+    )
+    // The fixture authority does not shrink, so the cross-check refuses after
+    // the isolation write; what matters is the isolation reason.
+    await expect(
+      publishLeaderboardSeason('90D', { database, scoreCohort: jest.fn(), coreSources: [] })
+    ).rejects.toMatchObject({ code: 'isolation_not_applied' })
+    const isolationInsert = statements.findIndex((text) =>
+      /INSERT INTO arena\.leaderboard_publication_source_isolations/.test(text)
+    )
+    expect(isolationInsert).toBeGreaterThan(-1)
+    expect(JSON.parse(String(parameters[isolationInsert][1]))).toEqual([
+      expect.objectContaining({ source: 'bybit', reasons: ['untrusted'] }),
+    ])
+  })
+
+  it('refuses the season when most fresh sources are untrusted', async () => {
+    const { statements, database } = harness(
+      [passedBoard('binance_futures', 1), passedBoard('bybit', 2), passedBoard('hyperliquid', 3)],
+      {
+        sources: ['binance_futures', 'bybit', 'hyperliquid'],
+        isolationSupported: true,
+        untrustedSnapshotIds: [2, 3],
+      }
+    )
+    await expect(
+      publishLeaderboardSeason('90D', { database, scoreCohort: jest.fn(), coreSources: [] })
+    ).rejects.toMatchObject({
+      code: 'expected_source_not_fresh',
+      message: expect.stringContaining('bybit(untrusted), hyperliquid(untrusted)'),
+    })
+    expect(statements.some((text) => /INSERT INTO arena\.leaderboard_publication/.test(text))).toBe(
+      false
+    )
+  })
 
   it('refuses before any claim or write when an expected source has no fresh board', async () => {
     const { statements, database, rolledBack } = harness([

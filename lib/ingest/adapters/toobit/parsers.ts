@@ -108,9 +108,20 @@ function toobitBoardExtras(item: Record<string, unknown>): Record<string, unknow
   return Object.keys(ext).length > 0 ? ext : null
 }
 
+/**
+ * The board object of a leaderboard page: the captured upstream envelope
+ * `{code, data:{list,pages,total}}`, or the legacy stored composite
+ * `{timeframe, board:{list,pages,total}}`.
+ */
+function boardOf(raw: unknown): { list?: unknown; total?: unknown } {
+  const payload = (raw ?? {}) as { board?: unknown; data?: unknown }
+  const board = payload.board ?? payload.data
+  return board && typeof board === 'object' ? (board as { list?: unknown; total?: unknown }) : {}
+}
+
 export function parseToobitLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLeaderboardPage {
-  const payload = (raw ?? {}) as { board?: { list?: unknown; total?: unknown } }
-  const list = objects(payload.board?.list)
+  const board = boardOf(raw)
+  const list = objects(board.list)
 
   const rows: ParsedLeaderboardRow[] = []
   for (let i = 0; i < list.length; i++) {
@@ -142,7 +153,7 @@ export function parseToobitLeaderboardPage(raw: unknown, _ctx: ParseCtx): Parsed
       raw: item,
     })
   }
-  return { rows, reportedTotal: num((payload.board ?? {}).total) }
+  return { rows, reportedTotal: num(board.total) }
 }
 
 /**
@@ -158,8 +169,7 @@ export function parseToobitLeaderboardSeries(
   timeframe: RankingTimeframe
 ): Map<string, BoardSeriesBlock[]> {
   const out = new Map<string, BoardSeriesBlock[]>()
-  const payload = (raw ?? {}) as { board?: { list?: unknown } }
-  for (const item of objects(payload.board?.list)) {
+  for (const item of objects(boardOf(raw).list)) {
     const id = str(item.leaderUserId)
     if (!id) continue
     const points = objects(item.leaderTradeProfit)

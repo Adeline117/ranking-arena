@@ -1037,6 +1037,11 @@ export async function writeAttemptBoundLeaderboardRawArtifactSet(
     safety_limited: projection.safetyLimited,
     acquisition_state: projection.acquisitionState,
     population_state: projection.populationState,
+    // Exhausted mode: the DB re-checks this block before an outcome may be
+    // complete without a reported total (arena.leaderboard_exhaustion_completeness_holds).
+    ...('completeness' in manifest && manifest.completeness
+      ? { completeness: manifest.completeness }
+      : {}),
   })
   const commonMeta = {
     surface: 'tier_a_leaderboard',

@@ -40,6 +40,8 @@ import { htxAdapter } from '../adapters/htx'
 import { kucoinAdapter } from '../adapters/kucoin'
 import { lbankAdapter } from '../adapters/lbank'
 import { okxWeb3Adapter } from '../adapters/okx-web3'
+import { toobitAdapter } from '../adapters/toobit'
+import { xtAdapter } from '../adapters/xt'
 
 const V3 = 'arena.ingest.leaderboard-acquisition-manifest@3'
 
@@ -386,6 +388,36 @@ const CASES: SourceCase[] = [
     ['data'],
     'total',
     { pageCountKey: 'pages' }
+  ),
+  fixtureCase(
+    {
+      slug: 'toobit_futures',
+      adapter: toobitAdapter,
+      adapterSlug: 'toobit',
+      currency: 'USDT',
+      timeframe: 30,
+      pageSize: 1000,
+    },
+    fixture('toobit', 'leaders-new-p1.json'),
+    ['data', 'list'],
+    ['data'],
+    'total',
+    { asString: true, pageCountKey: 'pages' }
+  ),
+  fixtureCase(
+    {
+      slug: 'xt_futures',
+      adapter: xtAdapter,
+      adapterSlug: 'xt',
+      currency: 'USDT',
+      timeframe: 30,
+      pageSize: 1000,
+      meta: { boardKey: 'futures' },
+    },
+    fixture('xt', 'leaderboard-fut-30.json'),
+    ['result', 'items'],
+    ['result'],
+    'total'
   ),
   {
     slug: 'okx_web3_solana',

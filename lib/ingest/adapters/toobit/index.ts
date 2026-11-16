@@ -8,14 +8,14 @@
  * /copytrading page renders a landing carousel only:
  *
  *   GET bapi.toobit.com/bapi/v1/copy-trading/
- *     leaders-new?page&pageSize&dataType={7|30|90}&hideFull=0
+ *     leaders-new?page&size&dataType={7|30|90}&hideFull=0
  *         THE board — native per-TF (dataType echoes on rows), sorted by
- *         window ROI. pageSize is IGNORED (server pins 6 rows/page →
- *         sources.page_size=6); {list, pages:"265", total:"1587"} at
- *         survey. Rows carry ROI/PnL/win-rate/Sharpe/AUM + an embedded
- *         daily cumulative-ROI sparkline (leaderTradeProfit) — kept
- *         verbatim in entries.raw.
- *         NOTE survey said "~65 traders"; the real total is ~1,587.
+ *         window ROI. The page-size parameter is `size`: `pageSize` is
+ *         ignored (6 rows/page), `size` is honoured up to at least 1000
+ *         (probed 2026-11-15: total "2582" = 3 pages of size=1000, 2582
+ *         distinct leaderUserIds, page one re-read identical). Rows carry
+ *         ROI/PnL/win-rate/Sharpe/AUM + an embedded daily cumulative-ROI
+ *         sparkline (leaderTradeProfit) — kept verbatim in entries.raw.
  *     leader-detail?leaderUserId&dataType        identity + counts + fees
  *     get-leader-radar-chart?leaderUserId&type   ROI/MDD/win-rate (+site
  *         percentiles) per TF — radar.leaderProfitRatio == board ROI
@@ -42,6 +42,12 @@ import type {
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { BlockedUpstreamError, isBlockedStatus } from '../../fetch/rate-limiter'
+import type { JsonFetcher } from '../../fetch/capture'
+import {
+  captureReplayLeaderboard,
+  collectionMeta,
+  requireEnvelopeValue,
+} from '../../fetch/replay-capture'
 import {
   parseToobitHistory,
   parseToobitLeaderboardPage,
@@ -51,7 +57,6 @@ import {
 } from './parsers'
 
 const API_BASE = 'https://bapi.toobit.com/bapi/v1/copy-trading'
-const MAX_BOARD_PAGES = 400 // ~265 at survey; hard safety cap
 const DEFAULT_HISTORY_MAX_PAGES = 5
 
 type Dict = Record<string, unknown>
@@ -61,19 +66,40 @@ function base(src: SourceRow): string {
   return endpoints.base ?? API_BASE
 }
 
+const HEADERS = {
+  accept: 'application/json',
+  origin: 'https://www.toobit.com',
+  referer: 'https://www.toobit.com/en-US/copytrading',
+  'user-agent':
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
+    '(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+}
+
+/** Plain-HTTP JsonFetcher (the capture paces and classifies the status). */
+const toobitFetcher: JsonFetcher = async (template) => {
+  const res = await fetch(template.url, { headers: template.headers })
+  let json: unknown = null
+  try {
+    json = await res.json()
+  } catch {
+    // non-JSON body (block page) — the capture records it as an upstream error
+  }
+  return { status: res.status, json }
+}
+
+/** Upstream page meta: rows before parser validation; board population as reported. */
+const toobitLeaderboardMeta = collectionMeta({
+  label: 'toobit',
+  assertSuccess: requireEnvelopeValue('toobit', ['code'], [200]),
+  list: ['data', 'list'],
+  total: ['data', 'total'],
+  pageCount: ['data', 'pages'],
+})
+
 /** Paced plain-HTTP GET; toobit envelopes everything as {code,data,msg}. */
 async function fetchData<T = unknown>(session: FetchSession, url: string): Promise<T> {
   return session.paced(async () => {
-    const res = await fetch(url, {
-      headers: {
-        accept: 'application/json',
-        origin: 'https://www.toobit.com',
-        referer: 'https://www.toobit.com/en-US/copytrading',
-        'user-agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
-          '(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-      },
-    })
+    const res = await fetch(url, { headers: HEADERS })
     if (isBlockedStatus(res.status)) throw new BlockedUpstreamError(res.status, url)
     if (!res.ok) throw new Error(`[toobit] HTTP ${res.status} from ${url}`)
     const payload = (await res.json()) as { code?: unknown; data?: unknown; msg?: unknown }
@@ -117,41 +143,37 @@ const toobitAdapter: SourceAdapter = {
   },
 
   /**
-   * Native per-TF board: pages 1..reported `pages` (server pins 6
-   * rows/page — pageIndex maps straight onto Tier-A rank re-anchoring
-   * with sources.page_size=6). The live board shifts under pagination;
-   * the staging validator dedupes by leaderUserId keeping the best rank.
+   * Native per-TF board in total mode: pages of `size` = sources.page_size
+   * until the accepted rows reach the reported `total`. Parser pages are the
+   * exact upstream envelopes; Tier-A re-anchors ranks by captured row counts.
    */
+  async captureLeaderboard(session, src, timeframe, options) {
+    options?.signal?.throwIfAborted()
+    const listUrl = `${base(src)}/leaders-new`
+    const pageSize = src.page_size ?? 1000
+    return captureReplayLeaderboard(
+      { session, fetcher: toobitFetcher, src, label: 'toobit', signal: options?.signal },
+      {
+        buildRequest: (pageIndex) => ({
+          url: `${listUrl}?page=${pageIndex}&size=${pageSize}&dataType=${timeframe}&hideFull=0`,
+          method: 'GET',
+          headers: HEADERS,
+        }),
+        publicRequest: { query: ['page', 'size', 'dataType', 'hideFull'] },
+        pageBinding: { location: 'query', key: 'page' },
+        extractMeta: toobitLeaderboardMeta,
+        pageSize,
+      }
+    )
+  },
+
   async *listLeaderboard(
     session: FetchSession,
     src: SourceRow,
     timeframe: RankingTimeframe
   ): AsyncIterable<RawPage> {
-    const maxPagesKnob = Number(src.meta.max_pages) || null
-    let pageCount: number | null = null
-
-    for (let page = 1; page <= Math.min(maxPagesKnob ?? pageCount ?? 1, MAX_BOARD_PAGES); page++) {
-      const url =
-        `${base(src)}/leaders-new?page=${page}&pageSize=20` + `&dataType=${timeframe}&hideFull=0`
-      const data = await fetchData<{ list?: unknown; pages?: unknown; total?: unknown }>(
-        session,
-        url
-      )
-      if (pageCount === null) {
-        const reported = Number(data.pages)
-        pageCount = Number.isFinite(reported) && reported > 0 ? reported : 1
-        if (maxPagesKnob !== null) pageCount = Math.min(pageCount, maxPagesKnob)
-      }
-      const list = Array.isArray(data.list) ? data.list : []
-      if (list.length === 0) break
-
-      yield {
-        pageIndex: page,
-        payload: { timeframe, board: { list, pages: data.pages, total: data.total } },
-        url,
-        fetchedAt: new Date().toISOString(),
-      }
-    }
+    const capture = await toobitAdapter.captureLeaderboard!(session, src, timeframe)
+    yield* capture.parsePages
   },
 
   /**

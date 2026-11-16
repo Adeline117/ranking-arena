@@ -58,7 +58,6 @@ jest.mock('../source-job-execution-authority', () => {
 import {
   publishClaimedAttemptBoundLeaderboardSnapshot,
   publishClaimedBoardSeries,
-  publishClaimedLeaderboardSnapshot,
   publishClaimedTrustedLeaderboardSnapshot,
   type PublishAttemptBoundLeaderboardSnapshotInput,
 } from '../fenced-tier-a-publication'
@@ -487,17 +486,17 @@ describe('execution-claimed Tier-A publication', () => {
     )
   })
 
-  it('publishes a snapshot through one branded execution transaction without nesting region authority', async () => {
+  it('publishes a trusted snapshot through one branded execution transaction without nesting region authority', async () => {
     const { context, execution, query, transaction, withClaimedWrite, withFencedWrite } =
       claimedHarness()
 
     await expect(
-      publishClaimedLeaderboardSnapshot(snapshotInput(), context, execution)
-    ).resolves.toEqual({ snapshotId: 77 })
+      publishClaimedTrustedLeaderboardSnapshot(trustedInput(), context, execution)
+    ).resolves.toEqual({ snapshotId: 88 })
 
     expect(withClaimedWrite).toHaveBeenCalledTimes(1)
     expect(withFencedWrite).not.toHaveBeenCalled()
-    expect(mockPublishSnapshot).toHaveBeenCalledWith(
+    expect(mockPublishTrustedSnapshot).toHaveBeenCalledWith(
       transaction,
       expect.any(Object),
       expect.any(Function)
@@ -590,12 +589,12 @@ describe('execution-claimed Tier-A publication', () => {
       })
 
       await expect(
-        publishClaimedLeaderboardSnapshot(snapshotInput(), context, execution)
+        publishClaimedTrustedLeaderboardSnapshot(trustedInput(), context, execution)
       ).rejects.toMatchObject({ code: 'execution_authority_mismatch' })
 
       expect(withClaimedWrite).not.toHaveBeenCalled()
       expect(withFencedWrite).not.toHaveBeenCalled()
-      expect(mockPublishSnapshot).not.toHaveBeenCalled()
+      expect(mockPublishTrustedSnapshot).not.toHaveBeenCalled()
       expect(mockPublicationWrite).not.toHaveBeenCalled()
     }
   )
@@ -605,33 +604,33 @@ describe('execution-claimed Tier-A publication', () => {
       claimedHarness({ forgedTransaction: true })
 
     await expect(
-      publishClaimedLeaderboardSnapshot(snapshotInput(), context, execution)
+      publishClaimedTrustedLeaderboardSnapshot(trustedInput(), context, execution)
     ).rejects.toMatchObject({ code: 'execution_transaction_unauthorized' })
 
     expect(withClaimedWrite).toHaveBeenCalledTimes(1)
     expect(withFencedWrite).not.toHaveBeenCalled()
     expect(rollback).toHaveBeenCalledTimes(1)
     expect(query).not.toHaveBeenCalled()
-    expect(mockPublishSnapshot).not.toHaveBeenCalled()
+    expect(mockPublishTrustedSnapshot).not.toHaveBeenCalled()
   })
 
   it('rolls back when a claimed transaction is revoked before the source guard', async () => {
-    mockPublishSnapshot.mockImplementationOnce(
+    mockPublishTrustedSnapshot.mockImplementationOnce(
       async (
         transaction: WorkerDbFencedWrite,
-        _input: PublishSnapshotInput,
+        _input: PublishTrustedSnapshotInput,
         sourceAuthorityGuard: (candidate: WorkerDbFencedWrite) => Promise<void>
       ) => {
         mockClaimedWrites.delete(transaction)
         await sourceAuthorityGuard(transaction)
         mockPublicationWrite()
-        return { snapshotId: 77 }
+        return { snapshotId: 88 }
       }
     )
     const { context, execution, query, rollback, withFencedWrite } = claimedHarness()
 
     await expect(
-      publishClaimedLeaderboardSnapshot(snapshotInput(), context, execution)
+      publishClaimedTrustedLeaderboardSnapshot(trustedInput(), context, execution)
     ).rejects.toMatchObject({ code: 'execution_transaction_unauthorized' })
 
     expect(withFencedWrite).not.toHaveBeenCalled()
@@ -642,11 +641,11 @@ describe('execution-claimed Tier-A publication', () => {
 
   it('preserves a publisher callback error identity and delegates rollback to the execution owner', async () => {
     const failure = new Error('snapshot validation failed')
-    mockPublishSnapshot.mockRejectedValueOnce(failure)
+    mockPublishTrustedSnapshot.mockRejectedValueOnce(failure)
     const { context, execution, rollback, withClaimedWrite, withFencedWrite } = claimedHarness()
 
     await expect(
-      publishClaimedLeaderboardSnapshot(snapshotInput(), context, execution)
+      publishClaimedTrustedLeaderboardSnapshot(trustedInput(), context, execution)
     ).rejects.toBe(failure)
 
     expect(withClaimedWrite).toHaveBeenCalledTimes(1)
@@ -656,11 +655,11 @@ describe('execution-claimed Tier-A publication', () => {
   })
 
   it('rolls back if a publisher omits the mandatory claimed source guard', async () => {
-    mockPublishSnapshot.mockResolvedValueOnce({ snapshotId: 77 })
+    mockPublishTrustedSnapshot.mockResolvedValueOnce({ snapshotId: 88 })
     const { context, execution, query, rollback, withFencedWrite } = claimedHarness()
 
     await expect(
-      publishClaimedLeaderboardSnapshot(snapshotInput(), context, execution)
+      publishClaimedTrustedLeaderboardSnapshot(trustedInput(), context, execution)
     ).rejects.toMatchObject({ code: 'source_registry_contract_violation' })
 
     expect(withFencedWrite).not.toHaveBeenCalled()
