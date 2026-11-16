@@ -23,8 +23,8 @@ const servingReadiness = readSource('scripts/qa/serving-page-readiness.mjs')
 const servingContract = readSource('scripts/qa/serving-data-contract.test.mjs')
 const servingProfileE2e = readSource('scripts/qa/serving-profiles-e2e.mjs')
 
-test('V1 ingest execution gate is fixed false and cannot be reopened from an environment', () => {
-  assert.match(gate, /V1_INGEST_EXECUTION_PUBLISHED\s*=\s*false\s+as const/)
+test('V1 ingest execution gate is a checked-in constant and cannot be changed from an environment', () => {
+  assert.match(gate, /V1_INGEST_EXECUTION_PUBLISHED\s*=\s*true\s+as const/)
   assert.match(gate, /isV1IngestExecutionPublished\(\): boolean/)
   assert.match(gate, /INGEST_EXECUTION_NOT_PUBLISHED/)
   assert.doesNotMatch(gate, /process\.env|NEXT_PUBLIC_|INGEST_EXECUTION.*(?:ENV|FLAG)/)
