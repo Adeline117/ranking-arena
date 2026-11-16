@@ -16,8 +16,8 @@ const scheduler = readSource('worker/src/scheduler.ts')
 const triggerChain = readSource('lib/cron/trigger-chain.ts')
 const packageJson = JSON.parse(readSource('package.json'))
 
-test('V1 ranking command-chain gate is checked in as a fixed false value', () => {
-  assert.match(gate, /V1_RANKING_COMMAND_CHAIN_PUBLISHED\s*=\s*false\s+as const/)
+test('V1 ranking command-chain gate is a checked-in constant with no environment override', () => {
+  assert.match(gate, /V1_RANKING_COMMAND_CHAIN_PUBLISHED\s*=\s*true\s+as const/)
   assert.match(gate, /isV1RankingCommandChainPublished\(\): boolean/)
   assert.doesNotMatch(gate, /process\.env|NEXT_PUBLIC_|RANKING_COMMAND_CHAIN.*(?:ENV|FLAG)/)
 })
