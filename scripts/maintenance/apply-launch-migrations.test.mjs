@@ -175,7 +175,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20261111135144_freeze_legacy_position_history_relations_prod_creator.sql',
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
-    '20261113150757_clean_derived_formal_win_rate.sql',
+    '20261115142045_clean_derived_formal_win_rate_scoped_probe.sql',
     '20261114211034_public_source_attempt_bound_capture_contracts.sql',
     '20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql',
   ])
@@ -234,10 +234,11 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260817061000_legacy_raw_metric_publication_isolation.sql',
     '20261111134416_quarantine_bitget_bot_cumulative_rank_authority_prod_reader.sql',
     '20261113104533_trader_follows_hard_cap_lock.sql',
+    '20261113150757_clean_derived_formal_win_rate.sql',
     '20261113151848_sync_user_profile_email_from_auth.sql',
     '20261113151849_auth_user_has_password_rpc.sql',
   ])
-  assert.equal(new Set(all).size, 196)
+  assert.equal(new Set(all).size, 197)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
   assert.deepEqual(predeploy.slice(-116), [
     '20260718120000_leaderboard_source_freshness.sql',
@@ -1422,7 +1423,7 @@ test('ADR-023 single-file migrations are classified, never emitted, and their sl
     '`20260803101000_verified_position_history_publication_writer.sql`',
     '`20261111133300_retire_legacy_token_rankings_cron_api.sql`',
     '`20260804052000_fail_closed_unbound_copier_aggregates.sql`',
-    '`20261113150757_clean_derived_formal_win_rate.sql`',
+    '`20261115142045_clean_derived_formal_win_rate_scoped_probe.sql`',
   ]) {
     assert.ok(checklist.includes(anchor), `LAUNCH_CHECKLIST.md must place ${anchor}`)
   }

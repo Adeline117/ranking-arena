@@ -292,7 +292,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
   20260717120000_trader_follows_composite_identity.sql
-  20261113150757_clean_derived_formal_win_rate.sql
+  20261115142045_clean_derived_formal_win_rate_scoped_probe.sql
   20261114211034_public_source_attempt_bound_capture_contracts.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
@@ -433,6 +433,10 @@ readonly -a RECOVERY_MIGRATIONS
 #   production: one join over arena.leaderboard_entries looped ~1.4M times and
 #   hit the file's own 2-minute statement_timeout. 20261115013558 is the same
 #   body with that join order pinned and takes the slot.
+# - 20261113150757 evaluates a correlated probe of arena.leaderboard_entries
+#   for all 180,875 in-scope trader_stats rows (~6 min on production against
+#   its own 5-minute statement_timeout). 20261115142045 is the same body with
+#   the probe scoped to the 8,883 rows that can use it and takes the slot.
 # - 20261113104533, 20261113151848 and 20261113151849 were applied to production
 #   on 2026-11-13 through the ADR-023 MCP single-file channel, which records the
 #   apply time as the ledger version (233535 / 233625 / 233643). Replaying
@@ -459,6 +463,7 @@ SUPERSEDED_MIGRATIONS=(
   20260817061000_legacy_raw_metric_publication_isolation.sql
   20261111134416_quarantine_bitget_bot_cumulative_rank_authority_prod_reader.sql
   20261113104533_trader_follows_hard_cap_lock.sql
+  20261113150757_clean_derived_formal_win_rate.sql
   20261113151848_sync_user_profile_email_from_auth.sql
   20261113151849_auth_user_has_password_rpc.sql
 )
@@ -486,6 +491,7 @@ superseder_version() {
     20260817060000_trader_series_publication_isolation.sql) printf '%s' 20261111132448 ;;
     20260817061000_legacy_raw_metric_publication_isolation.sql) printf '%s' 20261111132450 ;;
     20261113104533_trader_follows_hard_cap_lock.sql) printf '%s' 20261113233535 ;;
+    20261113150757_clean_derived_formal_win_rate.sql) printf '%s' 20261115142045 ;;
     20261113151848_sync_user_profile_email_from_auth.sql) printf '%s' 20261113233625 ;;
     20261113151849_auth_user_has_password_rpc.sql) printf '%s' 20261113233643 ;;
     *)
