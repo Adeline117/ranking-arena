@@ -130,6 +130,7 @@
     "qa:codec-rebuild-slot-guard-pg17": "bash supabase/migrations/__tests__/leaderboard-ranks-codec-layout-rebuild-slot-guard.pg17.sh",
     "qa:retention-trust-evidence-pg17": "bash supabase/migrations/__tests__/retention-preserves-metric-trust-evidence.pg17.sh",
     "qa:public-source-capture-contracts-pg17": "bash supabase/migrations/__tests__/public-source-attempt-bound-capture.pg17.sh",
+    "qa:public-source-exhaustion-capture-pg17": "bash supabase/migrations/__tests__/public-source-exhaustion-and-total-capture.pg17.sh",
     "qa:exhaustion-completeness-pg17": "bash supabase/migrations/__tests__/leaderboard-exhaustion-completeness-evidence.pg17.sh",
     "qa:snapshot-retention-pg17": "bash supabase/migrations/__tests__/leaderboard-snapshot-retention.pg17.sh && bash worker/src/ingest/processors/__tests__/positions-off-cohort.pg17.sh",
     "qa:score-alias-pg17": "bash supabase/migrations/__tests__/bitget-bot-rank-authority-quarantine.pg17.sh",
