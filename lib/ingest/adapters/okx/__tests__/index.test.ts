@@ -36,7 +36,7 @@ function source(productType: 'spot' | 'futures', instType: string): SourceRow {
     cadence_tier_a: '4 hours',
     cadence_tier_b: '12 hours',
     cadence_tier_d: '1 hour',
-    fetch_region: 'vps_sg',
+    fetch_region: 'local',
     rate_budget_ms: 500,
     phase: 3,
     serving_mode: 'serving',
