@@ -126,7 +126,7 @@ function rebuiltRoi(evidence: Partial<MetricTrustEvidence> = {}): RankingMetricI
     binding: {
       subjectKey: 'binance_web3_bsc:0xabc',
       sourceId: 'binance_web3_bsc',
-      sourceContractVersion: '2',
+      sourceContractVersion: '1',
       fieldPath: 'rebuild.roi',
       populationSnapshotRef: populationSnapshotRef('binance_web3_bsc'),
       rawRefs: rebuildRawRefs(),
@@ -164,8 +164,9 @@ function binanceWalletMetric(metric: 'roi' | 'pnl'): RankingMetricInput {
     binding: {
       subjectKey: 'binance_web3_bsc:0xabc',
       sourceId: 'binance_web3_bsc',
-      sourceContractVersion: '2',
-      fieldPath: metric === 'roi' ? 'data.data[].realizedPnlPercent' : 'data.data[].realizedPnl',
+      sourceContractVersion: '1',
+      fieldPath:
+        metric === 'roi' ? 'board.data.data[].realizedPnlPercent' : 'board.data.data[].realizedPnl',
       populationSnapshotRef: populationSnapshotRef('binance_web3_bsc'),
       rawRefs: directRawRefs('binance_web3_bsc'),
       currency: 'USD',

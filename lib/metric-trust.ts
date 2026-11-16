@@ -354,15 +354,17 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
       },
     ],
   }),
-  // v2: attempt-bound capture stores the board response verbatim, so the
-  // headline fields sit at data.data[] (v1 read the legacy composite board.*).
+  // v1 stays registered: metric_source_contracts is append-only and has no
+  // reviewed deactivation path, so a v2 with the verbatim-RAW field paths
+  // (data.data[]) would drift from the active v1 rows. Until then attempt-bound
+  // RAW observations record field_lineage_mismatch (shadow quality only).
   binance_web3_bsc: registeredSourceContract({
     sourceId: 'binance_web3_bsc',
-    version: '2',
+    version: '1',
     fields: [
       {
         metric: 'roi',
-        fieldPath: 'data.data[].realizedPnlPercent',
+        fieldPath: 'board.data.data[].realizedPnlPercent',
         provenance: 'source_reported',
         methodologyVersion: 'binance-web3-board-realized-pnl-percent@1',
         metricSetId: 'binance-web3-board-realized-pnl@1',
@@ -376,7 +378,7 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
       },
       {
         metric: 'pnl',
-        fieldPath: 'data.data[].realizedPnl',
+        fieldPath: 'board.data.data[].realizedPnl',
         provenance: 'source_reported',
         methodologyVersion: 'binance-web3-board-realized-pnl@1',
         metricSetId: 'binance-web3-board-realized-pnl@1',
