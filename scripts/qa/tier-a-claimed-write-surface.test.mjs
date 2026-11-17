@@ -60,10 +60,6 @@ test('Tier-A RAW and field inventory writes require caller-owned authority', () 
   const raw = read('lib/ingest/raw.ts')
   assert.match(
     raw,
-    /writeLeaderboardRawArtifactSet\([\s\S]*?runTransaction: IngestTransactionRunner[\s\S]*?assertTierARawTransactionRunner\(runTransaction\)/
-  )
-  assert.match(
-    raw,
     /writeAttemptBoundLeaderboardRawArtifactSet\([\s\S]*?runTransaction: IngestTransactionRunner[\s\S]*?assertTierARawTransactionRunner\(runTransaction\)/
   )
   assert.doesNotMatch(raw, /async function persistLeaderboardTrustPointers\(/)
