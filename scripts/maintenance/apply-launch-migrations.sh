@@ -45,6 +45,13 @@ ORDERED_PREDEPLOY_SNAPSHOT_DIR=''
 # the GMX source-contract pair (20260715231500/232500) stay outside this
 # manifest on purpose; their replacements are classified explicitly in
 # ADR023_SINGLE_FILE_MIGRATIONS below.
+# 20261117130152 re-creates public.arena_metric_trust_release_readiness with
+# one changed clause: the score-input encoder pin. 20261113014105 and
+# 20261114101514 (earlier in this list) re-created the encoder with the
+# PnL-domain guard spelled with jsonb_typeof, so the 20260722055000 pin on
+# 'jsonb_path_query_array' reports metric_trust_object_contract missing and
+# the ingest worker startup gate fails closed. The worker cannot start until
+# it is applied, so it is predeploy; it reads no other launch object.
 PREDEPLOY_MIGRATIONS=(
   20260716111600_atomic_group_application_review.sql
   20260716111700_group_application_read_write_boundary.sql
@@ -206,6 +213,7 @@ PREDEPLOY_MIGRATIONS=(
   20261116203816_metric_source_contract_retirement.sql
   20261116205144_trader_stats_score_input_evidence_pointer.sql
   20261116215328_profile_acquisition_evidence_ledger.sql
+  20261117130152_metric_trust_readiness_encoder_pnl_domain_pin.sql
 )
 readonly -a PREDEPLOY_MIGRATIONS
 # The final six (season publication follow-ups, PR #419) must stay LAST: they
