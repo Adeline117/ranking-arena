@@ -56,7 +56,7 @@ CREATE TEMPORARY TABLE profile_capture_contract_seed (
   contract_sha256 text NOT NULL,
   timeframes smallint[] NOT NULL,
   attestable_metrics text[] NOT NULL
-) ON COMMIT DROP;
+);
 
 INSERT INTO profile_capture_contract_seed VALUES
   ('binance_futures', 'binance', 'binance_futures-profile-capture@1',
