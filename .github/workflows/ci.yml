@@ -133,7 +133,8 @@ jobs:
           # tooling is reported but not blocking: the eslint-config-next →
           # fast-glob → micromatch → braces chain has no upstream fix (braces
           # 3.0.3 is latest) and never reaches the runtime bundle.
-          npm audit --omit=dev --audit-level=high || {
+          # The gate script applies the dated, per-advisory exemptions it lists.
+          npm audit --omit=dev --json | node scripts/qa/npm-audit-gate.mjs || {
             echo "::error::npm audit found high/critical vulnerabilities in production dependencies — fix before merging"
             exit 1
           }
