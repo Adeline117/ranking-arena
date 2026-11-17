@@ -3,7 +3,7 @@
  *
  * PURE HTTP — no Playwright. The bapi answers plain fetch() (verified
  * live 2026-06-12 from the SG VPS and 2026-11-15 from the local Mac;
- * migration 20261115170535 moves toobit_futures from fetch_region='vps_sg'
+ * migration 20261116204359 moves toobit_futures from fetch_region='vps_sg'
  * to 'local', so the local worker fetches it). Endpoints
  * were extracted from the SPA bundle (app.*.js api map) because the
  * /copytrading page renders a landing carousel only:
