@@ -239,8 +239,14 @@ CURRENT_SCRIPT_BLOB="$(git_command hash-object --no-filters "$SCRIPT_PATH")" || 
 
 RELEASE_TREE_PATHS="$(git_command ls-tree -r --name-only "$SHA")" || \
   fail 'unable to inspect target release paths'
-if grep -Eq '(^|/)\.gitattributes$' <<<"$RELEASE_TREE_PATHS"; then
-  fail 'worker release contains .gitattributes; exact archive bytes are not proven'
+# Attributes (export-subst, ident, eol, filters) can make `git archive` emit
+# bytes that differ from the committed blobs. The repository carries a reviewed
+# root .gitattributes, so its presence alone cannot be refused; instead
+# archive_worker_release proves every extracted file against its committed blob
+# and the extracted file set against the committed tree. An attributes file
+# inside the release inputs themselves is still refused.
+if grep -Eq '^(lib|worker)/(.*/)?\.gitattributes$' <<<"$RELEASE_TREE_PATHS"; then
+  fail 'worker release inputs contain .gitattributes; exact archive bytes are not proven'
 fi
 RELEASE_INPUT_TREE="$(git_command ls-tree -r "$SHA" -- \
   .npmrc lib worker package.json package-lock.json tsconfig.json \
@@ -271,6 +277,36 @@ archive_worker_release() {
     return 1
   fi
   rm -rf "$isolated_git"
+  verify_worker_release_bytes "$destination"
+}
+
+# Proof that the archive equals the committed objects byte for byte: the
+# extracted regular files are exactly the committed release paths, and each one
+# hashes (without filters) to its committed blob.
+verify_worker_release_bytes() {
+  local destination expected actual
+  destination="$1"
+  expected="$(git_command ls-tree -r "$SHA" -- \
+      .npmrc lib worker package.json package-lock.json tsconfig.json \
+      scripts/ci/worker-release-id.mjs \
+    | awk -F '\t' '{ split($1, meta, " "); print meta[3] "\t" $2 }' \
+    | LC_ALL=C sort)" || return 1
+  [ -n "$expected" ] || return 1
+  actual="$(cd "$destination" && cut -f2 <<<"$expected" \
+    | env -i HOME="$HOME" PATH="$GIT_SAFE_PATH" LC_ALL=C \
+        GIT_ATTR_NOSYSTEM=1 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
+        "$GIT_BIN" hash-object --no-filters --stdin-paths \
+    | paste - <(cut -f2 <<<"$expected") \
+    | LC_ALL=C sort)" || return 1
+  if [ "$actual" != "$expected" ]; then
+    echo '✗ extracted worker release differs from the committed blobs' >&2
+    return 1
+  fi
+  if [ "$(cd "$destination" && /usr/bin/find . -type f | sed 's#^\./##' | LC_ALL=C sort)" != \
+       "$(cut -f2 <<<"$expected" | LC_ALL=C sort)" ]; then
+    echo '✗ extracted worker release file set differs from the committed tree' >&2
+    return 1
+  fi
 }
 
 compute_worker_release_id() {
@@ -303,8 +339,18 @@ pm2_snapshot() {
       const apps = JSON.parse(raw).filter((app) => app.name === appName)
       if (apps.length !== 1) process.exit(41)
       const app = apps[0]
+      // A stopped entry written by an older PM2 carries neither `pid` nor
+      // `instances`. A stopped process has no pid, and a fork-mode entry is a
+      // single instance, so those two absences have exactly one meaning. Any
+      // other state keeps the fields mandatory.
+      const stopped = app.pm2_env?.status === "stopped"
+      const legacyPid = stopped && app.pid === undefined ? 0 : app.pid
+      const legacyInstances =
+        stopped && app.pm2_env?.instances === undefined && app.pm2_env?.exec_mode === "fork_mode"
+          ? 1
+          : app.pm2_env?.instances
       const values = [
-        app.pid,
+        legacyPid,
         app.pm2_env?.status,
         app.pm2_env?.pm_cwd,
         app.pm2_env?.exec_interpreter,
@@ -313,7 +359,7 @@ pm2_snapshot() {
         JSON.stringify(app.pm2_env?.args ?? []),
         JSON.stringify(app.pm2_env?.node_args ?? []),
         app.pm2_env?.exec_mode,
-        app.pm2_env?.instances,
+        legacyInstances,
       ]
       if (values.some((value) => String(value ?? "").match(/[\n\r\x1f]/))) process.exit(42)
       process.stdout.write(values.map((value) => String(value ?? "")).join("\x1f") + "\n")
@@ -362,12 +408,22 @@ case "$OLD_CWD/" in
   *) fail 'existing PM2 cwd is outside the managed release root' ;;
 esac
 
-OLD_SHA="$(sed -n '1p' "$OLD_CWD/DEPLOYED_SHA" 2>/dev/null || true)"
+# Identity of the existing release: its DEPLOYED_SHA stamp, or for a legacy
+# release that predates the stamp, the commit its Git worktree is on. The
+# stopped-baseline proofs below re-read it through the same function, so a
+# legacy release is held to the identity it was first observed with.
+existing_release_sha() {
+  local sha
+  sha="$(sed -n '1p' "$OLD_CWD/DEPLOYED_SHA" 2>/dev/null || true)"
+  if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+    sha="$(git_command -C "$OLD_CWD" rev-parse --verify HEAD^{commit} 2>/dev/null)" || return 1
+  fi
+  [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || return 1
+  printf '%s\n' "$sha"
+}
+
+OLD_SHA="$(existing_release_sha)" || fail 'existing legacy release has no provable Git identity'
 OLD_RELEASE_ID="$(sed -n '1p' "$OLD_CWD/WORKER_RELEASE_ID" 2>/dev/null || true)"
-if [[ ! "$OLD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-  OLD_SHA="$(git_command -C "$OLD_CWD" rev-parse --verify HEAD^{commit})" || \
-    fail 'existing legacy release has no provable Git identity'
-fi
 [[ "$OLD_SHA" =~ ^[0-9a-f]{40}$ ]] || fail 'existing release SHA is malformed'
 if [[ ! "$OLD_RELEASE_ID" =~ ^[0-9a-f]{64}$ ]]; then
   OLD_RELEASE_ID=''
@@ -590,7 +646,7 @@ prove_stopped_local_baseline() {
   snapshot="$(pm2_snapshot)" || return 1
   [ "$snapshot" = "$BASELINE_SNAPSHOT" ] || return 1
   [ "$(hash_shared_env)" = "$SHARED_ENV_SHA256" ] || return 1
-  [ "$(sed -n '1p' "$OLD_CWD/DEPLOYED_SHA" 2>/dev/null || true)" = "$OLD_SHA" ] || return 1
+  [ "$(existing_release_sha)" = "$OLD_SHA" ] || return 1
   if [ -n "$OLD_RELEASE_ID" ]; then
     [ "$(sed -n '1p' "$OLD_CWD/WORKER_RELEASE_ID" 2>/dev/null || true)" = "$OLD_RELEASE_ID" ] || return 1
   fi
@@ -602,7 +658,7 @@ prove_stopped_local_baseline() {
   assert_stopped_pm2_dumps || return 1
   [ "$(pm2_snapshot)" = "$BASELINE_SNAPSHOT" ] || return 1
   [ "$(hash_shared_env)" = "$SHARED_ENV_SHA256" ] || return 1
-  [ "$(sed -n '1p' "$OLD_CWD/DEPLOYED_SHA" 2>/dev/null || true)" = "$OLD_SHA" ] || return 1
+  [ "$(existing_release_sha)" = "$OLD_SHA" ] || return 1
   if [ -n "$OLD_RELEASE_ID" ]; then
     [ "$(sed -n '1p' "$OLD_CWD/WORKER_RELEASE_ID" 2>/dev/null || true)" = "$OLD_RELEASE_ID" ] || return 1
   fi
