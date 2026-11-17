@@ -180,6 +180,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20261114211034_public_source_attempt_bound_capture_contracts.sql',
     '20261115160917_public_source_exhaustion_and_total_capture_contracts.sql',
     '20261115170535_activate_local_public_sources.sql',
+    '20261116203817_binance_web3_bsc_metric_contract_v2.sql',
     '20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql',
   ])
   // Classified, never emitted: applied one file at a time via ADR-023 at the
@@ -241,7 +242,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20261113151848_sync_user_profile_email_from_auth.sql',
     '20261113151849_auth_user_has_password_rpc.sql',
   ])
-  assert.equal(new Set(all).size, 200)
+  assert.equal(new Set(all).size, 201)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
   assert.deepEqual(predeploy.slice(-117), [
     '20260718120000_leaderboard_source_freshness.sql',

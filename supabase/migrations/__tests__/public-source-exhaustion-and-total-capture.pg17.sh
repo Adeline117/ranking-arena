@@ -229,7 +229,10 @@ echo "ok: migration applies"
 
 # ── Rows equal the code registry ──
 
-METRIC_SOURCES='["binance_web3_bsc","bitget_cfd","bitget_futures","bitget_spot","kucoin_futures","okx_futures","okx_spot","toobit_futures","xt_futures"]'
+# binance_web3_bsc is absent on purpose: at this point it still holds its
+# 20260721120000 v1, which the registry has superseded with v2. Its parity is
+# proven after 20261116203817 by metric-source-contract-retirement.pg17.sh.
+METRIC_SOURCES='["bitget_cfd","bitget_futures","bitget_spot","kucoin_futures","okx_futures","okx_spot","toobit_futures","xt_futures"]'
 EXPECTED_JSON="$(cd "$ROOT_DIR" && METRIC_SOURCES="$METRIC_SOURCES" npx --no-install tsx -e '
 import { getRegisteredMetricSourceContract } from "./lib/metric-trust"
 import { OKX_LEADERBOARD_EXHAUSTION } from "./lib/ingest/adapters/okx"

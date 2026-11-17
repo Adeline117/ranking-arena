@@ -16,6 +16,7 @@ import {
   parseBinanceWeb3Profile,
 } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
+import { getRegisteredMetricSourceContract } from '@/lib/metric-trust'
 
 function fixture(name: string): Record<string, unknown> {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
@@ -62,6 +63,26 @@ describe('parseBinanceWeb3LeaderboardPage', () => {
     expect(typeof page.rows[0].headlineVolume).toBe('number')
     expect(page.rows[0].headlineExtras).toBeTruthy()
     expect(typeof page.rows[0].headlineExtras?.total_traded_tokens).toBe('number')
+  })
+
+  it('claims the registered v2 field paths for a verbatim attempt-bound page', () => {
+    const verbatim = (fixture('board-capture-90d.json').pages as Record<string, unknown>[])[0]
+    const page = parseBinanceWeb3LeaderboardPage(verbatim, ctx)
+    const contract = getRegisteredMetricSourceContract('binance_web3_bsc')!
+    const boardFields = contract.fields.filter(
+      (field) => field.sourcePayloadScope === 'population_snapshot'
+    )
+    expect(contract.version).toBe('2')
+    expect(boardFields.map((field) => `${field.metric}:${field.fieldPath}`).sort()).toEqual([
+      'pnl:data.data[].realizedPnl',
+      'roi:data.data[].realizedPnlPercent',
+    ])
+    expect(page.rows.length).toBeGreaterThan(0)
+    for (const row of page.rows) {
+      for (const field of boardFields) {
+        expect(row.headlineMetricSources?.[field.metric]?.fieldPath).toBe(field.fieldPath)
+      }
+    }
   })
 
   it('flags KOL membership from the embedded session set', () => {

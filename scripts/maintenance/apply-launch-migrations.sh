@@ -302,6 +302,12 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # the worker release and 160917 (its preflight requires 160917's capture and
 # exhaustion rows and post-160917 windows/page_size). It updates arena.sources
 # only (no table 192134 guards), so 192134 stays last.
+# 20261116203817 registers binance_web3_bsc metric contract v2 and retires v1
+# (predeploy 20261116203816). The worker before this release reads v1, so it
+# follows the worker whose registry holds v2; until then that worker fails its
+# contract parity check for binance_web3_bsc only. It needs binance_web3_bsc in
+# USD (160917), so it follows 170535, and touches no table 192134 guards, so
+# 192134 stays last.
 # 040440 forward replacement. V1_EXECUTION_STATUS requires the RAW-only
 # bridge SHA to be deployed and legacy callers drained before the legacy
 # position-history relations are frozen. Current main never reads or writes
@@ -317,6 +323,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261114211034_public_source_attempt_bound_capture_contracts.sql
   20261115160917_public_source_exhaustion_and_total_capture_contracts.sql
   20261115170535_activate_local_public_sources.sql
+  20261116203817_binance_web3_bsc_metric_contract_v2.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
