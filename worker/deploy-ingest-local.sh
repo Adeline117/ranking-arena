@@ -239,8 +239,14 @@ CURRENT_SCRIPT_BLOB="$(git_command hash-object --no-filters "$SCRIPT_PATH")" || 
 
 RELEASE_TREE_PATHS="$(git_command ls-tree -r --name-only "$SHA")" || \
   fail 'unable to inspect target release paths'
-if grep -Eq '(^|/)\.gitattributes$' <<<"$RELEASE_TREE_PATHS"; then
-  fail 'worker release contains .gitattributes; exact archive bytes are not proven'
+# Attributes (export-subst, ident, eol, filters) can make `git archive` emit
+# bytes that differ from the committed blobs. The repository carries a reviewed
+# root .gitattributes, so its presence alone cannot be refused; instead
+# archive_worker_release proves every extracted file against its committed blob
+# and the extracted file set against the committed tree. An attributes file
+# inside the release inputs themselves is still refused.
+if grep -Eq '^(lib|worker)/(.*/)?\.gitattributes$' <<<"$RELEASE_TREE_PATHS"; then
+  fail 'worker release inputs contain .gitattributes; exact archive bytes are not proven'
 fi
 RELEASE_INPUT_TREE="$(git_command ls-tree -r "$SHA" -- \
   .npmrc lib worker package.json package-lock.json tsconfig.json \
@@ -271,6 +277,36 @@ archive_worker_release() {
     return 1
   fi
   rm -rf "$isolated_git"
+  verify_worker_release_bytes "$destination"
+}
+
+# Proof that the archive equals the committed objects byte for byte: the
+# extracted regular files are exactly the committed release paths, and each one
+# hashes (without filters) to its committed blob.
+verify_worker_release_bytes() {
+  local destination expected actual
+  destination="$1"
+  expected="$(git_command ls-tree -r "$SHA" -- \
+      .npmrc lib worker package.json package-lock.json tsconfig.json \
+      scripts/ci/worker-release-id.mjs \
+    | awk -F '\t' '{ split($1, meta, " "); print meta[3] "\t" $2 }' \
+    | LC_ALL=C sort)" || return 1
+  [ -n "$expected" ] || return 1
+  actual="$(cd "$destination" && cut -f2 <<<"$expected" \
+    | env -i HOME="$HOME" PATH="$GIT_SAFE_PATH" LC_ALL=C \
+        GIT_ATTR_NOSYSTEM=1 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
+        "$GIT_BIN" hash-object --no-filters --stdin-paths \
+    | paste - <(cut -f2 <<<"$expected") \
+    | LC_ALL=C sort)" || return 1
+  if [ "$actual" != "$expected" ]; then
+    echo '✗ extracted worker release differs from the committed blobs' >&2
+    return 1
+  fi
+  if [ "$(cd "$destination" && /usr/bin/find . -type f | sed 's#^\./##' | LC_ALL=C sort)" != \
+       "$(cut -f2 <<<"$expected" | LC_ALL=C sort)" ]; then
+    echo '✗ extracted worker release file set differs from the committed tree' >&2
+    return 1
+  fi
 }
 
 compute_worker_release_id() {
