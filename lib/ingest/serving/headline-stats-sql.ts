@@ -6,7 +6,17 @@
  * (`__tests__/headline-stats-as-of.pg17.sh`) without loading the worker DB pool.
  *
  * Parameters: $1 timeframe, $2 scraped_at (as_of), $3 currency,
- * $4 jsonb rows, $5 source_id.
+ * $4 jsonb rows, $5 source_id, $6 evidence source payload RAW id,
+ * $7 evidence source run id ($6/$7 both NULL when the board write is not an
+ * attempt-bound acquisition).
+ *
+ * Evidence (20261116205144): an attempt-bound board write stamps the row with
+ * its source payload RAW and source run, and lists in evidence_metrics the
+ * score-input values THIS board sent. Values the COALESCE below retains from
+ * an earlier writer are not listed, so publication never treats them as board
+ * evidence (arena.publication_score_rows_json). The table's evidence trigger
+ * drops listed metrics stored NULL and later strips any attested value another
+ * writer overwrites.
  *
  * as_of semantics (row freshness = oldest surviving headline fact):
  *   - A headline column that this board did NOT send (EXCLUDED IS NULL) but
@@ -23,11 +33,25 @@
  */
 export const HEADLINE_STATS_UPSERT_SQL = `INSERT INTO arena.trader_stats
            (trader_id, timeframe, as_of, currency, roi, pnl, win_rate, mdd, sharpe, aum, copier_count, copier_pnl, volume,
-            win_positions, total_positions, holding_duration_avg, extras)
+            win_positions, total_positions, holding_duration_avg, extras,
+            evidence_raw_object_id, evidence_source_run_id, evidence_metrics)
          SELECT t.id, $1, $2, $3, r.roi, r.pnl, r.win_rate, r.mdd, r.sharpe, r.aum, r.copier_count, r.copier_pnl, r.volume,
                 r.win_positions, r.total_positions,
                 CASE WHEN r.holding_hours IS NOT NULL THEN make_interval(secs => r.holding_hours * 3600) ELSE NULL END,
-                COALESCE(r.extras, '{}'::jsonb)
+                COALESCE(r.extras, '{}'::jsonb),
+                $6::bigint, $7::text,
+                CASE WHEN $6::bigint IS NOT NULL AND $7::text IS NOT NULL THEN array_remove(ARRAY[
+                  CASE WHEN r.roi IS NOT NULL THEN 'roi' END,
+                  CASE WHEN r.pnl IS NOT NULL THEN 'pnl' END,
+                  CASE WHEN r.win_rate IS NOT NULL THEN 'win_rate' END,
+                  CASE WHEN r.mdd IS NOT NULL THEN 'mdd' END,
+                  CASE WHEN r.sharpe IS NOT NULL THEN 'sharpe' END,
+                  CASE WHEN r.copier_count IS NOT NULL THEN 'copier_count' END,
+                  CASE WHEN r.total_positions IS NOT NULL THEN 'total_positions' END,
+                  CASE WHEN r.extras ? 'sortino' THEN 'sortino' END,
+                  CASE WHEN r.extras ? 'calmar' THEN 'calmar' END,
+                  CASE WHEN r.extras ? 'volatility' THEN 'volatility' END
+                ]::text[], NULL) END
            FROM jsonb_to_recordset($4::jsonb) AS r(
              exchange_trader_id text, roi numeric, pnl numeric, win_rate numeric,
              mdd numeric, sharpe numeric, aum numeric, copier_count integer, copier_pnl numeric, volume numeric,
@@ -65,4 +89,7 @@ export const HEADLINE_STATS_UPSERT_SQL = `INSERT INTO arena.trader_stats
            total_positions = COALESCE(EXCLUDED.total_positions, arena.trader_stats.total_positions),
            holding_duration_avg = COALESCE(EXCLUDED.holding_duration_avg, arena.trader_stats.holding_duration_avg),
            extras          = CASE WHEN EXCLUDED.extras = '{}'::jsonb THEN arena.trader_stats.extras
-                                  ELSE COALESCE(arena.trader_stats.extras, '{}'::jsonb) || EXCLUDED.extras END`
+                                  ELSE COALESCE(arena.trader_stats.extras, '{}'::jsonb) || EXCLUDED.extras END,
+           evidence_raw_object_id = EXCLUDED.evidence_raw_object_id,
+           evidence_source_run_id = EXCLUDED.evidence_source_run_id,
+           evidence_metrics       = EXCLUDED.evidence_metrics`

@@ -203,6 +203,7 @@ PREDEPLOY_MIGRATIONS=(
   20261114193017_rank_publication_requires_attempt_bound_evidence.sql
   20261114211033_public_source_board_metric_contracts.sql
   20261115141050_leaderboard_exhaustion_completeness_evidence.sql
+  20261116205144_trader_stats_score_input_evidence_pointer.sql
 )
 readonly -a PREDEPLOY_MIGRATIONS
 # The final six (season publication follow-ups, PR #419) must stay LAST: they
@@ -231,6 +232,11 @@ readonly -a PREDEPLOY_MIGRATIONS
 # no ledger table and is inert until a source registers an exhaustion contract
 # (its registry starts empty), so it is predeploy: the worker that records
 # exhaustion proofs calls arena.record_leaderboard_exhaustion_evidence.
+# 20261116205144 (score-input evidence binding, step 2a) adds the per-value
+# evidence pointer to arena.trader_stats and its guard trigger. It is inert for
+# the deployed worker, which never sets the pointer (every row stays NULL), and
+# the worker release that stamps attempt-bound board writes needs the columns,
+# so it is predeploy. It reads no other launch object.
 #
 # 20261113014105 (unknown-trade-count sample confidence, issue #435) and its
 # follow-up 20261114101514 (true-zero trade counts, audit P1-2), in that order,

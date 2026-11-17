@@ -584,6 +584,10 @@ export async function publishClaimedAttemptBoundLeaderboardSnapshot(
     expectedCountOverride: input.expectedCountOverride,
     countBaselineGeneration: input.countBaselineGeneration,
     observationCycleId: cycleId ?? undefined,
+    statsEvidence: {
+      rawObjectId: prepared.artifacts.sourcePayload.id,
+      sourceRunId: prepared.sourceRunId,
+    },
   }
   const result = await withClaimedTierAPublication(
     prepared.src,

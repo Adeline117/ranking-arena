@@ -87,6 +87,13 @@ export interface PublishSnapshotInput {
    * observations cannot ratify a sustained level shift.
    */
   observationCycleId?: string
+  /**
+   * Attempt-bound acquisition that produced `rawObjectId` (its source run).
+   * When present, the headline stats upsert stamps the values this board sent
+   * as score-input evidence (20261116205144). Must name the same RAW as
+   * `rawObjectId`. The trusted (V3) path derives it from its manifest.
+   */
+  statsEvidence?: { rawObjectId: number; sourceRunId: string } | null
 }
 
 export interface PublishTrustedSnapshotInput extends Omit<
@@ -315,6 +322,21 @@ async function publishLeaderboardSnapshotTransactionInternal(
     throw new Error(`[publish] invalid count baseline generation: ${countBaselineGeneration}`)
   }
   const expectedCount = expectedLeaderboardCount(input)
+  const statsEvidence = preparedTrust
+    ? {
+        rawObjectId: preparedTrust.artifacts.sourcePayload.id,
+        sourceRunId: preparedTrust.sourceRunId,
+      }
+    : (input.statsEvidence ?? null)
+  if (
+    statsEvidence !== null &&
+    (statsEvidence.rawObjectId !== rawObjectId ||
+      !Number.isSafeInteger(statsEvidence.rawObjectId) ||
+      statsEvidence.rawObjectId <= 0 ||
+      !/^[0-9a-f]{64}$/.test(statsEvidence.sourceRunId))
+  ) {
+    throw new Error('[publish] stats evidence must name the snapshot RAW and a source run digest')
+  }
 
   // A snapshot and its board series are separate transactions in Tier A.
   // Sharing this source lock with replay prevents an older RAW re-parse
@@ -500,6 +522,8 @@ async function publishLeaderboardSnapshotTransactionInternal(
           }))
         ),
         src.id,
+        statsEvidence?.rawObjectId ?? null,
+        statsEvidence?.sourceRunId ?? null,
       ])
       if (stats.rowCount !== rows.length) {
         throw new Error(
