@@ -15,7 +15,7 @@
 # Proves:
 #   positive - futures 90D publishes the profile drawdown and trade count
 #              next to the board headline; spot 90D publishes the profile
-#              drawdown and refuses the lifetime win-day ratio as a win rate;
+#              drawdown and stores no window win rate (lifetime ratio only);
 #   negative - a capture of another trader or another timeframe, or an
 #              incomplete capture, cannot be pointed at the row (22023); a
 #              capture older than the freshness window is not published.
@@ -467,8 +467,10 @@ BEGIN
        AND (v_row->'unevidenced_metrics') ?| ARRAY['max_drawdown', 'trades_count'] THEN
       RAISE EXCEPTION '% lists an attested metric as unevidenced: %', v_key, v_row;
     END IF;
-    IF v_key = '4163883351504751104' AND NOT (v_row->'unevidenced_metrics') ? 'win_rate' THEN
-      RAISE EXCEPTION 'spot win rate was not refused: %', v_row;
+    -- The parser stores no window win rate for spot (lifetime_win_rate in
+    -- extras), so there is nothing to refuse: null and not listed.
+    IF v_key = '4163883351504751104' AND (v_row->'unevidenced_metrics') ? 'win_rate' THEN
+      RAISE EXCEPTION 'spot row still carries a window win rate: %', v_row;
     END IF;
     IF v_key LIKE '50000000000000001%' AND NOT (v_row->'unevidenced_metrics') ?& ARRAY['max_drawdown', 'trades_count'] THEN
       RAISE EXCEPTION '% did not refuse its unattested values: %', v_key, v_row;
