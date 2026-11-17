@@ -321,7 +321,6 @@ DECLARE
   v_id uuid := gen_random_uuid();
   v_seq bigint;
   v_run text := encode(sha256(convert_to(v_id::text, 'UTF8')), 'hex');
-  v_done timestamptz;
   v_source smallint;
   v_ext text;
 BEGIN
@@ -334,8 +333,7 @@ BEGIN
     'raw/' || p_raw, 1, repeat('e', 64),
     jsonb_build_object('profile_capture', jsonb_build_object(
       'attempt_id', v_id::text,
-      'source_run_id', CASE WHEN p_state = 'complete' THEN v_run END)));
-  v_done := clock_timestamp();
+      'capture_contract', 'alpha_futures-profile-capture@1')));
   IF p_state = 'complete' THEN
     PERFORM arena.finish_profile_acquisition_attempt(v_seq, v_id, 'complete', NULL, p_raw, v_run,
       jsonb_build_object(
@@ -345,16 +343,14 @@ BEGIN
         'capture_contract_sha256', p_contract_sha,
         'timeframe', p_timeframe,
         'exchange_trader_id', v_ext,
-        'capture_completed_at', v_done,
         'requests', jsonb_build_array(jsonb_build_object(
           'endpoint', 'detail',
           'request_projection_sha256', repeat('1', 64),
           'response_sha256', repeat('2', 64))),
-        'metrics', p_metrics),
-      v_done);
+        'metrics', p_metrics));
   ELSE
     PERFORM arena.finish_profile_acquisition_attempt(v_seq, v_id, p_state, 'pagination_partial',
-      p_raw, NULL, NULL, v_done);
+      p_raw, NULL, NULL);
   END IF;
   RETURN v_seq;
 END
@@ -391,6 +387,23 @@ expect_failure 'finish refuses a non-numeric attested value' 'attests metrics ou
   "SELECT public.capture(101, 90, '{\"mdd\":{\"value\":\"12\"}}', 9001)"
 
 psql_db <<'SQL'
+-- A manifest that is valid for (attempt, exchange trader) in every other way.
+CREATE FUNCTION public.manifest_for(p_id uuid, p_ext text) RETURNS jsonb LANGUAGE sql AS $$
+  SELECT jsonb_build_object('contract', 'profile-acquisition-manifest@1',
+    'attempt_id', p_id::text, 'capture_contract', 'alpha_futures-profile-capture@1',
+    'capture_contract_sha256', repeat('a', 64), 'timeframe', 90, 'exchange_trader_id', p_ext,
+    'requests', jsonb_build_array(jsonb_build_object('endpoint', 'detail',
+      'request_projection_sha256', repeat('1', 64), 'response_sha256', repeat('2', 64))),
+    'metrics', '{"mdd":{"value":12}}'::jsonb)
+$$;
+CREATE FUNCTION public.tier_b_raw(p_id bigint, p_trader bigint, p_attempt uuid) RETURNS void
+LANGUAGE sql AS $$
+  INSERT INTO arena.raw_objects VALUES (p_id, 1, 'tier_b', p_trader, 90, clock_timestamp(),
+    'raw/' || p_id, 1, repeat('e', 64), false, jsonb_build_object('profile_capture',
+      jsonb_build_object('attempt_id', p_attempt::text,
+        'capture_contract', 'alpha_futures-profile-capture@1')))
+$$;
+
 DO $proof$
 DECLARE
   v_id uuid := gen_random_uuid();
@@ -398,53 +411,53 @@ DECLARE
 BEGIN
   SELECT attempt_seq INTO v_seq FROM arena.start_profile_acquisition_attempt(
     v_id, 1, 101, 90, 'alpha_futures-profile-capture@1', repeat('a', 64), NULL);
-  -- The RAW of another trader cannot close this attempt.
-  INSERT INTO arena.raw_objects VALUES (9101, 1, 'tier_b', 102, 90, clock_timestamp(), 'raw/9101',
-    1, repeat('e', 64), false, jsonb_build_object('profile_capture',
-      jsonb_build_object('attempt_id', v_id::text, 'source_run_id', repeat('f', 64))));
+  PERFORM public.tier_b_raw(9101, 102, v_id);              -- another trader
+  PERFORM public.tier_b_raw(9102, 101, gen_random_uuid()); -- another attempt
+  PERFORM public.tier_b_raw(9103, 101, v_id);              -- this attempt
+
+  -- Positive control: the exact RAW and manifest close the attempt (rolled back).
+  BEGIN
+    PERFORM arena.finish_profile_acquisition_attempt(v_seq, v_id, 'complete', NULL, 9103,
+      repeat('f', 64), public.manifest_for(v_id, 'full'));
+    RAISE EXCEPTION USING ERRCODE = 'P0099';
+  EXCEPTION WHEN SQLSTATE 'P0099' THEN NULL;
+  END;
   BEGIN
     PERFORM arena.finish_profile_acquisition_attempt(v_seq, v_id, 'complete', NULL, 9101,
-      repeat('f', 64), '{}'::jsonb, clock_timestamp());
+      repeat('f', 64), public.manifest_for(v_id, 'full'));
     RAISE EXCEPTION 'a RAW of another trader closed the attempt';
   EXCEPTION WHEN invalid_parameter_value THEN NULL;
   END;
-  -- Nor can a RAW of the right trader bound to another attempt id.
-  INSERT INTO arena.raw_objects VALUES (9102, 1, 'tier_b', 101, 90, clock_timestamp(), 'raw/9102',
-    1, repeat('e', 64), false, jsonb_build_object('profile_capture',
-      jsonb_build_object('attempt_id', gen_random_uuid()::text, 'source_run_id', repeat('f', 64))));
   BEGIN
     PERFORM arena.finish_profile_acquisition_attempt(v_seq, v_id, 'complete', NULL, 9102,
-      repeat('f', 64), '{}'::jsonb, clock_timestamp());
+      repeat('f', 64), public.manifest_for(v_id, 'full'));
     RAISE EXCEPTION 'a RAW of another attempt closed the attempt';
   EXCEPTION WHEN invalid_parameter_value THEN NULL;
   END;
-  -- A complete outcome whose manifest names another trader is refused.
-  INSERT INTO arena.raw_objects VALUES (9103, 1, 'tier_b', 101, 90, clock_timestamp(), 'raw/9103',
-    1, repeat('e', 64), false, jsonb_build_object('profile_capture',
-      jsonb_build_object('attempt_id', v_id::text, 'source_run_id', repeat('f', 64))));
   BEGIN
     PERFORM arena.finish_profile_acquisition_attempt(v_seq, v_id, 'complete', NULL, 9103,
-      repeat('f', 64), jsonb_build_object('contract', 'profile-acquisition-manifest@1',
-        'attempt_id', v_id::text, 'capture_contract', 'alpha_futures-profile-capture@1',
-        'capture_contract_sha256', repeat('a', 64), 'timeframe', 90,
-        'exchange_trader_id', 'no-pnl', 'capture_completed_at', clock_timestamp(),
-        'requests', '[]'::jsonb, 'metrics', '{}'::jsonb), clock_timestamp());
+      repeat('f', 64), public.manifest_for(v_id, 'no-pnl'));
     RAISE EXCEPTION 'a manifest of another trader closed the attempt';
   EXCEPTION WHEN invalid_parameter_value THEN NULL;
   END;
-  -- An incomplete outcome carries no manifest.
+  BEGIN
+    PERFORM arena.finish_profile_acquisition_attempt(v_seq, v_id, 'complete', NULL, 9103,
+      repeat('f', 64), public.manifest_for(gen_random_uuid(), 'full'));
+    RAISE EXCEPTION 'a manifest of another attempt closed the attempt';
+  EXCEPTION WHEN invalid_parameter_value THEN NULL;
+  END;
   BEGIN
     PERFORM arena.finish_profile_acquisition_attempt(v_seq, v_id, 'partial', 'endpoint_missing',
-      NULL, NULL, '{}'::jsonb, clock_timestamp());
+      9103, NULL, public.manifest_for(v_id, 'full'));
     RAISE EXCEPTION 'an incomplete outcome carried a manifest';
   EXCEPTION WHEN invalid_parameter_value THEN NULL;
   END;
   -- One typed terminal per attempt.
   PERFORM arena.finish_profile_acquisition_attempt(v_seq, v_id, 'upstream_failed', 'upstream_gone',
-    NULL, NULL, NULL, NULL);
+    NULL, NULL, NULL);
   BEGIN
     PERFORM arena.finish_profile_acquisition_attempt(v_seq, v_id, 'upstream_failed', 'upstream_gone',
-      NULL, NULL, NULL, NULL);
+      NULL, NULL, NULL);
     RAISE EXCEPTION 'a second terminal was recorded';
   EXCEPTION WHEN unique_violation THEN NULL;
   END;
@@ -533,8 +546,8 @@ UPDATE arena.trader_stats SET profile_evidence_attempt_seq = (SELECT seq FROM pu
   profile_evidence_metrics = '{pnl,mdd}' WHERE trader_id = 104 AND timeframe = 90;
 UPDATE arena.trader_stats SET profile_evidence_attempt_seq = (SELECT seq FROM public.seqs WHERE name = 'stale'),
   profile_evidence_metrics = '{pnl,mdd}' WHERE trader_id = 103 AND timeframe = 90;
--- The stale capture completed 3 days ago (fixture-only rewrite of the ledger).
-UPDATE arena.profile_acquisition_outcomes SET capture_completed_at = now() - interval '72 hours'
+-- The stale capture began 3 days ago (fixture-only rewrite of the ledger).
+UPDATE arena.profile_acquisition_attempts SET recorded_started_at = now() - interval '72 hours'
 WHERE attempt_seq = (SELECT seq FROM public.seqs WHERE name = 'stale');
 SET session_replication_role = origin;
 SQL
@@ -598,7 +611,7 @@ BEGIN
      OR has_function_privilege('service_role', 'arena.publication_score_rows_json(text,integer,integer)', 'EXECUTE')
      OR has_table_privilege('service_role', 'arena.profile_acquisition_outcomes', 'INSERT')
      OR NOT has_function_privilege('service_role',
-       'arena.finish_profile_acquisition_attempt(bigint,uuid,text,text,bigint,text,jsonb,timestamptz)', 'EXECUTE')
+       'arena.finish_profile_acquisition_attempt(bigint,uuid,text,text,bigint,text,jsonb)', 'EXECUTE')
      OR has_function_privilege('anon',
        'arena.start_profile_acquisition_attempt(uuid,integer,bigint,integer,text,text,text)', 'EXECUTE') THEN
     RAISE EXCEPTION 'execution boundary drifted';

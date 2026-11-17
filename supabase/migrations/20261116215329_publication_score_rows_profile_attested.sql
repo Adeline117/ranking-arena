@@ -7,7 +7,8 @@
 -- for a value to be evidence: trader_stats.profile_evidence_attempt_seq names
 -- a COMPLETE arena.profile_acquisition_outcomes row whose attempt is of the
 -- selected board's source and timeframe and of this trader, whose capture
--- completed inside the board freshness window (p_max_age_hours), and the
+-- (database-owned attempt start) is inside the board freshness window
+-- (p_max_age_hours), and the
 -- metric is in profile_evidence_metrics. The table trigger of 20261116215328
 -- already guarantees the stored value equals the captured value and strips a
 -- metric whose value a later write changed. Every other value stays NULL and
@@ -202,11 +203,13 @@ AS $function$
      AND stats.as_of > requested.stats_cutoff
     -- A profile attestation (20261116215328) counts only when it is a
     -- COMPLETE capture of this very source, trader and timeframe whose
-    -- capture time is inside the board's freshness window. The table trigger
+    -- capture time is inside the board's freshness window. Capture time is
+    -- the database-owned attempt start (before the fetch): never newer than
+    -- the data it attests. The table trigger
     -- already guarantees the stored values equal the captured ones and strips
     -- any value a later write changed.
     LEFT JOIN LATERAL (
-      SELECT stats.profile_evidence_metrics AS metrics, outcome.capture_completed_at AS captured_at
+      SELECT stats.profile_evidence_metrics AS metrics, attempt.recorded_started_at AS captured_at
       FROM arena.profile_acquisition_outcomes AS outcome
       JOIN arena.profile_acquisition_attempts AS attempt
         ON attempt.attempt_seq = outcome.attempt_seq
@@ -215,8 +218,8 @@ AS $function$
         AND attempt.source_id = latest.source_id
         AND attempt.trader_id = trader.id
         AND attempt.timeframe = latest.timeframe
-        AND outcome.capture_completed_at > requested.requested_cutoff
-        AND outcome.capture_completed_at <= pg_catalog.now()
+        AND attempt.recorded_started_at > requested.requested_cutoff
+        AND attempt.recorded_started_at <= pg_catalog.now()
     ) AS profile ON true
     WHERE (entry.rank IS NULL OR entry.rank <= p_per_platform_limit)
       AND latest.scraped_at > requested.requested_cutoff

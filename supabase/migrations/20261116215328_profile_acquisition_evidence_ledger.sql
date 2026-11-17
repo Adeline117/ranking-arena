@@ -19,7 +19,7 @@
 --   fetch; the database owns attempt order and start time. One typed terminal
 --   per attempt. A complete outcome must name the tier_b RAW of exactly that
 --   source, trader and timeframe, written after the attempt began and bound to
---   it by attempt_id and source_run_id in the RAW metadata, plus the capture
+--   it by attempt_id and capture contract in the RAW metadata, plus the capture
 --   manifest (request projection and response sha256 per page, and the value
 --   the contract field path supplied for each attested metric).
 -- * arena.trader_stats.profile_evidence_attempt_seq / _metrics: a per-value
@@ -147,6 +147,8 @@ CREATE TABLE arena.profile_acquisition_outcomes (
   request_projection_sha256s text[],
   response_sha256s text[],
   attested_metrics text[] NOT NULL,
+  -- Database clock at finish; freshness is judged by the attempt's
+  -- recorded_started_at (before the fetch, so never newer than the data).
   capture_completed_at timestamptz,
   recorded_completed_at timestamptz NOT NULL,
   CONSTRAINT profile_acquisition_outcomes_state CHECK (
@@ -324,8 +326,7 @@ CREATE FUNCTION arena.finish_profile_acquisition_attempt(
   p_reason_code text,
   p_source_payload_raw_object_id bigint,
   p_source_run_id text,
-  p_manifest jsonb,
-  p_capture_completed_at timestamptz
+  p_manifest jsonb
 )
 RETURNS TABLE (attempt_seq bigint, terminal_state text, recorded_completed_at timestamptz)
 LANGUAGE plpgsql
@@ -364,7 +365,8 @@ BEGIN
        OR v_raw.fetched_at < v_attempt.recorded_started_at
        OR v_raw.content_hash !~ '^[0-9a-f]{64}$'
        OR v_raw.meta->'profile_capture'->>'attempt_id' IS DISTINCT FROM v_attempt.attempt_id::text
-       OR v_raw.meta->'profile_capture'->>'source_run_id' IS DISTINCT FROM p_source_run_id THEN
+       OR v_raw.meta->'profile_capture'->>'capture_contract'
+         IS DISTINCT FROM v_attempt.capture_contract THEN
       RAISE EXCEPTION 'RAW % is not the tier_b capture of profile attempt %',
         p_source_payload_raw_object_id, p_attempt_seq
         USING ERRCODE = '22023';
@@ -381,9 +383,6 @@ BEGIN
 
     v_requests := p_manifest->'requests';
     IF p_source_payload_raw_object_id IS NULL
-       OR p_capture_completed_at IS NULL
-       OR p_capture_completed_at < v_attempt.recorded_started_at
-       OR p_capture_completed_at > v_completed
        OR pg_catalog.jsonb_typeof(p_manifest) IS DISTINCT FROM 'object'
        OR p_manifest->>'contract' IS DISTINCT FROM 'profile-acquisition-manifest@1'
        OR p_manifest->>'attempt_id' IS DISTINCT FROM v_attempt.attempt_id::text
@@ -391,7 +390,6 @@ BEGIN
        OR p_manifest->>'capture_contract_sha256' IS DISTINCT FROM v_contract.contract_sha256
        OR p_manifest->'timeframe' IS DISTINCT FROM pg_catalog.to_jsonb(v_attempt.timeframe::integer)
        OR p_manifest->>'exchange_trader_id' IS DISTINCT FROM v_exchange_trader_id
-       OR (p_manifest->>'capture_completed_at')::timestamptz IS DISTINCT FROM p_capture_completed_at
        OR pg_catalog.jsonb_typeof(v_requests) IS DISTINCT FROM 'array'
        OR pg_catalog.jsonb_array_length(v_requests) = 0
        OR pg_catalog.jsonb_typeof(p_manifest->'metrics') IS DISTINCT FROM 'object' THEN
@@ -446,7 +444,7 @@ BEGIN
     p_attempt_seq, p_terminal_state, p_reason_code, p_source_payload_raw_object_id,
     CASE WHEN p_source_payload_raw_object_id IS NOT NULL THEN v_raw.content_hash END,
     p_source_run_id, p_manifest, v_request_hashes, v_response_hashes, v_metrics,
-    p_capture_completed_at, v_completed
+    CASE WHEN p_terminal_state = 'complete' THEN v_completed END, v_completed
   );
   PERFORM pg_catalog.set_config('arena.profile_acquisition_mutation_path', '', true);
 
@@ -573,7 +571,7 @@ ALTER FUNCTION arena.reject_direct_profile_acquisition_mutation() OWNER TO postg
 ALTER FUNCTION arena.reject_profile_capture_contract_mutation() OWNER TO postgres;
 ALTER FUNCTION arena.start_profile_acquisition_attempt(uuid, integer, bigint, integer, text, text, text)
   OWNER TO postgres;
-ALTER FUNCTION arena.finish_profile_acquisition_attempt(bigint, uuid, text, text, bigint, text, jsonb, timestamptz)
+ALTER FUNCTION arena.finish_profile_acquisition_attempt(bigint, uuid, text, text, bigint, text, jsonb)
   OWNER TO postgres;
 ALTER FUNCTION arena.trader_stats_profile_evidence() OWNER TO postgres;
 REVOKE ALL ON FUNCTION arena.profile_attestable_metrics()
@@ -584,7 +582,7 @@ REVOKE ALL ON FUNCTION arena.reject_profile_capture_contract_mutation()
   FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION arena.start_profile_acquisition_attempt(uuid, integer, bigint, integer, text, text, text)
   FROM PUBLIC, anon, authenticated, service_role;
-REVOKE ALL ON FUNCTION arena.finish_profile_acquisition_attempt(bigint, uuid, text, text, bigint, text, jsonb, timestamptz)
+REVOKE ALL ON FUNCTION arena.finish_profile_acquisition_attempt(bigint, uuid, text, text, bigint, text, jsonb)
   FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION arena.trader_stats_profile_evidence()
   FROM PUBLIC, anon, authenticated, service_role;
@@ -598,7 +596,7 @@ GRANT SELECT ON TABLE arena.profile_acquisition_attempts TO service_role;
 GRANT SELECT ON TABLE arena.profile_acquisition_outcomes TO service_role;
 GRANT EXECUTE ON FUNCTION arena.start_profile_acquisition_attempt(uuid, integer, bigint, integer, text, text, text)
   TO service_role;
-GRANT EXECUTE ON FUNCTION arena.finish_profile_acquisition_attempt(bigint, uuid, text, text, bigint, text, jsonb, timestamptz)
+GRANT EXECUTE ON FUNCTION arena.finish_profile_acquisition_attempt(bigint, uuid, text, text, bigint, text, jsonb)
   TO service_role;
 
 NOTIFY pgrst, 'reload schema';
