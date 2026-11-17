@@ -444,6 +444,10 @@ OLD_ROSTER_RELEASE_ID="${OLD_RELEASE_ID:-unknown}"
 
 if [ "$DRY_RUN" = 1 ]; then
   DRY_SOURCE="$(mktemp -d "${TMPDIR:-/tmp}/arena-local-dry-run.XXXXXX")"
+  # macOS TMPDIR lives behind the /var -> /private/var symlink. The release-id
+  # helper only runs when its real path equals the invoked path, so stage the
+  # dry-run under the canonical directory, as real deploys do under RELEASE_ROOT.
+  DRY_SOURCE="$(cd "$DRY_SOURCE" && pwd -P)"
   trap 'rm -rf "$DRY_SOURCE"' EXIT
   archive_worker_release "$DRY_SOURCE"
   WORKER_RELEASE_ID="$(compute_worker_release_id "$DRY_SOURCE/scripts/ci/worker-release-id.mjs")" || \
