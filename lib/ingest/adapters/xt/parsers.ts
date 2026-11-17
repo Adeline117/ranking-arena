@@ -128,6 +128,8 @@ export function parseXtLeaderboardPage(payload: unknown, ctx: ParseCtx): ParsedL
     const traderMeta: Record<string, unknown> = {}
     if (item.level !== undefined) traderMeta.xt_level = int(item.level)
     if (typeof item.levelName === 'string') traderMeta.xt_level_name = item.levelName
+    const headlineRoi = pct(item.incomeRate)
+    const headlinePnl = num(item.income)
     rows.push({
       exchangeTraderId: String(id),
       rank, // sorted list; re-anchored across pages by the caller
@@ -136,8 +138,12 @@ export function parseXtLeaderboardPage(payload: unknown, ctx: ParseCtx): ParsedL
       walletAddress: null,
       traderKind: 'human',
       botStrategy: null,
-      headlineRoi: pct(item.incomeRate),
-      headlinePnl: num(item.income),
+      headlineRoi,
+      headlinePnl,
+      headlineMetricSources: {
+        ...(headlineRoi === null ? {} : { roi: { fieldPath: 'result.items[].incomeRate' } }),
+        ...(headlinePnl === null ? {} : { pnl: { fieldPath: 'result.items[].income' } }),
+      },
       headlineWinRate: pct(item.winRate),
       // XT's board JSON carries the per-TF MDD as `maxRetraction`, even though
       // the UI listing hides it. Unit = DECIMAL, identical to the leader-stats

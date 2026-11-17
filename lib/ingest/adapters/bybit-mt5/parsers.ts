@@ -85,6 +85,8 @@ export function parseBybitMt5LeaderboardPage(
     // scrape trader segmentation; durable, so it goes on traders.meta.
     const traderMeta: Record<string, unknown> = {}
     if (typeof item.providerLevel === 'string') traderMeta.provider_level = item.providerLevel
+    const headlineRoi = pctE4(item.roeE4)
+    const headlinePnl = e(item.masterPnlE8, 8)
     rows.push({
       exchangeTraderId: String(id),
       // Positional in-page rank; re-anchored across pages by the caller.
@@ -94,8 +96,16 @@ export function parseBybitMt5LeaderboardPage(
       walletAddress: null,
       traderKind: 'human',
       botStrategy: null,
-      headlineRoi: pctE4(item.roeE4),
-      headlinePnl: e(item.masterPnlE8, 8),
+      headlineRoi,
+      headlinePnl,
+      headlineMetricSources: {
+        ...(headlineRoi === null
+          ? {}
+          : { roi: { fieldPath: 'result.providerDetailsList[].roeE4' } }),
+        ...(headlinePnl === null
+          ? {}
+          : { pnl: { fieldPath: 'result.providerDetailsList[].masterPnlE8' } }),
+      },
       headlineWinRate: pctE4(item.winRateE4),
       // Board carries MDD (maxDrawDownE4, E4→pct) and Sharpe (sharpeRatioE4, E4
       // raw ratio) on every row — were raw-only. ~9/16 fixture rows have real

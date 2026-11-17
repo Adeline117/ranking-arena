@@ -203,6 +203,7 @@ PREDEPLOY_MIGRATIONS=(
   20261114193017_rank_publication_requires_attempt_bound_evidence.sql
   20261114211033_public_source_board_metric_contracts.sql
   20261115141050_leaderboard_exhaustion_completeness_evidence.sql
+  20261116203816_metric_source_contract_retirement.sql
   20261116205144_trader_stats_score_input_evidence_pointer.sql
 )
 readonly -a PREDEPLOY_MIGRATIONS
@@ -232,6 +233,12 @@ readonly -a PREDEPLOY_MIGRATIONS
 # no ledger table and is inert until a source registers an exhaustion contract
 # (its registry starts empty), so it is predeploy: the worker that records
 # exhaustion proofs calls arena.record_leaderboard_exhaustion_evidence.
+# 20261116203816 (append-only metric source contract retirement) is inert
+# until a version is retired: the current contract set equals the active set
+# and the deployed worker never reads the new table. It is predeploy because
+# the worker that resolves contracts through the retirement table needs that
+# table before it ships; its preflight refuses a source that already holds two
+# active versions. It needs only 20260721120000.
 # 20261116205144 (score-input evidence binding, step 2a) adds the per-value
 # evidence pointer to arena.trader_stats and its guard trigger. It is inert for
 # the deployed worker, which never sets the pointer (every row stays NULL), and
@@ -304,6 +311,13 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # the worker release and 160917 (its preflight requires 160917's capture and
 # exhaustion rows and post-160917 windows/page_size). It updates arena.sources
 # only (no table 192134 guards), so 192134 stays last.
+# 20261116203817 registers binance_web3_bsc metric contract v2 and retires v1
+# (predeploy 20261116203816). The worker before this release reads v1, so it
+# follows the worker whose registry holds v2; until then that worker fails its
+# contract parity check for binance_web3_bsc only. It needs binance_web3_bsc in
+# USD (160917); it follows 20261116204359 (the forward replacement of the
+# superseded 170535 activation) and touches no table 192134 guards, so 192134
+# stays last.
 # 20261116204006 (score-input evidence binding, step 1) moves the score-input
 # bundle's scoreRows to arena.publication_score_rows_json: board headline
 # metrics only, plus a per-row unevidenced_metrics list. The deployed
@@ -335,6 +349,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261114211034_public_source_attempt_bound_capture_contracts.sql
   20261115160917_public_source_exhaustion_and_total_capture_contracts.sql
   20261116204359_move_public_sources_to_local_region_prod_state.sql
+  20261116203817_binance_web3_bsc_metric_contract_v2.sql
   20261116204006_publication_score_rows_board_headline_only.sql
   20261116210122_publication_score_rows_require_stats_evidence.sql
   20261116210657_rank_publication_evidence_score_input_digest.sql

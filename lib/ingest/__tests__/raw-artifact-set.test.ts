@@ -37,9 +37,7 @@ import {
 import {
   type IngestTransactionRunner,
   writeAttemptBoundLeaderboardRawArtifactSet as writeAttemptBoundLeaderboardRawArtifactSetClaimed,
-  writeLeaderboardRawArtifactSet as writeLeaderboardRawArtifactSetClaimed,
   type WriteAttemptBoundLeaderboardRawArtifactSetInput,
-  type WriteLeaderboardRawArtifactSetInput,
 } from '@/lib/ingest/raw'
 import type { RawPage } from '@/lib/ingest/core/types'
 import type { IngestQueryExecutor } from '@/lib/ingest/db'
@@ -48,13 +46,6 @@ import { strictCanonicalJson, strictCanonicalSha256 } from '@/lib/ingest/strict-
 const runClaimedTransaction: IngestTransactionRunner = async (operation) => {
   const transaction = (await mockConnect()) as IngestQueryExecutor
   return operation(transaction)
-}
-
-function writeLeaderboardRawArtifactSet(
-  input: WriteLeaderboardRawArtifactSetInput,
-  runTransaction: IngestTransactionRunner = runClaimedTransaction
-) {
-  return writeLeaderboardRawArtifactSetClaimed(input, runTransaction)
 }
 
 function writeAttemptBoundLeaderboardRawArtifactSet(
@@ -156,19 +147,6 @@ function manifestBuildInput(): Parameters<typeof buildLeaderboardAcquisitionMani
   }
 }
 
-function artifactInput() {
-  const built = buildLeaderboardAcquisitionManifest(manifestBuildInput())
-  return {
-    sourceId: 1,
-    sourceSlug: 'binance_futures',
-    timeframe: 30 as const,
-    sourceRunId: built.sourceRunId,
-    sourcePages: sourcePages.map((page) => ({ ...page })),
-    manifest: built.manifest,
-    observationCycleId,
-  }
-}
-
 function acquisitionAttempt(
   overrides: Partial<LeaderboardAcquisitionAttempt> = {}
 ): LeaderboardAcquisitionAttempt {
@@ -218,6 +196,23 @@ function attemptBoundArtifactInput(
     },
   })
   return { attempt, built, sourcePages: sourcePages.map((page) => ({ ...page })) }
+}
+
+function withForgedV3Manifest(
+  input: ReturnType<typeof attemptBoundArtifactInput>,
+  forge: (
+    manifest: ReturnType<typeof attemptBoundArtifactInput>['built']['manifest']
+  ) => ReturnType<typeof attemptBoundArtifactInput>['built']['manifest']
+): ReturnType<typeof attemptBoundArtifactInput> {
+  const manifest = forge(input.built.manifest)
+  return {
+    ...input,
+    built: {
+      manifest,
+      canonicalJson: strictCanonicalJson(manifest),
+      sourceRunId: strictCanonicalSha256(manifest),
+    },
+  }
 }
 
 function attemptBoundV4ArtifactInput() {
@@ -507,7 +502,7 @@ function makeDatabaseHarness(
   return { pointers, query, release, client, reconcileQuery, reconcileRelease, reconcileClient }
 }
 
-describe('writeLeaderboardRawArtifactSet', () => {
+describe('writeAttemptBoundLeaderboardRawArtifactSet', () => {
   const storage = new Map<string, Buffer>()
 
   beforeAll(() => {
@@ -531,79 +526,16 @@ describe('writeLeaderboardRawArtifactSet', () => {
     })
   })
 
-  it.each([
-    [
-      'canonical artifact set',
-      () =>
-        (
-          writeLeaderboardRawArtifactSetClaimed as unknown as (
-            input: WriteLeaderboardRawArtifactSetInput
-          ) => Promise<unknown>
-        )(artifactInput()),
-    ],
-    [
-      'attempt-bound artifact set',
-      () =>
-        (
-          writeAttemptBoundLeaderboardRawArtifactSetClaimed as unknown as (
-            input: WriteAttemptBoundLeaderboardRawArtifactSetInput
-          ) => Promise<unknown>
-        )(attemptBoundArtifactInput()),
-    ],
-  ])('rejects a %s without a claimed transaction runner before I/O', async (_label, write) => {
-    await expect(write()).rejects.toThrow('requires a claimed transaction runner')
+  it('rejects an artifact set without a claimed transaction runner before I/O', async () => {
+    const writeWithoutRunner = writeAttemptBoundLeaderboardRawArtifactSetClaimed as unknown as (
+      input: WriteAttemptBoundLeaderboardRawArtifactSetInput
+    ) => Promise<unknown>
+    await expect(writeWithoutRunner(attemptBoundArtifactInput())).rejects.toThrow(
+      'requires a claimed transaction runner'
+    )
     expect(mockUpload).not.toHaveBeenCalled()
     expect(mockDownload).not.toHaveBeenCalled()
     expect(mockConnect).not.toHaveBeenCalled()
-  })
-
-  it('writes one deterministic pair and returns the same pointers on an exact retry', async () => {
-    const database = makeDatabaseHarness()
-    mockConnect.mockResolvedValue(database.client)
-    const input = artifactInput()
-
-    const first = await writeLeaderboardRawArtifactSet(input)
-    const second = await writeLeaderboardRawArtifactSet(input)
-
-    expect(second).toEqual(first)
-    expect(database.pointers).toHaveLength(2)
-    expect(first.sourcePayload.id).not.toBe(first.populationManifest.id)
-    expect(first.populationManifest.contentHash).toBe(input.sourceRunId)
-    expect(first.sourcePayload.storagePath).toContain(`${input.sourceRunId}/source_payload_`)
-    expect(first.populationManifest.storagePath).toContain(
-      `${input.sourceRunId}/population_manifest_${input.sourceRunId}.json.gz`
-    )
-    expect(first).not.toHaveProperty('projection')
-    expect(
-      database.pointers.every(
-        (pointer) => !Object.hasOwn(pointer.meta as Record<string, unknown>, 'acquisition_attempt')
-      )
-    ).toBe(true)
-    expect(database.pointers.map((pointer) => pointer.fetched_at)).toEqual([
-      input.manifest.completed_at,
-      input.manifest.completed_at,
-    ])
-    expect(
-      database.pointers.find((pointer) => pointer.trust_artifact_role === 'source_payload')?.meta
-    ).toMatchObject({
-      pageCount: 2,
-      parserPageCount: 2,
-      parserSourcePageOrdinals: [1, 2],
-    })
-    expect(mockUpload).toHaveBeenCalledTimes(4)
-    expect(mockDownload).toHaveBeenCalledTimes(2)
-    const insertSql = database.query.mock.calls
-      .filter(([sql]) => String(sql).startsWith('INSERT INTO arena.raw_objects'))
-      .map(([sql]) => String(sql))
-    expect(insertSql).toHaveLength(2)
-    expect(insertSql[0]).toContain("trust_artifact_role = 'source_payload'")
-    expect(insertSql[0]).toContain("job_type = 'tier_a'")
-    expect(insertSql[0]).toContain('trader_id IS NULL')
-    expect(insertSql[1]).toContain("trust_artifact_role = 'population_manifest'")
-    expect(mockConnect).toHaveBeenCalledTimes(2)
-    expect(
-      database.query.mock.calls.some(([sql]) => /^(?:BEGIN|COMMIT|ROLLBACK)\b/.test(String(sql)))
-    ).toBe(false)
   })
 
   it('runs the pointer pair on one caller transaction only after both Storage uploads', async () => {
@@ -623,9 +555,12 @@ describe('writeLeaderboardRawArtifactSet', () => {
       return operation(transaction)
     }
 
-    await expect(writeLeaderboardRawArtifactSet(artifactInput(), runTransaction)).resolves.toEqual({
-      sourcePayload: expect.objectContaining({ id: 101 }),
-      populationManifest: expect.objectContaining({ id: 102 }),
+    await expect(
+      writeAttemptBoundLeaderboardRawArtifactSet(attemptBoundArtifactInput(), runTransaction)
+    ).resolves.toMatchObject({
+      sourcePayload: { id: 101 },
+      populationManifest: { id: 102 },
+      projection: { terminalState: 'complete' },
     })
 
     expect(events).toEqual(['upload:1', 'upload:2', 'runner'])
@@ -710,33 +645,18 @@ describe('writeLeaderboardRawArtifactSet', () => {
     })
     expect(mockUpload).toHaveBeenCalledTimes(4)
     expect(mockDownload).toHaveBeenCalledTimes(2)
-  })
-
-  it('runs an attempt-bound pointer pair through the supplied transaction capability', async () => {
-    const database = makeDatabaseHarness()
-    const executorQuery = jest.fn((sql: string, values?: readonly unknown[]) =>
-      database.query(sql, values ? [...values] : [])
-    )
-    const transaction = { query: executorQuery } as unknown as IngestQueryExecutor
-    const runTransaction = jest.fn(
-      async <T>(operation: (executor: IngestQueryExecutor) => Promise<T>): Promise<T> =>
-        operation(transaction)
-    ) as IngestTransactionRunner
-
-    await expect(
-      writeAttemptBoundLeaderboardRawArtifactSet(attemptBoundArtifactInput(), runTransaction)
-    ).resolves.toMatchObject({
-      sourcePayload: { id: 101 },
-      populationManifest: { id: 102 },
-      projection: { terminalState: 'complete' },
-    })
-
-    expect(runTransaction).toHaveBeenCalledTimes(1)
-    expect(mockConnect).not.toHaveBeenCalled()
-    expect(database.pointers).toHaveLength(2)
+    const insertSql = database.query.mock.calls
+      .filter(([sql]) => String(sql).startsWith('INSERT INTO arena.raw_objects'))
+      .map(([sql]) => String(sql))
+    expect(insertSql).toHaveLength(2)
+    expect(insertSql[0]).toContain("trust_artifact_role = 'source_payload'")
+    expect(insertSql[0]).toContain("job_type = 'tier_a'")
+    expect(insertSql[0]).toContain('trader_id IS NULL')
+    expect(insertSql[1]).toContain("trust_artifact_role = 'population_manifest'")
+    expect(mockConnect).toHaveBeenCalledTimes(2)
     expect(
-      executorQuery.mock.calls.every(([sql]) => !/^(?:BEGIN|COMMIT|ROLLBACK)$/.test(sql))
-    ).toBe(true)
+      database.query.mock.calls.some(([sql]) => /^(?:BEGIN|COMMIT|ROLLBACK)\b/.test(String(sql)))
+    ).toBe(false)
   })
 
   it('does not retry or fall back when the caller transaction fails after its callback', async () => {
@@ -1003,16 +923,16 @@ describe('writeLeaderboardRawArtifactSet', () => {
     const database = makeDatabaseHarness()
     mockConnect.mockResolvedValue(database.client)
     mockUpload.mockResolvedValue({ error: { message: 'duplicate', statusCode: 409 } })
-    const input = artifactInput()
+    const input = attemptBoundArtifactInput()
     const sourceJson = Buffer.from(strictCanonicalJson(input.sourcePages), 'utf8')
-    const manifestJson = Buffer.from(strictCanonicalJson(input.manifest), 'utf8')
+    const manifestJson = Buffer.from(input.built.canonicalJson, 'utf8')
     const sourceGzip = gzipSync(sourceJson, { level: 1 })
     const manifestGzip = gzipSync(manifestJson, { level: 1 })
     mockDownload
       .mockResolvedValueOnce({ data: downloadBody(sourceGzip), error: null })
       .mockResolvedValueOnce({ data: downloadBody(manifestGzip), error: null })
 
-    await writeLeaderboardRawArtifactSet(input)
+    await writeAttemptBoundLeaderboardRawArtifactSet(input)
 
     expect(database.pointers.map((pointer) => pointer.bytes)).toEqual([
       sourceGzip.byteLength,
@@ -1034,9 +954,9 @@ describe('writeLeaderboardRawArtifactSet', () => {
       error: null,
     })
 
-    await expect(writeLeaderboardRawArtifactSet(artifactInput())).rejects.toThrow(
-      'has different content'
-    )
+    await expect(
+      writeAttemptBoundLeaderboardRawArtifactSet(attemptBoundArtifactInput())
+    ).rejects.toThrow('has different content')
     expect(mockConnect).not.toHaveBeenCalled()
   })
 
@@ -1046,15 +966,16 @@ describe('writeLeaderboardRawArtifactSet', () => {
       .mockResolvedValueOnce({ error: null })
       .mockResolvedValueOnce({ error: { message: 'bucket unavailable', statusCode: 400 } })
 
-    await expect(writeLeaderboardRawArtifactSet(artifactInput(), runTransaction)).rejects.toThrow(
-      'bucket unavailable'
-    )
+    await expect(
+      writeAttemptBoundLeaderboardRawArtifactSet(attemptBoundArtifactInput(), runTransaction)
+    ).rejects.toThrow('bucket unavailable')
     expect(runTransaction).not.toHaveBeenCalled()
     expect(mockConnect).not.toHaveBeenCalled()
     expect(mockDownload).not.toHaveBeenCalled()
   })
 
   it('rejects instead of repairing a partial database pointer pair', async () => {
+    const input = attemptBoundArtifactInput()
     const database = makeDatabaseHarness({
       initialRows: [
         {
@@ -1063,20 +984,20 @@ describe('writeLeaderboardRawArtifactSet', () => {
           job_type: 'tier_a',
           trader_id: null,
           timeframe: 30,
-          fetched_at: artifactInput().manifest.completed_at,
+          fetched_at: input.built.manifest.completed_at,
           storage_path: 'foreign',
           bytes: 1,
           content_hash: 'f'.repeat(64),
           quarantined: false,
           meta: {},
-          source_run_id: artifactInput().sourceRunId,
+          source_run_id: input.built.sourceRunId,
           trust_artifact_role: 'source_payload',
         },
       ],
     })
     mockConnect.mockResolvedValue(database.client)
 
-    await expect(writeLeaderboardRawArtifactSet(artifactInput())).rejects.toThrow(
+    await expect(writeAttemptBoundLeaderboardRawArtifactSet(input)).rejects.toThrow(
       'only part of the expected RAW pointer pair'
     )
     expect(database.query.mock.calls.some(([sql]) => String(sql).startsWith('INSERT'))).toBe(false)
@@ -1087,9 +1008,9 @@ describe('writeLeaderboardRawArtifactSet', () => {
     const database = makeDatabaseHarness({ insertErrorRole: 'population_manifest' })
     mockConnect.mockResolvedValue(database.client)
 
-    await expect(writeLeaderboardRawArtifactSet(artifactInput())).rejects.toThrow(
-      'insert population_manifest failed'
-    )
+    await expect(
+      writeAttemptBoundLeaderboardRawArtifactSet(attemptBoundArtifactInput())
+    ).rejects.toThrow('insert population_manifest failed')
 
     expect(database.query.mock.calls.some(([sql]) => sql === 'ROLLBACK')).toBe(false)
     expect(storage).toHaveProperty('size', 2)
@@ -1098,19 +1019,19 @@ describe('writeLeaderboardRawArtifactSet', () => {
   it('atomically binds an exact pair of pre-existing unbound pointers', async () => {
     const database = makeDatabaseHarness()
     mockConnect.mockResolvedValue(database.client)
-    const input = artifactInput()
-    const first = await writeLeaderboardRawArtifactSet(input)
+    const input = attemptBoundArtifactInput()
+    const first = await writeAttemptBoundLeaderboardRawArtifactSet(input)
     for (const pointer of database.pointers) {
       pointer.source_run_id = null
       pointer.trust_artifact_role = null
     }
 
-    const second = await writeLeaderboardRawArtifactSet(input)
+    const second = await writeAttemptBoundLeaderboardRawArtifactSet(input)
 
     expect(second).toEqual(first)
-    expect(database.pointers.every((pointer) => pointer.source_run_id === input.sourceRunId)).toBe(
-      true
-    )
+    expect(
+      database.pointers.every((pointer) => pointer.source_run_id === input.built.sourceRunId)
+    ).toBe(true)
     expect(
       database.query.mock.calls.some(([sql]) => String(sql).startsWith('UPDATE arena.raw_objects'))
     ).toBe(true)
@@ -1119,15 +1040,15 @@ describe('writeLeaderboardRawArtifactSet', () => {
   it('rejects a mixed bound and unbound pointer pair without repairing either row', async () => {
     const database = makeDatabaseHarness()
     mockConnect.mockResolvedValue(database.client)
-    const input = artifactInput()
-    await writeLeaderboardRawArtifactSet(input)
+    const input = attemptBoundArtifactInput()
+    await writeAttemptBoundLeaderboardRawArtifactSet(input)
     database.pointers[0].source_run_id = null
     database.pointers[0].trust_artifact_role = null
     const updateCountBeforeRetry = database.query.mock.calls.filter(([sql]) =>
       String(sql).startsWith('UPDATE arena.raw_objects')
     ).length
 
-    await expect(writeLeaderboardRawArtifactSet(input)).rejects.toThrow(
+    await expect(writeAttemptBoundLeaderboardRawArtifactSet(input)).rejects.toThrow(
       'database pointers are only partially bound'
     )
 
@@ -1138,50 +1059,30 @@ describe('writeLeaderboardRawArtifactSet', () => {
     ).toHaveLength(updateCountBeforeRetry)
     expect(database.query.mock.calls.some(([sql]) => sql === 'ROLLBACK')).toBe(false)
     expect(database.pointers[0].source_run_id).toBeNull()
-    expect(database.pointers[1].source_run_id).toBe(input.sourceRunId)
-  })
-
-  it('rejects a source payload that does not match its canonical manifest before I/O', async () => {
-    const input = artifactInput()
-
-    await expect(
-      writeLeaderboardRawArtifactSet({
-        ...input,
-        sourcePages: [{ ...input.sourcePages[0], payload: { forged: true } }, input.sourcePages[1]],
-      })
-    ).rejects.toThrow('source payload page 1 does not match the manifest')
-
-    expect(mockUpload).not.toHaveBeenCalled()
-    expect(mockConnect).not.toHaveBeenCalled()
+    expect(database.pointers[1].source_run_id).toBe(input.built.sourceRunId)
   })
 
   it('rejects extra source-page fields and a forged parser digest before I/O', async () => {
-    const input = artifactInput()
+    const input = attemptBoundArtifactInput()
     const pageWithExtraField = {
       ...input.sourcePages[0],
       unboundEvidence: true,
     } as RawPage
 
     await expect(
-      writeLeaderboardRawArtifactSet({
+      writeAttemptBoundLeaderboardRawArtifactSet({
         ...input,
         sourcePages: [pageWithExtraField, input.sourcePages[1]],
       })
     ).rejects.toThrow('source payload page 1 does not match the manifest')
 
-    const forgedManifest: typeof input.manifest = {
-      ...input.manifest,
-      parser_input: {
-        ...input.manifest.parser_input,
-        sha256: 'f'.repeat(64),
-      },
-    }
     await expect(
-      writeLeaderboardRawArtifactSet({
-        ...input,
-        manifest: forgedManifest,
-        sourceRunId: strictCanonicalSha256(forgedManifest),
-      })
+      writeAttemptBoundLeaderboardRawArtifactSet(
+        withForgedV3Manifest(input, (manifest) => ({
+          ...manifest,
+          parser_input: { ...manifest.parser_input, sha256: 'f'.repeat(64) },
+        }))
+      )
     ).rejects.toThrow('parser input digest does not match the persisted source pages')
 
     expect(mockUpload).not.toHaveBeenCalled()
@@ -1189,11 +1090,10 @@ describe('writeLeaderboardRawArtifactSet', () => {
   })
 
   it('fails closed on dedupe/rechunk evidence until its parser payload is persisted', async () => {
-    const input = artifactInput()
-    const dedupeManifest: typeof input.manifest = {
-      ...input.manifest,
+    const input = withForgedV3Manifest(attemptBoundArtifactInput(), (manifest) => ({
+      ...manifest,
       parser_input: {
-        ...input.manifest.parser_input,
+        ...manifest.parser_input,
         transformation: {
           kind: 'dedupe_rechunk',
           source_page_ordinals: [1, 2],
@@ -1202,15 +1102,9 @@ describe('writeLeaderboardRawArtifactSet', () => {
           output_page_size: 2,
         },
       },
-    }
+    }))
 
-    await expect(
-      writeLeaderboardRawArtifactSet({
-        ...input,
-        manifest: dedupeManifest,
-        sourceRunId: strictCanonicalSha256(dedupeManifest),
-      })
-    ).rejects.toThrow(
+    await expect(writeAttemptBoundLeaderboardRawArtifactSet(input)).rejects.toThrow(
       'dedupe/rechunk parser evidence requires a separately persisted parser payload'
     )
 

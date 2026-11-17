@@ -155,6 +155,12 @@ export function parseKucoinLeaderboardPage(raw: unknown, _ctx: ParseCtx): Parsed
     const item = items[i]
     if (item.leadConfigId === null || item.leadConfigId === undefined) continue
     const pilot = isTradePilot(item)
+    const headlineRoi = kucoinHeadlineRoi(
+      item.thirtyDayPnlRatio,
+      item.thirtyDayPnl,
+      item.leadPrincipal
+    )
+    const headlinePnl = num(item.thirtyDayPnl)
     rows.push({
       // leadConfigId is the only id the board exposes AND the routing key of
       // every profile endpoint (profile URL: /copytrading/trader-profile/{id}).
@@ -168,9 +174,16 @@ export function parseKucoinLeaderboardPage(raw: unknown, _ctx: ParseCtx): Parsed
       botStrategy: pilot ? 'ai' : null,
       // thirtyDayPnlRatio is the exchange's ROI (authoritative); fall back to
       // pnl/principal only when it's absurd (broken field). See kucoinHeadlineRoi.
-      headlineRoi: kucoinHeadlineRoi(item.thirtyDayPnlRatio, item.thirtyDayPnl, item.leadPrincipal),
-      headlinePnl: num(item.thirtyDayPnl),
+      headlineRoi,
+      headlinePnl,
       headlineWinRate: null, // not exposed on the board
+      // A pnl/principal fallback ROI is derived, so it claims no field lineage.
+      headlineMetricSources: {
+        ...(headlineRoi === null || headlineRoi !== pct(item.thirtyDayPnlRatio)
+          ? {}
+          : { roi: { fieldPath: 'data.items[].thirtyDayPnlRatio' } }),
+        ...(headlinePnl === null ? {} : { pnl: { fieldPath: 'data.items[].thirtyDayPnl' } }),
+      },
       // leadAmount = Lead Size / AUM (absolute USD; identical to profile overview.aum)
       // — was raw-only, so board-tier traders had no AUM. (KuCoin exposes no MDD.)
       headlineAum: num(item.leadAmount),

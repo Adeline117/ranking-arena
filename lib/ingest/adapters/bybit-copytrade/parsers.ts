@@ -158,6 +158,7 @@ export function parseBybitCopytradeLeaderboardPage(
       : []
     if (tags.length > 0) traderMeta.user_tags = tags
 
+    const headlineRoi = num(metrics.roi)
     rows.push({
       exchangeTraderId: String(id),
       // Positional in-page rank; re-anchored across pages by the caller.
@@ -167,8 +168,12 @@ export function parseBybitCopytradeLeaderboardPage(
       walletAddress: null,
       traderKind: 'human',
       botStrategy: null,
-      headlineRoi: num(metrics.roi),
+      headlineRoi,
       headlinePnl: null,
+      headlineMetricSources:
+        headlineRoi === null
+          ? {}
+          : { roi: { fieldPath: 'result.leaderDetails[].metricValues[roi]' } },
       headlineWinRate: num(metrics.win_rate),
       // The board has a Drawdown column (SORT_KEY..DRAW_DOWN -> 'drawdown'); its
       // display value is already a percent like roi/win_rate, so num() not pct().

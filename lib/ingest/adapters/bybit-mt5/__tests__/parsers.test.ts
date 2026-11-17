@@ -7,6 +7,7 @@ import {
   parseBybitMt5Profile,
 } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
+import { resolveHeadlineLineage } from '../../../testing/headline-lineage'
 
 function fixture(name: string): unknown {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
@@ -21,6 +22,15 @@ const ctx: ParseCtx = {
 }
 
 describe('parseBybitMt5LeaderboardPage', () => {
+  it('bybit_mt5: lineage resolves against the registered board contract', () => {
+    const page = parseBybitMt5LeaderboardPage(fixture('leaderboard-p1.json'), ctx)
+    expect(page.rows.length).toBeGreaterThan(0)
+    expect(resolveHeadlineLineage(page.rows, 'bybit_mt5')).toEqual({
+      resolved: page.rows.length * 2,
+      unresolved: [],
+    })
+  })
+
   it('parses a live all-traders page (E-suffix decoding + totalCount)', () => {
     const page = parseBybitMt5LeaderboardPage(fixture('leaderboard-p1.json'), ctx)
     expect(page.reportedTotal).toBe(29572)

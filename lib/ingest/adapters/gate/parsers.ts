@@ -73,6 +73,8 @@ export function dedupeHash(...fields: unknown[]): string {
 export function parseGateLeaderboardPage(payload: unknown, _ctx: ParseCtx): ParsedLeaderboardPage {
   const data = ((payload as Dict)?.data ?? {}) as Dict
   const items = (data.list ?? data.lists ?? []) as Dict[]
+  // Futures rows live under data.list, CFD rows under data.lists.
+  const collection = data.list === null || data.list === undefined ? 'lists' : 'list'
   const reportedTotal = int(data.totalcount)
 
   const rows: ParsedLeaderboardRow[] = []
@@ -82,6 +84,8 @@ export function parseGateLeaderboardPage(payload: unknown, _ctx: ParseCtx): Pars
     const id = item.leader_id
     if (id === null || id === undefined) continue
     const user = (item.user_info ?? {}) as Dict
+    const headlineRoi = pct(item.profit_rate)
+    const headlinePnl = num(item.profit)
     rows.push({
       exchangeTraderId: String(id),
       rank: i + 1, // sorted list; re-anchored across pages by the caller
@@ -90,8 +94,12 @@ export function parseGateLeaderboardPage(payload: unknown, _ctx: ParseCtx): Pars
       walletAddress: null,
       traderKind: 'human',
       botStrategy: null,
-      headlineRoi: pct(item.profit_rate),
-      headlinePnl: num(item.profit),
+      headlineRoi,
+      headlinePnl,
+      headlineMetricSources: {
+        ...(headlineRoi === null ? {} : { roi: { fieldPath: `data.${collection}[].profit_rate` } }),
+        ...(headlinePnl === null ? {} : { pnl: { fieldPath: `data.${collection}[].profit` } }),
+      },
       headlineWinRate: pct(item.win_rate),
       // The board row carries max_drawdown (a decimal, like profit_rate/win_rate —
       // 0.297 = 29.7%), so extract it to headlineMdd (publish writes trader_stats.mdd).

@@ -14,6 +14,7 @@ import {
   parseBtccProfile,
 } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
+import { resolveHeadlineLineage } from '../../../testing/headline-lineage'
 
 function fixture(name: string): unknown {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
@@ -28,6 +29,15 @@ const ctx: ParseCtx = {
 }
 
 describe('parseBtccLeaderboardPage', () => {
+  it('btcc_futures: lineage resolves against the registered board contract', () => {
+    const page = parseBtccLeaderboardPage(fixture('trader-page-p1.json'), ctx)
+    expect(page.rows.length).toBeGreaterThan(0)
+    expect(resolveHeadlineLineage(page.rows, 'btcc_futures')).toEqual({
+      resolved: page.rows.length * 2,
+      unresolved: [],
+    })
+  })
+
   it('parses the native 30d board (values already percent, bps MDD in raw)', () => {
     const page = parseBtccLeaderboardPage(fixture('trader-page-p1.json'), ctx)
     expect(page.reportedTotal).toBe(1820)

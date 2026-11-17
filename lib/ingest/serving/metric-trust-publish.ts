@@ -652,37 +652,52 @@ export function prepareLeaderboardMetricTrust(
   }
 }
 
+/**
+ * The source's current population contracts: active rows of a version that
+ * has no retirement (arena.metric_source_contract_retirements). Every current
+ * row is returned, so two unretired versions surface as drift below.
+ */
+export const CURRENT_METRIC_CONTRACTS_SQL = `SELECT contract.id::text AS id,
+            contract.contract_version,
+            contract.metric,
+            contract.field_path,
+            contract.provenance,
+            contract.methodology_version,
+            contract.metric_set_id,
+            contract.timeframes,
+            contract.value_unit,
+            contract.currencies,
+            contract.required_raw_roles,
+            contract.source_payload_scope,
+            ((EXTRACT(EPOCH FROM contract.max_freshness) * 1000)::bigint)::text
+              AS max_freshness_ms,
+            ((EXTRACT(EPOCH FROM contract.max_window_end_lag) * 1000)::bigint)::text
+              AS max_window_end_lag_ms,
+            contract.allow_derived_population
+       FROM arena.metric_source_contracts AS contract
+      WHERE contract.source_id = $1
+        AND contract.active
+        AND NOT EXISTS (
+          SELECT 1
+            FROM arena.metric_source_contract_retirements AS retirement
+           WHERE retirement.source_id = contract.source_id
+             AND retirement.contract_version = contract.contract_version
+        )
+        AND contract.source_payload_scope = 'population_snapshot'
+        AND $2::smallint = ANY(contract.timeframes)
+        AND $3::text = ANY(contract.currencies)
+      ORDER BY contract.metric, contract.field_path, contract.provenance,
+               contract.methodology_version`
+
 async function loadMetricContracts(
   client: IngestQueryExecutor,
   prepared: PreparedLeaderboardMetricTrust
 ): Promise<MetricContractRow[]> {
-  const { rows } = await client.query<MetricContractRow>(
-    `SELECT id::text AS id,
-            contract_version,
-            metric,
-            field_path,
-            provenance,
-            methodology_version,
-            metric_set_id,
-            timeframes,
-            value_unit,
-            currencies,
-            required_raw_roles,
-            source_payload_scope,
-            ((EXTRACT(EPOCH FROM max_freshness) * 1000)::bigint)::text
-              AS max_freshness_ms,
-            ((EXTRACT(EPOCH FROM max_window_end_lag) * 1000)::bigint)::text
-              AS max_window_end_lag_ms,
-            allow_derived_population
-       FROM arena.metric_source_contracts
-      WHERE source_id = $1
-        AND active
-        AND source_payload_scope = 'population_snapshot'
-        AND $2::smallint = ANY(timeframes)
-        AND $3::text = ANY(currencies)
-      ORDER BY metric, field_path, provenance, methodology_version`,
-    [prepared.src.id, prepared.timeframe, prepared.src.currency]
-  )
+  const { rows } = await client.query<MetricContractRow>(CURRENT_METRIC_CONTRACTS_SQL, [
+    prepared.src.id,
+    prepared.timeframe,
+    prepared.src.currency,
+  ])
 
   const expectedByKey = new Map(prepared.expectedFields.map((field) => [fieldKey(field), field]))
   const actualByKey = new Map(rows.map((field) => [fieldKey(field), field]))

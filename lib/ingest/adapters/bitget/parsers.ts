@@ -118,6 +118,9 @@ export function parseBitgetLeaderboardPage(
   // there is no global total, so reportedTotal stays null for that shape.
   const reportedTotal = data.nextFlag === undefined ? int(data.total) : null
   const items = listOf(payload)
+  // Only UTA itemVoList columns (data.rows) match the registered field paths;
+  // legacy list shapes and their fallback keys claim no lineage.
+  const uta = Array.isArray(data.rows)
 
   const rows: ParsedLeaderboardRow[] = []
   for (let i = 0; i < items.length; i++) {
@@ -149,6 +152,14 @@ export function parseBitgetLeaderboardPage(
       botStrategy: null,
       headlineRoi: cols.profit_rate ?? pct(item, 'roi', ['profitRate', 'returnRate']),
       headlinePnl: cols.total_income ?? num(item.profit ?? item.totalProfit),
+      headlineMetricSources: {
+        ...(uta && cols.profit_rate != null
+          ? { roi: { fieldPath: 'data.rows[].itemVoList[profit_rate].comparedValue' } }
+          : {}),
+        ...(uta && cols.total_income != null
+          ? { pnl: { fieldPath: 'data.rows[].itemVoList[total_income].comparedValue' } }
+          : {}),
+      },
       headlineWinRate: cols.winning_rate ?? pct(item, 'winRate', ['winningRate']),
       raw: item,
     })

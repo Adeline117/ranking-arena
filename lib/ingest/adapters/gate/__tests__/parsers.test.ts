@@ -7,6 +7,7 @@ import {
   parseGateProfile,
 } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
+import { resolveHeadlineLineage } from '../../../testing/headline-lineage'
 
 function fixture(name: string): unknown {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
@@ -23,6 +24,18 @@ const ctx: ParseCtx = {
 const cfdCtx: ParseCtx = { ...ctx, sourceSlug: 'gate_cfd', currency: 'USDx' }
 
 describe('parseGateLeaderboardPage', () => {
+  it.each([
+    ['gate_futures', 'leaderboard-fut-p1.json'],
+    ['gate_cfd', 'leaderboard-cfd-p1.json'],
+  ])('%s: ROI/PnL lineage resolves against the registered board contract', (slug, file) => {
+    const page = parseGateLeaderboardPage(fixture(file), ctx)
+    expect(page.rows.length).toBeGreaterThan(0)
+    expect(resolveHeadlineLineage(page.rows, slug)).toEqual({
+      resolved: page.rows.length * 2,
+      unresolved: [],
+    })
+  })
+
   it('parses the futures full_ranking list (decimal rates → percent)', () => {
     const page = parseGateLeaderboardPage(fixture('leaderboard-fut-p1.json'), ctx)
     expect(page.reportedTotal).toBe(734)

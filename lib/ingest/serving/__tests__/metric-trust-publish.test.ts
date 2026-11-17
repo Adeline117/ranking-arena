@@ -11,6 +11,7 @@ import type { ParsedLeaderboardRow, RawPage, SourceRow } from '../../core/types'
 import { binanceLeaderboardListRequestSha256 } from '../../leaderboard-request-evidence'
 import { validateWorkerDbFencedWriteStatement } from '@/lib/ingest/db-fenced-write-contract'
 import {
+  CURRENT_METRIC_CONTRACTS_SQL,
   fenceAttemptBoundLeaderboardPublicationCommit,
   hasRegisteredLeaderboardMetricTrust,
   prepareLeaderboardMetricTrust,
@@ -1532,6 +1533,46 @@ describe('Tier-A metric trust transaction writer', () => {
         ]),
       })
     ).rejects.toThrow('code/database contract drift')
+  })
+
+  it('resolves only unretired versions and fails closed on a second current version', async () => {
+    const issued: string[] = []
+    const secondVersion = contracts.map((contract, index) => ({
+      ...contract,
+      id: String(21 + index),
+      contract_version: '2',
+    }))
+    const query = jest.fn(async (sqlInput: unknown) => {
+      const sql = String(sqlInput)
+      if (sql.includes('INSERT INTO arena.metric_trust_runs')) return { rows: [], rowCount: 1 }
+      if (sql.includes('FROM arena.metric_source_contracts')) {
+        issued.push(sql)
+        return { rows: [...contracts, ...secondVersion], rowCount: contracts.length * 2 }
+      }
+      throw new Error(`unexpected SQL: ${sql}`)
+    })
+    const prepared = prepareLeaderboardMetricTrust({
+      src,
+      timeframe: 30,
+      rows,
+      rejectedRowCount: 0,
+      bundle: trustFixture(),
+    })
+
+    await expect(
+      writeLeaderboardMetricTrust(queryClient(query), prepared, {
+        snapshotId: 77,
+        snapshotScrapedAt: '2026-07-21T10:00:03.000Z',
+        traderIds: new Map([
+          ['one', 1_001],
+          ['two', 1_002],
+        ]),
+      })
+    ).rejects.toThrow('code/database contract drift')
+    expect(issued).toEqual([CURRENT_METRIC_CONTRACTS_SQL])
+    expect(CURRENT_METRIC_CONTRACTS_SQL).toMatch(
+      /AND contract\.active\s+AND NOT EXISTS \(\s+SELECT 1\s+FROM arena\.metric_source_contract_retirements AS retirement\s+WHERE retirement\.source_id = contract\.source_id\s+AND retirement\.contract_version = contract\.contract_version/
+    )
   })
 
   it('accepts an idempotent retry only after every row and artifact matches', async () => {

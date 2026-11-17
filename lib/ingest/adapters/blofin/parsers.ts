@@ -99,6 +99,8 @@ export function parseBlofinLeaderboardPage(
     const item = list[i]
     const id = item.uid
     if (id === null || id === undefined) continue
+    const headlineRoi = pct(item.roi)
+    const headlinePnl = num(item.pnl)
     rows.push({
       exchangeTraderId: String(id),
       rank: i + 1, // sorted list; re-anchored across pages by the caller
@@ -109,9 +111,13 @@ export function parseBlofinLeaderboardPage(
       // them) — default human; bot tagging is a documented gap.
       traderKind: 'human',
       botStrategy: null,
-      headlineRoi: pct(item.roi),
-      headlinePnl: num(item.pnl),
+      headlineRoi,
+      headlinePnl,
       headlineWinRate: null, // not exposed on the board row
+      headlineMetricSources: {
+        ...(headlineRoi === null ? {} : { roi: { fieldPath: 'data.trader_info[].roi' } }),
+        ...(headlinePnl === null ? {} : { pnl: { fieldPath: 'data.trader_info[].pnl' } }),
+      },
       // Blofin has NO per-uid profile endpoint, so the board IS the stats
       // substrate (spec §0): carry mdd/sharpe/aum/copier_count straight into
       // trader_stats via the publish headline upsert. mdd is a decimal

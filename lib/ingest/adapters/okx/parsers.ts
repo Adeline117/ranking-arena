@@ -116,12 +116,17 @@ function boardRanks(raw: unknown): Dict[] {
 
 export function parseOkxLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLeaderboardPage {
   const ranks = boardRanks(raw)
+  // Only the verbatim response (data[0].ranks) matches the registered field
+  // paths; the legacy normalized chunk claims no lineage.
+  const verbatim = Array.isArray((raw as { data?: unknown } | null)?.data)
 
   const rows: ParsedLeaderboardRow[] = []
   for (let i = 0; i < ranks.length; i++) {
     const item = ranks[i]
     const code = str(item.uniqueCode)
     if (!code) continue
+    const headlineRoi = pct(item.pnlRatio) // last-90d figures (board native TF)
+    const headlinePnl = num(item.pnl)
     rows.push({
       exchangeTraderId: code,
       rank: i + 1, // board order within the chunk; Tier-A re-anchors
@@ -130,8 +135,14 @@ export function parseOkxLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLea
       walletAddress: null,
       traderKind: 'human',
       botStrategy: null,
-      headlineRoi: pct(item.pnlRatio), // last-90d figures (board native TF)
-      headlinePnl: num(item.pnl),
+      headlineRoi,
+      headlinePnl,
+      headlineMetricSources: verbatim
+        ? {
+            ...(headlineRoi === null ? {} : { roi: { fieldPath: 'data[0].ranks[].pnlRatio' } }),
+            ...(headlinePnl === null ? {} : { pnl: { fieldPath: 'data[0].ranks[].pnl' } }),
+          }
+        : {},
       headlineWinRate: pct(item.winRatio),
       // Board carries aum (absolute USD) — was raw-only. (OKX CEX is geo-blocked
       // → no MDD on board; forward fix, effective once a VPS region reaches it.)

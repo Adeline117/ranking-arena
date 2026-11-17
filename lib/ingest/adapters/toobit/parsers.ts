@@ -122,12 +122,17 @@ function boardOf(raw: unknown): { list?: unknown; total?: unknown } {
 export function parseToobitLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLeaderboardPage {
   const board = boardOf(raw)
   const list = objects(board.list)
+  // Only the verbatim response (data.list) matches the registered field paths;
+  // the legacy normalized chunk ({board}) claims no lineage.
+  const verbatim = ((raw as { board?: unknown } | null)?.board ?? null) === null
 
   const rows: ParsedLeaderboardRow[] = []
   for (let i = 0; i < list.length; i++) {
     const item = list[i]
     const id = str(item.leaderUserId)
     if (!id) continue
+    const headlineRoi = pct(item.leaderAvgProfitRatio)
+    const headlinePnl = num(item.pnl)
     rows.push({
       exchangeTraderId: id,
       rank: i + 1, // board order within the page; Tier-A re-anchors
@@ -136,8 +141,16 @@ export function parseToobitLeaderboardPage(raw: unknown, _ctx: ParseCtx): Parsed
       walletAddress: null,
       traderKind: 'human',
       botStrategy: null,
-      headlineRoi: pct(item.leaderAvgProfitRatio),
-      headlinePnl: num(item.pnl),
+      headlineRoi,
+      headlinePnl,
+      headlineMetricSources: verbatim
+        ? {
+            ...(headlineRoi === null
+              ? {}
+              : { roi: { fieldPath: 'data.list[].leaderAvgProfitRatio' } }),
+            ...(headlinePnl === null ? {} : { pnl: { fieldPath: 'data.list[].pnl' } }),
+          }
+        : {},
       headlineWinRate: pct(item.leaderProfitOrderRatio),
       // Board carries AUM (totalLeadAmount, absolute USD) and Sharpe (sharpeRatio,
       // raw ratio) — were raw-only. (Toobit is geo-blocked → no MDD on board;

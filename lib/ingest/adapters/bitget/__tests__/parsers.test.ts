@@ -7,6 +7,7 @@ import {
   parseBitgetProfile,
 } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
+import { resolveHeadlineLineage } from '../../../testing/headline-lineage'
 import { parsedPositionHistoryRowSchema } from '../../../core/schemas'
 import { BITGET_HISTORY_PAGE_ENVELOPE_CONTRACT } from '../history-terminal'
 
@@ -23,6 +24,18 @@ const ctx: ParseCtx = {
 }
 
 describe('parseBitgetLeaderboardPage', () => {
+  it.each([
+    ['bitget_futures', 'uta-board-futures-7d-p1.json', 2],
+    ['bitget_cfd', 'uta-board-cfd-30d-tail.json', 1],
+  ])('%s: UTA board lineage resolves against the registered contract', (slug, file, fields) => {
+    const page = parseBitgetLeaderboardPage(fixture(file), ctx)
+    expect(page.rows.length).toBeGreaterThan(0)
+    expect(resolveHeadlineLineage(page.rows, slug)).toEqual({
+      resolved: page.rows.length * fields,
+      unresolved: [],
+    })
+  })
+
   it('parses the currentTrader/list shape (percent values)', () => {
     const payload = {
       data: {
@@ -57,6 +70,8 @@ describe('parseBitgetLeaderboardPage', () => {
     })
     expect(page.rows[1].rank).toBe(2)
     expect(page.rows[0].raw).toMatchObject({ drawDown: 8.2 })
+    // Legacy keys are not the registered UTA field paths: no lineage claim.
+    expect(page.rows[0].headlineMetricSources).toEqual({})
   })
 
   it('parses the legacy traderList shape (decimal ratios → percent)', () => {
