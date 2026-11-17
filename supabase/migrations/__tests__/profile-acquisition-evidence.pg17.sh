@@ -778,3 +778,71 @@ expect_failure 'the writer cannot stamp another trader''s capture' 'is not a com
      NULL, NULL, NULL, '{}', false, $OTHER_SEQ, '{mdd}')"
 
 echo "profile-acquisition-evidence.pg17: writer ok"
+
+# ---------------------------------------------------------------------------
+# TypeScript <-> SQL: the worker's real contract hash, capture helper and
+# manifest are accepted by the ledger, and the writer's stamp survives the
+# trigger's exact stored-value check (0.235 * 100 is 23.499999999999996 in JS;
+# the attested value is the parser's 23.5, which is what is stored).
+# ---------------------------------------------------------------------------
+ATTEMPT_ID=00000000-0000-4000-8000-0000000000b1
+TS_JSON="$(cd "$ROOT_DIR" && npx --no-install tsx -e '
+import { buildProfileAcquisition } from "./lib/ingest/profile-capture/capture"
+import { profileCaptureContractSha256, PROFILE_CAPTURE_CONTRACT_DOCUMENT } from "./lib/ingest/profile-capture/contract"
+const contract = {
+  document: PROFILE_CAPTURE_CONTRACT_DOCUMENT,
+  captureContract: "beta_futures-profile-capture@1",
+  sourceSlug: "beta_futures",
+  timeframes: [90],
+  endpoints: [{ id: "detail", origin: "https://api.beta.example", pathname: "/detail",
+    queryAllowlist: ["uid"], required: true }],
+  metrics: {
+    mdd: { endpoint: "detail", path: ["data", "mdd"], transform: "fraction_to_percent" },
+    pnl: { endpoint: "detail", path: ["data", "pnl"], transform: "identity" },
+  },
+} as const
+const sha = profileCaptureContractSha256(contract)
+const block = { timeframe: 90, asOf: "2026-01-01T00:00:00.000Z", roi: null, pnl: 1234.5,
+  sharpe: null, mdd: 23.5, winRate: null, winPositions: null, totalPositions: null,
+  copierPnl: null, copierCount: null, aum: null, volume: null, profitShareRate: null,
+  holdingDurationAvgHours: null, tradingPreferences: null, extras: {} } as const
+const result = buildProfileAcquisition({ contract, contractSha256: sha,
+  attemptId: process.argv[1], exchangeTraderId: "foreign", timeframe: 90,
+  pages: [{ pageIndex: 0, url: "https://api.beta.example/detail?uid=foreign&t=1",
+    payload: { data: { mdd: 0.235, pnl: "1234.5" } }, fetchedAt: "" }],
+  parsed: block, stored: block })
+if (result.terminalState !== "complete") throw new Error(result.terminalState)
+process.stdout.write(JSON.stringify({ sha, run: result.sourceRunId, manifest: result.manifest,
+  metrics: result.attestedMetrics }))
+' "$ATTEMPT_ID")"
+TS_SHA="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).sha)' "$TS_JSON")"
+TS_RUN="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).run)' "$TS_JSON")"
+TS_MANIFEST="$(node -e 'process.stdout.write(JSON.stringify(JSON.parse(process.argv[1]).manifest))' "$TS_JSON")"
+TS_METRICS="$(node -e 'process.stdout.write("{" + JSON.parse(process.argv[1]).metrics.join(",") + "}")' "$TS_JSON")"
+
+psql_db -v sha="$TS_SHA" -v run="$TS_RUN" -v manifest="$TS_MANIFEST" -v metrics="$TS_METRICS" \
+  -v attempt_id="$ATTEMPT_ID" <<SQL
+INSERT INTO arena.profile_capture_contracts
+  (source_id, capture_contract, contract_sha256, timeframes, attestable_metrics)
+VALUES (2, 'beta_futures-profile-capture@1', :'sha', '{90}', '{mdd,pnl}');
+SELECT attempt_seq AS ts_seq FROM arena.start_profile_acquisition_attempt(
+  :'attempt_id', 2, 201, 90, 'beta_futures-profile-capture@1', :'sha', NULL) \gset
+INSERT INTO arena.raw_objects VALUES (7201, 2, 'tier_b', 201, 90, clock_timestamp(), 'raw/7201', 1,
+  repeat('e', 64), false, jsonb_build_object('profile_capture', jsonb_build_object(
+    'attempt_id', :'attempt_id', 'capture_contract', 'beta_futures-profile-capture@1')));
+SELECT terminal_state FROM arena.finish_profile_acquisition_attempt(
+  :ts_seq, :'attempt_id', 'complete', NULL, 7201, :'run', :'manifest'::jsonb);
+PREPARE ts_upsert(bigint, smallint, timestamptz, text, numeric, numeric, numeric, numeric,
+  numeric, integer, integer, numeric, integer, numeric, numeric, numeric, numeric, jsonb, jsonb,
+  boolean, bigint, text[]) AS $UPSERT_SQL;
+EXECUTE ts_upsert(201, 90, now(), 'USDT', NULL, 1234.5, NULL, 23.5, NULL, NULL, NULL, NULL, NULL,
+  NULL, NULL, NULL, NULL, NULL, '{}', false, :ts_seq, :'metrics');
+DO \$\$ BEGIN
+  IF (SELECT profile_evidence_metrics FROM arena.trader_stats WHERE trader_id = 201 AND timeframe = 90)
+     IS DISTINCT FROM '{mdd,pnl}' THEN
+    RAISE EXCEPTION 'the TS manifest did not attest through the trigger';
+  END IF;
+END \$\$;
+SQL
+
+echo "profile-acquisition-evidence.pg17: typescript manifest ok"

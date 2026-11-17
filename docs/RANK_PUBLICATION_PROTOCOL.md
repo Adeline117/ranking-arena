@@ -199,6 +199,13 @@ persistLeaderboardRanks` 已于 2026-11-13 删除；`scripts/qa/public-ranking-s
   - 每个发布来源的证据行带 `score_input_sha256`：打分实际收到的行按 `arena-score-input-set@1`
     （`lib/rankings/publication/score-input-digest.ts`）算的摘要，由编排器在封存事务里写入；RPC @3 与延迟封存
     栅栏都要求它。
+  - Tier-B profile 证据（20261116215328 / 20261116215329）：板上缺的值也可以由 profile 采集认证。每次 profile
+    抓取是 `arena.profile_acquisition_attempts` 里的一次 attempt，结果是带类型的终态；只有 `complete` 的终态带
+    清单（每页请求投影与响应 sha256、每个被认证指标的 RAW 字段值）。`trader_stats.profile_evidence_attempt_seq /
+profile_evidence_metrics` 按指标记录认证，与板指针并存、互不作废；任何改动该值的后续写入都会撤销它。
+    `publication_score_rows_json@3` 采用一个值的条件是：板认证，或 profile 认证且该 attempt 是同来源、同交易员、
+    同周期的 complete 采集，开始时间在板的新鲜窗口内；否则仍为 NULL。来源如何声明见
+    `docs/PROFILE_CAPTURE_EVIDENCE.md`。
 - 快照保留策略（20261113110021）同时保留被证据绑定的快照：窗口（默认 180 天）外，被信任
   run/observation、Tier-A receipt、发布来源证据、发布 proofs 或当前 freshness 引用的快照，以及每个
   (source, timeframe) 最新通过的榜永久保留（这些证据行按设计只追加，不能删）；其余过期快照连同
