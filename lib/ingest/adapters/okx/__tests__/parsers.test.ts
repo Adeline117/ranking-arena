@@ -15,6 +15,7 @@ import {
   parseOkxProfile,
 } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
+import { resolveHeadlineLineage } from '../../../testing/headline-lineage'
 import { parsedPositionHistoryRowSchema } from '../../../core/schemas'
 
 function fixture(name: string): Record<string, unknown> {
@@ -39,6 +40,27 @@ function historyFixture(): Record<string, unknown> {
 }
 
 describe('parseOkxLeaderboardPage', () => {
+  it.each([
+    ['okx_futures', 'board-capture-swap.json'],
+    ['okx_spot', 'board-capture-spot.json'],
+  ])('%s: verbatim board lineage resolves against the registered contract', (slug, file) => {
+    const { pages } = fixture(file) as { pages: unknown[] }
+    const rows = pages.flatMap((page) => parseOkxLeaderboardPage(page, ctx).rows)
+    expect(rows.length).toBeGreaterThan(0)
+    expect(resolveHeadlineLineage(rows, slug)).toEqual({
+      resolved: rows.length * 2,
+      unresolved: [],
+    })
+  })
+
+  it('claims no lineage on the legacy normalized chunk', () => {
+    const page = parseOkxLeaderboardPage(fixture('board-page.json'), ctx)
+    expect(page.rows.length).toBeGreaterThan(0)
+    expect(
+      page.rows.every((row) => Object.keys(row.headlineMetricSources ?? {}).length === 0)
+    ).toBe(true)
+  })
+
   const payload = fixture('board-page.json')
 
   it('parses real rank rows: uniqueCode identity, fraction→percent metrics', () => {
