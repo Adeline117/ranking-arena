@@ -13,6 +13,7 @@ import {
   parseCoinexProfile,
 } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
+import { resolveHeadlineLineage } from '../../../testing/headline-lineage'
 
 function fixture(name: string): unknown {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
@@ -60,6 +61,14 @@ describe('parseCoinexLeaderboardPage', () => {
     expect(raw.aum).toBe('3234.41711368')
     expect(Array.isArray(raw.profit_rate_series)).toBe(true)
     expect(page.rows[2]).toMatchObject({ exchangeTraderId: '056A9ABF', rank: 3 })
+  })
+
+  it('claims ROI/PnL lineage that resolves against the registered board contract', () => {
+    const page = parseCoinexLeaderboardPage(fixture('leaderboard-p1.json'), ctx)
+    expect(resolveHeadlineLineage(page.rows, 'coinex_futures')).toEqual({
+      resolved: 6,
+      unresolved: [],
+    })
   })
 
   it('returns empty rows for an error payload', () => {
