@@ -2,6 +2,7 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { parseBlofinLeaderboardPage } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
+import { resolveHeadlineLineage } from '../../../testing/headline-lineage'
 
 function fixture(name: string): unknown {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
@@ -16,6 +17,18 @@ const ctx: ParseCtx = {
 }
 
 describe('parseBlofinLeaderboardPage', () => {
+  it.each([
+    ['blofin_futures', 'board-fut-30.json'],
+    ['blofin_spot', 'board-spot-30.json'],
+  ])('%s: lineage resolves against the registered board contract', (slug, file) => {
+    const page = parseBlofinLeaderboardPage(fixture(file), ctx)
+    expect(page.rows.length).toBeGreaterThan(0)
+    expect(resolveHeadlineLineage(page.rows, slug)).toEqual({
+      resolved: page.rows.length * 2,
+      unresolved: [],
+    })
+  })
+
   it('parses the futures board (decimal roi → percent, page_total)', () => {
     const page = parseBlofinLeaderboardPage(fixture('board-fut-30.json'), ctx)
     expect(page.reportedTotal).toBe(1662)
