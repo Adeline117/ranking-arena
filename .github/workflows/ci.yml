@@ -557,6 +557,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:profile-acquisition-evidence-pg17
 
+      - name: Prove binance profile captures publish exactly their contracted metrics
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:binance-profile-capture-pg17
+
       - name: Prove retention keeps metric-trust evidence
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
