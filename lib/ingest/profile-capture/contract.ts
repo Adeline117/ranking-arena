@@ -16,6 +16,10 @@
 
 import type { ParsedStats, RankingTimeframe } from '../core/types'
 import { strictCanonicalSha256 } from '../strict-canonical-json'
+import {
+  BINANCE_FUTURES_PROFILE_CAPTURE,
+  BINANCE_SPOT_PROFILE_CAPTURE,
+} from '../adapters/binance/profile-capture-contract'
 
 export const PROFILE_CAPTURE_CONTRACT_DOCUMENT = 'arena.profile-capture-contract@1' as const
 
@@ -182,12 +186,18 @@ export function parsedStatsMetricValue(
 }
 
 /**
- * Registered contracts, keyed by source slug. EMPTY by design: declaring a
- * source is a reviewed change that adds its contract here AND a migration
- * that registers profileCaptureContractSha256(contract) for it (see
- * docs/PROFILE_CAPTURE_EVIDENCE.md).
+ * Declared contracts, keyed by source slug. Declaring a source is a reviewed
+ * change that adds its contract here AND a migration that registers
+ * profileCaptureContractSha256(contract) for it (see
+ * docs/PROFILE_CAPTURE_EVIDENCE.md); until that row exists, start refuses the
+ * attempt and the source publishes unattested exactly as before.
  */
-const PROFILE_CAPTURE_CONTRACTS: ReadonlyMap<string, ProfileCaptureContract> = new Map()
+export const PROFILE_CAPTURE_CONTRACTS: ReadonlyMap<string, ProfileCaptureContract> = new Map(
+  [BINANCE_FUTURES_PROFILE_CAPTURE, BINANCE_SPOT_PROFILE_CAPTURE].map((contract) => [
+    contract.sourceSlug,
+    contract,
+  ])
+)
 
 export function getProfileCaptureContract(
   sourceSlug: string,

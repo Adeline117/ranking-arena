@@ -159,8 +159,8 @@ describe('profile capture contract', () => {
     ).toThrow(TypeError)
   })
 
-  it('declares no source until a reviewed contract is added', () => {
-    expect(getProfileCaptureContract('binance_futures')).toBeNull()
+  it('declares only sources with a reviewed contract', () => {
+    expect(getProfileCaptureContract('alpha_futures')).toBeNull()
     expect(getProfileCaptureContract('alpha_futures', new Map([['alpha_futures', CONTRACT]]))).toBe(
       CONTRACT
     )
