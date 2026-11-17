@@ -242,7 +242,7 @@ export default function RankingControls({
             onClick={() => navigate(r, 0)}
             disabled={isPending}
             aria-pressed={r === activeRange}
-            aria-label={`Show ${r} rankings`}
+            aria-label={t('showRangeRankingsAria').replace('{range}', r)}
           >
             {r}
           </button>
