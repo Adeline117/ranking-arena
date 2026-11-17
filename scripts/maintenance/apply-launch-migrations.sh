@@ -205,6 +205,7 @@ PREDEPLOY_MIGRATIONS=(
   20261115141050_leaderboard_exhaustion_completeness_evidence.sql
   20261116203816_metric_source_contract_retirement.sql
   20261116205144_trader_stats_score_input_evidence_pointer.sql
+  20261116215328_profile_acquisition_evidence_ledger.sql
 )
 readonly -a PREDEPLOY_MIGRATIONS
 # The final six (season publication follow-ups, PR #419) must stay LAST: they
@@ -244,6 +245,13 @@ readonly -a PREDEPLOY_MIGRATIONS
 # the deployed worker, which never sets the pointer (every row stays NULL), and
 # the worker release that stamps attempt-bound board writes needs the columns,
 # so it is predeploy. It reads no other launch object.
+# 20261116215328 (attempt-bound Tier-B profile evidence) adds the empty
+# profile capture contract registry, the append-only profile acquisition
+# ledger and its two RPCs, and the per-value profile pointer on
+# arena.trader_stats with its guard trigger. It is inert for the deployed
+# worker (no contract is registered, nothing calls the RPCs, every pointer
+# stays NULL); the worker release that records profile attempts needs it, so
+# it is predeploy. It needs 20261116205144 (shared metric value helper).
 #
 # 20261113014105 (unknown-trade-count sample confidence, issue #435) and its
 # follow-up 20261114101514 (true-zero trade counts, audit P1-2), in that order,
@@ -334,6 +342,11 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # require it. The deployed orchestrator sends no digest, so @3 would refuse
 # every season; the release that sends one accepts @2 and @3. Postdeploy,
 # after 210122; it replaces predeploy 20261114193017's RPC and fence bodies.
+# 20261116215329 makes arena.publication_score_rows_json (@3) also accept a
+# trader_stats value attested by a complete, fresh profile capture of the same
+# source, trader and timeframe (predeploy 20261116215328). It replaces the @2
+# body of 210122, so it follows it; with no profile attestation it returns
+# exactly the @2 rows. It touches no table 192134 guards.
 # 040440 forward replacement. V1_EXECUTION_STATUS requires the RAW-only
 # bridge SHA to be deployed and legacy callers drained before the legacy
 # position-history relations are frozen. Current main never reads or writes
@@ -353,6 +366,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261116204006_publication_score_rows_board_headline_only.sql
   20261116210122_publication_score_rows_require_stats_evidence.sql
   20261116210657_rank_publication_evidence_score_input_digest.sql
+  20261116215329_publication_score_rows_profile_attested.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS

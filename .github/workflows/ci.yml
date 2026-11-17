@@ -552,6 +552,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:headline-stats-as-of-pg17
 
+      - name: Prove profile captures attest score inputs only through the attempt ledger
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:profile-acquisition-evidence-pg17
+
       - name: Prove retention keeps metric-trust evidence
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
