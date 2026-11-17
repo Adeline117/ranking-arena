@@ -46,6 +46,7 @@ import type { ArenaFollowerCountSource } from './scoring-helpers'
 import { sealLeaderboardRankPublication } from './seal-rank-publication'
 import {
   buildSourcePublicationRows,
+  lacksRequiredMetricEvidence,
   type ParsedSourcePublicationEvidence,
   type PublicationWindow,
   type SourcePublicationRow,
@@ -224,6 +225,12 @@ export type RankRowExclusionReason =
   | 'max_drawdown_missing'
   | 'max_drawdown_liquidated'
   | 'max_drawdown_negative'
+  /**
+   * A required metric (ROI, PnL, win rate, drawdown) exists only in
+   * arena.trader_stats and no bound board evidence attests it, so the row
+   * cannot be ranked (arena.publication_score_rows_json).
+   */
+  | 'score_input_evidence_missing'
 
 export interface RankRowExclusionSummary {
   /** Score-input rows of the expected sources handed to the scorer. */
@@ -845,8 +852,19 @@ async function publishInTransaction(
     const expected = new Set(expectedSources)
     const evidence = restrictEvidence(bundle.evidence, expected)
 
-    // 3. Score the fresh authority rows; keep only DB-sealable rows.
+    // 3. Score the fresh authority rows; keep only DB-sealable rows. A row
+    // whose required metric was refused for lack of board evidence can never
+    // be ranked (ROI/PnL gate the scorer, win rate/drawdown its completeness),
+    // so it is counted here instead of reaching the scorer as a bare null.
     const traderRows = bundle.traderRows.filter((row) => expected.has(row.source))
+    const unevidencedKeys = new Set(
+      evidence.freshScoreRows
+        .filter(lacksRequiredMetricEvidence)
+        .map((row) => `${row.platform}\u0000${row.trader_key}`)
+    )
+    const scorerRows = traderRows.filter(
+      (row) => !unevidencedKeys.has(`${row.source}\u0000${row.source_trader_id}`)
+    )
     const handleMap = new Map<string, { handle: string | null; avatar_url: string | null }>()
     for (const row of evidence.freshScoreRows) {
       handleMap.set(`${row.platform}:${row.trader_key}`, {
@@ -854,7 +872,7 @@ async function publishInTransaction(
         avatar_url: row.avatar_url,
       })
     }
-    const scored = await deps.scoreCohort(traderRows, season, { tx, handleMap })
+    const scored = await deps.scoreCohort(scorerRows, season, { tx, handleMap })
     const rows: PublishableRow[] = []
     const identities = new Map<string, string[]>(expectedSources.map((source) => [source, []]))
     const seen = new Set<string>()
@@ -869,6 +887,17 @@ async function publishInTransaction(
     const scoredBySource = new Map<string, number>()
     for (const row of traderRows) {
       scoredBySource.set(row.source, (scoredBySource.get(row.source) ?? 0) + 1)
+    }
+    const scorerInputBySource = new Map<string, number>()
+    for (const row of scorerRows) {
+      scorerInputBySource.set(row.source, (scorerInputBySource.get(row.source) ?? 0) + 1)
+    }
+    for (const row of traderRows) {
+      if (!unevidencedKeys.has(`${row.source}\u0000${row.source_trader_id}`)) continue
+      exclusions.excluded += 1
+      bump(exclusions.byReason, 'score_input_evidence_missing')
+      exclusions.bySource[row.source] ??= {}
+      bump(exclusions.bySource[row.source], 'score_input_evidence_missing')
     }
     const returnedBySource = new Map<string, number>()
     for (const trader of scored) {
@@ -898,7 +927,7 @@ async function publishInTransaction(
       rows.push(row)
       identities.get(row.source)?.push(row.source_trader_id)
     }
-    for (const [source, inputCount] of scoredBySource) {
+    for (const [source, inputCount] of scorerInputBySource) {
       const dropped = inputCount - (returnedBySource.get(source) ?? 0)
       if (dropped <= 0) continue
       exclusions.excluded += dropped
@@ -910,7 +939,8 @@ async function publishInTransaction(
     if (rows.length === 0) {
       throw new RankPublicationError(
         'no_publishable_rows',
-        `[${season}] no scored row satisfies the public eligibility policy`
+        `[${season}] no scored row satisfies the public eligibility policy (${exclusions.excluded}/${exclusions.scored} excluded: ${JSON.stringify(exclusions.byReason)})`,
+        { exclusions }
       )
     }
     if (rows.length > MAX_ROWS_PER_GENERATION) {

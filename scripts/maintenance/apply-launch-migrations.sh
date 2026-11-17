@@ -295,6 +295,12 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # the worker release and 160917 (its preflight requires 160917's capture and
 # exhaustion rows and post-160917 windows/page_size). It updates arena.sources
 # only (no table 192134 guards), so 192134 stays last.
+# 20261116204006 (score-input evidence binding, step 1) moves the score-input
+# bundle's scoreRows to arena.publication_score_rows_json: board headline
+# metrics only, plus a per-row unevidenced_metrics list. The deployed
+# orchestrator's strict bundle schema rejects that key (it would refuse every
+# season), so it follows the worker release that accepts it; it pins the
+# bundle body 20261115013558 installed and touches no table 192134 guards.
 # 040440 forward replacement. V1_EXECUTION_STATUS requires the RAW-only
 # bridge SHA to be deployed and legacy callers drained before the legacy
 # position-history relations are frozen. Current main never reads or writes
@@ -310,6 +316,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261114211034_public_source_attempt_bound_capture_contracts.sql
   20261115160917_public_source_exhaustion_and_total_capture_contracts.sql
   20261115170535_activate_local_public_sources.sql
+  20261116204006_publication_score_rows_board_headline_only.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
