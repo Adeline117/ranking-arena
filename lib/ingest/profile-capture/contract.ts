@@ -16,6 +16,7 @@
 
 import type { ParsedStats, RankingTimeframe } from '../core/types'
 import { strictCanonicalSha256 } from '../strict-canonical-json'
+import { BLOFIN_FUTURES_PROFILE_CAPTURE } from '../adapters/blofin/profile-capture-contract'
 
 export const PROFILE_CAPTURE_CONTRACT_DOCUMENT = 'arena.profile-capture-contract@1' as const
 
@@ -182,12 +183,14 @@ export function parsedStatsMetricValue(
 }
 
 /**
- * Registered contracts, keyed by source slug. EMPTY by design: declaring a
+ * Registered contracts, keyed by source slug. Declaring a
  * source is a reviewed change that adds its contract here AND a migration
  * that registers profileCaptureContractSha256(contract) for it (see
  * docs/PROFILE_CAPTURE_EVIDENCE.md).
  */
-const PROFILE_CAPTURE_CONTRACTS: ReadonlyMap<string, ProfileCaptureContract> = new Map()
+const PROFILE_CAPTURE_CONTRACTS: ReadonlyMap<string, ProfileCaptureContract> = new Map([
+  [BLOFIN_FUTURES_PROFILE_CAPTURE.sourceSlug, BLOFIN_FUTURES_PROFILE_CAPTURE],
+])
 
 export function getProfileCaptureContract(
   sourceSlug: string,

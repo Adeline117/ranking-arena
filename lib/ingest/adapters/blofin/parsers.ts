@@ -190,7 +190,9 @@ export function parseBlofinProfile(rawPayload: unknown, ctx: ParseCtx): ParsedPr
       pnl: num(ind.real_pnl ?? ind.pnl_all),
       sharpe: num(ind.sharpe_ratio),
       mdd: pct(ind.max_drawdown),
-      winRate: pct(ind.win_ratio_all),
+      // win_ratio_all is the period's winning_trades / trades. With zero
+      // trades the source reports "0", which is no win rate at all.
+      winRate: int(ind.trades) === 0 ? null : pct(ind.win_ratio_all),
       winPositions: int(ind.winning_trades),
       totalPositions: int(ind.trades),
       copierPnl: null,
