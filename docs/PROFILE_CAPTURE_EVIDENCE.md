@@ -50,9 +50,14 @@ export const BINANCE_FUTURES_PROFILE_CAPTURE: ProfileCaptureContract = {
 }
 ```
 
-- `transform`：`identity`、`fraction_to_percent`（×100）、`abs`、`abs_fraction_to_percent`。
+- `transform`：`identity`、`fraction_to_percent`（×100）、`abs`、`abs_fraction_to_percent`、
+  `decimal_e2` / `decimal_e4` / `decimal_e8`（÷1e2 / ÷1e4 / ÷1e8，Bybit 的 `…E4`、`…E8` 定点字段；
+  `…E4` 百分比字段是百分数的 E2，例如 `1771` → 17.71 %）。
   存储值 = transform(RAW 值)，按相对误差 1e-9 比较（只吸收浮点误差，不吸收单位或取整差异）。
 - 指标只能来自 required 端点；`path` 里的数字是数组下标；RAW 值可以是数字或数字字符串。
+- 一个响应里用周期前缀区分各周期字段的来源（例如 Bybit leader-income 的
+  `sevenDayProfitE8` / `thirtyDayProfitE8` / `ninetyDayProfitE8`），`path` 里可以用
+  `{ byTimeframe: { '7': …, '30': …, '90': … } }` 这一步，每个契约周期都必须有键；清单里记录解析后的具体路径。
 - `assertProfileCaptureContract` 会拒绝：名字和来源不符、周期不在 7/30/90、端点重复、非 https、
   不可认证的指标名、指标指向 optional 端点。
 
@@ -109,7 +114,9 @@ complete 时一个指标被认证，当且仅当：解析器值非空、等于 R
 1. 在来源的 adapter 目录写契约（例如 `lib/ingest/adapters/<adapter>/profile-capture-contract.ts`），
    对照真实的 `getProfile` URL 和 `parseProfile` 代码写端点和字段路径。
 2. 用录制的页面写测试（见下节），证明契约认证的正是你声明的指标。
-3. 把契约加进 `contract.ts` 里的 `PROFILE_CAPTURE_CONTRACTS`（键 = source slug）。
+3. 把契约加进 `contract.ts` 里的 `PROFILE_CAPTURE_CONTRACTS`（键 = source slug）。契约文件只能
+   `import type` contract.ts（contract.ts 要导入它来建注册表，值导入会形成加载顺序循环），
+   `document` 直接写字面量 `'arena.profile-capture-contract@1'`。
 4. 用 `scripts/new-migration.sh register_<source>_profile_capture_contract` 生成注册迁移：
    ```sql
    INSERT INTO arena.profile_capture_contracts
@@ -153,4 +160,18 @@ it('binance_futures profile contract attests drawdown and win rate', () => {
 
 ## 现状
 
-注册表和代码里的契约表都是空的：上线这些迁移和 worker 后，行为与 #489 完全一样，直到某个来源按上面的步骤声明。
+数据库注册表是空的：上线这些迁移和 worker 后，行为与 #489 完全一样，直到某个来源的注册迁移落地。
+
+代码里已声明（注册迁移由集成统一编写）：
+
+| 来源              | 契约                                | 周期      | 认证指标                                        | sha256                                                             |
+| ----------------- | ----------------------------------- | --------- | ----------------------------------------------- | ------------------------------------------------------------------ |
+| `bybit_copytrade` | `bybit_copytrade-profile-capture@1` | 7, 30, 90 | `roi` `pnl` `win_rate` `mdd` `sharpe` `sortino` | `b9e04adab7fe2d1d31c54dadba418f71e56ba72a66c44abef8efd89bfa5bb212` |
+
+bybit_copytrade：板没有 PnL 列，PnL 取 leader-income 的 `{seven|thirty|ninety}DayProfitE8`（交易所自己的
+分周期值）。同一响应里还有交易所自己的分周期 ROI、胜率、回撤、Sharpe、Sortino，profile 发布会用它们覆盖板写入的值；
+板认证只在值不变时保留（20261116205144），所以只认证 PnL 的话，回撤一漂移就会把板的回撤认证也撤掉。
+因此 profile 写入的这些交易所值全部认证。不认证：交易次数（leader-income 没有分周期交易次数字段，解析器的
+`totalPositions` 是 `WinCount + LossCount` 的和，与交易所自己的 `cumTradeCount` 不相等）；跟单人数（不分周期，
+且解析器在 info 和 income 之间回退，声明单一路径会让回退变成 projection_mismatch）。
+PG17 证明：`npm run qa:profile-capture-bybit-copytrade-pg17`（真实 getProfile、解析器、契约哈希、写入 SQL 和 @3 读取器）。
