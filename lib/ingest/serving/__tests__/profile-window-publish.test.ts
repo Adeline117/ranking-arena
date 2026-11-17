@@ -182,7 +182,7 @@ describe('publishProfile whole-window coverage gate', () => {
       String(statement).includes('INSERT INTO arena.trader_stats')
     )
     expect(statsCall).toBeDefined()
-    expect((statsCall?.[1] as unknown[]).at(-1)).toBe(true)
+    expect((statsCall?.[1] as unknown[])[19]).toBe(true)
     expect(String(statsCall?.[0])).toContain('THEN LEAST(arena.trader_stats.as_of, EXCLUDED.as_of)')
     expect(String(statsCall?.[0])).toContain("'_arena_profile_publication_epoch_ms'")
     expect(JSON.parse(String((statsCall?.[1] as unknown[])[18]))).toMatchObject({

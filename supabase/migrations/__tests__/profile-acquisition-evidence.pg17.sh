@@ -24,6 +24,11 @@
 #              captured ones; a later overwrite strips that metric; board and
 #              profile attestations merge per metric and survive each other's
 #              writes when the value is unchanged;
+#   writer   - the exact publishProfile upsert (profile-stats-sql.ts) stamps an
+#              attested publish, keeps the attestation through an unattested
+#              publish of equal values, strips only the metric a later publish
+#              changes, never attests a value retained by the fill-metrics
+#              guard, and refuses a pointer of another trader;
 #   reader   - a profile-attested value is published (also for a headline the
 #              board lacks); a stale capture, a wrong trader, a wrong timeframe
 #              and an incomplete outcome are refused even when a forged pointer
@@ -40,6 +45,7 @@ STEP2A=20261116205144_trader_stats_score_input_evidence_pointer.sql
 STEP2B=20261116210122_publication_score_rows_require_stats_evidence.sql
 LEDGER=20261116215328_profile_acquisition_evidence_ledger.sql
 READER=20261116215329_publication_score_rows_profile_attested.sql
+WRITER_MODULE="$ROOT_DIR/lib/ingest/serving/profile-stats-sql.ts"
 CHAIN=(
   20260721175746_arena_score_inputs_publish_bundle.sql
   20260725012000_strengthen_arena_score_publish_evidence.sql
@@ -164,6 +170,13 @@ CREATE TABLE arena.trader_stats (
   sharpe numeric,
   copier_count integer,
   total_positions integer,
+  win_positions integer,
+  copier_pnl numeric,
+  aum numeric,
+  volume numeric,
+  profit_share_rate numeric,
+  holding_duration_avg interval,
+  trading_preferences jsonb,
   extras jsonb NOT NULL DEFAULT '{}'::jsonb,
   PRIMARY KEY (trader_id, timeframe)
 );
@@ -687,3 +700,81 @@ $proof$;
 SQL
 
 echo "profile-acquisition-evidence.pg17: reader ok"
+
+# ---------------------------------------------------------------------------
+# Writer: the exact publishProfile statement.
+# ---------------------------------------------------------------------------
+UPSERT_SQL="$(node -e '
+const s = require("fs").readFileSync(process.argv[1], "utf8")
+const key = s.match(/PROFILE_PUBLICATION_EPOCH_KEY = \x27([^\x27]+)\x27/)
+const m = s.match(/PROFILE_STATS_UPSERT_SQL = `([\s\S]*?)`/)
+if (!key || !m) { console.error("profile stats SQL not found"); process.exit(1) }
+process.stdout.write(m[1].split("${PROFILE_PUBLICATION_EPOCH_KEY}").join(key[1]))
+' "$WRITER_MODULE")"
+
+psql_db <<SQL
+INSERT INTO arena.traders (id, source_id, exchange_trader_id) VALUES (108, 1, 'writer');
+INSERT INTO public.seqs VALUES
+  ('writer', public.capture(108, 90, '{"pnl":{"value":900},"mdd":{"value":20},"win_rate":{"value":55}}', 7108)),
+  ('writer-2', public.capture(108, 90, '{"pnl":{"value":900},"mdd":{"value":20},"win_rate":{"value":55}}', 7110)),
+  ('writer-other', public.capture(102, 90, '{"mdd":{"value":20}}', 7109));
+PREPARE profile_upsert(bigint, smallint, timestamptz, text, numeric, numeric, numeric, numeric,
+  numeric, integer, integer, numeric, integer, numeric, numeric, numeric, numeric, jsonb, jsonb,
+  boolean, bigint, text[]) AS $UPSERT_SQL;
+SELECT seq AS writer_seq FROM public.seqs WHERE name = 'writer' \gset
+SELECT seq AS writer2_seq FROM public.seqs WHERE name = 'writer-2' \gset
+
+CREATE FUNCTION public.writer_state() RETURNS text[] LANGUAGE sql AS \$\$
+  SELECT profile_evidence_metrics FROM arena.trader_stats WHERE trader_id = 108 AND timeframe = 90
+\$\$;
+
+-- 1. An attested publish stamps exactly the captured, stored values.
+EXECUTE profile_upsert(108, 90, now() - interval '3 minutes', 'USDT', 10, 900, NULL, 20, 55,
+  NULL, 30, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '{}', false,
+  :writer_seq, '{mdd,pnl,win_rate}');
+DO \$\$ BEGIN
+  IF public.writer_state() IS DISTINCT FROM '{mdd,pnl,win_rate}' THEN
+    RAISE EXCEPTION 'attested publish did not stamp: %', public.writer_state();
+  END IF;
+END \$\$;
+
+-- 2. An unattested publish of equal values keeps the attestation.
+EXECUTE profile_upsert(108, 90, now() - interval '2 minutes', 'USDT', 10, 900, NULL, 20, 55,
+  NULL, 31, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '{}', false, NULL, NULL);
+DO \$\$ BEGIN
+  IF public.writer_state() IS DISTINCT FROM '{mdd,pnl,win_rate}' THEN
+    RAISE EXCEPTION 'an equal unattested publish voided evidence: %', public.writer_state();
+  END IF;
+END \$\$;
+
+-- 3. An unattested publish that changes the drawdown strips only it.
+EXECUTE profile_upsert(108, 90, now() - interval '1 minute', 'USDT', 10, 900, NULL, 21, 55,
+  NULL, 31, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '{}', false, NULL, NULL);
+DO \$\$ BEGIN
+  IF public.writer_state() IS DISTINCT FROM '{pnl,win_rate}' THEN
+    RAISE EXCEPTION 'overwrite stripping drifted: %', public.writer_state();
+  END IF;
+END \$\$;
+
+-- 4. A new capture published with the fill-metrics guard on: the retained
+--    (old) win rate 54 is not the captured 55, so it is not attested.
+UPDATE arena.trader_stats SET win_rate = 54 WHERE trader_id = 108 AND timeframe = 90;
+EXECUTE profile_upsert(108, 90, now(), 'USDT', 10, 900, NULL, 20, 55,
+  NULL, 31, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '{"fills_metrics_complete":false}', true,
+  :writer2_seq, '{mdd,pnl,win_rate}');
+DO \$\$ BEGIN
+  IF public.writer_state() IS DISTINCT FROM '{mdd,pnl}' THEN
+    RAISE EXCEPTION 'a retained value was attested: %', public.writer_state();
+  END IF;
+END \$\$;
+SQL
+
+OTHER_SEQ="$(psql_db -At -c "SELECT seq FROM public.seqs WHERE name = 'writer-other'")"
+expect_failure 'the writer cannot stamp another trader''s capture' 'is not a complete capture' \
+  "PREPARE p(bigint, smallint, timestamptz, text, numeric, numeric, numeric, numeric,
+     numeric, integer, integer, numeric, integer, numeric, numeric, numeric, numeric, jsonb, jsonb,
+     boolean, bigint, text[]) AS $UPSERT_SQL;
+   EXECUTE p(108, 90, now(), 'USDT', 10, 900, NULL, 20, 55, NULL, 31, NULL, NULL, NULL, NULL,
+     NULL, NULL, NULL, '{}', false, $OTHER_SEQ, '{mdd}')"
+
+echo "profile-acquisition-evidence.pg17: writer ok"
