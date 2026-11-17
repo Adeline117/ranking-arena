@@ -14,6 +14,7 @@
  * values are never attested, so publication treats them as unevidenced.
  */
 
+import { TOOBIT_FUTURES_PROFILE_CAPTURE } from '../adapters/toobit/profile-capture-contract'
 import type { ParsedStats, RankingTimeframe } from '../core/types'
 import { strictCanonicalSha256 } from '../strict-canonical-json'
 
@@ -182,12 +183,15 @@ export function parsedStatsMetricValue(
 }
 
 /**
- * Registered contracts, keyed by source slug. EMPTY by design: declaring a
- * source is a reviewed change that adds its contract here AND a migration
- * that registers profileCaptureContractSha256(contract) for it (see
- * docs/PROFILE_CAPTURE_EVIDENCE.md).
+ * Declared contracts, keyed by source slug. Declaring a source is a reviewed
+ * change that adds its contract here AND a migration that registers
+ * profileCaptureContractSha256(contract) for it (see
+ * docs/PROFILE_CAPTURE_EVIDENCE.md); until that row exists, start refuses the
+ * attempt and the source publishes unattested exactly as before.
  */
-const PROFILE_CAPTURE_CONTRACTS: ReadonlyMap<string, ProfileCaptureContract> = new Map()
+const PROFILE_CAPTURE_CONTRACTS: ReadonlyMap<string, ProfileCaptureContract> = new Map(
+  [TOOBIT_FUTURES_PROFILE_CAPTURE].map((contract) => [contract.sourceSlug, contract])
+)
 
 export function getProfileCaptureContract(
   sourceSlug: string,

@@ -1,0 +1,104 @@
+{
+  "detail": {
+    "code": 200,
+    "data": {
+      "avatar": "https://image.tbstatic.com/plain/9001/fixture/avatar.png",
+      "currentFollowerCount": "52",
+      "isFollow": false,
+      "isFull": false,
+      "lastWeekWinRate": "1",
+      "leaderUserId": "668939882",
+      "maxLeadCount": "100",
+      "nickname": "Fixture Leader",
+      "profitSharingRate": "0.1",
+      "startLeadTime": "1746710277746",
+      "symbolConfigs": [
+        {
+          "leverage": "75",
+          "symbolId": "AVAX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        }
+      ],
+      "totalFollowerCount": "52",
+      "totalLeadAmount": "3183.81",
+      "totalLeadProfit": "-426.0602",
+      "totalLeadProfitRate": "-0.1338",
+      "tradeCount": "545",
+      "cardSize": 0,
+      "cardMaxDeduction": "0",
+      "isNeedInvite": 0,
+      "levelName": "Co-Pilot",
+      "levelId": "1",
+      "joinTime": "1746710277746",
+      "tradeProtect": 1,
+      "unLeadType": 0,
+      "unLeadStartTime": 0,
+      "unLeadEndTime": 0,
+      "leadPositionType": -1,
+      "shareHost": "https://www.toobit.com",
+      "translateButton": false,
+      "identityType": 1,
+      "recommendShare": 0,
+      "recommendShareRate": "0",
+      "leadDays": "557"
+    }
+  },
+  "radar": {
+    "code": 200,
+    "data": {
+      "leaderId": 668939882,
+      "type": 7,
+      "leaderProfitOrderRatio": "1",
+      "leaderProfitOrderRatioProportion": "1",
+      "leaderProfitRatio": "0.0364",
+      "leaderProfitRatioProportion": "0.0607",
+      "leaderMaximumDrawdown": "0.3222",
+      "leaderMaximumDrawdownProportion": "0.6778",
+      "leaderJoinDuration": "48186811150",
+      "leaderJoinDurationProportion": "1",
+      "leaderProfitAndLossRatio": "--",
+      "leaderProfitAndLossRatioProportion": "1"
+    }
+  },
+  "accumulate": {
+    "code": 200,
+    "data": [
+      {
+        "leaderId": 668939882,
+        "type": 7,
+        "date": "20261113",
+        "symbolId": "all",
+        "value": "0.59"
+      },
+      {
+        "leaderId": 668939882,
+        "type": 7,
+        "date": "20261114",
+        "symbolId": "all",
+        "value": "0.59"
+      },
+      {
+        "leaderId": 668939882,
+        "type": 7,
+        "date": "20261115",
+        "symbolId": "all",
+        "value": "0.59"
+      },
+      {
+        "leaderId": 668939882,
+        "type": 7,
+        "date": "20261116",
+        "symbolId": "all",
+        "value": "7.29"
+      },
+      {
+        "leaderId": 668939882,
+        "type": 7,
+        "date": "20261117",
+        "symbolId": "all",
+        "value": "-25.09"
+      }
+    ]
+  }
+}

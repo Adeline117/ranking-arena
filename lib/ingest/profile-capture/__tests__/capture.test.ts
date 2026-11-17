@@ -160,7 +160,7 @@ describe('profile capture contract', () => {
   })
 
   it('declares no source until a reviewed contract is added', () => {
-    expect(getProfileCaptureContract('binance_futures')).toBeNull()
+    expect(getProfileCaptureContract('bitget_spot')).toBeNull()
     expect(getProfileCaptureContract('alpha_futures', new Map([['alpha_futures', CONTRACT]]))).toBe(
       CONTRACT
     )
