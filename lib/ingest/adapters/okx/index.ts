@@ -6,7 +6,7 @@
  * PURE HTTP — no Playwright. The OFFICIAL documented public API answers
  * plain fetch() (verified live 2026-06-12 from the SG VPS and 2026-11-15
  * from the local Mac — the web UI geo-hides copy trading, but the data API
- * serves globally; migration 20261115170535 moves okx_futures/okx_spot from
+ * serves globally; migration 20261116204359 moves okx_futures/okx_spot from
  * fetch_region='vps_sg' to 'local', so the local worker fetches them):
  *
  *   GET www.okx.com/api/v5/copytrading/

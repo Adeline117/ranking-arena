@@ -13,7 +13,7 @@
 -- arena.metric_source_contract_retirements (20261116203816); its rows and the
 -- observations that cite them stay as they are.
 --
--- POSTDEPLOY, after 20261115170535 and before 20261111192134. The deployed
+-- POSTDEPLOY, after 20261116204359 and before 20261111192134. The deployed
 -- worker before this release reads v1 (it would see v1 retired and v2 current
 -- and fail its contract parity check for this source), so this runs after the
 -- worker whose registry holds v2. Until it runs, that worker fails the same

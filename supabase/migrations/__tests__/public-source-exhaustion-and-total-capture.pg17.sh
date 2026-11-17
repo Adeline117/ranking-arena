@@ -16,7 +16,7 @@
 #     does not cover refuse the whole migration and leave no rows
 #   + an absent source is skipped
 #
-# It then proves 20261115170535 (postdeploy activation of okx_futures,
+# It then proves 20261116204359 (forward replacement of 20261115170535) (postdeploy activation of okx_futures,
 # okx_spot, toobit_futures and xt_futures as local, publicly ranked sources)
 # on the post-160917 state; see the section at the end.
 
@@ -399,7 +399,7 @@ assert_equal "absent sources skipped, the rest registered" \
 
 echo "public source exhaustion and total capture PG17 proof passed"
 
-# ── 20261115170535: activate okx/toobit/xt as local, publicly ranked sources ──
+# ── 20261116204359 (replaces 20261115170535): okx/toobit/xt as local, publicly ranked sources ──
 #
 #   + on the post-160917 state the four flip to active/serving/local, nothing
 #     else changes, and they join arena_freshness_expected_sources (real
@@ -408,7 +408,7 @@ echo "public source exhaustion and total capture PG17 proof passed"
 #   - a drifted status / serving_mode / region / window / adapter, a missing
 #     row, or a missing 160917 capture registration refuses with no write
 
-ACTIVATION="$MIGRATIONS/20261115170535_activate_local_public_sources.sql"
+ACTIVATION="$MIGRATIONS/20261116204359_move_public_sources_to_local_region_prod_state.sql"
 
 expect_activation_failure() {
   local db="$1" label="$2" expected="$3"
@@ -494,8 +494,10 @@ assert_equal "the four join the expected set with their native windows only" \
   "$(expected_four)"
 
 ACTIVATED="$(sources_state act_main)"
+# xt_futures at the target equals its production pre-state, so only the three
+# rows that moved region are reported.
 expect_activation_failure act_main "activation replay" \
-  "local public source activation pre-state drift: okx_futures, okx_spot, toobit_futures, xt_futures"
+  "local public source activation pre-state drift: okx_futures, okx_spot, toobit_futures"
 assert_equal "refused activation replay changes nothing" "$ACTIVATED" "$(sources_state act_main)"
 
 drift_case() {
@@ -531,5 +533,28 @@ expect_activation_failure act_no_capture "activation before 160917 registers cap
   "requires the 20261115160917 V3 capture contract for: okx_futures, okx_spot, toobit_futures, xt_futures"
 assert_equal "refused pre-160917 activation leaves every source row as it was" \
   "$NO_CAPTURE_BEFORE" "$(sources_state act_no_capture)"
+
+# Production pre-state (read 2026-11-17): already active/serving, okx and
+# toobit on vps_sg, okx deriving 7/30 with page_size 20.
+"$PG_BIN/createdb" -h "$SOCKET_DIR" -p "$PORT" -T main act_prod
+psql_db act_prod -q -c "
+  UPDATE arena.sources SET status = 'active', serving_mode = 'serving'
+   WHERE slug IN ('okx_futures', 'okx_spot', 'toobit_futures', 'xt_futures');
+  UPDATE arena.sources SET timeframes_derived = '{7,30}', page_size = 20
+   WHERE slug IN ('okx_futures', 'okx_spot');"
+PROD_OTHERS_BEFORE="$(psql_db act_prod -Atqc "
+  SELECT string_agg(s::text, '|' ORDER BY s.id) FROM arena.sources AS s
+   WHERE slug NOT IN ('okx_futures', 'okx_spot', 'toobit_futures')")"
+psql_db act_prod -q -f "$ACTIVATION"
+echo "ok: activation applies on the production pre-state"
+assert_equal "production pre-state converges to active/serving/local" \
+  "okx_futures:active:serving:local|okx_spot:active:serving:local|toobit_futures:active:serving:local|xt_futures:active:serving:local" \
+  "$(four_state act_prod)"
+assert_equal "on the production pre-state only the region of okx and toobit changes" \
+  "$PROD_OTHERS_BEFORE" "$(psql_db act_prod -Atqc "
+  SELECT string_agg(s::text, '|' ORDER BY s.id) FROM arena.sources AS s
+   WHERE slug NOT IN ('okx_futures', 'okx_spot', 'toobit_futures')")"
+assert_equal "okx keeps its derived windows and page size" "{7,30}:20|{7,30}:20" \
+  "$(psql_db act_prod -Atqc "SELECT string_agg(timeframes_derived::text || ':' || page_size, '|' ORDER BY slug) FROM arena.sources WHERE slug IN ('okx_futures','okx_spot')")"
 
 echo "local public source activation PG17 proof passed"

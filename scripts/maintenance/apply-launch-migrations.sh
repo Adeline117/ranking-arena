@@ -295,6 +295,9 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # those sources would fail, so it is postdeploy, after 211034. It requires
 # predeploy 20261115141050 (exhaustion registry) and 20261114211033 (kucoin's
 # contract) and touches no table 192134 guards, so 192134 stays last.
+# 20261116204359 replaces 20261115170535, whose preflight accepts only the
+# seed pre-state; production already holds the four as active/serving, so it
+# refuses there. The replacement accepts either pre-state per row.
 # 20261115170535 activates okx_futures, okx_spot, toobit_futures and
 # xt_futures (owner decision 2026-11-15) as active/serving sources on the
 # `local` region. An active source is scheduled for Tier-A at once and Tier-A
@@ -306,8 +309,9 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # (predeploy 20261116203816). The worker before this release reads v1, so it
 # follows the worker whose registry holds v2; until then that worker fails its
 # contract parity check for binance_web3_bsc only. It needs binance_web3_bsc in
-# USD (160917), so it follows 170535, and touches no table 192134 guards, so
-# 192134 stays last.
+# USD (160917); it follows 20261116204359 (the forward replacement of the
+# superseded 170535 activation) and touches no table 192134 guards, so 192134
+# stays last.
 # 040440 forward replacement. V1_EXECUTION_STATUS requires the RAW-only
 # bridge SHA to be deployed and legacy callers drained before the legacy
 # position-history relations are frozen. Current main never reads or writes
@@ -322,7 +326,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261115142045_clean_derived_formal_win_rate_scoped_probe.sql
   20261114211034_public_source_attempt_bound_capture_contracts.sql
   20261115160917_public_source_exhaustion_and_total_capture_contracts.sql
-  20261115170535_activate_local_public_sources.sql
+  20261116204359_move_public_sources_to_local_region_prod_state.sql
   20261116203817_binance_web3_bsc_metric_contract_v2.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
@@ -494,6 +498,7 @@ SUPERSEDED_MIGRATIONS=(
   20261111134416_quarantine_bitget_bot_cumulative_rank_authority_prod_reader.sql
   20261113104533_trader_follows_hard_cap_lock.sql
   20261113150757_clean_derived_formal_win_rate.sql
+  20261115170535_activate_local_public_sources.sql
   20261113151848_sync_user_profile_email_from_auth.sql
   20261113151849_auth_user_has_password_rpc.sql
 )
@@ -522,6 +527,7 @@ superseder_version() {
     20260817061000_legacy_raw_metric_publication_isolation.sql) printf '%s' 20261111132450 ;;
     20261113104533_trader_follows_hard_cap_lock.sql) printf '%s' 20261113233535 ;;
     20261113150757_clean_derived_formal_win_rate.sql) printf '%s' 20261115142045 ;;
+    20261115170535_activate_local_public_sources.sql) printf '%s' 20261116204359 ;;
     20261113151848_sync_user_profile_email_from_auth.sql) printf '%s' 20261113233625 ;;
     20261113151849_auth_user_has_password_rpc.sql) printf '%s' 20261113233643 ;;
     *)
