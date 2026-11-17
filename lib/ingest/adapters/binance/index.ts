@@ -32,7 +32,7 @@ import type {
   SourceRow,
   Timeframe,
 } from '../../core/types'
-import { HistoryPageCapReachedError } from '../../core/history-page-cap'
+import { CopierPageCapReachedError, HistoryPageCapReachedError } from '../../core/history-page-cap'
 import {
   HISTORY_CONTINUATION_NOT_WIRED,
   type ContinuableHistoryKind,
@@ -593,6 +593,11 @@ const binanceAdapter: SourceAdapter = {
         // Typed so Tier-B publishes the captured newest pages and records the
         // truncation instead of failing the whole trader every cycle.
         throw new HistoryPageCapReachedError(src.slug, kind, opts.pages, lastPage + 1)
+      }
+      if (kind === 'copiers') {
+        // Typed so Tier-B keeps the last complete snapshot and records
+        // copiers_truncated, like every other copier source.
+        throw new CopierPageCapReachedError(src.slug, opts.pages)
       }
       throw new Error(
         `[binance] ${kind} ${opts.sort ?? 'default'} reached page cap ${opts.pages} without terminal proof`
