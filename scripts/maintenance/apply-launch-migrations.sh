@@ -203,6 +203,7 @@ PREDEPLOY_MIGRATIONS=(
   20261114193017_rank_publication_requires_attempt_bound_evidence.sql
   20261114211033_public_source_board_metric_contracts.sql
   20261115141050_leaderboard_exhaustion_completeness_evidence.sql
+  20261116203816_metric_source_contract_retirement.sql
 )
 readonly -a PREDEPLOY_MIGRATIONS
 # The final six (season publication follow-ups, PR #419) must stay LAST: they
@@ -231,6 +232,12 @@ readonly -a PREDEPLOY_MIGRATIONS
 # no ledger table and is inert until a source registers an exhaustion contract
 # (its registry starts empty), so it is predeploy: the worker that records
 # exhaustion proofs calls arena.record_leaderboard_exhaustion_evidence.
+# 20261116203816 (append-only metric source contract retirement) is inert
+# until a version is retired: the current contract set equals the active set
+# and the deployed worker never reads the new table. It is predeploy because
+# the worker that resolves contracts through the retirement table needs that
+# table before it ships; its preflight refuses a source that already holds two
+# active versions. It needs only 20260721120000.
 #
 # 20261113014105 (unknown-trade-count sample confidence, issue #435) and its
 # follow-up 20261114101514 (true-zero trade counts, audit P1-2), in that order,
