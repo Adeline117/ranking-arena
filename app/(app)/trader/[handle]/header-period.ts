@@ -15,18 +15,39 @@ import type { HeadlineWindow } from '@/lib/data/serving/headline-window'
 export type HeaderPeriod = '7D' | '30D' | '90D'
 
 /**
- * 90D-labelled score / ROI from a performance record (P1-3, 2026-11-12 audit).
- * Only the 90D period counts: the unsuffixed `arena_score` and `roi_30d` /
- * `roi_7d` belong to the primary (possibly 30D/7D) period, so a trader without
- * a 90D row shows "—" under the 90D label instead of a shorter window's value.
+ * 90D-labelled values from a performance record (P1-3, 2026-11-12 audit).
+ * Only the 90D period counts: the unsuffixed `arena_score`, `pnl`, `win_rate`
+ * and `max_drawdown` and `roi_30d` / `roi_7d` belong to the primary (possibly
+ * 30D/7D) period, so a trader without a 90D row shows "—" under the 90D label
+ * instead of a shorter window's value.
  */
 export function ninetyDayHeadline(
-  perf: { arena_score_90d?: number | null; roi_90d?: number | null } | null | undefined
+  perf:
+    | {
+        has_period_90d?: boolean
+        arena_score_90d?: number | null
+        roi_90d?: number | null
+        pnl?: number | null
+        win_rate?: number | null
+        max_drawdown?: number | null
+      }
+    | null
+    | undefined
 ): {
   arena_score: number | null
   roi: number | null
+  pnl: number | null
+  win_rate: number | null
+  max_drawdown: number | null
 } {
-  return { arena_score: perf?.arena_score_90d ?? null, roi: perf?.roi_90d ?? null }
+  const has90 = perf?.has_period_90d !== false
+  return {
+    arena_score: perf?.arena_score_90d ?? null,
+    roi: perf?.roi_90d ?? null,
+    pnl: has90 ? (perf?.pnl ?? null) : null,
+    win_rate: has90 ? (perf?.win_rate ?? null) : null,
+    max_drawdown: has90 ? (perf?.max_drawdown ?? null) : null,
+  }
 }
 
 type HeadlineMetrics = Pick<

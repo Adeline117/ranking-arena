@@ -520,9 +520,6 @@ export default function TraderProfileClient({
         rank: null,
         // No headline_window = 90D label: 90D values only (P1-3).
         ...ninetyDayHeadline(performance),
-        pnl: performance?.pnl ?? null,
-        win_rate: performance?.win_rate ?? null,
-        max_drawdown: performance?.max_drawdown ?? null,
         is_verified_data: false,
       }
     }
@@ -1091,9 +1088,6 @@ export default function TraderProfileClient({
         rank: null,
         // No headline_window = 90D label: 90D values only (P1-3).
         ...ninetyDayHeadline(exactPerformance),
-        pnl: exactPerformance?.pnl ?? null,
-        win_rate: exactPerformance?.win_rate ?? null,
-        max_drawdown: exactPerformance?.max_drawdown ?? null,
         sharpe_ratio: (exactPerformanceRecord?.sharpe_ratio as number | null) ?? null,
         sortino_ratio: (exactPerformanceRecord?.sortino_ratio as number | null) ?? null,
         profit_factor: (exactPerformanceRecord?.profit_factor as number | null) ?? null,

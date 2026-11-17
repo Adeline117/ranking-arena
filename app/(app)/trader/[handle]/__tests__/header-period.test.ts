@@ -109,12 +109,21 @@ describe('90D header — every 90D-labelled value comes from 90D (P1-3)', () => 
   }
 
   it('ninetyDayHeadline never borrows the primary-period score or a 30D/7D ROI', () => {
-    expect(ninetyDayHeadline(thirtyOnly)).toEqual({ arena_score: null, roi: null })
-    expect(ninetyDayHeadline({ arena_score_90d: 81, roi_90d: 90 })).toEqual({
-      arena_score: 81,
-      roi: 90,
-    })
-    expect(ninetyDayHeadline(null)).toEqual({ arena_score: null, roi: null })
+    const none = { arena_score: null, roi: null, pnl: null, win_rate: null, max_drawdown: null }
+    expect(ninetyDayHeadline({ ...thirtyOnly, pnl: 300, win_rate: 55, max_drawdown: 12 })).toEqual(
+      none
+    )
+    expect(
+      ninetyDayHeadline({
+        has_period_90d: true,
+        arena_score_90d: 81,
+        roi_90d: 90,
+        pnl: 900,
+        win_rate: 61,
+        max_drawdown: 9,
+      })
+    ).toEqual({ arena_score: 81, roi: 90, pnl: 900, win_rate: 61, max_drawdown: 9 })
+    expect(ninetyDayHeadline(null)).toEqual(none)
   })
 
   it('shows — (null/undefined) under the 90D label for a trader without a 90D row', () => {

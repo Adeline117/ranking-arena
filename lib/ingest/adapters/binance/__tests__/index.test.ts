@@ -7,6 +7,7 @@ import {
 import type { SourceRow } from '../../../core/types'
 import type { FetchSession, ReplayRequestTemplate } from '../../../fetch/types'
 import { LeaderboardCaptureUpstreamError } from '../../../fetch/capture'
+import { CopierPageCapReachedError } from '../../../core/history-page-cap'
 import { captureHistoryAcquisition } from '../../../history-acquisition'
 import { assessLeaderboardNativeWindowRequest } from '../../../leaderboard-request-evidence'
 import { binanceAdapter, projectBinanceLeaderboardRequest } from '../index'
@@ -374,6 +375,32 @@ describe('Binance evidence-preserving leaderboard capture', () => {
         message: '[binance] position_history CLOSING reached page cap 1 without terminal proof',
       })
     )
+  })
+
+  it('raises the typed copier cap error when the copier table exceeds its page budget', async () => {
+    const rows = Array.from({ length: 50 }, (_, index) => ({ id: `copier-${index}` }))
+    const { session: fetchSession } = session(async () => ({
+      status: 200,
+      json: historyEnvelope(rows, 100),
+    }))
+
+    let failure: unknown = null
+    try {
+      for await (const _page of binanceAdapter.getHistory(
+        fetchSession,
+        source({ copier_max_pages: 1 }),
+        'portfolio-1',
+        'copiers',
+        null
+      )) {
+        // drain
+      }
+    } catch (error) {
+      failure = error
+    }
+
+    expect(failure).toBeInstanceOf(CopierPageCapReachedError)
+    expect(failure).toMatchObject({ pageCap: 1 })
   })
 
   it('selects terminal verification only for the reviewed futures endpoint', () => {
