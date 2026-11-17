@@ -15,6 +15,7 @@ import {
   parseToobitProfile,
 } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
+import { resolveHeadlineLineage } from '../../../testing/headline-lineage'
 
 function fixture(name: string): Record<string, unknown> {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
@@ -29,6 +30,26 @@ const ctx: ParseCtx = {
 }
 
 describe('parseToobitLeaderboardPage', () => {
+  it.each([['toobit_futures', 'leaders-new-p1.json']])(
+    '%s: verbatim board lineage resolves against the registered contract',
+    (slug, file) => {
+      const page = parseToobitLeaderboardPage(fixture(file), ctx)
+      expect(page.rows.length).toBeGreaterThan(0)
+      expect(resolveHeadlineLineage(page.rows, slug)).toEqual({
+        resolved: page.rows.length * 2,
+        unresolved: [],
+      })
+    }
+  )
+
+  it('claims no lineage on the legacy normalized chunk', () => {
+    const page = parseToobitLeaderboardPage(fixture('board-page.json'), ctx)
+    expect(page.rows.length).toBeGreaterThan(0)
+    expect(
+      page.rows.every((row) => Object.keys(row.headlineMetricSources ?? {}).length === 0)
+    ).toBe(true)
+  })
+
   const payload = fixture('board-page.json')
 
   it('parses real rows: leaderUserId identity, fraction→percent metrics', () => {
