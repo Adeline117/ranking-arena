@@ -7,7 +7,8 @@
 > provider-control-plane evidence. They do not authorize a deployment, host access,
 > scheduler, queue, credential, proxy, or data operation.
 > `V1_CRON_EXECUTION_PUBLISHED=false` and
-> `V1_RANKING_COMMAND_CHAIN_PUBLISHED=false` are narrow, checked-in source guards;
+> `V1_RANKING_COMMAND_CHAIN_PUBLISHED` (`true` since the 2026-11-16 launch window)
+> are narrow, checked-in source guards;
 > they do not stop or prove the state of an external worker or schedule.
 > The former is called directly by 19 route handlers listed below **and** as the
 > first statement of `withCron` (`lib/api/with-cron.ts`), so every one of the 25
@@ -156,8 +157,9 @@ schedules；这只是源码候选，不证明或改变任何已部署 provider�
 `/api/cron/sync-meilisearch`、`/api/cron/pipeline-evaluate` 和
 `/api/hooks/post-deploy` 在 auth-first 之后固定返回 401/410 与三层 `no-store`，且不进入
 参数、锁、pipeline log、cache、data 或 provider 工作。本段不概括其他 cron。独立的
-`V1_RANKING_COMMAND_CHAIN_PUBLISHED=false` 让源码中的 legacy downstream
-worker/scheduler/caller chain 在 dotenv、DB、Redis、BullMQ 或 HTTP 工作前退出/返回。
+`V1_RANKING_COMMAND_CHAIN_PUBLISHED` 为 `false` 时让源码中的 legacy downstream
+worker/scheduler/caller chain 在 dotenv、DB、Redis、BullMQ 或 HTTP 工作前退出/返回；
+该常量已于 2026-11-16 上线窗口改为 `true`（放行评分 worker，compute-leaderboard 路由仍是墓碑）。
 两者都不能停止已运行的 process 或 checkout 外已有的 schedule。
 
 同一个固定、非环境的 `V1_CRON_EXECUTION_PUBLISHED=false` source gate 还单独封存精确十个
