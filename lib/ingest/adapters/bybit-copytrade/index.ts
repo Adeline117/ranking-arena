@@ -105,9 +105,10 @@ async function warmSession(session: FetchSession, src: SourceRow): Promise<void>
   warmedSessions.add(session)
 }
 
-/** Session-scoped cache for the TF-independent profile requests (info +
- *  leader-income cover all 3 TFs) — Tier-B fetches 3 TFs back to back and
- *  only the chart varies per TF. */
+/** Session-scoped cache for the TF-independent pub-leader/info request —
+ *  Tier-B fetches 3 TFs back to back. leader-income is NOT cached: it carries
+ *  the attested score inputs (profile capture contract), and each timeframe's
+ *  attempt must observe a response fetched after that attempt started. */
 const profileCache = new WeakMap<FetchSession, Map<string, unknown>>()
 
 async function cached(
@@ -203,8 +204,7 @@ const bybitCopytradeAdapter: SourceAdapter = {
     const tf = (timeframe === 0 ? 90 : timeframe) as RankingTimeframe
     const mark = encodeURIComponent(exchangeTraderId)
 
-    // info + leader-income are TF-independent (income carries all 3 TF
-    // blocks) — fetched once per (session, trader).
+    // info is TF-independent — fetched once per (session, trader).
     const infoUrl = endpoint(src, 'info', `${INFO_BASE}/info`)
     const info = await cached(session, `info:${exchangeTraderId}`, () =>
       replayJson(session, fetcher, {
@@ -214,16 +214,20 @@ const bybitCopytradeAdapter: SourceAdapter = {
       })
     )
     const incomeUrl = endpoint(src, 'income', `${BASE}/leader-income`)
-    const income = await cached(session, `income:${exchangeTraderId}`, () =>
-      replayJson(session, fetcher, {
-        url: `${incomeUrl}?leaderMark=${mark}`,
-        method: 'GET',
-        headers: HEADERS,
-      })
-    )
+    // leader-income carries all 3 TF blocks but is fetched per call: it is
+    // the attested surface of BYBIT_COPYTRADE_PROFILE_CAPTURE (see cache doc).
+    const income = await replayJson(session, fetcher, {
+      url: `${incomeUrl}?leaderMark=${mark}`,
+      method: 'GET',
+      headers: HEADERS,
+    })
     const chartUrl = endpoint(src, 'chart', `${CHART_BASE}/dynamic-yield-trend`)
+    // The bundle page's url is the exact per-TF chart request: its query
+    // (dayCycleType + leaderMark) binds the page to this trader and timeframe
+    // in the capture manifest's request projection.
+    const chartRequestUrl = `${chartUrl}?dayCycleType=${TF_CYCLE[tf]}&period=PERIOD_DAY&leaderMark=${mark}`
     const yieldTrend = await replayJson(session, fetcher, {
-      url: `${chartUrl}?dayCycleType=${TF_CYCLE[tf]}&period=PERIOD_DAY&leaderMark=${mark}`,
+      url: chartRequestUrl,
       method: 'GET',
       headers: HEADERS,
     })
@@ -234,7 +238,7 @@ const bybitCopytradeAdapter: SourceAdapter = {
         {
           pageIndex: 1,
           payload: { info, income, yieldTrend, timeframe: tf },
-          url: chartUrl,
+          url: chartRequestUrl,
           fetchedAt,
         },
       ],

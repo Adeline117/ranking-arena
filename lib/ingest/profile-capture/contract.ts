@@ -14,6 +14,7 @@
  * values are never attested, so publication treats them as unevidenced.
  */
 
+import { BYBIT_COPYTRADE_PROFILE_CAPTURE } from '../adapters/bybit-copytrade/profile-capture-contract'
 import type { ParsedStats, RankingTimeframe } from '../core/types'
 import { strictCanonicalSha256 } from '../strict-canonical-json'
 
@@ -39,12 +40,27 @@ export type ProfileAttestableMetric = (typeof PROFILE_ATTESTABLE_METRICS)[number
  * - identity: stored = raw
  * - fraction_to_percent: stored = raw * 100 (upstream 0.123 → 12.3 %)
  * - abs / abs_fraction_to_percent: drawdowns some sources sign negatively
+ * - decimal_e8: fixed-point integer text scaled by 10^8 (Bybit `…E8` fields:
+ *   "-21472556189" → -214.72556189); stored = raw / 1e8
  */
 export type ProfileMetricTransform =
   | 'identity'
   | 'fraction_to_percent'
   | 'abs'
   | 'abs_fraction_to_percent'
+  | 'decimal_e8'
+
+/**
+ * One step of a metric's payload path. A string is an object key, a number an
+ * array index. `byTimeframe` names the key per contracted timeframe, for
+ * sources whose one response carries every window under timeframe-prefixed
+ * keys (Bybit leader-income: sevenDayProfitE8 / thirtyDayProfitE8 / ...).
+ * The manifest records the resolved, concrete path.
+ */
+export type ProfilePathSegment =
+  | string
+  | number
+  | { readonly byTimeframe: Readonly<Partial<Record<'7' | '30' | '90', string>>> }
 
 export interface ProfileEndpointContract {
   /** Stable id used by metric declarations and recorded in the manifest. */
@@ -65,7 +81,7 @@ export interface ProfileEndpointContract {
 export interface ProfileMetricFieldContract {
   readonly endpoint: string
   /** Path inside that endpoint's JSON payload; numbers index arrays. */
-  readonly path: readonly (string | number)[]
+  readonly path: readonly ProfilePathSegment[]
   readonly transform: ProfileMetricTransform
 }
 
@@ -138,7 +154,40 @@ export function assertProfileCaptureContract(contract: ProfileCaptureContract): 
     // whether that page happened to be fetched; keep evidence deterministic.
     if (!endpoint.required) fail(contract, `metric ${metric} must come from a required endpoint`)
     if (field.path.length === 0) fail(contract, `metric ${metric} path is empty`)
+    for (const timeframe of contract.timeframes) {
+      if (resolveProfileMetricPath(field.path, timeframe) === null) {
+        fail(contract, `metric ${metric} path has no key for ${timeframe}d`)
+      }
+    }
   }
+}
+
+/**
+ * The concrete path of a metric for one timeframe, or null when a
+ * `byTimeframe` step names no (or an empty) key for it.
+ */
+export function resolveProfileMetricPath(
+  path: readonly ProfilePathSegment[],
+  timeframe: RankingTimeframe
+): Array<string | number> | null {
+  const resolved: Array<string | number> = []
+  for (const segment of path) {
+    if (typeof segment === 'string' || typeof segment === 'number') {
+      resolved.push(segment)
+      continue
+    }
+    const keys = Object.keys(segment.byTimeframe)
+    const key = segment.byTimeframe[String(timeframe) as '7' | '30' | '90']
+    if (
+      keys.some((tf) => tf !== '7' && tf !== '30' && tf !== '90') ||
+      typeof key !== 'string' ||
+      key.length === 0
+    ) {
+      return null
+    }
+    resolved.push(key)
+  }
+  return resolved
 }
 
 /** The sha256 the registration migration inserts as contract_sha256. */
@@ -182,12 +231,15 @@ export function parsedStatsMetricValue(
 }
 
 /**
- * Registered contracts, keyed by source slug. EMPTY by design: declaring a
- * source is a reviewed change that adds its contract here AND a migration
- * that registers profileCaptureContractSha256(contract) for it (see
- * docs/PROFILE_CAPTURE_EVIDENCE.md).
+ * Registered contracts, keyed by source slug. Declaring a source is a
+ * reviewed change that adds its contract here AND a migration that registers
+ * profileCaptureContractSha256(contract) for it (see
+ * docs/PROFILE_CAPTURE_EVIDENCE.md); until that row exists the ledger refuses
+ * the attempt and the profile is published unattested.
  */
-const PROFILE_CAPTURE_CONTRACTS: ReadonlyMap<string, ProfileCaptureContract> = new Map()
+const PROFILE_CAPTURE_CONTRACTS: ReadonlyMap<string, ProfileCaptureContract> = new Map([
+  ['bybit_copytrade', BYBIT_COPYTRADE_PROFILE_CAPTURE],
+])
 
 export function getProfileCaptureContract(
   sourceSlug: string,

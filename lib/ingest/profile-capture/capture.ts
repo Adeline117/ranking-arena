@@ -22,6 +22,7 @@ import {
   assertProfileCaptureContract,
   parsedStatsMetricValue,
   profileContractMetrics,
+  resolveProfileMetricPath,
   type ProfileAttestableMetric,
   type ProfileCaptureContract,
   type ProfileEndpointContract,
@@ -162,7 +163,8 @@ export function profileRequestProjection(
   }
 }
 
-function fieldValue(payload: unknown, path: readonly (string | number)[]): unknown {
+function fieldValue(payload: unknown, path: readonly (string | number)[] | null): unknown {
+  if (path === null) return undefined
   let value = payload
   for (const segment of path) {
     if (typeof segment === 'number') {
@@ -198,6 +200,8 @@ function applyTransform(value: number, transform: ProfileMetricTransform): numbe
       return Math.abs(value)
     case 'abs_fraction_to_percent':
       return Math.abs(value) * 100
+    case 'decimal_e8':
+      return value / 1e8
   }
 }
 
@@ -288,7 +292,8 @@ export function buildProfileAcquisition(input: BuildProfileAcquisitionInput): Pr
     if (parsedValue === null || parsedValue === undefined) continue // honest absence
     const parsed = finiteNumber(parsedValue)
     const page = pagesByEndpoint.get(field.endpoint)
-    const rawValue = page ? fieldValue(page.payload, field.path) : undefined
+    const path = resolveProfileMetricPath(field.path, input.timeframe)
+    const rawValue = page ? fieldValue(page.payload, path) : undefined
     const raw = rawNumber(rawValue)
     if (
       parsed === null ||
@@ -300,14 +305,14 @@ export function buildProfileAcquisition(input: BuildProfileAcquisitionInput): Pr
       return profileOutcome(
         'processing_failed',
         'projection_mismatch',
-        `${metric}: parser ${String(parsedValue)} vs ${field.endpoint}.${field.path.join('.')}=${JSON.stringify(rawValue)}`
+        `${metric}: parser ${String(parsedValue)} vs ${field.endpoint}.${(path ?? []).join('.')}=${JSON.stringify(rawValue)}`
       )
     }
     const stored = input.stored === null ? null : parsedStatsMetricValue(input.stored, metric)
     if (stored !== parsed) continue // clamped / nulled by validation
     metrics[metric] = {
       endpoint: field.endpoint,
-      path: [...field.path],
+      path: path ?? [],
       raw_value: rawValue as number | string,
       value: parsed,
     }

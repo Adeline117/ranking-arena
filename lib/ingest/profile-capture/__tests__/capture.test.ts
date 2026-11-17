@@ -153,6 +153,30 @@ describe('profile capture contract', () => {
       'a non-attestable metric',
       { metrics: { aum: { endpoint: 'detail', path: ['x'], transform: 'identity' } } },
     ],
+    [
+      'a per-timeframe key missing a contracted window',
+      {
+        metrics: {
+          pnl: {
+            endpoint: 'detail',
+            path: ['data', { byTimeframe: { '90': 'pnl90' } }],
+            transform: 'identity',
+          },
+        },
+      },
+    ],
+    [
+      'a per-timeframe key for an unknown window',
+      {
+        metrics: {
+          pnl: {
+            endpoint: 'detail',
+            path: ['data', { byTimeframe: { '30': 'pnl30', '90': 'pnl90', '180': 'x' } }],
+            transform: 'identity',
+          },
+        },
+      },
+    ],
   ])('rejects %s', (_label, change) => {
     expect(() =>
       assertProfileCaptureContract({ ...CONTRACT, ...change } as ProfileCaptureContract)

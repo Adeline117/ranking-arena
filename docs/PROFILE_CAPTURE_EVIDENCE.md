@@ -50,9 +50,13 @@ export const BINANCE_FUTURES_PROFILE_CAPTURE: ProfileCaptureContract = {
 }
 ```
 
-- `transform`：`identity`、`fraction_to_percent`（×100）、`abs`、`abs_fraction_to_percent`。
+- `transform`：`identity`、`fraction_to_percent`（×100）、`abs`、`abs_fraction_to_percent`、
+  `decimal_e8`（÷1e8，Bybit 的 `…E8` 定点字段）。
   存储值 = transform(RAW 值)，按相对误差 1e-9 比较（只吸收浮点误差，不吸收单位或取整差异）。
 - 指标只能来自 required 端点；`path` 里的数字是数组下标；RAW 值可以是数字或数字字符串。
+- 一个响应里用周期前缀区分各周期字段的来源（例如 Bybit leader-income 的
+  `sevenDayProfitE8` / `thirtyDayProfitE8` / `ninetyDayProfitE8`），`path` 里可以用
+  `{ byTimeframe: { '7': …, '30': …, '90': … } }` 这一步，每个契约周期都必须有键；清单里记录解析后的具体路径。
 - `assertProfileCaptureContract` 会拒绝：名字和来源不符、周期不在 7/30/90、端点重复、非 https、
   不可认证的指标名、指标指向 optional 端点。
 
@@ -109,7 +113,9 @@ complete 时一个指标被认证，当且仅当：解析器值非空、等于 R
 1. 在来源的 adapter 目录写契约（例如 `lib/ingest/adapters/<adapter>/profile-capture-contract.ts`），
    对照真实的 `getProfile` URL 和 `parseProfile` 代码写端点和字段路径。
 2. 用录制的页面写测试（见下节），证明契约认证的正是你声明的指标。
-3. 把契约加进 `contract.ts` 里的 `PROFILE_CAPTURE_CONTRACTS`（键 = source slug）。
+3. 把契约加进 `contract.ts` 里的 `PROFILE_CAPTURE_CONTRACTS`（键 = source slug）。契约文件只能
+   `import type` contract.ts（contract.ts 要导入它来建注册表，值导入会形成加载顺序循环），
+   `document` 直接写字面量 `'arena.profile-capture-contract@1'`。
 4. 用 `scripts/new-migration.sh register_<source>_profile_capture_contract` 生成注册迁移：
    ```sql
    INSERT INTO arena.profile_capture_contracts
@@ -153,4 +159,14 @@ it('binance_futures profile contract attests drawdown and win rate', () => {
 
 ## 现状
 
-注册表和代码里的契约表都是空的：上线这些迁移和 worker 后，行为与 #489 完全一样，直到某个来源按上面的步骤声明。
+数据库注册表是空的：上线这些迁移和 worker 后，行为与 #489 完全一样，直到某个来源的注册迁移落地。
+
+代码里已声明（注册迁移由集成统一编写）：
+
+| 来源              | 契约                                | 周期      | 认证指标 | sha256                                                             |
+| ----------------- | ----------------------------------- | --------- | -------- | ------------------------------------------------------------------ |
+| `bybit_copytrade` | `bybit_copytrade-profile-capture@1` | 7, 30, 90 | `pnl`    | `f9a5c9b7cd8ccc9b8923b75d32807c56f6e3f6ed6c6129f248989c1f28feb555` |
+
+bybit_copytrade：板没有 PnL 列，PnL 取 leader-income 的 `{seven|thirty|ninety}DayProfitE8`（交易所自己的
+分周期值）。交易次数不认证：leader-income 没有分周期的交易次数字段，解析器的 `totalPositions` 是
+`WinCount + LossCount` 的和（与交易所自己的 `cumTradeCount` 不相等），不是交易所提供的值。
