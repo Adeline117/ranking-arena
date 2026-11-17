@@ -117,6 +117,8 @@ export function parseLbankLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedL
   for (let i = 0; i < records.length; i++) {
     const item = records[i]
     if (!item.uuid) continue
+    const headlineRoi = num(item.sprofitRate)
+    const headlinePnl = num(item.sprofit)
     rows.push({
       exchangeTraderId: String(item.uuid),
       rank: i + 1, // positional; re-anchored across pages by the processor
@@ -127,8 +129,12 @@ export function parseLbankLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedL
       botStrategy: null,
       // s* fields = the window selected by the request's sortField prefix;
       // values are ALREADY percent.
-      headlineRoi: num(item.sprofitRate),
-      headlinePnl: num(item.sprofit),
+      headlineRoi,
+      headlinePnl,
+      headlineMetricSources: {
+        ...(headlineRoi === null ? {} : { roi: { fieldPath: 'data.records[].sprofitRate' } }),
+        ...(headlinePnl === null ? {} : { pnl: { fieldPath: 'data.records[].sprofit' } }),
+      },
       headlineWinRate: num(item.swinRate),
       // Board carries drawDown (already percent — "14.21" = 14.21%, per header) and
       // AUM (followerBalance, absolute). Extract them — were raw-only, capping

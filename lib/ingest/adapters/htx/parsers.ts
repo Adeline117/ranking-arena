@@ -89,6 +89,8 @@ export function parseHtxLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLea
   for (let i = 0; i < items.length; i++) {
     const item = items[i]
     if (item.uid === null || item.uid === undefined) continue
+    const headlineRoi = pct(item.profitRate90)
+    const headlinePnl = num(item.profit90)
     rows.push({
       exchangeTraderId: String(item.uid),
       rank: i + 1, // positional; re-anchored across pages by the processor
@@ -97,9 +99,13 @@ export function parseHtxLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLea
       walletAddress: null,
       traderKind: 'human', // no bot product on these boards
       botStrategy: null,
-      headlineRoi: pct(item.profitRate90),
-      headlinePnl: num(item.profit90),
+      headlineRoi,
+      headlinePnl,
       headlineWinRate: pct(item.winRate),
+      headlineMetricSources: {
+        ...(headlineRoi === null ? {} : { roi: { fieldPath: 'data.itemList[].profitRate90' } }),
+        ...(headlinePnl === null ? {} : { pnl: { fieldPath: 'data.itemList[].profit90' } }),
+      },
       // Board carries per-trader mdd (a fraction, per header doc + profile parser's
       // pct(perf.mdd)) and aum (absolute). Extract them — were raw-only, so HTX
       // captured MDD/AUM only for top-N profiles (~40-64%). Garbage >100% MDD

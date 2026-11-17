@@ -115,6 +115,8 @@ export function parseCoinexLeaderboardPage(raw: unknown, _ctx: ParseCtx): Parsed
   for (let i = 0; i < items.length; i++) {
     const item = items[i]
     if (!item.trader_id) continue
+    const headlineRoi = pct(item.profit_rate)
+    const headlinePnl = num(item.profit_amount)
     rows.push({
       exchangeTraderId: String(item.trader_id),
       rank: i + 1, // positional; re-anchored across pages by the processor
@@ -123,9 +125,13 @@ export function parseCoinexLeaderboardPage(raw: unknown, _ctx: ParseCtx): Parsed
       walletAddress: null,
       traderKind: 'human', // no bot product on this board
       botStrategy: null,
-      headlineRoi: pct(item.profit_rate),
-      headlinePnl: num(item.profit_amount),
+      headlineRoi,
+      headlinePnl,
       headlineWinRate: pct(item.winning_rate),
+      headlineMetricSources: {
+        ...(headlineRoi === null ? {} : { roi: { fieldPath: 'data.data[].profit_rate' } }),
+        ...(headlinePnl === null ? {} : { pnl: { fieldPath: 'data.data[].profit_amount' } }),
+      },
       // Board carries mdd (fraction, "0.0594"→5.94%) and aum (absolute USD) — extract
       // them (were raw-only, so board-tier traders had no MDD/AUM).
       headlineMdd: pct(item.mdd),

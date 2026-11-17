@@ -18,13 +18,11 @@ import type { RankingTimeframe, RawPage } from './core/types'
 import {
   LEADERBOARD_ACQUISITION_MANIFEST_V3_CONTRACT,
   LEADERBOARD_ACQUISITION_MANIFEST_V4_CONTRACT,
-  parseLeaderboardAcquisitionManifest,
   parseLeaderboardAcquisitionManifestV3,
   parseLeaderboardAcquisitionManifestV4,
   projectPartitionedNumericParserPage,
   type BuiltLeaderboardAcquisitionManifestV3,
   type BuiltLeaderboardAcquisitionManifestV4,
-  type LeaderboardAcquisitionManifest,
   type LeaderboardAcquisitionManifestV3,
   type LeaderboardAcquisitionManifestV4,
 } from './acquisition-manifest'
@@ -204,16 +202,6 @@ function assertTierARawTransactionRunner(
   }
 }
 
-export interface WriteLeaderboardRawArtifactSetInput {
-  sourceId: number
-  sourceSlug: string
-  timeframe: RankingTimeframe
-  sourceRunId: string
-  sourcePages: RawPage[]
-  manifest: LeaderboardAcquisitionManifest
-  observationCycleId: string | null
-}
-
 export interface LeaderboardRawArtifactSetReceipt {
   sourcePayload: RawObjectReceipt
   populationManifest: RawObjectReceipt
@@ -241,7 +229,6 @@ export interface AttemptBoundLeaderboardRawArtifactSetReceipt extends Leaderboar
 }
 
 type LeaderboardAcquisitionManifestLike =
-  | LeaderboardAcquisitionManifest
   | LeaderboardAcquisitionManifestV3
   | LeaderboardAcquisitionManifestV4
 
@@ -490,27 +477,6 @@ function validateLeaderboardManifestPages(
   ) {
     throw artifactSetError('parser input digest does not match the persisted source pages')
   }
-}
-
-function validateLeaderboardRawArtifactSetInput(
-  input: WriteLeaderboardRawArtifactSetInput
-): LeaderboardAcquisitionManifest {
-  validateLeaderboardRawArtifactSetCoordinates(input)
-
-  const manifest = parseLeaderboardAcquisitionManifest(input.manifest)
-  if (strictCanonicalSha256(manifest) !== input.sourceRunId) {
-    throw artifactSetError('canonical manifest hash does not match source run id')
-  }
-  if (
-    manifest.source.id !== input.sourceId ||
-    manifest.source.slug !== input.sourceSlug ||
-    manifest.timeframe !== input.timeframe ||
-    manifest.observation_cycle_id !== input.observationCycleId
-  ) {
-    throw artifactSetError('manifest source, timeframe, or cycle binding does not match the input')
-  }
-  validateLeaderboardManifestPages(input, manifest)
-  return manifest
 }
 
 function prepareLeaderboardTrustArtifact(
@@ -887,68 +853,6 @@ async function persistLeaderboardTrustPointersInTransaction(
     )
   }
   return verified.receipts
-}
-
-/**
- * Persist one capture payload and its canonical population manifest as an
- * idempotent pair. Storage is written before the short PG transaction; a
- * deterministic retry verifies any existing object byte-for-byte and returns
- * the same database pointers. No failure path deletes Storage evidence.
- */
-export async function writeLeaderboardRawArtifactSet(
-  input: WriteLeaderboardRawArtifactSetInput,
-  runTransaction: IngestTransactionRunner
-): Promise<LeaderboardRawArtifactSetReceipt> {
-  assertTierARawTransactionRunner(runTransaction)
-  const manifest = validateLeaderboardRawArtifactSetInput(input)
-  // Snapshot every later-read binding before the first Storage await. Callers
-  // cannot race a mutable input object against the database transaction.
-  const normalizedInput: NormalizedLeaderboardRawArtifactSetInput = {
-    sourceId: input.sourceId,
-    sourceSlug: input.sourceSlug,
-    timeframe: input.timeframe,
-    sourceRunId: input.sourceRunId,
-    sourcePages: [...input.sourcePages],
-    manifest,
-    observationCycleId: input.observationCycleId,
-  }
-  const commonMeta = {
-    surface: 'tier_a_leaderboard',
-    source_run_id: normalizedInput.sourceRunId,
-    ...(normalizedInput.observationCycleId
-      ? { observation_cycle_id: normalizedInput.observationCycleId }
-      : {}),
-  }
-  const artifacts = [
-    prepareLeaderboardTrustArtifact(
-      normalizedInput,
-      'source_payload',
-      normalizedInput.sourcePages,
-      {
-        ...commonMeta,
-        pageCount: normalizedInput.sourcePages.length,
-        parserPageCount: manifest.parser_input.page_count,
-        parserSourcePageOrdinals: manifest.parser_input.transformation.source_page_ordinals,
-      }
-    ),
-    prepareLeaderboardTrustArtifact(normalizedInput, 'population_manifest', manifest, {
-      ...commonMeta,
-      data_contract: manifest.data_contract,
-    }),
-  ] as const
-  if (artifacts[1].contentHash !== normalizedInput.sourceRunId) {
-    throw artifactSetError('serialized manifest digest does not match source run id')
-  }
-  if (artifacts[0].storagePath === artifacts[1].storagePath) {
-    throw artifactSetError('source payload and manifest Storage paths must differ')
-  }
-
-  for (const artifact of artifacts) {
-    artifact.durableCompressedBytes = await uploadDeterministicRaw(artifact)
-  }
-  return runTransaction((transaction) =>
-    persistLeaderboardTrustPointersInTransaction(transaction, normalizedInput, artifacts)
-  )
 }
 
 interface PreparedAttemptBoundLeaderboardManifest {

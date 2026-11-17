@@ -13,6 +13,7 @@ import {
   parseBitunixProfile,
 } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
+import { resolveHeadlineLineage } from '../../../testing/headline-lineage'
 
 function fixture(name: string): unknown {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
@@ -27,6 +28,15 @@ const ctx: ParseCtx = {
 }
 
 describe('parseBitunixLeaderboardPage', () => {
+  it('bitunix_futures: lineage resolves against the registered board contract', () => {
+    const page = parseBitunixLeaderboardPage(fixture('trader-list-30d-p1.json'), ctx)
+    expect(page.rows.length).toBeGreaterThan(0)
+    expect(resolveHeadlineLineage(page.rows, 'bitunix_futures')).toEqual({
+      resolved: page.rows.length * 2,
+      unresolved: [],
+    })
+  })
+
   it('parses the 30d board (statisticType=2; fractions → percent)', () => {
     const page = parseBitunixLeaderboardPage(fixture('trader-list-30d-p1.json'), ctx)
     expect(page.reportedTotal).toBe(4025)

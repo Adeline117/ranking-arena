@@ -13,6 +13,7 @@ import {
   parseLbankProfile,
 } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
+import { resolveHeadlineLineage } from '../../../testing/headline-lineage'
 
 function fixture(name: string): unknown {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
@@ -27,6 +28,15 @@ const ctx: ParseCtx = {
 }
 
 describe('parseLbankLeaderboardPage', () => {
+  it('lbank_futures: lineage resolves against the registered board contract', () => {
+    const page = parseLbankLeaderboardPage(fixture('getall-30d-p1.json'), ctx)
+    expect(page.rows.length).toBeGreaterThan(0)
+    expect(resolveHeadlineLineage(page.rows, 'lbank_futures')).toEqual({
+      resolved: page.rows.length * 2,
+      unresolved: [],
+    })
+  })
+
   it('parses the 30d board (s* selected fields, values already percent)', () => {
     const page = parseLbankLeaderboardPage(fixture('getall-30d-p1.json'), ctx)
     expect(page.reportedTotal).toBe(134)

@@ -2,6 +2,7 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { parseXtLeaderboardPage, parseXtLeaderboardSeries, parseXtProfile } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
+import { resolveHeadlineLineage } from '../../../testing/headline-lineage'
 
 function fixture(name: string): unknown {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
@@ -18,6 +19,15 @@ const ctx: ParseCtx = {
 const spotCtx: ParseCtx = { ...ctx, sourceSlug: 'xt_spot', meta: { boardKey: 'spot' } }
 
 describe('parseXtLeaderboardPage', () => {
+  it('xt_futures: lineage resolves against the registered board contract', () => {
+    const page = parseXtLeaderboardPage(fixture('leaderboard-fut-30.json'), ctx)
+    expect(page.rows.length).toBeGreaterThan(0)
+    expect(resolveHeadlineLineage(page.rows, 'xt_futures')).toEqual({
+      resolved: page.rows.length * 2,
+      unresolved: [],
+    })
+  })
+
   it('parses the futures v3 board (result.total + decimal rates)', () => {
     const page = parseXtLeaderboardPage(fixture('leaderboard-fut-30.json'), ctx)
     expect(page.reportedTotal).toBe(1873)

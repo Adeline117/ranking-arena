@@ -13,6 +13,7 @@ import {
   parseHtxProfile,
 } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
+import { resolveHeadlineLineage } from '../../../testing/headline-lineage'
 
 function fixture(name: string): unknown {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
@@ -27,6 +28,17 @@ const ctx: ParseCtx = {
 }
 
 describe('parseHtxLeaderboardPage', () => {
+  it.each([
+    ['htx_futures', 'rank-futures-p1.json'],
+    ['htx_spot', 'rank-spot-p1.json'],
+  ])('%s: ROI/PnL lineage resolves against the registered board contract', (slug, file) => {
+    const page = parseHtxLeaderboardPage(fixture(file), ctx)
+    expect(resolveHeadlineLineage(page.rows, slug)).toEqual({
+      resolved: page.rows.length * 2,
+      unresolved: [],
+    })
+  })
+
   it('parses the futures rank page (fraction → percent, userSign in traderMeta)', () => {
     const page = parseHtxLeaderboardPage(fixture('rank-futures-p1.json'), ctx)
     expect(page.reportedTotal).toBe(532)

@@ -7,6 +7,7 @@ import {
   parseBybitCopytradeProfile,
 } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
+import { resolveHeadlineLineage } from '../../../testing/headline-lineage'
 
 function fixture(name: string): unknown {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
@@ -21,6 +22,15 @@ const ctx: ParseCtx = {
 }
 
 describe('parseBybitCopytradeLeaderboardPage', () => {
+  it('bybit_copytrade: lineage resolves against the registered board contract', () => {
+    const page = parseBybitCopytradeLeaderboardPage(fixture('leaderboard-p1.json'), ctx)
+    expect(page.rows.length).toBeGreaterThan(0)
+    expect(resolveHeadlineLineage(page.rows, 'bybit_copytrade')).toEqual({
+      resolved: page.rows.length,
+      unresolved: [],
+    })
+  })
+
   it('parses a live all-traders page (display-string columns + totalCount)', () => {
     const page = parseBybitCopytradeLeaderboardPage(fixture('leaderboard-p1.json'), ctx)
     expect(page.reportedTotal).toBe(8781)
