@@ -339,8 +339,18 @@ pm2_snapshot() {
       const apps = JSON.parse(raw).filter((app) => app.name === appName)
       if (apps.length !== 1) process.exit(41)
       const app = apps[0]
+      // A stopped entry written by an older PM2 carries neither `pid` nor
+      // `instances`. A stopped process has no pid, and a fork-mode entry is a
+      // single instance, so those two absences have exactly one meaning. Any
+      // other state keeps the fields mandatory.
+      const stopped = app.pm2_env?.status === "stopped"
+      const legacyPid = stopped && app.pid === undefined ? 0 : app.pid
+      const legacyInstances =
+        stopped && app.pm2_env?.instances === undefined && app.pm2_env?.exec_mode === "fork_mode"
+          ? 1
+          : app.pm2_env?.instances
       const values = [
-        app.pid,
+        legacyPid,
         app.pm2_env?.status,
         app.pm2_env?.pm_cwd,
         app.pm2_env?.exec_interpreter,
@@ -349,7 +359,7 @@ pm2_snapshot() {
         JSON.stringify(app.pm2_env?.args ?? []),
         JSON.stringify(app.pm2_env?.node_args ?? []),
         app.pm2_env?.exec_mode,
-        app.pm2_env?.instances,
+        legacyInstances,
       ]
       if (values.some((value) => String(value ?? "").match(/[\n\r\x1f]/))) process.exit(42)
       process.stdout.write(values.map((value) => String(value ?? "")).join("\x1f") + "\n")
@@ -398,12 +408,22 @@ case "$OLD_CWD/" in
   *) fail 'existing PM2 cwd is outside the managed release root' ;;
 esac
 
-OLD_SHA="$(sed -n '1p' "$OLD_CWD/DEPLOYED_SHA" 2>/dev/null || true)"
+# Identity of the existing release: its DEPLOYED_SHA stamp, or for a legacy
+# release that predates the stamp, the commit its Git worktree is on. The
+# stopped-baseline proofs below re-read it through the same function, so a
+# legacy release is held to the identity it was first observed with.
+existing_release_sha() {
+  local sha
+  sha="$(sed -n '1p' "$OLD_CWD/DEPLOYED_SHA" 2>/dev/null || true)"
+  if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+    sha="$(git_command -C "$OLD_CWD" rev-parse --verify HEAD^{commit} 2>/dev/null)" || return 1
+  fi
+  [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || return 1
+  printf '%s\n' "$sha"
+}
+
+OLD_SHA="$(existing_release_sha)" || fail 'existing legacy release has no provable Git identity'
 OLD_RELEASE_ID="$(sed -n '1p' "$OLD_CWD/WORKER_RELEASE_ID" 2>/dev/null || true)"
-if [[ ! "$OLD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-  OLD_SHA="$(git_command -C "$OLD_CWD" rev-parse --verify HEAD^{commit})" || \
-    fail 'existing legacy release has no provable Git identity'
-fi
 [[ "$OLD_SHA" =~ ^[0-9a-f]{40}$ ]] || fail 'existing release SHA is malformed'
 if [[ ! "$OLD_RELEASE_ID" =~ ^[0-9a-f]{64}$ ]]; then
   OLD_RELEASE_ID=''
@@ -626,7 +646,7 @@ prove_stopped_local_baseline() {
   snapshot="$(pm2_snapshot)" || return 1
   [ "$snapshot" = "$BASELINE_SNAPSHOT" ] || return 1
   [ "$(hash_shared_env)" = "$SHARED_ENV_SHA256" ] || return 1
-  [ "$(sed -n '1p' "$OLD_CWD/DEPLOYED_SHA" 2>/dev/null || true)" = "$OLD_SHA" ] || return 1
+  [ "$(existing_release_sha)" = "$OLD_SHA" ] || return 1
   if [ -n "$OLD_RELEASE_ID" ]; then
     [ "$(sed -n '1p' "$OLD_CWD/WORKER_RELEASE_ID" 2>/dev/null || true)" = "$OLD_RELEASE_ID" ] || return 1
   fi
@@ -638,7 +658,7 @@ prove_stopped_local_baseline() {
   assert_stopped_pm2_dumps || return 1
   [ "$(pm2_snapshot)" = "$BASELINE_SNAPSHOT" ] || return 1
   [ "$(hash_shared_env)" = "$SHARED_ENV_SHA256" ] || return 1
-  [ "$(sed -n '1p' "$OLD_CWD/DEPLOYED_SHA" 2>/dev/null || true)" = "$OLD_SHA" ] || return 1
+  [ "$(existing_release_sha)" = "$OLD_SHA" ] || return 1
   if [ -n "$OLD_RELEASE_ID" ]; then
     [ "$(sed -n '1p' "$OLD_CWD/WORKER_RELEASE_ID" 2>/dev/null || true)" = "$OLD_RELEASE_ID" ] || return 1
   fi
