@@ -178,8 +178,10 @@ describe('binance profile capture contracts', () => {
       metrics: ['mdd'],
     })
     expect(result.manifest?.metrics.mdd?.value).toBe(13.201449)
-    // The same 17.59 is returned for 7D/30D/90D: not a window value.
-    expect(result.parsed?.winRate).toBe(17.59)
+    // The same 17.59 is returned for 7D/30D/90D: not a window value, so the
+    // parser keeps it as lifetime_win_rate and leaves the window win rate empty.
+    expect(result.parsed?.winRate).toBeNull()
+    expect(result.parsed?.extras.lifetime_win_rate).toBe(17.59)
     expect(result.manifest?.metrics.win_rate).toBeUndefined()
   })
 

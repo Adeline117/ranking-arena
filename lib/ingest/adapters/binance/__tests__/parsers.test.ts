@@ -130,6 +130,9 @@ describe('parseBinanceProfile', () => {
     expect(st.winPositions).toBeNull() // spot has winDays, not winOrders
     expect(typeof st.extras.win_days).toBe('number')
     expect(st.extras.days_trading).toBe(637)
+    // The spot ratio is lifetime (win days / join days), not this window's.
+    expect(st.winRate).toBeNull()
+    expect(typeof st.extras.lifetime_win_rate).toBe('number')
     expect(st.copierCount).toBe(160)
     expect(profile.series.map((s) => s.metric).sort()).toEqual(['pnl', 'roi'])
   })

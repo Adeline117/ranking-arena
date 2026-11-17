@@ -204,7 +204,15 @@ export function parseBinanceProfile(raw: unknown, ctx: ParseCtx): ParsedProfile 
   const windowMatches = perf?.timeRange === undefined || perf.timeRange === `${tf}D`
   if (perf && windowMatches) {
     const extras: Record<string, unknown> = {}
-    if (perf.winDays !== undefined) extras.win_days = int(perf.winDays) // spot only
+    // Spot performance.winRate is the same for 7D/30D/90D and equals detail
+    // winDays / joinDays: a lifetime win-day ratio, not a window win rate
+    // (2026-11-16 probe). It is kept as lifetime_win_rate and never stored as
+    // this window's win rate.
+    const isSpot = perf.winDays !== undefined
+    if (isSpot) {
+      extras.win_days = int(perf.winDays)
+      extras.lifetime_win_rate = num(perf.winRate)
+    }
     if (det) {
       // TF-independent Lead Trader Overview (spec §11.1) → extras
       const margin = det.marginBalance ?? det.walletBalanceAmount // futures | spot
@@ -231,7 +239,7 @@ export function parseBinanceProfile(raw: unknown, ctx: ParseCtx): ParsedProfile 
       pnl: num(perf.pnl),
       sharpe: num(perf.sharpRatio ?? det?.sharpRatio), // Binance exposes Sharpe!
       mdd: num(perf.mdd), // already percent
-      winRate: num(perf.winRate), // already percent
+      winRate: isSpot ? null : num(perf.winRate), // already percent
       winPositions: int(perf.winOrders), // futures only
       totalPositions: int(perf.totalOrder), // futures only
       copierPnl: num(perf.copierPnl),

@@ -18,6 +18,10 @@
  *   - spot winRate: identical for 7D/30D/90D and equal to detail winDays /
  *     joinDays (83/914 = 9.08 %), i.e. a lifetime win-day ratio, not a
  *     window win rate. Attesting it as a 7D/30D/90D value would mislabel it.
+ *     The parser stores it as extras.lifetime_win_rate and leaves the window
+ *     win rate empty. The public eligibility policy requires a window win
+ *     rate (arena.leaderboard_rank_row_is_public_eligible), so binance_spot
+ *     stays off the ranking until Binance publishes one.
  *   - sharpRatio: identical across windows on both boards (lifetime value).
  *   - roi/pnl/win rate (futures): the Tier-A board already supplies them.
  *
