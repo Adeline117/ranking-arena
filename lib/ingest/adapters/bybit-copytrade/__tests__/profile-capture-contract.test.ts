@@ -55,40 +55,90 @@ const run = (timeframe: RankingTimeframe, pages: RawPage[], exchangeTraderId = M
     exchangeTraderId,
   })
 
+const PREFIX: Record<RankingTimeframe, string> = { 7: 'sevenDay', 30: 'thirtyDay', 90: 'ninetyDay' }
+const ATTESTED = ['mdd', 'pnl', 'roi', 'sharpe', 'sortino', 'win_rate'] as const
+const FIELD = {
+  roi: ['YieldRateE4', 1e2],
+  pnl: ['ProfitE8', 1e8],
+  win_rate: ['ProfitWinRateE4', 1e2],
+  mdd: ['DrawDownE4', 1e2],
+  sharpe: ['SharpeRatioE4', 1e4],
+  sortino: ['SortinoRatioE4', 1e4],
+} as const
+
 describe('bybit_copytrade profile capture contract', () => {
   it('is the registered contract for the source', () => {
     expect(getProfileCaptureContract('bybit_copytrade')).toBe(BYBIT_COPYTRADE_PROFILE_CAPTURE)
     // The registration migration inserts this value; any contract change must
     // bump @n and register a new row.
     expect(profileCaptureContractSha256(BYBIT_COPYTRADE_PROFILE_CAPTURE)).toBe(
-      'f9a5c9b7cd8ccc9b8923b75d32807c56f6e3f6ed6c6129f248989c1f28feb555'
+      'b9e04adab7fe2d1d31c54dadba418f71e56ba72a66c44abef8efd89bfa5bb212'
     )
   })
 
   it.each([
-    [7, 'sevenDayProfitE8', -214.72556189],
-    [30, 'thirtyDayProfitE8', -300.1281687],
-    [90, 'ninetyDayProfitE8', -356.53843916],
-  ] as const)('%sd capture attests exactly the exchange PnL (%s)', (timeframe, key, pnl) => {
+    [
+      7,
+      {
+        pnl: -214.72556189,
+        roi: -19.45,
+        win_rate: 7.55,
+        mdd: 17.71,
+        sharpe: -2.4707,
+        sortino: -1.5208,
+      },
+    ],
+    [
+      30,
+      {
+        pnl: -300.1281687,
+        roi: -25.23,
+        win_rate: 10.61,
+        mdd: 23.02,
+        sharpe: -0.7694,
+        sortino: -1.1103,
+      },
+    ],
+    [
+      90,
+      {
+        pnl: -356.53843916,
+        roi: -28.62,
+        win_rate: 14.04,
+        mdd: 59.37,
+        sharpe: -0.4258,
+        sortino: -0.6647,
+      },
+    ],
+  ] as const)('%sd capture attests exactly the exchange window values', (timeframe, values) => {
     const result = expectProfileContractAttests({
       contract: BYBIT_COPYTRADE_PROFILE_CAPTURE,
       timeframe,
       pages: [bundlePage(timeframe)],
       parseProfile: parseBybitCopytradeProfile,
       exchangeTraderId: MARK,
-      metrics: ['pnl'],
+      metrics: ATTESTED,
     })
-    expect(result.stored?.pnl).toBe(pnl)
-    expect(result.manifest?.metrics).toEqual({
-      pnl: {
+    expect(result.stored).toMatchObject({
+      pnl: values.pnl,
+      roi: values.roi,
+      winRate: values.win_rate,
+      mdd: values.mdd,
+      sharpe: values.sharpe,
+      extras: expect.objectContaining({ sortino: values.sortino }),
+    })
+    const income = (fixture('leader-income.json') as { result: Record<string, string | number> })
+      .result
+    for (const metric of ATTESTED) {
+      const key = `${PREFIX[timeframe]}${FIELD[metric][0]}`
+      expect(result.manifest?.metrics[metric]).toEqual({
         endpoint: 'profile_bundle',
         path: ['income', 'result', key],
-        raw_value: (fixture('leader-income.json') as { result: Record<string, string> }).result[
-          key
-        ],
-        value: pnl,
-      },
-    })
+        raw_value: income[key],
+        value: values[metric],
+      })
+      expect(Number(income[key]) / FIELD[metric][1]).toBe(values[metric])
+    }
     expect(result.manifest).toMatchObject({
       exchange_trader_id: MARK,
       timeframe,
@@ -96,7 +146,7 @@ describe('bybit_copytrade profile capture contract', () => {
     })
     // The parser's win+loss sum is never attested (not an exchange field).
     expect(result.stored?.totalPositions).not.toBeNull()
-    expect(result.attestedMetrics).toEqual(['pnl'])
+    expect(result.attestedMetrics).not.toContain('total_positions')
   })
 
   it('binds the request to the trader and the timeframe', () => {
@@ -140,7 +190,7 @@ describe('bybit_copytrade profile capture contract', () => {
     const result = run(30, [page])
     expect(result.terminalState).toBe('complete')
     expect(result.stored?.pnl).toBeNull()
-    expect(result.attestedMetrics).toEqual([])
+    expect(result.attestedMetrics).toEqual(['mdd', 'roi', 'sharpe', 'sortino', 'win_rate'])
   })
 
   it('a parser value that the declared field does not supply fails the capture', () => {
@@ -205,7 +255,7 @@ describe('bybit_copytrade getProfile surface', () => {
         pages: bundle.pages,
         parseProfile: parseBybitCopytradeProfile,
         exchangeTraderId: MARK,
-        metrics: ['pnl'],
+        metrics: ATTESTED,
       })
     }
     // Attested leader-income is fetched once per attempt; info stays cached.

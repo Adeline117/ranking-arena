@@ -557,6 +557,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:profile-acquisition-evidence-pg17
 
+      - name: Prove the bybit_copytrade profile contract attests through the ledger and reader
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:profile-capture-bybit-copytrade-pg17
+
       - name: Prove retention keeps metric-trust evidence
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin

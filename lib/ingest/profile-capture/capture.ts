@@ -200,6 +200,10 @@ function applyTransform(value: number, transform: ProfileMetricTransform): numbe
       return Math.abs(value)
     case 'abs_fraction_to_percent':
       return Math.abs(value) * 100
+    case 'decimal_e2':
+      return value / 1e2
+    case 'decimal_e4':
+      return value / 1e4
     case 'decimal_e8':
       return value / 1e8
   }

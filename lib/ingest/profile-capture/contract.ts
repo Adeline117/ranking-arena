@@ -40,14 +40,18 @@ export type ProfileAttestableMetric = (typeof PROFILE_ATTESTABLE_METRICS)[number
  * - identity: stored = raw
  * - fraction_to_percent: stored = raw * 100 (upstream 0.123 → 12.3 %)
  * - abs / abs_fraction_to_percent: drawdowns some sources sign negatively
- * - decimal_e8: fixed-point integer text scaled by 10^8 (Bybit `…E8` fields:
- *   "-21472556189" → -214.72556189); stored = raw / 1e8
+ * - decimal_e2 / decimal_e4 / decimal_e8: fixed-point integers scaled by
+ *   10^n; stored = raw / 10^n (Bybit `…E4` percents are E2 of a percent:
+ *   1771 → 17.71 %; `…SharpeRatioE4` -24707 → -2.4707; `…E8` money text
+ *   "-21472556189" → -214.72556189)
  */
 export type ProfileMetricTransform =
   | 'identity'
   | 'fraction_to_percent'
   | 'abs'
   | 'abs_fraction_to_percent'
+  | 'decimal_e2'
+  | 'decimal_e4'
   | 'decimal_e8'
 
 /**

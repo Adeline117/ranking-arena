@@ -51,7 +51,8 @@ export const BINANCE_FUTURES_PROFILE_CAPTURE: ProfileCaptureContract = {
 ```
 
 - `transform`：`identity`、`fraction_to_percent`（×100）、`abs`、`abs_fraction_to_percent`、
-  `decimal_e8`（÷1e8，Bybit 的 `…E8` 定点字段）。
+  `decimal_e2` / `decimal_e4` / `decimal_e8`（÷1e2 / ÷1e4 / ÷1e8，Bybit 的 `…E4`、`…E8` 定点字段；
+  `…E4` 百分比字段是百分数的 E2，例如 `1771` → 17.71 %）。
   存储值 = transform(RAW 值)，按相对误差 1e-9 比较（只吸收浮点误差，不吸收单位或取整差异）。
 - 指标只能来自 required 端点；`path` 里的数字是数组下标；RAW 值可以是数字或数字字符串。
 - 一个响应里用周期前缀区分各周期字段的来源（例如 Bybit leader-income 的
@@ -163,10 +164,14 @@ it('binance_futures profile contract attests drawdown and win rate', () => {
 
 代码里已声明（注册迁移由集成统一编写）：
 
-| 来源              | 契约                                | 周期      | 认证指标 | sha256                                                             |
-| ----------------- | ----------------------------------- | --------- | -------- | ------------------------------------------------------------------ |
-| `bybit_copytrade` | `bybit_copytrade-profile-capture@1` | 7, 30, 90 | `pnl`    | `f9a5c9b7cd8ccc9b8923b75d32807c56f6e3f6ed6c6129f248989c1f28feb555` |
+| 来源              | 契约                                | 周期      | 认证指标                                        | sha256                                                             |
+| ----------------- | ----------------------------------- | --------- | ----------------------------------------------- | ------------------------------------------------------------------ |
+| `bybit_copytrade` | `bybit_copytrade-profile-capture@1` | 7, 30, 90 | `roi` `pnl` `win_rate` `mdd` `sharpe` `sortino` | `b9e04adab7fe2d1d31c54dadba418f71e56ba72a66c44abef8efd89bfa5bb212` |
 
 bybit_copytrade：板没有 PnL 列，PnL 取 leader-income 的 `{seven|thirty|ninety}DayProfitE8`（交易所自己的
-分周期值）。交易次数不认证：leader-income 没有分周期的交易次数字段，解析器的 `totalPositions` 是
-`WinCount + LossCount` 的和（与交易所自己的 `cumTradeCount` 不相等），不是交易所提供的值。
+分周期值）。同一响应里还有交易所自己的分周期 ROI、胜率、回撤、Sharpe、Sortino，profile 发布会用它们覆盖板写入的值；
+板认证只在值不变时保留（20261116205144），所以只认证 PnL 的话，回撤一漂移就会把板的回撤认证也撤掉。
+因此 profile 写入的这些交易所值全部认证。不认证：交易次数（leader-income 没有分周期交易次数字段，解析器的
+`totalPositions` 是 `WinCount + LossCount` 的和，与交易所自己的 `cumTradeCount` 不相等）；跟单人数（不分周期，
+且解析器在 info 和 income 之间回退，声明单一路径会让回退变成 projection_mismatch）。
+PG17 证明：`npm run qa:profile-capture-bybit-copytrade-pg17`（真实 getProfile、解析器、契约哈希、写入 SQL 和 @3 读取器）。
