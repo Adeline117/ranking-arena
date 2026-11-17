@@ -312,6 +312,11 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # the worker that stamps board writes serves, no row is attested and every
 # trader_stats metric would publish as NULL, so it is postdeploy, after
 # 204006 (whose reader it replaces) and predeploy 20261116205144 (the pointer).
+# 20261116210657 (step 3) adds score_input_sha256 to the rank-publication
+# evidence rows and makes the evidence RPC (@3) and the deferred seal fence
+# require it. The deployed orchestrator sends no digest, so @3 would refuse
+# every season; the release that sends one accepts @2 and @3. Postdeploy,
+# after 210122; it replaces predeploy 20261114193017's RPC and fence bodies.
 # 040440 forward replacement. V1_EXECUTION_STATUS requires the RAW-only
 # bridge SHA to be deployed and legacy callers drained before the legacy
 # position-history relations are frozen. Current main never reads or writes
@@ -329,6 +334,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261115170535_activate_local_public_sources.sql
   20261116204006_publication_score_rows_board_headline_only.sql
   20261116210122_publication_score_rows_require_stats_evidence.sql
+  20261116210657_rank_publication_evidence_score_input_digest.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS

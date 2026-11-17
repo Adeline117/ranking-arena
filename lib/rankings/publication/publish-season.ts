@@ -43,6 +43,7 @@ import { readSourcePublicationBundle } from './read-source-publication-bundle'
 import { rerankLeaderboardPublication } from './rerank-rank-publication'
 import { scoreTraders, type ScoredTrader } from './score-traders'
 import type { ArenaFollowerCountSource } from './scoring-helpers'
+import { scoreInputSetSha256 } from './score-input-digest'
 import { sealLeaderboardRankPublication } from './seal-rank-publication'
 import {
   buildSourcePublicationRows,
@@ -280,6 +281,13 @@ export interface PublishLeaderboardSeasonResult {
    * 'attempt_bound'; a source without that evidence is isolated instead.
    */
   evidenceGrades: Record<string, 'attempt_bound'>
+  /**
+   * Per published source, the arena-score-input-set@1 digest of the rows the
+   * scorer received (score-input-digest.ts). `recorded` is true when the
+   * evidence RPC stored it (20261116210657); an older RPC ignores it.
+   */
+  scoreInputSha256: Record<string, string>
+  scoreInputSha256Recorded: boolean
 }
 
 interface PublishableRow {
@@ -642,19 +650,36 @@ async function probeSourceIsolation(tx: RankPublicationSqlExecutor): Promise<boo
   return probe.rows[0]?.supported === true
 }
 
-/** The attempt-bound evidence chain (20261114193017) must be installed. */
-async function probeTrustEvidence(tx: RankPublicationSqlExecutor): Promise<boolean> {
-  const probe = await tx.query<{ supported: boolean }>(
+/**
+ * The attempt-bound evidence chain (20261114193017, @2) must be installed;
+ * @3 (20261116210657) also stores the score-input digest.
+ */
+async function probeTrustEvidence(
+  tx: RankPublicationSqlExecutor
+): Promise<{ supported: boolean; storesDigest: boolean }> {
+  const probe = await tx.query<{ supported: boolean; stores_digest: boolean }>(
     `SELECT pg_catalog.to_regprocedure('public.rank_publication_trust_evidence(bigint[])') IS NOT NULL
         AND EXISTS (
           SELECT 1 FROM pg_catalog.pg_proc AS function_row
            WHERE function_row.oid = pg_catalog.to_regprocedure(
                    'public.record_leaderboard_rank_publication_evidence(text,uuid,jsonb)')
+             AND (pg_catalog.strpos(function_row.prosrc,
+                    'leaderboard-rank-publication-evidence@2') > 0
+               OR pg_catalog.strpos(function_row.prosrc,
+                    'leaderboard-rank-publication-evidence@3') > 0)
+        ) AS supported,
+        EXISTS (
+          SELECT 1 FROM pg_catalog.pg_proc AS function_row
+           WHERE function_row.oid = pg_catalog.to_regprocedure(
+                   'public.record_leaderboard_rank_publication_evidence(text,uuid,jsonb)')
              AND pg_catalog.strpos(function_row.prosrc,
-                   'leaderboard-rank-publication-evidence@2') > 0
-        ) AS supported`
+                   'leaderboard-rank-publication-evidence@3') > 0
+        ) AS stores_digest`
   )
-  return probe.rows[0]?.supported === true
+  return {
+    supported: probe.rows[0]?.supported === true,
+    storesDigest: probe.rows[0]?.stores_digest === true,
+  }
 }
 
 /** Fresh sources with at least one PASSED board lacking attempt-bound evidence. */
@@ -697,7 +722,8 @@ async function publishInTransaction(
 
     // Publication requires the attempt-bound evidence chain; without it the
     // season is refused and the previous serving head keeps serving.
-    if (!(await probeTrustEvidence(tx))) {
+    const trustEvidence = await probeTrustEvidence(tx)
+    if (!trustEvidence.supported) {
       throw new RankPublicationError(
         'trust_evidence_not_installed',
         `[${season}] attempt-bound publication evidence (20261114193017) is not installed`
@@ -865,6 +891,10 @@ async function publishInTransaction(
     const scorerRows = traderRows.filter(
       (row) => !unevidencedKeys.has(`${row.source}\u0000${row.source_trader_id}`)
     )
+    // The bundle rows behind scorerRows: what the scorer actually used.
+    const scoredInputRows = evidence.freshScoreRows.filter(
+      (row) => !unevidencedKeys.has(`${row.platform}\u0000${row.trader_key}`)
+    )
     const handleMap = new Map<string, { handle: string | null; avatar_url: string | null }>()
     for (const row of evidence.freshScoreRows) {
       handleMap.set(`${row.platform}:${row.trader_key}`, {
@@ -1030,8 +1060,17 @@ async function publishInTransaction(
     }
 
     // 10. Bind every published source to its attempt-bound snapshots / RAW /
-    // acquisition runs, in the sealing transaction. The RPC refuses an unbound
-    // source and the seal cannot COMMIT without these rows (20261114193017).
+    // acquisition runs and the digest of its scored inputs, in the sealing
+    // transaction. The RPC refuses an unbound source and the seal cannot
+    // COMMIT without these rows (20261114193017, 20261116210657).
+    const scoreInputSha256: Record<string, string> = {}
+    for (const publication of freshPublications) {
+      scoreInputSha256[publication.source] = scoreInputSetSha256(
+        season,
+        publication.source,
+        scoredInputRows
+      )
+    }
     const recorded = await tx.query<{
       result: { grades: Record<string, 'attempt_bound'> }
     }>(
@@ -1045,6 +1084,7 @@ async function publishInTransaction(
           freshPublications.map((publication) => ({
             source: publication.source,
             snapshot_ids: publication.snapshot_ids,
+            score_input_sha256: scoreInputSha256[publication.source],
           }))
         ),
       ]
@@ -1136,6 +1176,8 @@ async function publishInTransaction(
       isolatedSources,
       restoredSources,
       evidenceGrades,
+      scoreInputSha256,
+      scoreInputSha256Recorded: trustEvidence.storesDigest,
     }
   })
 }

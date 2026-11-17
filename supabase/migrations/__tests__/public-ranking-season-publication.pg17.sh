@@ -23,6 +23,7 @@
 #   20261113011058 leaderboard_publication_source_isolation
 #   20261113110430 rank_publication_source_evidence_binding
 #   20261114193017 rank_publication_requires_attempt_bound_evidence
+#   20261116210657 rank_publication_evidence_score_input_digest
 # leaderboard_ranks itself is created in the reviewed codec layout of
 # 20261111140053 (the forward repair that rebuilds it in production).
 
@@ -48,6 +49,7 @@ CHAIN=(
   20261113011058_leaderboard_publication_source_isolation.sql
   20261113110430_rank_publication_source_evidence_binding.sql
   20261114193017_rank_publication_requires_attempt_bound_evidence.sql
+  20261116210657_rank_publication_evidence_score_input_digest.sql
 )
 
 for executable in initdb pg_ctl psql; do
@@ -540,6 +542,13 @@ assert_equal "every source is bound with its evidence grade" \
 assert_equal "evidence rows bind the exact passed snapshots" "binance_futures:{101},bybit:{202},hyperliquid:{301}" \
   "$(psql_db -Atqc "SELECT string_agg(source || ':' || snapshot_ids::text, ',' ORDER BY source)
      FROM arena.leaderboard_rank_publication_source_evidence WHERE score_cohort_id = '$COHORT_ONE'")"
+assert_equal "the orchestrator stored its score-input digests" "true" \
+  "$(json_field "$OUT" result.scoreInputSha256Recorded)"
+assert_equal "each evidence row carries the digest of its scored inputs" \
+  "$(node -e 'const d=JSON.parse(process.argv[1]); console.log(Object.keys(d).sort().map(k=>k+":"+d[k]).join(","))' \
+      "$(json_field "$OUT" result.scoreInputSha256)")" \
+  "$(psql_db -Atqc "SELECT string_agg(source || ':' || score_input_sha256, ',' ORDER BY source)
+     FROM arena.leaderboard_rank_publication_source_evidence WHERE score_cohort_id = '$COHORT_ONE'")"
 assert_equal "anon sees the served evidence level per source" "binance_futures:attempt_bound,bybit:attempt_bound,hyperliquid:attempt_bound" \
   "$(psql_db -Atqc "SET ROLE anon; SELECT string_agg(source || ':' || evidence_grade, ',' ORDER BY source)
      FROM public.public_ranked_leaderboard_source_evidence WHERE season_id = '90D'")"
@@ -577,6 +586,19 @@ SQL
 [[ "$UNBOUND_ERROR" == *"requires attempt-bound evidence: bybit has 0 of 1 boards bound"* ]] || {
   echo "an unbound board was bound as publication evidence: $UNBOUND_ERROR" >&2; exit 1
 }
+NO_DIGEST_ERROR="$(psql_db -Atq 2>&1 <<'SQL' || true
+BEGIN;
+INSERT INTO arena.leaderboard_rank_publications (id, season_id, request_sha256, source_count, trader_count, proofs)
+VALUES ('00000000-0000-4000-8000-0000000000e3', '90D', repeat('e', 64), 1, 0,
+        '[{"source":"bybit"}]'::jsonb);
+SELECT public.record_leaderboard_rank_publication_evidence('90D',
+  '00000000-0000-4000-8000-0000000000e3', '[{"source":"bybit","snapshot_ids":[202]}]'::jsonb);
+COMMIT;
+SQL
+)"
+[[ "$NO_DIGEST_ERROR" == *"evidence for bybit needs a lowercase sha256 score_input_sha256"* ]] || {
+  echo "a bound board was recorded without its score-input digest: $NO_DIGEST_ERROR" >&2; exit 1
+}
 NO_EVIDENCE_ERROR="$(psql_db -Atq 2>&1 <<'SQL' || true
 BEGIN;
 INSERT INTO arena.leaderboard_rank_publications (id, season_id, request_sha256, source_count, trader_count, proofs)
@@ -585,12 +607,13 @@ VALUES ('00000000-0000-4000-8000-0000000000e2', '90D', repeat('e', 64), 1, 0,
 COMMIT;
 SQL
 )"
-[[ "$NO_EVIDENCE_ERROR" == *"lacks attempt-bound evidence for: bybit"* ]] || {
+[[ "$NO_EVIDENCE_ERROR" == *"lacks attempt-bound evidence with a score-input digest for: bybit"* ]] || {
   echo "a seal without evidence committed: $NO_EVIDENCE_ERROR" >&2; exit 1
 }
 assert_equal "neither refused seal left a receipt" "0" "$(psql_db -Atqc "
   SELECT pg_catalog.count(*) FROM arena.leaderboard_rank_publications
-  WHERE id IN ('00000000-0000-4000-8000-0000000000e1', '00000000-0000-4000-8000-0000000000e2')")"
+  WHERE id IN ('00000000-0000-4000-8000-0000000000e1', '00000000-0000-4000-8000-0000000000e2',
+               '00000000-0000-4000-8000-0000000000e3')")"
 
 # Ranks are 1..N, follow arena_score DESC, and every row carries the cohort.
 assert_equal "view rank order matches arena_score" "t" "$(psql_db -Atqc "
