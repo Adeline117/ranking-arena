@@ -22,8 +22,11 @@ import type {
   ParseCtx,
   ParsedHistoryRow,
   ParsedProfile,
+  ParsedStats,
+  RankingTimeframe,
   RawPage,
   SourceRow,
+  Timeframe,
 } from '@/lib/ingest/core/types'
 import type { FetchSession } from '@/lib/ingest/fetch/types'
 import { getCircuit, openSession } from '@/lib/ingest/fetch/fetcher'
@@ -46,6 +49,23 @@ import { roiCrossCheckOk, validateStats } from '@/lib/ingest/staging/validate'
 import { getHistoryCursor, publishHistoryRows, publishProfile } from '@/lib/ingest/serving/publish'
 import { publishCopierSnapshotInTransaction } from '@/lib/ingest/serving/copier-snapshot-publish'
 import { recordFieldInventory } from '@/lib/ingest/field-inventory'
+import {
+  buildProfileAcquisition,
+  lastStatsBlock,
+  profileOutcome,
+  type ProfileCaptureResult,
+} from '@/lib/ingest/profile-capture/capture'
+import {
+  getProfileCaptureContract,
+  type ProfileCaptureContract,
+} from '@/lib/ingest/profile-capture/contract'
+import {
+  finishProfileAcquisitionAttempt,
+  profileCaptureRawMeta,
+  startProfileAcquisitionAttempt,
+  type ProfileAcquisitionAttempt,
+} from '@/lib/ingest/profile-capture/ledger'
+import type { ProfileStatsEvidence } from '@/lib/ingest/serving/publish'
 import { fireAndForget, logger } from '@/lib/utils/logger'
 import { getRegionQueue, INGEST_JOB, type TierJobData } from '../queues'
 import { getConnection } from '../../connection'
@@ -473,6 +493,130 @@ async function crawlTraderHistories(
   return written
 }
 
+/**
+ * Attempt-bound profile evidence (migration 20261116215328). A source whose
+ * profile capture contract covers the timeframe records every fetch as an
+ * attempt with a typed terminal; only a complete capture stamps the stats it
+ * attests. A ledger failure never blocks the crawl: the profile is published
+ * unattested, which publication treats as no evidence (fail closed).
+ */
+interface ProfileEvidenceAttempt {
+  readonly contract: ProfileCaptureContract
+  readonly attempt: ProfileAcquisitionAttempt
+  finished: boolean
+}
+
+function contractTimeframe(
+  contract: ProfileCaptureContract | null,
+  timeframe: Timeframe
+): RankingTimeframe | null {
+  if (contract === null || timeframe === 0) return null
+  return contract.timeframes.includes(timeframe) ? timeframe : null
+}
+
+async function beginProfileEvidence(
+  src: SourceRow,
+  traderId: number,
+  timeframe: Timeframe,
+  contract: ProfileCaptureContract | null
+): Promise<ProfileEvidenceAttempt | null> {
+  const covered = contractTimeframe(contract, timeframe)
+  if (contract === null || covered === null) return null
+  try {
+    const attempt = await startProfileAcquisitionAttempt(getIngestPool(), {
+      sourceId: src.id,
+      traderId,
+      timeframe: covered,
+      contract,
+    })
+    return { contract, attempt, finished: false }
+  } catch (err) {
+    logger.error(
+      `[tier-b] ${src.slug} profile attempt not started (publishing unattested):`,
+      err instanceof Error ? err.message : err
+    )
+    return null
+  }
+}
+
+/** Records the terminal once; true only when a complete outcome is durable. */
+async function finishProfileEvidence(
+  src: SourceRow,
+  evidence: ProfileEvidenceAttempt | null,
+  result: ProfileCaptureResult,
+  rawObjectId: number | null
+): Promise<boolean> {
+  if (evidence === null || evidence.finished) return false
+  evidence.finished = true
+  try {
+    await finishProfileAcquisitionAttempt(getIngestPool(), evidence.attempt, result, rawObjectId)
+    return result.terminalState === 'complete'
+  } catch (err) {
+    logger.error(
+      `[tier-b] ${src.slug} profile attempt ${evidence.attempt.attemptSeq} not finished ` +
+        `(publishing unattested):`,
+      err instanceof Error ? err.message : err
+    )
+    return false
+  }
+}
+
+/**
+ * Decide this attempt's terminal from what the publish loop will store: an
+ * incomplete window is partial; otherwise the last block for the timeframe
+ * (after the same staging validation) is checked against the contract.
+ */
+async function settleProfileEvidence(
+  src: SourceRow,
+  evidenceAttempt: ProfileEvidenceAttempt | null,
+  exchangeTraderId: string,
+  pages: readonly RawPage[],
+  profiles: readonly ParsedProfile[],
+  requiredFields: Array<keyof ParsedStats>,
+  rawObjectId: number
+): Promise<{ profileIndex: number; stats: ProfileStatsEvidence } | null> {
+  if (evidenceAttempt === null) return null
+  const { attempt, contract } = evidenceAttempt
+  if (profiles.some((profile) => findIncompleteProfileWindow(profile) !== null)) {
+    await finishProfileEvidence(
+      src,
+      evidenceAttempt,
+      profileOutcome('partial', 'profile_window_incomplete', 'profile window incomplete'),
+      rawObjectId
+    )
+    return null
+  }
+  const last = lastStatsBlock(profiles, attempt.timeframe)
+  const stored =
+    last === null ? null : (validateStats([last.block], requiredFields).valid[0] ?? null)
+  const result = buildProfileAcquisition({
+    contract,
+    contractSha256: attempt.contractSha256,
+    attemptId: attempt.attemptId,
+    exchangeTraderId,
+    timeframe: attempt.timeframe,
+    pages,
+    parsed: last?.block ?? null,
+    stored,
+  })
+  if (result.terminalState !== 'complete') {
+    logger.warn(
+      `[tier-b] ${src.slug} ${exchangeTraderId} ${attempt.timeframe}d profile capture ` +
+        `${result.terminalState}/${result.reasonCode}: ${result.detail}`
+    )
+  }
+  const durable = await finishProfileEvidence(src, evidenceAttempt, result, rawObjectId)
+  if (!durable || last === null || result.attestedMetrics.length === 0) return null
+  return {
+    profileIndex: last.profileIndex,
+    stats: {
+      attemptSeq: attempt.attemptSeq,
+      timeframe: attempt.timeframe,
+      metrics: result.attestedMetrics,
+    },
+  }
+}
+
 export async function processTierB(
   job: Job<TierJobData>,
   context: ConsumedRegionContext
@@ -533,6 +677,7 @@ export async function processTierB(
   // native ∪ derived: derived 30/90 boards are synthesized from these
   // profile stats (spec §1.1-C), so Tier-B must crawl their TFs too.
   const timeframes = supportsProfile ? profileTimeframes(src) : []
+  const profileContract = supportsProfile ? getProfileCaptureContract(src.slug) : null
   // Tier A intentionally keeps the legacy unsuffixed profile (warm cookies).
   // Tier B owns a stable lane so a long profile crawl cannot collide with it.
   const session = await openSession(src, {
@@ -568,6 +713,14 @@ export async function processTierB(
       // Every operational error of this trader was a 404/410 "gone" response.
       let traderOnlyGoneErrors = true
       for (const timeframe of timeframes) {
+        const evidenceAttempt = await beginProfileEvidence(
+          src,
+          trader.id,
+          timeframe,
+          profileContract
+        )
+        let stage: 'fetch' | 'raw' | 'parse' | 'publish' = 'fetch'
+        let rawObjectId: number | null = null
         try {
           const scrapedAt = new Date().toISOString()
           const bundle = await adapter.getProfile(
@@ -579,7 +732,8 @@ export async function processTierB(
             { intent: 'scheduled_full' }
           )
 
-          const rawObjectId = (
+          stage = 'raw'
+          rawObjectId = (
             await writeRawObject({
               sourceId: src.id,
               sourceSlug: src.slug,
@@ -587,8 +741,10 @@ export async function processTierB(
               traderId: trader.id,
               timeframe,
               payload: bundle.pages,
+              ...(evidenceAttempt ? { meta: profileCaptureRawMeta(evidenceAttempt.attempt) } : {}),
             })
           ).id
+          stage = 'parse'
 
           // Upstream field radar (P1): 1-in-50 traders sample the profile
           // payload shape. Fire-and-forget — never breaks the crawl.
@@ -654,6 +810,16 @@ export async function processTierB(
                 )
 
           if (qualityRejects.length > 0) {
+            await finishProfileEvidence(
+              src,
+              evidenceAttempt,
+              profileOutcome(
+                'quality_rejected',
+                'quality_rejected',
+                qualityRejects.map((reject) => reject.reason).join(',')
+              ),
+              rawObjectId
+            )
             // The immutable RAW pointer exists. A durable reject makes this
             // timeframe terminal without allowing any serving/cache mutation.
             await recordStagingRejects(src.id, rawObjectId, qualityRejects)
@@ -664,7 +830,21 @@ export async function processTierB(
             continue
           }
 
-          for (const { profile } of parsedPages) {
+          const requiredFields = ((src.meta.profile_required_fields as string[]) ?? []) as Array<
+            keyof ParsedStats
+          >
+          const evidence = await settleProfileEvidence(
+            src,
+            evidenceAttempt,
+            trader.exchange_trader_id,
+            bundle.pages,
+            parsedPages.map(({ profile }) => profile),
+            requiredFields,
+            rawObjectId
+          )
+          stage = 'publish'
+
+          for (const [profileIndex, { profile }] of parsedPages.entries()) {
             const incomplete = findIncompleteProfileWindow(profile)
             if (incomplete) {
               // RAW is already durable. Merge audit extras only, then surface
@@ -672,9 +852,6 @@ export async function processTierB(
               await publishProfile(src, trader.id, profile, { fullSeries: true })
               throw new IncompleteProfileWindowError(incomplete.timeframe, incomplete.reason)
             }
-            const requiredFields = ((src.meta.profile_required_fields as string[]) ?? []) as Array<
-              keyof import('@/lib/ingest/core/types').ParsedStats
-            >
             const { valid, rejects } = validateStats(profile.stats, requiredFields)
             result.rejects += rejects.length
 
@@ -696,13 +873,33 @@ export async function processTierB(
               src,
               trader.id,
               { ...profile, stats: valid },
-              { fullSeries: true } // Tier B = ranked/topN → full series (spec §13.1)
+              {
+                fullSeries: true, // Tier B = ranked/topN → full series (spec §13.1)
+                // Only the publish of the block the capture attested stamps it.
+                evidence: evidence?.profileIndex === profileIndex ? evidence.stats : null,
+              }
             )
           }
           result.surfacesFetched += 1
           successfulTimeframes += 1
           terminalTimeframes += 1
         } catch (err) {
+          await finishProfileEvidence(
+            src,
+            evidenceAttempt,
+            stage === 'fetch'
+              ? profileOutcome(
+                  'upstream_failed',
+                  err instanceof UpstreamGoneError ? 'upstream_gone' : 'upstream_error',
+                  err instanceof Error ? err.message : String(err)
+                )
+              : profileOutcome(
+                  'processing_failed',
+                  stage === 'raw' ? 'raw_persistence_failed' : 'parse_failed',
+                  err instanceof Error ? err.message : String(err)
+                ),
+            rawObjectId
+          )
           traderHadOperationalError = true
           if (!(err instanceof UpstreamGoneError)) traderOnlyGoneErrors = false
           result.errors += 1
