@@ -21,6 +21,7 @@ import {
   BINANCE_FUTURES_PROFILE_CAPTURE,
   BINANCE_SPOT_PROFILE_CAPTURE,
 } from '../adapters/binance/profile-capture-contract'
+import { BLOFIN_FUTURES_PROFILE_CAPTURE } from '../adapters/blofin/profile-capture-contract'
 
 export const PROFILE_CAPTURE_CONTRACT_DOCUMENT = 'arena.profile-capture-contract@1' as const
 
@@ -250,6 +251,7 @@ export const PROFILE_CAPTURE_CONTRACTS: ReadonlyMap<string, ProfileCaptureContra
     BINANCE_FUTURES_PROFILE_CAPTURE,
     BINANCE_SPOT_PROFILE_CAPTURE,
     BYBIT_COPYTRADE_PROFILE_CAPTURE,
+    BLOFIN_FUTURES_PROFILE_CAPTURE,
   ].map((contract) => [contract.sourceSlug, contract])
 )
 

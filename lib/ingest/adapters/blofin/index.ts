@@ -70,6 +70,7 @@ import {
   parseBlofinPositions,
   parseBlofinProfile,
 } from './parsers'
+import { BLOFIN_INDICATORS_PATH } from './profile-capture-contract'
 
 const ORIGIN = 'https://blofin.com'
 const LIST_PATHS: Record<string, string> = {
@@ -120,6 +121,20 @@ const blofinAdapter: SourceAdapter = {
     orders: false,
     transfers: false,
     copiers: true,
+  },
+
+  /**
+   * The /uapi/v1/copy profile endpoints describe the trader's FUTURES
+   * copy-trading account (probe 2026-11-17: for spot-board uids trader/info
+   * reports contract_type "linear" and an AUM/followers/drawdown unlike the
+   * spot board row, and stat/indicators reports zero trades). Writing them
+   * into blofin_spot rows would publish futures stats as spot stats, so the
+   * spot board has no profile surface until a spot profile endpoint is
+   * verified. (The record endpoints share that namespace; they are not
+   * narrowed here because they were not probed for spot uids.)
+   */
+  supportsSurface(src, surface) {
+    return !(surface === 'profile' && boardKey(src) === 'spot')
   },
 
   async captureLeaderboard(session, src, timeframe, options) {
@@ -217,12 +232,19 @@ const blofinAdapter: SourceAdapter = {
     ])
 
     const fetchedAt = new Date().toISOString()
+    // The composite page is keyed by the stat request that supplies its
+    // ParsedStats block: the declared profile-capture endpoint, with the POST
+    // body's identity (uid, stat_period) as the URL query so the attempt's
+    // request projection binds both (./profile-capture-contract.ts).
+    const indicatorsUrl = new URL(`${ORIGIN}${BLOFIN_INDICATORS_PATH}`)
+    indicatorsUrl.searchParams.set('uid', uid)
+    indicatorsUrl.searchParams.set('stat_period', stat)
     return {
       pages: [
         {
           pageIndex: 1,
           payload: { info, indicators, symbolPerf, performance, timeframe: tf },
-          url: `${ORIGIN}/copy-trade/details/${uid}`,
+          url: indicatorsUrl.toString(),
           fetchedAt,
         },
       ],
