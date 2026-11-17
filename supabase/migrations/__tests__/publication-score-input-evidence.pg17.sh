@@ -10,6 +10,8 @@
 #   (the 20261115013558 Bitget-bot bundle rewrite, replayed verbatim and
 #    pinned to its reviewed f1c2aa2f... body digest)
 #   20261116204006 publication_score_rows_board_headline_only     (step 1)
+#   20261116205144 trader_stats_score_input_evidence_pointer      (step 2a)
+#   20261116210122 publication_score_rows_require_stats_evidence  (step 2b)
 
 set -Eeuo pipefail
 
@@ -17,6 +19,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MIGRATIONS="$ROOT_DIR/supabase/migrations"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 STEP1=20261116204006_publication_score_rows_board_headline_only.sql
+STEP2A=20261116205144_trader_stats_score_input_evidence_pointer.sql
+STEP2B=20261116210122_publication_score_rows_require_stats_evidence.sql
 CHAIN=(
   20260721175746_arena_score_inputs_publish_bundle.sql
   20260725012000_strengthen_arena_score_publish_evidence.sql
@@ -147,6 +151,19 @@ CREATE TABLE arena.trader_stats (
   total_positions integer,
   extras jsonb NOT NULL DEFAULT '{}'::jsonb,
   PRIMARY KEY (trader_id, timeframe)
+);
+
+-- Minimal acquisition ledger (20260722030000): the columns the evidence
+-- binding reads.
+CREATE TABLE arena.leaderboard_acquisition_attempts (
+  attempt_seq bigint PRIMARY KEY,
+  source_id smallint NOT NULL,
+  timeframe smallint NOT NULL
+);
+CREATE TABLE arena.leaderboard_acquisition_outcomes (
+  attempt_seq bigint PRIMARY KEY REFERENCES arena.leaderboard_acquisition_attempts(attempt_seq),
+  source_run_id text,
+  source_payload_raw_object_id bigint
 );
 
 -- Stand-in for the legacy score-row reader. It satisfies the read contract
@@ -338,3 +355,100 @@ $proof$;
 SQL
 
 echo "publication-score-input-evidence.pg17: step 1 ok"
+
+# ---------------------------------------------------------------------------
+# Step 2: trader_stats values count only when the bound board attested them.
+# ---------------------------------------------------------------------------
+expect_failure 'step 2b refuses to run before the evidence pointer exists' \
+  'stats evidence binding requires' psql_db -f "$MIGRATIONS/$STEP2B"
+psql_db -f "$MIGRATIONS/$STEP2A"
+psql_db -f "$MIGRATIONS/$STEP2B"
+psql_db -f "$MIGRATIONS/$STEP2B"
+
+psql_db <<'SQL'
+-- Board 11 (RAW 5011) came from attempt 1 (run c...); attempt 2 is a 30D
+-- acquisition that happens to cite the same RAW and must not bind 90D stats.
+INSERT INTO arena.leaderboard_acquisition_attempts VALUES (1, 1, 90), (2, 1, 30);
+INSERT INTO arena.leaderboard_acquisition_outcomes VALUES
+  (1, repeat('c', 64), 5011),
+  (2, repeat('d', 64), 5011);
+
+-- The attempt-bound board write attested drawdown, Sharpe and copiers of
+-- 'full' (not its profile trade count or Sortino).
+UPDATE arena.trader_stats SET evidence_raw_object_id = 5011,
+  evidence_source_run_id = repeat('c', 64),
+  evidence_metrics = ARRAY['mdd', 'sharpe', 'copier_count']
+WHERE trader_id = 101;
+-- Attested by an older board RAW.
+UPDATE arena.trader_stats SET evidence_raw_object_id = 4999,
+  evidence_source_run_id = repeat('c', 64), evidence_metrics = ARRAY['mdd']
+WHERE trader_id = 102;
+-- The right RAW, but the run of another timeframe's acquisition.
+UPDATE arena.trader_stats SET evidence_raw_object_id = 5011,
+  evidence_source_run_id = repeat('d', 64), evidence_metrics = ARRAY['mdd']
+WHERE trader_id = 103;
+SQL
+
+psql_db <<'SQL'
+DO $proof$
+DECLARE
+  v_bundle jsonb := public.arena_score_inputs_publish_bundle_json('90D', 1000, 48);
+  v_rows jsonb := v_bundle->'scoreRows';
+  v_row jsonb;
+BEGIN
+  IF v_rows IS DISTINCT FROM arena.publication_score_rows_json('90D', 1000, 48)
+     OR jsonb_array_length(v_rows) <> 4 THEN
+    RAISE EXCEPTION 'bundle rows drifted: %', v_rows;
+  END IF;
+
+  SELECT r INTO STRICT v_row FROM jsonb_array_elements(v_rows) AS r WHERE r->>'trader_key' = 'full';
+  IF (v_row->>'max_drawdown')::numeric <> 12 OR (v_row->>'sharpe_ratio')::numeric <> 1.5
+     OR (v_row->>'copiers')::int <> 7
+     OR v_row->'trades_count' <> 'null'::jsonb OR v_row->'sortino_ratio' <> 'null'::jsonb
+     OR v_row->'unevidenced_metrics' <> '["trades_count", "sortino_ratio"]'::jsonb
+     OR (v_row->>'roi_pct')::numeric <> 50
+     OR (v_row->>'as_of')::timestamptz
+          <> (SELECT LEAST(s.scraped_at, st.as_of) FROM arena.leaderboard_snapshots s,
+                arena.trader_stats st WHERE s.id = 11 AND st.trader_id = 101) THEN
+    RAISE EXCEPTION 'attested row drifted: %', v_row;
+  END IF;
+
+  SELECT r INTO STRICT v_row FROM jsonb_array_elements(v_rows) AS r WHERE r->>'trader_key' = 'no-win';
+  IF v_row->'max_drawdown' <> 'null'::jsonb
+     OR v_row->'unevidenced_metrics' <> '["win_rate", "max_drawdown", "trades_count"]'::jsonb
+     OR (v_row->>'as_of')::timestamptz <> (SELECT scraped_at FROM arena.leaderboard_snapshots WHERE id = 11) THEN
+    RAISE EXCEPTION 'older-RAW attestation was accepted: %', v_row;
+  END IF;
+
+  SELECT r INTO STRICT v_row FROM jsonb_array_elements(v_rows) AS r WHERE r->>'trader_key' = 'bare';
+  IF v_row->'max_drawdown' <> 'null'::jsonb
+     OR v_row->'unevidenced_metrics' <> '["max_drawdown"]'::jsonb THEN
+    RAISE EXCEPTION 'another acquisition''s run was accepted: %', v_row;
+  END IF;
+
+  SELECT r INTO STRICT v_row FROM jsonb_array_elements(v_rows) AS r WHERE r->>'trader_key' = 'claimed';
+  IF v_row->'max_drawdown' <> 'null'::jsonb
+     OR v_row->'unevidenced_metrics' <> '["max_drawdown", "trades_count"]'::jsonb THEN
+    RAISE EXCEPTION 'unstamped first-party stats were accepted: %', v_row;
+  END IF;
+END
+$proof$;
+
+-- A later profile crawl overwrites the attested drawdown: publication drops it.
+UPDATE arena.trader_stats SET mdd = 13 WHERE trader_id = 101;
+DO $proof$
+DECLARE
+  v_row jsonb;
+BEGIN
+  SELECT r INTO STRICT v_row
+  FROM jsonb_array_elements(arena.publication_score_rows_json('90D', 1000, 48)) AS r
+  WHERE r->>'trader_key' = 'full';
+  IF v_row->'max_drawdown' <> 'null'::jsonb OR (v_row->>'sharpe_ratio')::numeric <> 1.5
+     OR v_row->'unevidenced_metrics' <> '["max_drawdown", "trades_count", "sortino_ratio"]'::jsonb THEN
+    RAISE EXCEPTION 'an overwritten attested value was still published: %', v_row;
+  END IF;
+END
+$proof$;
+SQL
+
+echo "publication-score-input-evidence.pg17: step 2 ok"

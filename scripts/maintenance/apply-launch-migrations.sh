@@ -307,6 +307,11 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # orchestrator's strict bundle schema rejects that key (it would refuse every
 # season), so it follows the worker release that accepts it; it pins the
 # bundle body 20261115013558 installed and touches no table 192134 guards.
+# 20261116210122 (step 2b) makes that reader accept a trader_stats value only
+# when an attempt-bound write of the selected board's RAW attested it. Before
+# the worker that stamps board writes serves, no row is attested and every
+# trader_stats metric would publish as NULL, so it is postdeploy, after
+# 204006 (whose reader it replaces) and predeploy 20261116205144 (the pointer).
 # 040440 forward replacement. V1_EXECUTION_STATUS requires the RAW-only
 # bridge SHA to be deployed and legacy callers drained before the legacy
 # position-history relations are frozen. Current main never reads or writes
@@ -323,6 +328,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261115160917_public_source_exhaustion_and_total_capture_contracts.sql
   20261115170535_activate_local_public_sources.sql
   20261116204006_publication_score_rows_board_headline_only.sql
+  20261116210122_publication_score_rows_require_stats_evidence.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS

@@ -63,7 +63,7 @@ test('exports a deterministic, hash-attested read-only launch inventory', () => 
   const predeploy = first.phases.find((phase) => phase.name === 'predeploy')
   const postdeploy = first.phases.find((phase) => phase.name === 'postdeploy')
   assert.equal(predeploy.count, 158)
-  assert.equal(postdeploy.count, 9)
+  assert.equal(postdeploy.count, 10)
   const firstMigration = predeploy.migrations[0]
   assert.equal(firstMigration.sha256, sha256(readFileSync(resolve(ROOT, firstMigration.path))))
   assert.equal(
