@@ -277,6 +277,13 @@ const bitgetAdapter: SourceAdapter = {
       }
     }
 
+    // Futures family only. Public probe 2026-11-17: spot and CFD board traders
+    // (type 1, with a portfolioId) get detailV2 code 30081 ("not a futures
+    // expert") and a cycleData success envelope whose statisticsDTO is null,
+    // and uta/performance answers zeros without maxDrawDown for their
+    // portfolioId. Neither board row carries a drawdown, so bitget_spot and
+    // bitget_cfd have no profile capture contract until their own public
+    // profile endpoints are identified.
     const detailUrl = endpoint(src, 'profile', `${BASE}/traderDetailPageV2`)
     const cycleUrl = endpoint(src, 'cycleData', `${BASE}/cycleData`)
 
