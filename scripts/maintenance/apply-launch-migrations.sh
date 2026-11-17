@@ -347,6 +347,14 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # source, trader and timeframe (predeploy 20261116215328). It replaces the @2
 # body of 210122, so it follows it; with no profile attestation it returns
 # exactly the @2 rows. It touches no table 192134 guards.
+# 20261117015119 registers every profile capture contract of the worker's code
+# registry (PROFILE_CAPTURE_CONTRACTS: binance_futures, binance_spot,
+# bybit_copytrade, blofin_futures, toobit_futures) in the registry of predeploy
+# 20261116215328. A registered contract is only meaningful to the worker release
+# that carries the same contract document, so it follows that release; it
+# follows 215329 (the reader that consumes profile attestations) and touches
+# no table 192134 guards, so 192134 stays last. It refuses a replay, an earlier
+# registration for a listed source, and a missing or re-adaptered source.
 # 040440 forward replacement. V1_EXECUTION_STATUS requires the RAW-only
 # bridge SHA to be deployed and legacy callers drained before the legacy
 # position-history relations are frozen. Current main never reads or writes
@@ -367,6 +375,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261116210122_publication_score_rows_require_stats_evidence.sql
   20261116210657_rank_publication_evidence_score_input_digest.sql
   20261116215329_publication_score_rows_profile_attested.sql
+  20261117015119_register_profile_capture_contracts.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS

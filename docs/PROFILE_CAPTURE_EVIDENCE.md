@@ -14,6 +14,7 @@ PR #489 规定：`arena.trader_stats` 里的值只有被 attempt-bound 证据认
 | 写入       | `lib/ingest/serving/profile-stats-sql.ts`、`publishProfile(opts.evidence)` | 给对应周期的 stats 块盖章                                                   |
 | 数据库     | 迁移 `20261116215328`（predeploy）                                         | 契约注册表、只追加账本、`trader_stats` 的 profile 指针和守卫触发器          |
 | 发布读取   | 迁移 `20261116215329`（postdeploy）                                        | `publication_score_rows_json@3`：板认证或 profile 认证都可采用              |
+| 契约注册   | 迁移 `20261117015119`（postdeploy）                                        | 把代码注册表里的全部契约逐字段写进 `arena.profile_capture_contracts`        |
 | 测试工具   | `lib/ingest/profile-capture/test-helper.ts`                                | 用录制的页面和真实解析器跑一遍 worker 的同一流程                            |
 
 ## 契约格式
@@ -117,7 +118,10 @@ complete 时一个指标被认证，当且仅当：解析器值非空、等于 R
 3. 把契约加进 `contract.ts` 里的 `PROFILE_CAPTURE_CONTRACTS`（键 = source slug）。契约文件只能
    `import type` contract.ts（contract.ts 要导入它来建注册表，值导入会形成加载顺序循环），
    `document` 直接写字面量 `'arena.profile-capture-contract@1'`。
-4. 用 `scripts/new-migration.sh register_<source>_profile_capture_contract` 生成注册迁移：
+4. 用 `scripts/new-migration.sh register_<source>_profile_capture_contract` 生成注册迁移（首批五个来源
+   binance_futures、binance_spot、bybit_copytrade、blofin_futures、toobit_futures 已由 `20261117015119`
+   一次注册，PG17 证明 `profile-capture-contract-registration.pg17.sh` 校验行与代码注册表逐字段相等；
+   之后新增的来源各写一个迁移，并把它加进该证明）：
    ```sql
    INSERT INTO arena.profile_capture_contracts
      (source_id, capture_contract, contract_sha256, timeframes, attestable_metrics)
