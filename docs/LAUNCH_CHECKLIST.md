@@ -83,10 +83,10 @@
 发布现在必须有采集证据：上游报告总数且翻页对上（总数模式），或翻页到上游的结束信号、页码连续、无重复、榜单版本不变（穷尽模式）。没有证据的来源走单源隔离；一季里被隔离的来源超过一半就整季拒发。
 
 - **覆盖**：约 30 个期望来源中登记了 23 个；其中 17 个经公开接口只读探测确认能出证据，6 个有风险（btcc 中段重排、okx_web3_solana 近实时更新、bybit_mt5 爬取约 1.7 小时、coinex 与 htx 两个因地域未验证）。
-- **余量**：按 23 个算，7D/30D/90D 余量 5/6/6；只按 17 个算，余量 2/2/1。这两组数字已把 okx_futures、okx_spot、toobit_futures、xt_futures 算进期望集和出证据的来源，迁移 `20261115170535` 应用后才成立。未激活时，toobit/xt 不在 7D/30D 期望集，四个都不在 90D 期望集，余量会变成 4/5/4 和 1/1/-1，即 90D 严格口径整季拒发。okx 只有原生 90D，只进 90D 期望集；okx_futures 也是核心来源之一，90D 多了一个能避免"核心来源全缺"拒发的来源。
+- **余量**：按 23 个算，7D/30D/90D 余量 5/6/6；只按 17 个算，余量 2/2/1。这两组数字已把 okx_futures、okx_spot、toobit_futures、xt_futures 算进期望集和出证据的来源，迁移 `20261116204359` 应用后才成立。未激活时，toobit/xt 不在 7D/30D 期望集，四个都不在 90D 期望集，余量会变成 4/5/4 和 1/1/-1，即 90D 严格口径整季拒发。okx 只有原生 90D，只进 90D 期望集；okx_futures 也是核心来源之一，90D 多了一个能避免"核心来源全缺"拒发的来源。
 - **永久不进公开榜**：bitget_futures（尾页不稳定，凑不满总数）、hyperliquid 与 gmx（上游全量文件，截断由我们做）、gtrade、xt_spot、bitmart_futures；mexc、phemex 因 CDN 403 未能探测。
 - **上线金丝雀的放行条件**：worker 首个完整周期后，7D/30D/90D 每个窗口实际出证据的来源都必须超过期望集的一半，且 binance_futures 与 bybit_copytrade 至少一个出证据；否则不开放榜单，先处理失败来源。
-- **来源激活（2026-11-15 owner 已定）**：okx_futures、okx_spot、toobit_futures、xt_futures 改为 active/serving，采集区域改为 `local`。依据：2026-11-15 从本机只读探测 okx `public-lead-traders`、toobit `leaders-new`、xt `leader-list-v3` 均成功，无地域封锁，不再需要 VPS 出口。由 postdeploy 迁移 `20261115170535` 执行，排在 `20261115160917` 之后、`20261111192134` 之前，并且只能在带这些采集实现的 worker 上线之后应用：来源一激活就会排进 Tier-A，没有采集实现或没注册采集契约时 Tier-A 直接失败。四行都必须等于种子值加 160917 校正后的状态（okx/toobit 为 blocked_pending_vps/legacy/vps_sg，xt 为 inactive/legacy/local），否则整份迁移拒绝。`20261115160917` 仍按种子值校正 kucoin/okx 原生窗口、binance_web3_bsc 币种和 toobit/xt 的 page_size，生产值不一致时整份迁移拒绝。
+- **来源激活（2026-11-15 owner 已定）**：okx_futures、okx_spot、toobit_futures、xt_futures 改为 active/serving，采集区域改为 `local`。依据：2026-11-15 从本机只读探测 okx `public-lead-traders`、toobit `leaders-new`、xt `leader-list-v3` 均成功，无地域封锁，不再需要 VPS 出口。由 postdeploy 迁移 `20261116204359` 执行，排在 `20261115160917` 之后、`20261111192134` 之前，并且只能在带这些采集实现的 worker 上线之后应用：来源一激活就会排进 Tier-A，没有采集实现或没注册采集契约时 Tier-A 直接失败。四行都必须等于种子值加 160917 校正后的状态（okx/toobit 为 blocked_pending_vps/legacy/vps_sg，xt 为 inactive/legacy/local），否则整份迁移拒绝。`20261115160917` 仍按种子值校正 kucoin/okx 原生窗口、binance_web3_bsc 币种和 toobit/xt 的 page_size，生产值不一致时整份迁移拒绝。
 
 ## 上线前要确认的产品问题
 
