@@ -557,6 +557,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:profile-acquisition-evidence-pg17
 
+      - name: Prove a recorded blofin_futures profile capture is publication evidence
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:blofin-profile-capture-pg17
+
       - name: Prove retention keeps metric-trust evidence
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
