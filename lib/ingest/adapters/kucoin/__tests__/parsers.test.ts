@@ -14,6 +14,7 @@ import {
   validateKucoinProfile,
 } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
+import { resolveHeadlineLineage } from '../../../testing/headline-lineage'
 
 function fixture(name: string): unknown {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
@@ -111,6 +112,23 @@ describe('parseKucoinLeaderboardPage', () => {
     )
     expect(page.rows[0].headlineRoi).toBeCloseTo(17.24, 1) // 20.83/120.83*100, not 2.19e11
     expect(page.rows[1].headlineRoi).toBe(432) // 4.32 ratio trusted (sane)
+    // The derived ROI claims no field; the source-reported values keep theirs.
+    expect(page.rows[0].headlineMetricSources).toEqual({
+      pnl: { fieldPath: 'data.items[].thirtyDayPnl' },
+    })
+    expect(page.rows[1].headlineMetricSources).toEqual({
+      roi: { fieldPath: 'data.items[].thirtyDayPnlRatio' },
+      pnl: { fieldPath: 'data.items[].thirtyDayPnl' },
+    })
+  })
+
+  it('claims ROI/PnL lineage that resolves against the registered board contract', () => {
+    const page = parseKucoinLeaderboardPage(fixture('leaderboard-p1.json'), ctx)
+    expect(page.rows.length).toBeGreaterThan(0)
+    expect(resolveHeadlineLineage(page.rows, 'kucoin_futures')).toEqual({
+      resolved: page.rows.length * 2,
+      unresolved: [],
+    })
   })
 
   it('returns empty rows for an error payload', () => {
