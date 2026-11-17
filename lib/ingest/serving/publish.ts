@@ -18,8 +18,10 @@ import type {
   ParsedHistoryRow,
   HistoryKind,
   SourceRow,
+  Timeframe,
 } from '../core/types'
 import type { RejectedRow } from '../staging/validate'
+import { PROFILE_PUBLICATION_EPOCH_KEY, PROFILE_STATS_UPSERT_SQL } from './profile-stats-sql'
 import { deriveMissingRatios, deriveRiskFromBlocks } from '../core/series-risk'
 import { ensureHistoryPartitions } from './history-partitions'
 import { HEADLINE_STATS_UPSERT_SQL } from './headline-stats-sql'
@@ -37,7 +39,6 @@ const SELF_DERIVE_RISK_SOURCES = new Set(['hyperliquid', 'gmx', 'gtrade'])
  * row-level as_of. Keep the independent watermark in extras until a dedicated
  * field-level provenance table replaces it.
  */
-const PROFILE_PUBLICATION_EPOCH_KEY = '_arena_profile_publication_epoch_ms'
 import {
   BOOTSTRAP_DEVIATION_PCT,
   ROLLING_DEVIATION_PCT,
@@ -87,6 +88,13 @@ export interface PublishSnapshotInput {
    * observations cannot ratify a sustained level shift.
    */
   observationCycleId?: string
+  /**
+   * Attempt-bound acquisition that produced `rawObjectId` (its source run).
+   * When present, the headline stats upsert stamps the values this board sent
+   * as score-input evidence (20261116205144). Must name the same RAW as
+   * `rawObjectId`. The trusted (V3) path derives it from its manifest.
+   */
+  statsEvidence?: { rawObjectId: number; sourceRunId: string } | null
 }
 
 export interface PublishTrustedSnapshotInput extends Omit<
@@ -315,6 +323,21 @@ async function publishLeaderboardSnapshotTransactionInternal(
     throw new Error(`[publish] invalid count baseline generation: ${countBaselineGeneration}`)
   }
   const expectedCount = expectedLeaderboardCount(input)
+  const statsEvidence = preparedTrust
+    ? {
+        rawObjectId: preparedTrust.artifacts.sourcePayload.id,
+        sourceRunId: preparedTrust.sourceRunId,
+      }
+    : (input.statsEvidence ?? null)
+  if (
+    statsEvidence !== null &&
+    (statsEvidence.rawObjectId !== rawObjectId ||
+      !Number.isSafeInteger(statsEvidence.rawObjectId) ||
+      statsEvidence.rawObjectId <= 0 ||
+      !/^[0-9a-f]{64}$/.test(statsEvidence.sourceRunId))
+  ) {
+    throw new Error('[publish] stats evidence must name the snapshot RAW and a source run digest')
+  }
 
   // A snapshot and its board series are separate transactions in Tier A.
   // Sharing this source lock with replay prevents an older RAW re-parse
@@ -500,6 +523,8 @@ async function publishLeaderboardSnapshotTransactionInternal(
           }))
         ),
         src.id,
+        statsEvidence?.rawObjectId ?? null,
+        statsEvidence?.sourceRunId ?? null,
       ])
       if (stats.rowCount !== rows.length) {
         throw new Error(
@@ -698,12 +723,26 @@ export async function resolveTraderId(src: SourceRow, exchangeTraderId: string):
   return rows[0].id
 }
 
+/**
+ * Attempt-bound profile evidence for one stats block (migration
+ * 20261116215328): the complete profile acquisition attempt and the metrics it
+ * attested. Only the block of `timeframe` is stamped; the table trigger
+ * re-checks that the attempt is a complete capture of this trader and
+ * timeframe and keeps only metrics whose stored value equals the captured one.
+ */
+export interface ProfileStatsEvidence {
+  attemptSeq: number
+  timeframe: Timeframe
+  metrics: readonly string[]
+}
+
 /** Publish a profile crawl: full stats blocks + chart series + identity refresh. */
 export async function publishProfile(
   src: SourceRow,
   traderId: number,
   profile: ParsedProfile,
-  opts: { fullSeries: boolean } // false → long-tail: latest snapshot only (spec §13.1)
+  // fullSeries false → long-tail: latest snapshot only (spec §13.1)
+  opts: { fullSeries: boolean; evidence?: ProfileStatsEvidence | null }
 ): Promise<void> {
   const client = await ingestClientConnect()
   try {
@@ -770,67 +809,32 @@ export async function publishProfile(
         ...s.extras,
         [PROFILE_PUBLICATION_EPOCH_KEY]: publicationEpochMs,
       }
-      const statsResult = await client.query(
-        `INSERT INTO arena.trader_stats
-           (trader_id, timeframe, as_of, currency, roi, pnl, sharpe, mdd, win_rate,
-            win_positions, total_positions, copier_pnl, copier_count, aum, volume,
-            profit_share_rate, holding_duration_avg, trading_preferences, extras)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
-                 make_interval(secs => $17), $18, $19)
-         ON CONFLICT (trader_id, timeframe) DO UPDATE SET
-           -- A partial fill crawl retains older fill metrics. Its row-level
-           -- freshness must therefore be the older observation, never "now".
-           as_of = CASE WHEN $20
-             THEN LEAST(arena.trader_stats.as_of, EXCLUDED.as_of)
-             ELSE EXCLUDED.as_of
-           END,
-           currency = EXCLUDED.currency,
-           roi = EXCLUDED.roi, pnl = EXCLUDED.pnl, sharpe = EXCLUDED.sharpe,
-           mdd = EXCLUDED.mdd,
-           win_rate = CASE WHEN $20 THEN arena.trader_stats.win_rate ELSE EXCLUDED.win_rate END,
-           win_positions = CASE WHEN $20 THEN arena.trader_stats.win_positions ELSE EXCLUDED.win_positions END,
-           total_positions = CASE WHEN $20 THEN arena.trader_stats.total_positions ELSE EXCLUDED.total_positions END,
-           copier_pnl = EXCLUDED.copier_pnl, copier_count = EXCLUDED.copier_count,
-           aum = EXCLUDED.aum, volume = EXCLUDED.volume,
-           profit_share_rate = EXCLUDED.profit_share_rate,
-           holding_duration_avg = CASE WHEN $20 THEN arena.trader_stats.holding_duration_avg ELSE EXCLUDED.holding_duration_avg END,
-           trading_preferences = EXCLUDED.trading_preferences,
-           extras = CASE WHEN $20
-             THEN COALESCE(arena.trader_stats.extras, '{}'::jsonb) || EXCLUDED.extras
-             ELSE EXCLUDED.extras
-           END
-         -- Profile ordering is independent from board as_of. The internal
-         -- numeric watermark is written by every accepted profile and avoids
-         -- timestamp parsing failures from arbitrary source extras.
-         WHERE COALESCE(
-           CASE WHEN jsonb_typeof(arena.trader_stats.extras -> '${PROFILE_PUBLICATION_EPOCH_KEY}') = 'number'
-             THEN (arena.trader_stats.extras ->> '${PROFILE_PUBLICATION_EPOCH_KEY}')::numeric
-           END,
-           -1
-         ) <= extract(epoch FROM EXCLUDED.as_of) * 1000`,
-        [
-          traderId,
-          s.timeframe,
-          s.asOf,
-          src.currency,
-          s.roi,
-          s.pnl,
-          s.sharpe,
-          s.mdd,
-          s.winRate,
-          s.winPositions,
-          s.totalPositions,
-          s.copierPnl,
-          s.copierCount,
-          s.aum,
-          s.volume,
-          s.profitShareRate,
-          s.holdingDurationAvgHours === null ? null : s.holdingDurationAvgHours * 3600,
-          s.tradingPreferences ? JSON.stringify(s.tradingPreferences) : null,
-          JSON.stringify(persistedExtras),
-          preserveFillMetrics,
-        ]
-      )
+      const stampedEvidence =
+        opts.evidence && opts.evidence.timeframe === s.timeframe ? opts.evidence : null
+      const statsResult = await client.query(PROFILE_STATS_UPSERT_SQL, [
+        traderId,
+        s.timeframe,
+        s.asOf,
+        src.currency,
+        s.roi,
+        s.pnl,
+        s.sharpe,
+        s.mdd,
+        s.winRate,
+        s.winPositions,
+        s.totalPositions,
+        s.copierPnl,
+        s.copierCount,
+        s.aum,
+        s.volume,
+        s.profitShareRate,
+        s.holdingDurationAvgHours === null ? null : s.holdingDurationAvgHours * 3600,
+        s.tradingPreferences ? JSON.stringify(s.tradingPreferences) : null,
+        JSON.stringify(persistedExtras),
+        preserveFillMetrics,
+        stampedEvidence?.attemptSeq ?? null,
+        stampedEvidence ? [...stampedEvidence.metrics] : null,
+      ])
       if (statsResult.rowCount === 0) {
         // Throwing keeps the stats + series transaction atomic and prevents
         // Tier-B from marking an out-of-order crawl as freshly profiled.

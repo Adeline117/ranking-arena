@@ -69,6 +69,7 @@ import {
   BINANCE_POSITION_HISTORY_URL,
 } from './history-contract'
 import { binancePositionHistoryTerminalVerifier } from './history-terminal'
+import { BINANCE_PROFILE_PERFORMANCE_URLS } from './profile-capture-contract'
 
 const BAPI = 'https://www.binance.com/bapi/futures/v1'
 const FUT = `${BAPI}/friendly/future/copy-trade`
@@ -81,7 +82,7 @@ const ENDPOINTS: Record<string, Record<string, string>> = {
   futures: {
     list: BINANCE_LEADERBOARD_LIST_URLS.futures,
     detail: `${FUT}/lead-portfolio/detail`,
-    performance: `${FUT_PUB}/lead-portfolio/performance`,
+    performance: BINANCE_PROFILE_PERFORMANCE_URLS.futures,
     chart: `${FUT_PUB}/lead-portfolio/chart-data`,
     coinPreference: `${FUT_PUB}/lead-portfolio/performance/coin`,
     positions: `${FUT}/lead-data/positions`,
@@ -93,7 +94,7 @@ const ENDPOINTS: Record<string, Record<string, string>> = {
   spot: {
     list: BINANCE_LEADERBOARD_LIST_URLS.spot,
     detail: `${SPOT}/lead-portfolio/detail`,
-    performance: `${SPOT_PUB}/lead-portfolio/performance`,
+    performance: BINANCE_PROFILE_PERFORMANCE_URLS.spot,
     chart: `${SPOT_PUB}/lead-portfolio/performance-chart-data`,
     coinPreference: `${SPOT}/lead-portfolio/coin-preference`,
     positions: `${SPOT}/lead-portfolio/get-active-holding-by-page`,
@@ -341,8 +342,11 @@ const binanceAdapter: SourceAdapter = {
         headers: HEADERS,
       })
     )
+    // The page url is this request, so the profile capture manifest binds the
+    // trader and window it was fetched for (profile-capture-contract.ts).
+    const performanceUrl = `${endpoint(src, 'performance')}?portfolioId=${pid}&timeRange=${timeRange}`
     const performance = await replayJson(session, fetcher, {
-      url: `${endpoint(src, 'performance')}?portfolioId=${pid}&timeRange=${timeRange}`,
+      url: performanceUrl,
       method: 'GET',
       headers: HEADERS,
     })
@@ -368,7 +372,7 @@ const binanceAdapter: SourceAdapter = {
         {
           pageIndex: 1,
           payload: { detail, performance, chartRoi, chartPnl, coinPreference, timeframe: tf },
-          url: endpoint(src, 'performance'),
+          url: performanceUrl,
           fetchedAt,
         },
       ],

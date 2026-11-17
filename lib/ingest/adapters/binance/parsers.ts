@@ -199,7 +199,10 @@ export function parseBinanceProfile(raw: unknown, ctx: ParseCtx): ParsedProfile 
   const pref = dataOf(bundle.coinPreference)
 
   const stats: ParsedStats[] = []
-  if (perf) {
+  // performance.data.timeRange echoes the requested window ("7D"/"30D"/"90D");
+  // a block for another window must never be stored under this timeframe.
+  const windowMatches = perf?.timeRange === undefined || perf.timeRange === `${tf}D`
+  if (perf && windowMatches) {
     const extras: Record<string, unknown> = {}
     if (perf.winDays !== undefined) extras.win_days = int(perf.winDays) // spot only
     if (det) {

@@ -48,7 +48,8 @@ fence / claim / seal 相关 RPC 只对 owner 和 `service_role` 开放。
 
 - RPC：`public.arena_score_inputs_publish_bundle_json(p_window, p_per_platform_limit, p_max_age_hours)`，
   当前定义在 `20260725012000_strengthen_arena_score_publish_evidence.sql:170-370`。一条语句同时返回
-  `scoreRows`（旧 `arena_score_inputs_json` 的评分行）和每块物理板的证据 `physicalBoards`。
+  `scoreRows` 和每块物理板的证据 `physicalBoards`。20261116204006 起 `scoreRows` 改由
+  `arena.publication_score_rows_json` 提供（不再调旧的 `arena_score_inputs_json`），见下文"打分输入的证据绑定"。
 - 每块板的状态：`missing / failed / ambiguous_latest / latest_attempt_failed / future / stale / entry_count_mismatch / passed`
   （`:309-328`；`stale` = 最新 PASSED 快照早于 `now - p_max_age_hours`，`:318-322`）。
 - 应用侧校验：`lib/rankings/publication/source-publication-evidence.ts` 的 `parseSourcePublicationEvidence`
@@ -187,6 +188,24 @@ persistLeaderboardRanks` 已于 2026-11-13 删除；`scripts/qa/public-ranking-s
 - 只接受本事务刚封存的 cohort、与封存 proof 完全一致的来源集合、该来源自己的已通过板。
 - 公开视图 `public.public_ranked_leaderboard_source_evidence`（anon 可读）给出当前在服务季每个来源的
   `evidence_grade` 与 `source_as_of`，前端可据此区分证据等级。
+- 打分输入的证据绑定（PR #476 方案 B，20261116204006 / 20261116205144 / 20261116210122 / 20261116210657）：
+  - ROI、PnL、胜率只取已绑定板条目的 headline，不再回退 `arena.trader_stats`；认领交易员不再被第一方 stats 行替换。
+  - `arena.trader_stats` 的其他指标（回撤、Sharpe、Sortino、Calmar、波动率、跟单人数、交易数）只在
+    `evidence_raw_object_id` 等于所选快照的 RAW、`evidence_source_run_id` 是以该 RAW 为源载荷的同来源同周期
+    采集 run、且该指标列在 `evidence_metrics` 时才采用。只有 attempt-bound 的板 headline upsert 会盖章，
+    并且只认证它本次写入的值；表上的守卫触发器在任何其他写入改动已认证值时撤销该值的认证。
+  - 被拒的值置 NULL 并列在行的 `unevidenced_metrics`；必需指标（ROI/PnL/胜率/回撤）因此为空的行不进打分，
+    计入排除原因 `score_input_evidence_missing`。
+  - 每个发布来源的证据行带 `score_input_sha256`：打分实际收到的行按 `arena-score-input-set@1`
+    （`lib/rankings/publication/score-input-digest.ts`）算的摘要，由编排器在封存事务里写入；RPC @3 与延迟封存
+    栅栏都要求它。
+  - Tier-B profile 证据（20261116215328 / 20261116215329）：板上缺的值也可以由 profile 采集认证。每次 profile
+    抓取是 `arena.profile_acquisition_attempts` 里的一次 attempt，结果是带类型的终态；只有 `complete` 的终态带
+    清单（每页请求投影与响应 sha256、每个被认证指标的 RAW 字段值）。`trader_stats.profile_evidence_attempt_seq /
+profile_evidence_metrics` 按指标记录认证，与板指针并存、互不作废；任何改动该值的后续写入都会撤销它。
+    `publication_score_rows_json@3` 采用一个值的条件是：板认证，或 profile 认证且该 attempt 是同来源、同交易员、
+    同周期的 complete 采集，开始时间在板的新鲜窗口内；否则仍为 NULL。来源如何声明见
+    `docs/PROFILE_CAPTURE_EVIDENCE.md`。
 - 快照保留策略（20261113110021）同时保留被证据绑定的快照：窗口（默认 180 天）外，被信任
   run/observation、Tier-A receipt、发布来源证据、发布 proofs 或当前 freshness 引用的快照，以及每个
   (source, timeframe) 最新通过的榜永久保留（这些证据行按设计只追加，不能删）；其余过期快照连同

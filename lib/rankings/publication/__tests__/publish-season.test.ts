@@ -452,6 +452,87 @@ describe('publishLeaderboardSeason gate', () => {
     expect(statements.some((text) => /claim_leaderboard_rank_generation/.test(text))).toBe(false)
   })
 
+  it('counts rows whose required metric lacks board evidence instead of scoring them', async () => {
+    const boardAsOf = iso(new Date(now.getTime() - 60 * 60 * 1000))
+    const scoreRow = (traderKey: string, rank: number, overrides: Record<string, unknown>) => ({
+      platform: 'binance_futures',
+      market_type: 'futures',
+      trader_key: traderKey,
+      board_rank: rank,
+      roi_pct: 40,
+      pnl_usd: 900,
+      win_rate: 55,
+      max_drawdown: 12,
+      copiers: null,
+      trades_count: null,
+      sharpe_ratio: null,
+      sortino_ratio: null,
+      calmar_ratio: null,
+      volatility_pct: null,
+      unevidenced_metrics: [],
+      trader_kind: null,
+      handle: null,
+      avatar_url: null,
+      currency: 'USDT',
+      as_of: boardAsOf,
+      board_as_of: boardAsOf,
+      ...overrides,
+    })
+    const rows = [
+      scoreRow('bound', 1, {}),
+      scoreRow('unbound-win-rate', 2, { win_rate: null, unevidenced_metrics: ['win_rate'] }),
+      // An optional metric refused for evidence does not exclude the row.
+      scoreRow('unbound-sharpe', 3, { unevidenced_metrics: ['sharpe_ratio'] }),
+    ]
+    const board = { ...passedBoard('binance_futures', 1), actual_count: 3, entry_count: 3 }
+    const { database } = harness([board, passedBoard('bybit', 2)])
+    const original = database.transaction
+    database.transaction = (work) =>
+      original(async (tx) =>
+        work({
+          async query(text, values) {
+            if (text.includes('arena_score_inputs_publish_bundle_json')) {
+              return {
+                rows: [
+                  {
+                    result: {
+                      scoreRows: rows,
+                      physicalBoards: [
+                        { ...board, rank_limited_entry_count: 3 },
+                        passedBoard('bybit', 2),
+                      ],
+                    },
+                  },
+                ] as never[],
+                rowCount: 1,
+              }
+            }
+            return tx.query(text, values)
+          },
+        })
+      )
+    const scoreCohort = jest.fn(async () => [])
+
+    const error = await publishLeaderboardSeason('90D', { database, scoreCohort }).catch(
+      (caught: unknown) => caught
+    )
+
+    expect(error).toBeInstanceOf(RankPublicationError)
+    expect((error as RankPublicationError).code).toBe('no_publishable_rows')
+    const scorerInput = (scoreCohort.mock.calls[0] as unknown[])[0] as Array<{
+      source_trader_id: string
+    }>
+    expect(scorerInput.map((row) => row.source_trader_id)).toEqual(['bound', 'unbound-sharpe'])
+    expect((error as RankPublicationError).details.exclusions).toEqual({
+      scored: 3,
+      excluded: 3,
+      byReason: { score_input_evidence_missing: 1, filtered_by_scorer: 2 },
+      bySource: {
+        binance_futures: { score_input_evidence_missing: 1, filtered_by_scorer: 2 },
+      },
+    })
+  })
+
   it('refuses a season whose sources are fresh but yield no publishable row', async () => {
     const { database } = harness([passedBoard('binance_futures', 1), passedBoard('bybit', 2)])
     await expect(

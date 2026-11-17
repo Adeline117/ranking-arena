@@ -136,4 +136,93 @@ describe('publishLeaderboardSnapshot count baseline generation', () => {
     expect(fencedQuery).toHaveBeenCalledTimes(clientQuery.mock.calls.length)
     expect(release).not.toHaveBeenCalled()
   })
+
+  describe('score-input evidence stamping', () => {
+    const native = { ...src, timeframes_native: [30], timeframes_derived: [] } as SourceRow
+    const row = {
+      exchangeTraderId: 'trader-a',
+      rank: 1,
+      headlineRoi: 12,
+      headlinePnl: 340,
+      headlineWinRate: 55,
+      headlineMdd: 8,
+      raw: {},
+    }
+    const guard = jest.fn(async () => undefined)
+    const runId = 'b'.repeat(64)
+
+    function statsCall() {
+      return clientQuery.mock.calls.find(([sql]) =>
+        String(sql).includes('INSERT INTO arena.trader_stats')
+      )
+    }
+
+    beforeEach(() => {
+      clientQuery.mockImplementation(async (sql: string) => {
+        if (sql.includes('INSERT INTO arena.leaderboard_snapshots')) {
+          return { rows: [{ id: 78, scraped_at: '2026-11-16 00:00:00.000000+00' }], rowCount: 1 }
+        }
+        if (sql.includes('INSERT INTO arena.traders')) {
+          return { rows: [{ id: 501, exchange_trader_id: 'trader-a' }], rowCount: 1 }
+        }
+        if (sql.includes('INSERT INTO arena.leaderboard_entries')) return { rows: [], rowCount: 1 }
+        if (sql.includes('INSERT INTO arena.trader_stats')) return { rows: [], rowCount: 1 }
+        return { rows: [], rowCount: 0 }
+      })
+    })
+
+    it('stamps the board RAW and source run of an attempt-bound board write', async () => {
+      await publishLeaderboardSnapshotInTransaction(
+        { query: clientQuery } as unknown as IngestQueryExecutor,
+        {
+          src: native,
+          timeframe: 30,
+          rows: [row] as never,
+          rejects: [],
+          rawObjectId: 9001,
+          expectedCountOverride: 1,
+          statsEvidence: { rawObjectId: 9001, sourceRunId: runId },
+        },
+        guard
+      )
+      const params = statsCall()?.[1] as unknown[]
+      expect(params.slice(5)).toEqual([9001, runId])
+    })
+
+    it('stamps nothing for a board write without an acquisition', async () => {
+      await publishLeaderboardSnapshotInTransaction(
+        { query: clientQuery } as unknown as IngestQueryExecutor,
+        {
+          src: native,
+          timeframe: 30,
+          rows: [row] as never,
+          rejects: [],
+          rawObjectId: 9001,
+          expectedCountOverride: 1,
+        },
+        guard
+      )
+      const params = statsCall()?.[1] as unknown[]
+      expect(params.slice(5)).toEqual([null, null])
+    })
+
+    it('refuses evidence that names a different RAW before any database I/O', async () => {
+      await expect(
+        publishLeaderboardSnapshotInTransaction(
+          { query: clientQuery } as unknown as IngestQueryExecutor,
+          {
+            src: native,
+            timeframe: 30,
+            rows: [row] as never,
+            rejects: [],
+            rawObjectId: 9001,
+            expectedCountOverride: 1,
+            statsEvidence: { rawObjectId: 9002, sourceRunId: runId },
+          },
+          guard
+        )
+      ).rejects.toThrow('stats evidence must name the snapshot RAW')
+      expect(clientQuery).not.toHaveBeenCalled()
+    })
+  })
 })

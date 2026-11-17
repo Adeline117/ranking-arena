@@ -11,11 +11,16 @@
 #   2. a sparse repeat publish that relies on COALESCE to retain an older
 #      headline value keeps the conservative LEAST(old, new) as_of;
 #   3. extras merge and profile-only columns survive the board upsert.
+#   4. score-input evidence (with the real 20261116205144 table trigger): an
+#      attempt-bound board write attests only the values it sent; values the
+#      COALESCE retains, values another writer later overwrites, and a write
+#      without a pointer are never attested.
 
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 SQL_MODULE="$ROOT_DIR/lib/ingest/serving/headline-stats-sql.ts"
+EVIDENCE_MIGRATION="$ROOT_DIR/supabase/migrations/20261116205144_trader_stats_score_input_evidence_pointer.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -46,10 +51,10 @@ cleanup() {
 trap cleanup EXIT
 
 psql_cmd() {
-  "$PG_BIN/psql" -X -q -v ON_ERROR_STOP=1 -h "$SOCKET_DIR" -p "$PORT" -d postgres "$@"
+  "$PG_BIN/psql" -X -q -v ON_ERROR_STOP=1 -h "$SOCKET_DIR" -p "$PORT" -U postgres -d postgres "$@"
 }
 
-"$PG_BIN/initdb" -D "$DATA_DIR" --auth-local=trust --auth-host=trust \
+"$PG_BIN/initdb" -D "$DATA_DIR" -U postgres --auth-local=trust --auth-host=trust \
   --encoding=UTF8 --no-locale >/dev/null
 "$PG_BIN/pg_ctl" -D "$DATA_DIR" -l "$LOG_FILE" \
   -o "-F -p $PORT -k $SOCKET_DIR -c listen_addresses=" -w start >/dev/null
@@ -62,6 +67,9 @@ process.stdout.write(m[1])
 ' "$SQL_MODULE")"
 
 psql_cmd <<SQL
+CREATE ROLE anon NOLOGIN;
+CREATE ROLE authenticated NOLOGIN;
+CREATE ROLE service_role NOLOGIN;
 CREATE SCHEMA arena;
 CREATE TABLE arena.traders (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -82,14 +90,19 @@ CREATE TABLE arena.trader_stats (
   PRIMARY KEY (trader_id, timeframe)
 );
 INSERT INTO arena.traders (source_id, exchange_trader_id) VALUES (9, 't-full'), (9, 't-sparse');
+SQL
 
-PREPARE upsert(smallint, timestamptz, text, jsonb, smallint) AS
+psql_cmd -f "$EVIDENCE_MIGRATION"
+
+psql_cmd <<SQL
+PREPARE upsert(smallint, timestamptz, text, jsonb, smallint, bigint, text) AS
 ${UPSERT_SQL};
 
 -- Cycle 1: full-width board publish for both traders.
 EXECUTE upsert(30, '2026-11-01T00:00:00Z', 'USDT',
   '[{"exchange_trader_id":"t-full","roi":10,"pnl":100,"win_rate":50,"mdd":5,"sharpe":1.2,"extras":{"risk_label":"a"}},
-    {"exchange_trader_id":"t-sparse","roi":10,"pnl":100,"win_rate":50,"mdd":5,"sharpe":1.2}]'::jsonb, 9);
+    {"exchange_trader_id":"t-sparse","roi":10,"pnl":100,"win_rate":50,"mdd":5,"sharpe":1.2}]'::jsonb, 9,
+  NULL, NULL);
 
 -- A profile crawl later attaches profile-only state + its own watermark.
 UPDATE arena.trader_stats
@@ -100,7 +113,8 @@ UPDATE arena.trader_stats
 -- Cycle 2 (72h later): t-full re-sends every headline column; t-sparse omits mdd/sharpe.
 EXECUTE upsert(30, '2026-11-04T00:00:00Z', 'USDT',
   '[{"exchange_trader_id":"t-full","roi":20,"pnl":200,"win_rate":60,"mdd":6,"sharpe":1.5,"extras":{"risk_label":"b"}},
-    {"exchange_trader_id":"t-sparse","roi":20,"pnl":200,"win_rate":60}]'::jsonb, 9);
+    {"exchange_trader_id":"t-sparse","roi":20,"pnl":200,"win_rate":60}]'::jsonb, 9,
+  7001, repeat('a', 64));
 
 DO \$\$
 DECLARE
@@ -133,8 +147,59 @@ BEGIN
   IF sparse_row.roi <> 20 OR sparse_row.mdd <> 5 OR sparse_row.sharpe <> 1.2 THEN
     RAISE EXCEPTION 'sparse publish must COALESCE-retain old values: %', row_to_json(sparse_row);
   END IF;
+
+  -- Evidence: the attempt-bound cycle-2 board attests what it sent, never the
+  -- cycle-1 values the sparse row retained.
+  IF full_row.evidence_raw_object_id IS DISTINCT FROM 7001
+     OR full_row.evidence_source_run_id IS DISTINCT FROM repeat('a', 64)
+     OR full_row.evidence_metrics IS DISTINCT FROM ARRAY['mdd','pnl','roi','sharpe','win_rate'] THEN
+    RAISE EXCEPTION 'full board write must attest every value it sent: %', row_to_json(full_row);
+  END IF;
+  IF sparse_row.evidence_raw_object_id IS DISTINCT FROM 7001
+     OR sparse_row.evidence_metrics IS DISTINCT FROM ARRAY['pnl','roi','win_rate'] THEN
+    RAISE EXCEPTION 'retained values must not be attested: %', row_to_json(sparse_row);
+  END IF;
+END
+\$\$;
+
+-- A profile crawl overwrites the board drawdown and adds a trade count: the
+-- drawdown loses its attestation, the trade count never gains one.
+UPDATE arena.trader_stats AS st SET mdd = 9, total_positions = 40
+  FROM arena.traders AS t WHERE t.id = st.trader_id AND t.exchange_trader_id = 't-full';
+-- Rewriting a value to itself keeps it attested.
+UPDATE arena.trader_stats AS st SET roi = 20
+  FROM arena.traders AS t WHERE t.id = st.trader_id AND t.exchange_trader_id = 't-full';
+DO \$\$
+BEGIN
+  IF (SELECT st.evidence_metrics FROM arena.trader_stats st JOIN arena.traders t ON t.id = st.trader_id
+       WHERE t.exchange_trader_id = 't-full') IS DISTINCT FROM ARRAY['pnl','roi','sharpe','win_rate'] THEN
+    RAISE EXCEPTION 'an overwritten value must lose its attestation';
+  END IF;
+END
+\$\$;
+
+-- Overwriting every attested value clears the pointer.
+UPDATE arena.trader_stats AS st SET roi = 1, pnl = 1, win_rate = 1
+  FROM arena.traders AS t WHERE t.id = st.trader_id AND t.exchange_trader_id = 't-sparse';
+-- A board write without a pointer (not attempt-bound) stores none.
+EXECUTE upsert(30, '2026-11-05T00:00:00Z', 'USDT',
+  '[{"exchange_trader_id":"t-full","roi":30,"pnl":300,"win_rate":61,"mdd":7}]'::jsonb, 9, NULL, NULL);
+DO \$\$
+BEGIN
+  IF EXISTS (SELECT 1 FROM arena.trader_stats
+              WHERE evidence_raw_object_id IS NOT NULL OR evidence_metrics IS NOT NULL) THEN
+    RAISE EXCEPTION 'pointer must be cleared: %',
+      (SELECT json_agg(row_to_json(st)) FROM arena.trader_stats st);
+  END IF;
 END
 \$\$;
 SQL
+
+# The shape CHECK refuses a forged pointer outside the trigger's normal form.
+if forged="$(psql_cmd -c "ALTER TABLE arena.trader_stats DISABLE TRIGGER trader_stats_score_input_evidence; UPDATE arena.trader_stats SET evidence_raw_object_id = 1, evidence_source_run_id = 'x', evidence_metrics = ARRAY['roi']" 2>&1)" \
+  || ! grep -q 'trader_stats_score_input_evidence_shape' <<<"$forged"; then
+  echo "shape CHECK did not refuse a malformed pointer: $forged" >&2
+  exit 1
+fi
 
 echo "headline-stats-as-of.pg17: OK"

@@ -12,6 +12,33 @@ const nullableFiniteNumberSchema = z.number().nullable()
 const nonNegativeSafeIntegerSchema = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
 const positiveSafeIntegerSchema = nonNegativeSafeIntegerSchema.min(1)
 
+/**
+ * Score-input metrics a publication row can carry. The bundle lists, per row,
+ * the ones arena.trader_stats held but publication refused because no bound
+ * board evidence attests them (arena.publication_score_rows_json).
+ */
+export const SCORE_INPUT_METRICS = [
+  'roi_pct',
+  'pnl_usd',
+  'win_rate',
+  'max_drawdown',
+  'copiers',
+  'trades_count',
+  'sharpe_ratio',
+  'sortino_ratio',
+  'calmar_ratio',
+  'volatility_pct',
+] as const
+export type ScoreInputMetric = (typeof SCORE_INPUT_METRICS)[number]
+
+/** Metrics without which no row can be ranked (public eligibility policy). */
+export const RANK_REQUIRED_SCORE_INPUT_METRICS: readonly ScoreInputMetric[] = [
+  'roi_pct',
+  'pnl_usd',
+  'win_rate',
+  'max_drawdown',
+]
+
 const scoreRowSchema = z
   .object({
     platform: identifierSchema,
@@ -28,6 +55,8 @@ const scoreRowSchema = z
     sortino_ratio: nullableFiniteNumberSchema,
     calmar_ratio: nullableFiniteNumberSchema,
     volatility_pct: nullableFiniteNumberSchema,
+    // Absent from bundles older than 20261116204006 (no evidence filter yet).
+    unevidenced_metrics: z.array(z.enum(SCORE_INPUT_METRICS)).optional(),
     trader_kind: z.string().nullable(),
     handle: z.string().nullable(),
     avatar_url: z.string().nullable(),
@@ -104,6 +133,18 @@ export type SourcePublicationEvidenceErrorCode =
   | 'retained_rank_count'
   | 'unsafe_count_expansion'
   | 'unsafe_empty_publication'
+
+/**
+ * True when a row cannot be ranked only because a required metric was refused
+ * for lack of board evidence: the value is null in the row and the bundle says
+ * trader_stats held one.
+ */
+export function lacksRequiredMetricEvidence(row: SourcePublicationScoreRow): boolean {
+  const unevidenced = row.unevidenced_metrics ?? []
+  return RANK_REQUIRED_SCORE_INPUT_METRICS.some(
+    (metric) => row[metric] === null && unevidenced.includes(metric)
+  )
+}
 
 export class SourcePublicationEvidenceError extends Error {
   constructor(

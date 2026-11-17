@@ -204,6 +204,8 @@ PREDEPLOY_MIGRATIONS=(
   20261114211033_public_source_board_metric_contracts.sql
   20261115141050_leaderboard_exhaustion_completeness_evidence.sql
   20261116203816_metric_source_contract_retirement.sql
+  20261116205144_trader_stats_score_input_evidence_pointer.sql
+  20261116215328_profile_acquisition_evidence_ledger.sql
 )
 readonly -a PREDEPLOY_MIGRATIONS
 # The final six (season publication follow-ups, PR #419) must stay LAST: they
@@ -238,6 +240,18 @@ readonly -a PREDEPLOY_MIGRATIONS
 # the worker that resolves contracts through the retirement table needs that
 # table before it ships; its preflight refuses a source that already holds two
 # active versions. It needs only 20260721120000.
+# 20261116205144 (score-input evidence binding, step 2a) adds the per-value
+# evidence pointer to arena.trader_stats and its guard trigger. It is inert for
+# the deployed worker, which never sets the pointer (every row stays NULL), and
+# the worker release that stamps attempt-bound board writes needs the columns,
+# so it is predeploy. It reads no other launch object.
+# 20261116215328 (attempt-bound Tier-B profile evidence) adds the empty
+# profile capture contract registry, the append-only profile acquisition
+# ledger and its two RPCs, and the per-value profile pointer on
+# arena.trader_stats with its guard trigger. It is inert for the deployed
+# worker (no contract is registered, nothing calls the RPCs, every pointer
+# stays NULL); the worker release that records profile attempts needs it, so
+# it is predeploy. It needs 20261116205144 (shared metric value helper).
 #
 # 20261113014105 (unknown-trade-count sample confidence, issue #435) and its
 # follow-up 20261114101514 (true-zero trade counts, audit P1-2), in that order,
@@ -312,6 +326,35 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # USD (160917); it follows 20261116204359 (the forward replacement of the
 # superseded 170535 activation) and touches no table 192134 guards, so 192134
 # stays last.
+# 20261116204006 (score-input evidence binding, step 1) moves the score-input
+# bundle's scoreRows to arena.publication_score_rows_json: board headline
+# metrics only, plus a per-row unevidenced_metrics list. The deployed
+# orchestrator's strict bundle schema rejects that key (it would refuse every
+# season), so it follows the worker release that accepts it; it pins the
+# bundle body 20261115013558 installed and touches no table 192134 guards.
+# 20261116210122 (step 2b) makes that reader accept a trader_stats value only
+# when an attempt-bound write of the selected board's RAW attested it. Before
+# the worker that stamps board writes serves, no row is attested and every
+# trader_stats metric would publish as NULL, so it is postdeploy, after
+# 204006 (whose reader it replaces) and predeploy 20261116205144 (the pointer).
+# 20261116210657 (step 3) adds score_input_sha256 to the rank-publication
+# evidence rows and makes the evidence RPC (@3) and the deferred seal fence
+# require it. The deployed orchestrator sends no digest, so @3 would refuse
+# every season; the release that sends one accepts @2 and @3. Postdeploy,
+# after 210122; it replaces predeploy 20261114193017's RPC and fence bodies.
+# 20261116215329 makes arena.publication_score_rows_json (@3) also accept a
+# trader_stats value attested by a complete, fresh profile capture of the same
+# source, trader and timeframe (predeploy 20261116215328). It replaces the @2
+# body of 210122, so it follows it; with no profile attestation it returns
+# exactly the @2 rows. It touches no table 192134 guards.
+# 20261117015119 registers every profile capture contract of the worker's code
+# registry (PROFILE_CAPTURE_CONTRACTS: binance_futures, binance_spot,
+# bybit_copytrade, blofin_futures, toobit_futures) in the registry of predeploy
+# 20261116215328. A registered contract is only meaningful to the worker release
+# that carries the same contract document, so it follows that release; it
+# follows 215329 (the reader that consumes profile attestations) and touches
+# no table 192134 guards, so 192134 stays last. It refuses a replay, an earlier
+# registration for a listed source, and a missing or re-adaptered source.
 # 040440 forward replacement. V1_EXECUTION_STATUS requires the RAW-only
 # bridge SHA to be deployed and legacy callers drained before the legacy
 # position-history relations are frozen. Current main never reads or writes
@@ -328,6 +371,11 @@ POSTDEPLOY_MIGRATIONS=(
   20261115160917_public_source_exhaustion_and_total_capture_contracts.sql
   20261116204359_move_public_sources_to_local_region_prod_state.sql
   20261116203817_binance_web3_bsc_metric_contract_v2.sql
+  20261116204006_publication_score_rows_board_headline_only.sql
+  20261116210122_publication_score_rows_require_stats_evidence.sql
+  20261116210657_rank_publication_evidence_score_input_digest.sql
+  20261116215329_publication_score_rows_profile_attested.sql
+  20261117015119_register_profile_capture_contracts.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS

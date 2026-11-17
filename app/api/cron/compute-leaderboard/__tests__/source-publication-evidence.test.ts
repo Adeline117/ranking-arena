@@ -5,6 +5,7 @@
 import {
   SourcePublicationEvidenceError,
   buildSourcePublicationRows,
+  lacksRequiredMetricEvidence,
   parseSourcePublicationEvidence,
   type SourcePublicationEvidenceErrorCode,
 } from '../source-publication-evidence'
@@ -587,6 +588,30 @@ describe('source publication evidence', () => {
     )
     expect(error.message).toContain('platform=alpha')
     expect(error.message).toContain('trader_key=trader-1')
+  })
+
+  it('carries the evidence-refused metrics of each score row and rejects unknown names', () => {
+    const parsed = parse(
+      [physicalBoard()],
+      [scoreRow({ win_rate: null, unevidenced_metrics: ['win_rate', 'sharpe_ratio'] })]
+    )
+    expect(parsed.scoreRows[0].unevidenced_metrics).toEqual(['win_rate', 'sharpe_ratio'])
+    expect(lacksRequiredMetricEvidence(parsed.scoreRows[0])).toBe(true)
+
+    // Optional-only refusal, a present value, and a pre-evidence bundle row
+    // (no key) are all rankable on evidence grounds.
+    const optionalOnly = parse(
+      [physicalBoard()],
+      [scoreRow({ sharpe_ratio: null, unevidenced_metrics: ['sharpe_ratio'] })]
+    )
+    expect(lacksRequiredMetricEvidence(optionalOnly.scoreRows[0])).toBe(false)
+    const legacy = parse([physicalBoard()], [scoreRow()])
+    expect(lacksRequiredMetricEvidence(legacy.scoreRows[0])).toBe(false)
+
+    captureError(
+      () => parse([physicalBoard()], [scoreRow({ unevidenced_metrics: ['arena_score'] })]),
+      'invalid_bundle'
+    )
   })
 
   it('accepts the same trader key on different platforms', () => {
