@@ -116,6 +116,8 @@ export function parseBitunixLeaderboardPage(raw: unknown, _ctx: ParseCtx): Parse
   for (let i = 0; i < items.length; i++) {
     const item = items[i]
     if (item.uid === undefined || item.uid === null) continue
+    const headlineRoi = pct(item.roi)
+    const headlinePnl = num(item.pl)
     rows.push({
       exchangeTraderId: String(item.uid),
       // Positional in-page rank; re-anchored across pages by the caller.
@@ -127,8 +129,12 @@ export function parseBitunixLeaderboardPage(raw: unknown, _ctx: ParseCtx): Parse
       // not a reliable signal) — all rows are human (spec §1.3).
       traderKind: 'human',
       botStrategy: null,
-      headlineRoi: pct(item.roi),
-      headlinePnl: num(item.pl),
+      headlineRoi,
+      headlinePnl,
+      headlineMetricSources: {
+        ...(headlineRoi === null ? {} : { roi: { fieldPath: 'data.records[].roi' } }),
+        ...(headlinePnl === null ? {} : { pnl: { fieldPath: 'data.records[].pl' } }),
+      },
       headlineWinRate: pct(item.winRate),
       // The board row carries per-TF mdd (a FRACTION, like roi/winRate — see header
       // doc), so extract it to headlineMdd (publish writes it to trader_stats.mdd).
