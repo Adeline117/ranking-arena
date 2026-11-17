@@ -209,6 +209,17 @@ export function parseToobitProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
   const detail = (bundle.detail?.data ?? null) as Dict | null
   const radar = (bundle.radar?.data ?? null) as Dict | null
   const accumulate = objects(bundle.accumulate?.data)
+  const nickname = detail ? str(detail.nickname) : null
+  const avatarUrlOrigin = detail ? str(detail.avatar) : null
+
+  // radar and accumulate echo their window (`type`); a response for another
+  // window than the bundle's is not this window's block (spec §5.5).
+  const echoes = [radar?.type, ...accumulate.map((p) => p.type)].filter(
+    (v) => v !== undefined && v !== null
+  )
+  if (echoes.some((v) => num(v) !== tf)) {
+    return { stats: [], series: [], nickname, avatarUrlOrigin }
+  }
 
   const points = accumulate
     .map((p) => ({ ts: dayIso(p.date), value: num(p.value) }))
@@ -277,12 +288,7 @@ export function parseToobitProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
   const series: ParsedProfile['series'] = []
   if (points.length > 0) series.push({ timeframe: tf, metric: 'pnl', points })
 
-  return {
-    stats,
-    series,
-    nickname: detail ? str(detail.nickname) : null,
-    avatarUrlOrigin: detail ? str(detail.avatar) : null,
-  }
+  return { stats, series, nickname, avatarUrlOrigin }
 }
 
 // ── Positions (current-lead-orders, mask-aware) ──

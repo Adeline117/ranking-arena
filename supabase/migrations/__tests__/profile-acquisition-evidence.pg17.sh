@@ -34,6 +34,9 @@
 #              and an incomplete outcome are refused even when a forged pointer
 #              bypasses the trigger; as_of is the oldest observation used;
 #              without profile evidence @3 returns exactly what @2 returns.
+#   sources  - each declared contract (toobit_futures) with its recorded page,
+#              real parser and capture helper: published when fresh; refused
+#              when stale, for another trader or timeframe, or incomplete.
 
 set -Eeuo pipefail
 
@@ -846,3 +849,139 @@ END \$\$;
 SQL
 
 echo "profile-acquisition-evidence.pg17: typescript manifest ok"
+
+# ---------------------------------------------------------------------------
+# Declared source: toobit_futures. The registered contract and the recorded
+# radar page (lib/ingest/adapters/toobit/__tests__/fixtures) go through the
+# real parser and capture helper; the manifest closes an attempt, the exact
+# writer stamps the drawdown and the @3 reader publishes it. A stale capture,
+# a capture of another trader or timeframe and an incomplete outcome are
+# refused.
+# ---------------------------------------------------------------------------
+TOOBIT_JSON="$(cd "$ROOT_DIR" && npx --no-install tsx -e '
+import { readFileSync } from "fs"
+import { TOOBIT_FUTURES_PROFILE_CAPTURE as contract } from "./lib/ingest/adapters/toobit/profile-capture-contract"
+import { parseToobitProfile } from "./lib/ingest/adapters/toobit/parsers"
+import { profileCaptureContractSha256 } from "./lib/ingest/profile-capture/contract"
+import { FIXTURE_ATTEMPT_ID, runProfileContractFixture } from "./lib/ingest/profile-capture/test-helper"
+const served = JSON.parse(readFileSync("lib/ingest/adapters/toobit/__tests__/fixtures/profile-capture-90.json", "utf8"))
+const page = { pageIndex: 1, fetchedAt: "",
+  url: "https://bapi.toobit.com/bapi/v1/copy-trading/get-leader-radar-chart?leaderUserId=668939882&type=90",
+  payload: { timeframe: 90, detail: { data: served.detail.data }, radar: { data: served.radar.data },
+    accumulate: { data: served.accumulate.data } } }
+const result = runProfileContractFixture({ contract, timeframe: 90, pages: [page],
+  parseProfile: parseToobitProfile, ctx: { sourceSlug: "toobit_futures" }, exchangeTraderId: "668939882" })
+if (result.terminalState !== "complete" || result.attestedMetrics.join() !== "mdd") {
+  throw new Error(`${result.terminalState}/${result.reasonCode}`)
+}
+process.stdout.write(JSON.stringify({ sha: profileCaptureContractSha256(contract), attempt: FIXTURE_ATTEMPT_ID,
+  run: result.sourceRunId, manifest: result.manifest, mdd: JSON.stringify(result.stored.mdd),
+  roi: JSON.stringify(result.stored.roi), pnl: JSON.stringify(result.stored.pnl),
+  win: JSON.stringify(result.stored.winRate) }))
+')"
+toobit() { node -e 'const v = JSON.parse(process.argv[1])[process.argv[2]]; process.stdout.write(typeof v === "string" ? v : JSON.stringify(v))' "$TOOBIT_JSON" "$1"; }
+TOOBIT_MDD="$(toobit mdd)"
+
+psql_db -v sha="$(toobit sha)" -v attempt_id="$(toobit attempt)" -v run="$(toobit run)" \
+  -v manifest="$(toobit manifest)" -v mdd="$(toobit mdd)" -v roi="$(toobit roi)" \
+  -v pnl="$(toobit pnl)" -v win="$(toobit win)" <<SQL
+INSERT INTO arena.sources (id, slug, adapter_slug, status, serving_mode)
+VALUES (3, 'toobit_futures', 'toobit', 'active', 'serving');
+INSERT INTO arena.traders (id, source_id, exchange_trader_id) VALUES
+  (301, 3, '668939882'), (302, 3, '522025357');
+INSERT INTO arena.leaderboard_snapshots VALUES (31, 3, 90, now() - interval '1 hour', 2, true, 5031);
+INSERT INTO arena.leaderboard_entries
+  (scraped_at, snapshot_id, trader_id, timeframe, rank, headline_roi, headline_pnl, headline_win_rate)
+SELECT scraped_at, 31, e.trader_id, 90, e.rank, :roi, :pnl, :win
+FROM arena.leaderboard_snapshots, (VALUES (301, 1), (302, 2)) AS e(trader_id, rank) WHERE id = 31;
+INSERT INTO arena.leaderboard_acquisition_attempts VALUES (31, 3, 90);
+INSERT INTO arena.leaderboard_acquisition_outcomes VALUES (31, repeat('d', 64), 5031);
+INSERT INTO arena.trader_stats (trader_id, timeframe, as_of, roi, pnl, win_rate) VALUES
+  (302, 90, now() - interval '1 hour', :roi, :pnl, :win),
+  (301, 30, now() - interval '1 hour', :roi, :pnl, :win);
+INSERT INTO arena.profile_capture_contracts
+  (source_id, capture_contract, contract_sha256, timeframes, attestable_metrics)
+VALUES (3, 'toobit_futures-profile-capture@1', :'sha', '{7,30,90}', '{mdd}');
+
+-- The worker's sequence: start, tier_b RAW claimed by the attempt, finish.
+SELECT attempt_seq AS toobit_seq FROM arena.start_profile_acquisition_attempt(
+  :'attempt_id', 3, 301, 90, 'toobit_futures-profile-capture@1', :'sha', NULL) \gset
+INSERT INTO arena.raw_objects VALUES (7301, 3, 'tier_b', 301, 90, clock_timestamp(), 'raw/7301', 1,
+  repeat('e', 64), false, jsonb_build_object('profile_capture', jsonb_build_object(
+    'attempt_id', :'attempt_id', 'capture_contract', 'toobit_futures-profile-capture@1')));
+SELECT terminal_state FROM arena.finish_profile_acquisition_attempt(
+  :toobit_seq, :'attempt_id', 'complete', NULL, 7301, :'run', :'manifest'::jsonb);
+
+-- An incomplete capture of the same trader and timeframe.
+SELECT attempt_seq AS toobit_partial_seq FROM arena.start_profile_acquisition_attempt(
+  '00000000-0000-4000-8000-0000000000c2', 3, 301, 90, 'toobit_futures-profile-capture@1', :'sha', NULL) \gset
+INSERT INTO arena.raw_objects VALUES (7302, 3, 'tier_b', 301, 90, clock_timestamp(), 'raw/7302', 1,
+  repeat('e', 64), false, jsonb_build_object('profile_capture', jsonb_build_object(
+    'attempt_id', '00000000-0000-4000-8000-0000000000c2',
+    'capture_contract', 'toobit_futures-profile-capture@1')));
+SELECT terminal_state FROM arena.finish_profile_acquisition_attempt(
+  :toobit_partial_seq, '00000000-0000-4000-8000-0000000000c2', 'partial', 'endpoint_missing',
+  7302, NULL, NULL);
+
+CREATE TABLE public.toobit_seqs AS SELECT :toobit_seq::bigint AS complete, :toobit_partial_seq::bigint AS partial;
+
+PREPARE toobit_upsert(bigint, smallint, timestamptz, text, numeric, numeric, numeric, numeric,
+  numeric, integer, integer, numeric, integer, numeric, numeric, numeric, numeric, jsonb, jsonb,
+  boolean, bigint, text[]) AS $UPSERT_SQL;
+EXECUTE toobit_upsert(301, 90, now(), 'USDT', :roi, :pnl, NULL, :mdd, :win, NULL, NULL, NULL,
+  NULL, NULL, NULL, NULL, NULL, NULL, '{}', false, :toobit_seq, '{mdd}');
+
+DO \$proof\$
+DECLARE
+  v_rows jsonb := arena.publication_score_rows_json('90D', 1000, 48);
+  v_row jsonb;
+BEGIN
+  SELECT r INTO STRICT v_row FROM jsonb_array_elements(v_rows) AS r WHERE r->>'trader_key' = '668939882';
+  IF (v_row->>'max_drawdown')::numeric <> $TOOBIT_MDD OR v_row->'unevidenced_metrics' ? 'max_drawdown' THEN
+    RAISE EXCEPTION 'the toobit capture was not published: %', v_row;
+  END IF;
+  -- The other trader has no capture: its drawdown stays unevidenced.
+  SELECT r INTO STRICT v_row FROM jsonb_array_elements(v_rows) AS r WHERE r->>'trader_key' = '522025357';
+  IF v_row->'max_drawdown' <> 'null'::jsonb THEN
+    RAISE EXCEPTION 'an uncaptured toobit drawdown was published: %', v_row;
+  END IF;
+END
+\$proof\$;
+SQL
+
+TOOBIT_SEQ="$(psql_db -At -c 'SELECT complete FROM public.toobit_seqs')"
+TOOBIT_PARTIAL_SEQ="$(psql_db -At -c 'SELECT partial FROM public.toobit_seqs')"
+toobit_stamp() {
+  echo "PREPARE p(bigint, smallint, timestamptz, text, numeric, numeric, numeric, numeric,
+     numeric, integer, integer, numeric, integer, numeric, numeric, numeric, numeric, jsonb, jsonb,
+     boolean, bigint, text[]) AS $UPSERT_SQL;
+   EXECUTE p($1, $2, now(), 'USDT', NULL, NULL, NULL, $TOOBIT_MDD, NULL, NULL, NULL, NULL, NULL,
+     NULL, NULL, NULL, NULL, NULL, '{}', false, $3, '{mdd}')"
+}
+expect_failure 'a toobit capture cannot stamp another trader' 'is not a complete capture' \
+  "$(toobit_stamp 302 90 "$TOOBIT_SEQ")"
+expect_failure 'a toobit 90D capture cannot stamp the 30D row' 'is not a complete capture' \
+  "$(toobit_stamp 301 30 "$TOOBIT_SEQ")"
+expect_failure 'an incomplete toobit capture cannot stamp' 'is not a complete capture' \
+  "$(toobit_stamp 301 90 "$TOOBIT_PARTIAL_SEQ")"
+
+# Stale: the same capture, begun 72 hours ago (fixture-only ledger rewrite).
+psql_db <<SQL
+SET session_replication_role = replica;
+UPDATE arena.profile_acquisition_attempts SET recorded_started_at = now() - interval '72 hours'
+WHERE attempt_seq = $TOOBIT_SEQ;
+SET session_replication_role = origin;
+DO \$proof\$
+DECLARE
+  v_row jsonb;
+BEGIN
+  SELECT r INTO STRICT v_row FROM jsonb_array_elements(arena.publication_score_rows_json('90D', 1000, 48)) AS r
+  WHERE r->>'trader_key' = '668939882';
+  IF v_row->'max_drawdown' <> 'null'::jsonb OR NOT v_row->'unevidenced_metrics' ? 'max_drawdown' THEN
+    RAISE EXCEPTION 'a stale toobit capture was published: %', v_row;
+  END IF;
+END
+\$proof\$;
+SQL
+
+echo "profile-acquisition-evidence.pg17: toobit_futures contract ok"

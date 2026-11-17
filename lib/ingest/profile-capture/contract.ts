@@ -15,6 +15,7 @@
  */
 
 import { BYBIT_COPYTRADE_PROFILE_CAPTURE } from '../adapters/bybit-copytrade/profile-capture-contract'
+import { TOOBIT_FUTURES_PROFILE_CAPTURE } from '../adapters/toobit/profile-capture-contract'
 import type { ParsedStats, RankingTimeframe } from '../core/types'
 import { strictCanonicalSha256 } from '../strict-canonical-json'
 import {
@@ -252,6 +253,7 @@ export const PROFILE_CAPTURE_CONTRACTS: ReadonlyMap<string, ProfileCaptureContra
     BINANCE_SPOT_PROFILE_CAPTURE,
     BYBIT_COPYTRADE_PROFILE_CAPTURE,
     BLOFIN_FUTURES_PROFILE_CAPTURE,
+    TOOBIT_FUTURES_PROFILE_CAPTURE,
   ].map((contract) => [contract.sourceSlug, contract])
 )
 
