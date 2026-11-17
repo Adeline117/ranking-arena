@@ -40,12 +40,31 @@ assert_matches() {
   grep -Eq -- "$pattern" <<<"$haystack" || fail "$label (pattern: $pattern)"
 }
 
+# The fake archive and the fake tree listing describe the same file set (the
+# tracked release inputs, with their working-tree bytes), because the deploy
+# proves every extracted file against the tree's blob id.
 emit_test_archive() {
-  command tar -cf - \
-    .npmrc package.json package-lock.json tsconfig.json \
-    scripts/ci/worker-release-id.mjs lib worker
+  (cd "$ROOT" && env -u GIT_DIR -u GIT_OBJECT_DIRECTORY /usr/bin/git ls-files -z -- .npmrc package.json package-lock.json \
+      tsconfig.json scripts/ci/worker-release-id.mjs lib worker \
+    | command tar -cf - --null -T -)
 }
 export -f emit_test_archive
+
+# Computed once: one batched hash-object over the tracked release inputs.
+TEST_RELEASE_TREE_FILE="$(mktemp "${TMPDIR:-/tmp}/arena-deploy-test-tree.XXXXXX")"
+(cd "$ROOT" && paste \
+    <(/usr/bin/git ls-files -- .npmrc package.json package-lock.json tsconfig.json \
+        scripts/ci/worker-release-id.mjs lib worker \
+      | /usr/bin/git hash-object --no-filters --stdin-paths) \
+    <(/usr/bin/git ls-files -- .npmrc package.json package-lock.json tsconfig.json \
+        scripts/ci/worker-release-id.mjs lib worker) \
+  | sed 's/^/100644 blob /') > "$TEST_RELEASE_TREE_FILE"
+export TEST_RELEASE_TREE_FILE
+
+emit_test_release_tree() {
+  command cat "$TEST_RELEASE_TREE_FILE"
+}
+export -f emit_test_release_tree
 
 write_function_wrapper() {
   local path="$1"
@@ -58,6 +77,7 @@ write_function_wrapper() {
     printf 'export OLD_CWD=%q\n' "$OLD_CWD"
     printf 'export CANDIDATE_FAILED_FILE=%q\n' "$CANDIDATE_FAILED_FILE"
     printf 'export TEST_SHA=%q\n' "$TEST_SHA"
+    printf 'export TEST_RELEASE_TREE_FILE=%q\n' "$TEST_RELEASE_TREE_FILE"
     printf 'export TEST_RELEASE=%q\n' "$TEST_RELEASE"
     printf 'export FAKE_NODE_PATH=%q\n' "${FAKE_NODE_PATH:-}"
     printf 'export FAKE_PM2_PATH=%q\n' "${FAKE_PM2_PATH:-}"
@@ -112,7 +132,7 @@ write_function_wrapper() {
     printf 'export FAKE_PREFLIGHT_STATUS=%q\n' "${FAKE_PREFLIGHT_STATUS:-0}"
     printf 'export FAKE_RESIDUAL_INGEST_PROCESS=%q\n' \
       "${FAKE_RESIDUAL_INGEST_PROCESS:-0}"
-    declare -f fail emit_test_archive fake_npm_ci fake_git_environment fake_git_provenance \
+    declare -f fail emit_test_archive emit_test_release_tree fake_npm_ci fake_git_environment fake_git_provenance \
       "$function_name"
     printf '%s "$@"\n' "$function_name"
   } > "$path"
@@ -240,9 +260,9 @@ install_common_fake_functions() {
         printf '%s\n' .npmrc package.json package-lock.json tsconfig.json \
           scripts/ci/worker-release-id.mjs worker/deploy-ingest-local.sh
         ;;
-      *'ls-tree -r '*' -- .npmrc'*)
-        printf '100644 blob %s\t.npmrc\n' "$TEST_SHA"
-        printf '100755 blob %s\tworker/deploy-ingest-local.sh\n' "$TEST_SHA"
+      *'ls-tree -r '*' -- .npmrc'*) emit_test_release_tree ;;
+      *'hash-object --no-filters --stdin-paths'*)
+        /usr/bin/git hash-object --no-filters --stdin-paths
         ;;
       *'archive'*) emit_test_archive ;;
       *) fail "unexpected fake git invocation: $*" ;;
@@ -781,9 +801,9 @@ test_archive_invocation_has_no_ui_paths() {
         printf '%s\n' .npmrc package.json package-lock.json tsconfig.json \
           scripts/ci/worker-release-id.mjs worker/deploy-ingest-local.sh
         ;;
-      *'ls-tree -r '*' -- .npmrc'*)
-        printf '100644 blob %s\t.npmrc\n' "$TEST_SHA"
-        printf '100755 blob %s\tworker/deploy-ingest-local.sh\n' "$TEST_SHA"
+      *'ls-tree -r '*' -- .npmrc'*) emit_test_release_tree ;;
+      *'hash-object --no-filters --stdin-paths'*)
+        /usr/bin/git hash-object --no-filters --stdin-paths
         ;;
       *'archive'*) return 71 ;;
       *) fail "unexpected git before deliberate archive failure: $*" ;;
