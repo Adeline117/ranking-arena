@@ -373,6 +373,12 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # without it okx_futures, okx_spot and binance_web3_bsc fail every real
 # publication. It re-creates the 20261117130152 readiness body, so it follows
 # it; no worker code depends on it and it touches no table 192134 guards.
+# 20261118114230 lets the exhausted completeness proof accept a third board
+# version kind, reported_total_drift (bounded relative drift, at most 1%), for
+# live boards that change while they are paged. It only replaces two function
+# bodies and is inert until a source registers such a declaration; it follows
+# 112703 (which makes exhausted outcomes publishable) and touches no table
+# 192134 guards.
 # 040440 forward replacement. V1_EXECUTION_STATUS requires the RAW-only
 # bridge SHA to be deployed and legacy callers drained before the legacy
 # position-history relations are frozen. Current main never reads or writes
@@ -417,6 +423,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261117204557_source_capabilities_refresh_index_probe.sql
   20261118112703_metric_trust_exhaustion_observation_authority.sql
   20261118113319_binance_leaderboard_page_size_served_caps.sql
+  20261118114230_leaderboard_exhaustion_reported_total_drift.sql
   20261118113759_expected_sources_require_capture_contract.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
