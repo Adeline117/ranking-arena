@@ -47,6 +47,19 @@ psql_cmd() {
     -h "$SOCKET_DIR" -p "$PORT" -U postgres -d postgres "$@"
 }
 
+psql_drift() {
+  "$PG_BIN/psql" -X -v ON_ERROR_STOP=1 \
+    -h "$SOCKET_DIR" -p "$PORT" -U postgres -d drift "$@"
+}
+
+body_sha256() {
+  psql_cmd -Atqc "
+    SELECT pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(prosrc, 'UTF8')), 'hex')
+    FROM pg_catalog.pg_proc
+    WHERE oid = 'public.arena_freshness_expected_sources()'::pg_catalog.regprocedure;
+  "
+}
+
 expect_eq() {
   local label="$1" actual="$2" expected="$3"
   if [[ "$actual" != "$expected" ]]; then
@@ -121,7 +134,8 @@ INSERT INTO arena.sources (
        '{"legacy_platform":"shared"}', '{7}', '{}'),
   (10, 'alias_unreg',     1, 'a_alias2', 'active',  'serving',
        '{"legacy_platform":"shared"}', '{7,30}', '{}'),
-  (11, 'inactive_unreg',  1, 'a_inact', 'inactive', 'serving', '{}', '{7}',    '{}');
+  (11, 'inactive_unreg',  1, 'a_inact', 'inactive', 'serving', '{}', '{7}',    '{}'),
+  (12, 'bitget_bots_futures', 1, 'bitget_bots', 'active', 'serving', '{}', '{30}', '{}');
 
 INSERT INTO arena.leaderboard_capture_contracts (
   source_id, capture_contract, adapter_slug, attempt_binding_contract,
@@ -142,6 +156,9 @@ INSERT INTO arena.leaderboard_capture_contracts (
   (7, 'arena.ingest.leaderboard-acquisition-manifest@3', 'other_adapter',
    'arena.ingest.leaderboard-acquisition-attempt-binding@1', true),
   (9, 'arena.ingest.leaderboard-acquisition-manifest@3', 'a_alias',
+   'arena.ingest.leaderboard-acquisition-attempt-binding@1', true),
+  -- Registered, but the Bitget-bot quarantine keeps it out of both lists.
+  (12, 'arena.ingest.leaderboard-acquisition-manifest@4', 'bitget_bots',
    'arena.ingest.leaderboard-acquisition-attempt-binding@1', true);
 SQL
 
@@ -152,7 +169,64 @@ apply() {
 apply 20260718134000_freshness_expected_sources.sql
 # Later authority migrations pin the function's search_path this way.
 psql_cmd -qc "ALTER FUNCTION public.arena_freshness_expected_sources() SET search_path TO pg_catalog, pg_temp;"
+expect_eq "legacy body digest" "$(body_sha256)" \
+  "c1739275e302ac2a7429c79a0c3456680603418004cc9c3da44913de88d28b4e"
+
+# The Bitget-bot quarantine (20261115013558) rewrites this body with exactly
+# this replacement. Its prerequisite chain is out of scope here, so the
+# rewrite is reproduced and proven by the quarantine's own pinned digest.
+psql_cmd -q <<'SQL'
+DO $quarantine$
+DECLARE
+  v_needle text := pg_catalog.format('%s.serving_mode = ''serving''%s', 'source_row', E'\n');
+BEGIN
+  EXECUTE pg_catalog.replace(
+    pg_catalog.pg_get_functiondef(
+      'public.arena_freshness_expected_sources()'::pg_catalog.regprocedure),
+    v_needle,
+    v_needle || pg_catalog.format(
+$predicate$%2$s-- bitget-bot-cumulative-rank-quarantine@1
+%2$sAND NOT (
+%2$s  %1$s.slug = ANY (
+%2$s    ARRAY[
+%2$s      'bitget_bots_futures',
+%2$s      'bitget_bots_spot'
+%2$s    ]::pg_catalog.text[]
+%2$s  )
+%2$s  OR %1$s.adapter_slug = 'bitget_bots'
+%2$s)
+$predicate$, 'source_row', '    '));
+END
+$quarantine$;
+SQL
+expect_eq "quarantined body digest" "$(body_sha256)" \
+  "c69d25e952d8f131f8873770325b3e12baf83080059c9cd8a48d9c4b094d9b86"
+
 apply 20261113011058_leaderboard_publication_source_isolation.sql
+expect_eq "isolated body digest" "$(body_sha256)" \
+  "9427c4e01af650268ec07534a61101d9f177b38f07ceec621ae4e4b0a8cbc56b"
+
+# Negative: any other body refuses the whole migration (copy of this state).
+psql_cmd -qc "CREATE DATABASE drift TEMPLATE postgres;"
+psql_drift -qc "
+  CREATE OR REPLACE FUNCTION public.arena_freshness_expected_sources()
+  RETURNS TABLE (registry_slug text, filter_source text, exchange_name text, season_id text)
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+  AS 'SELECT NULL::text, NULL::text, NULL::text, NULL::text WHERE false
+      -- leaderboard-publication-source-isolation@1';
+"
+if DRIFT="$(psql_drift -q -f "$MIGRATIONS/20261118113759_expected_sources_require_capture_contract.sql" 2>&1)"; then
+  echo "a drifted freshness body was not refused" >&2
+  exit 1
+fi
+if [[ "$DRIFT" != *"body drifted from the reviewed post-isolation body"* ]]; then
+  echo "drift refusal had the wrong reason: $DRIFT" >&2
+  exit 1
+fi
+if [[ "$(psql_drift -Atqc "SELECT pg_catalog.to_regclass('arena.leaderboard_publication_unsupported_sources') IS NULL")" != "t" ]]; then
+  echo "a refused migration left objects behind" >&2
+  exit 1
+fi
 
 expected_sets() {
   psql_cmd -Atqc "
@@ -169,8 +243,12 @@ expect_eq "pre-migration expected set" "$BEFORE" \
   "30D:reg_v3,30D:reg_v4,30D:shared,7D:adapter_mismatch,7D:legacy_unverified,7D:no_git_sha,7D:only_v2,7D:reg_v3,7D:shared,7D:uncontracted,7D:wrong_binding,90D:uncontracted"
 
 apply 20261118113759_expected_sources_require_capture_contract.sql
-# Replay is a no-op (marker present; CREATE OR REPLACE everywhere else).
+expect_eq "final body digest" "$(body_sha256)" \
+  "2d7d679a100ed09b60c40a53e57d7bd2907d624a6738c7c49ce81496b0e9ebd2"
+# Replay converges to the same body.
 apply 20261118113759_expected_sources_require_capture_contract.sql
+expect_eq "replayed body digest" "$(body_sha256)" \
+  "2d7d679a100ed09b60c40a53e57d7bd2907d624a6738c7c49ce81496b0e9ebd2"
 
 MARKERS="$(
   psql_cmd -Atqc "

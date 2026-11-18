@@ -19,7 +19,8 @@
 --   * attempt_binding_contract = arena.ingest.leaderboard-acquisition-attempt-binding@1,
 --   * requires_runner_git_sha is true.
 -- The predicate lives in one helper, arena.leaderboard_capture_contract_registered,
--- and is spliced into the single freshness authority, so every SQL consumer
+-- and is added to the single freshness authority (a static, digest-fenced
+-- replacement of the reviewed post-isolation body), so every SQL consumer
 -- (cleanup, rerank, seal, serving-authority trigger, read-time serving check
 -- arena.public_ranked_leaderboard_serving_seasons, freshness report) and the
 -- TypeScript orchestrator (which reads the same function) use the identical
@@ -126,43 +127,70 @@ REVOKE ALL ON FUNCTION arena.leaderboard_capture_contract_registered(integer, te
 GRANT EXECUTE ON FUNCTION arena.leaderboard_capture_contract_registered(integer, text)
   TO service_role;
 
--- Splice the registration predicate into the freshness authority, after the
--- shared serving anchor (present exactly once, also after the Bitget-bot
--- quarantine and isolation rewrites). The function-local setting
--- arena.freshness_include_unsupported lets the unsupported reader below see
--- the same rows without the predicate.
-DO $rewrite_expected_sources$
+-- Replace the freshness authority with the reviewed post-isolation body plus
+-- the registration predicate. The current body must be exactly the one
+-- 20261113011058 leaves after the Bitget-bot quarantine (prosrc sha256
+-- 9427c4e0...; the quarantine's own c69d25e9... reproduces exactly in the
+-- pg17 proof), or this migration's own body on replay; anything else refuses.
+-- The function-local setting arena.freshness_include_unsupported lets the
+-- unsupported reader below see the same rows without the predicate.
+DO $expected_sources_digest$
 DECLARE
-  v_function oid := pg_catalog.to_regprocedure('public.arena_freshness_expected_sources()');
-  v_source text;
-  v_needle constant text := E'source_row.serving_mode = ''serving''\n';
-  v_marker constant text := 'leaderboard-capture-contract-registration@1';
-  v_needle_count integer;
+  v_sha256 text;
 BEGIN
-  SELECT function_row.prosrc
-  INTO STRICT v_source
+  SELECT pg_catalog.encode(
+    pg_catalog.sha256(pg_catalog.convert_to(function_row.prosrc, 'UTF8')), 'hex')
+  INTO STRICT v_sha256
   FROM pg_catalog.pg_proc AS function_row
-  WHERE function_row.oid = v_function;
+  WHERE function_row.oid =
+        pg_catalog.to_regprocedure('public.arena_freshness_expected_sources()');
 
-  IF pg_catalog.strpos(v_source, v_marker) > 0 THEN
-    RETURN; -- already rewritten (idempotent replay)
-  END IF;
-
-  v_needle_count := (
-    pg_catalog.length(v_source)
-    - pg_catalog.length(pg_catalog.replace(v_source, v_needle, ''))
-  ) / pg_catalog.length(v_needle);
-  IF v_needle_count <> 1
-     OR pg_catalog.strpos(v_source, 'timeframe.day_count') = 0 THEN
+  IF v_sha256 NOT IN (
+    -- after 20261113011058
+    '9427c4e01af650268ec07534a61101d9f177b38f07ceec621ae4e4b0a8cbc56b',
+    -- this migration (replay)
+    '2d7d679a100ed09b60c40a53e57d7bd2907d624a6738c7c49ce81496b0e9ebd2'
+  ) THEN
     RAISE EXCEPTION
-      'arena_freshness_expected_sources body drifted (serving anchor count %)',
-      v_needle_count;
+      'arena_freshness_expected_sources body drifted from the reviewed post-isolation body: %',
+      v_sha256;
   END IF;
+END
+$expected_sources_digest$;
 
-  EXECUTE pg_catalog.replace(
-    pg_catalog.pg_get_functiondef(v_function),
-    v_needle,
-    v_needle || $predicate$    -- leaderboard-capture-contract-registration@1
+CREATE OR REPLACE FUNCTION public.arena_freshness_expected_sources()
+RETURNS TABLE (
+  registry_slug text,
+  filter_source text,
+  exchange_name text,
+  season_id text
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+  SELECT
+    source_row.slug AS registry_slug,
+    COALESCE(
+      NULLIF(pg_catalog.btrim(source_row.meta->>'legacy_platform'), ''),
+      source_row.slug
+    ) AS filter_source,
+    exchange_row.name AS exchange_name,
+    (timeframe.day_count::text || 'D') AS season_id
+  FROM arena.sources AS source_row
+  JOIN arena.exchanges AS exchange_row
+    ON exchange_row.id = source_row.exchange_id
+  CROSS JOIN LATERAL (
+    SELECT DISTINCT declared.day_count
+    FROM unnest(
+      source_row.timeframes_native || source_row.timeframes_derived
+    ) AS declared(day_count)
+    WHERE declared.day_count IN (7, 30, 90)
+  ) AS timeframe
+  WHERE source_row.status = 'active'
+    AND source_row.serving_mode = 'serving'
+    -- leaderboard-capture-contract-registration@1
     AND (
       arena.leaderboard_capture_contract_registered(
         source_row.id::integer,
@@ -171,10 +199,41 @@ BEGIN
       OR pg_catalog.current_setting('arena.freshness_include_unsupported', true)
          IS NOT DISTINCT FROM 'on'
     )
-$predicate$
-  );
-END
-$rewrite_expected_sources$;
+    -- leaderboard-publication-source-isolation@1
+    AND NOT EXISTS (
+      SELECT 1
+      FROM arena.leaderboard_publication_source_isolations AS isolation
+      WHERE isolation.season_id = (timeframe.day_count::text || 'D')
+        AND isolation.filter_source = COALESCE(
+          NULLIF(pg_catalog.btrim(source_row.meta->>'legacy_platform'), ''),
+          source_row.slug
+        )
+    )
+    -- bitget-bot-cumulative-rank-quarantine@1
+    AND NOT (
+      source_row.slug = ANY (
+        ARRAY[
+          'bitget_bots_futures',
+          'bitget_bots_spot'
+        ]::pg_catalog.text[]
+      )
+      OR source_row.adapter_slug = 'bitget_bots'
+    )
+    -- Historical registry imports used the JSON string "null" as a sentinel.
+    -- Score inputs and source-watermark publication exclude it too.
+    AND pg_catalog.btrim(
+      COALESCE(source_row.meta->>'legacy_platform', '')
+    ) <> 'null'
+  ORDER BY
+    exchange_row.name,
+    source_row.slug,
+    timeframe.day_count;
+$function$;
+
+ALTER FUNCTION public.arena_freshness_expected_sources() OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.arena_freshness_expected_sources()
+  FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.arena_freshness_expected_sources() TO service_role;
 
 -- (season, filter_source) pairs the registration predicate removes from the
 -- expected set: declared by an active+serving source, but no registry row of
@@ -316,13 +375,11 @@ BEGIN
   FROM pg_catalog.pg_proc AS function_row
   WHERE function_row.oid = v_function;
 
-  IF (
-       pg_catalog.length(v_function_row.prosrc)
-       - pg_catalog.length(pg_catalog.replace(
-           v_function_row.prosrc, 'leaderboard-capture-contract-registration@1', ''))
-     ) / pg_catalog.length('leaderboard-capture-contract-registration@1') <> 1
-     OR pg_catalog.strpos(v_function_row.prosrc,
-          'leaderboard-publication-source-isolation@1') = 0
+  IF pg_catalog.encode(
+       pg_catalog.sha256(pg_catalog.convert_to(v_function_row.prosrc, 'UTF8')), 'hex')
+       <> '2d7d679a100ed09b60c40a53e57d7bd2907d624a6738c7c49ce81496b0e9ebd2'
+     OR v_function_row.proconfig
+        IS DISTINCT FROM ARRAY['search_path=pg_catalog, pg_temp']::pg_catalog.text[]
      OR NOT v_function_row.prosecdef
      OR v_function_row.proowner <> 'postgres'::pg_catalog.regrole
      OR pg_catalog.has_function_privilege('anon', v_function, 'EXECUTE')
