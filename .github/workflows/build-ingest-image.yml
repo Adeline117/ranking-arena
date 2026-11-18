@@ -85,7 +85,7 @@ jobs:
           docker run --rm --entrypoint node "$IMAGE_REF" --import tsx --input-type=module -e \
             "for (const m of ['bullmq','ioredis','viem','abitype','luxon','playwright','tsx','dotenv','pg','ccxt']) await import(m); await import('./worker/src/ingest/heartbeat.ts'); console.log('worker-modules-loaded')"
       - name: Log in to ghcr.io
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
