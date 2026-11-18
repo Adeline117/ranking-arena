@@ -12,14 +12,18 @@
 --
 -- What: a source may declare
 --     "board_version": {"kind": "reported_total_drift",
---                       "path": [...], "max_drift_rows": N}
+--                       "path": [...], "max_drift_bps": B}
 --   and its capture then records the smallest, largest and last board total it
---   was given. The proof holds only when the total varied by at most N rows and
---   the distinct rows differ from the last total by at most N; every other
+--   was given. With allowance = min(last total * B / 10000, max_duplicate_rows),
+--   the proof holds only when the total varied by at most the allowance, the
+--   distinct rows differ from the last total by at most the allowance, and the
+--   duplicate rows are at most the allowance. B is at most 100 (1%). The bound
+--   is relative because a registered declaration is immutable while a board
+--   keeps growing; max_duplicate_rows caps it in absolute rows. Every other
 --   condition is unchanged (one entry per source page, natural short/empty
 --   page end, zero rejected rows, distinct = accepted rows, duplicates =
---   observed - distinct and within max_duplicate_rows). The outcome keeps the
---   exhausted ledger shape; no table, column, constraint or caller changes.
+--   observed - distinct). The outcome keeps the exhausted ledger shape; no
+--   table, column, constraint or caller changes.
 --
 --   This extends completeness contract @1 with one more accepted declaration;
 --   every declaration and proof valid before stays valid with the same result.
@@ -115,11 +119,13 @@ AS $function$
         arena.leaderboard_exhaustion_keys(p_declaration->'board_version') = ARRAY['kind']
       WHEN 'reported_total_drift' THEN
         arena.leaderboard_exhaustion_keys(p_declaration->'board_version') =
-          ARRAY['kind', 'max_drift_rows', 'path']
+          ARRAY['kind', 'max_drift_bps', 'path']
         AND arena.leaderboard_exhaustion_path_valid(p_declaration->'board_version'->'path')
         AND arena.leaderboard_exhaustion_count_valid(
-          p_declaration->'board_version'->'max_drift_rows'
+          p_declaration->'board_version'->'max_drift_bps'
         )
+        -- At most 1% of the board.
+        AND (p_declaration->'board_version'->>'max_drift_bps')::integer <= 100
       ELSE false
     END,
     false
@@ -153,6 +159,7 @@ DECLARE
   v_reread jsonb;
   v_end_values jsonb;
   v_totals jsonb;
+  v_allowance bigint;
 BEGIN
   IF arena.leaderboard_exhaustion_keys(p_completeness) IS DISTINCT FROM ARRAY[
        'board_version', 'data_contract', 'declaration', 'pages', 'row_keys'
@@ -319,8 +326,9 @@ BEGIN
         RETURN false;
       END IF;
     WHEN 'reported_total_drift' THEN
-      -- A live board: the total every page reports and the distinct rows stay
-      -- within the declared allowance of each other.
+      -- A live board: the total every page reports, the distinct rows against
+      -- the last total, and the duplicate rows each stay within the declared
+      -- share of the last total, never above max_duplicate_rows.
       v_totals := v_board_version->'reported_totals';
       IF arena.leaderboard_exhaustion_keys(v_board_version) IS DISTINCT FROM
            ARRAY['kind', 'reported_totals']
@@ -331,11 +339,18 @@ BEGIN
          OR NOT arena.leaderboard_exhaustion_count_valid(v_totals->'max')
          OR NOT arena.leaderboard_exhaustion_count_valid(v_totals->'last')
          OR (v_totals->>'last')::integer NOT BETWEEN
-            (v_totals->>'min')::integer AND (v_totals->>'max')::integer
-         OR (v_totals->>'max')::integer - (v_totals->>'min')::integer >
-            (v_declaration->'board_version'->>'max_drift_rows')::integer
-         OR pg_catalog.abs((v_totals->>'last')::integer - (v_rows->>'distinct')::integer) >
-            (v_declaration->'board_version'->>'max_drift_rows')::integer
+            (v_totals->>'min')::integer AND (v_totals->>'max')::integer THEN
+        RETURN false;
+      END IF;
+      v_allowance := LEAST(
+        (v_totals->>'last')::bigint
+          * (v_declaration->'board_version'->>'max_drift_bps')::bigint / 10000,
+        (v_declaration->>'max_duplicate_rows')::bigint
+      );
+      IF (v_totals->>'max')::bigint - (v_totals->>'min')::bigint > v_allowance
+         OR pg_catalog.abs((v_totals->>'last')::bigint - (v_rows->>'distinct')::bigint) >
+            v_allowance
+         OR (v_rows->>'duplicate')::bigint > v_allowance
          OR EXISTS (
            SELECT 1
              FROM pg_catalog.jsonb_array_elements(v_pages) AS page(value)
