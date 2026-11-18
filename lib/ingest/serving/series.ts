@@ -170,6 +170,7 @@ export const TRUST_EVIDENCE_RETENTION_DELETE_ENV = 'INGEST_TRUST_EVIDENCE_RETENT
 
 export const TRUST_EVIDENCE_RETENTION_DEFAULT_ROW_CAP = 100_000
 export const TRUST_EVIDENCE_RETENTION_MIN_ROW_CAP = 1_000
+export const TRUST_EVIDENCE_RETENTION_STATEMENT_TIMEOUT = '180s'
 export const TRUST_EVIDENCE_RETENTION_ROW_CAP_KEY = 'arena:ingest:trust-retention:row-cap'
 
 /** Where the adaptive row cap survives between maintenance runs (Redis in the worker). */
@@ -221,8 +222,8 @@ async function readRowCap(store: TrustEvidenceRowCapStore): Promise<number> {
  * worker env INGEST_TRUST_EVIDENCE_RETENTION_DELETE=1 and the owner-only
  * arena.trust_evidence_retention_settings.delete_enabled are on.
  *
- * One row-budgeted batch per call, inside one transaction with statement/lock
- * timeouts. A batch that times out rolls back whole; the row cap is then
+ * One row-budgeted batch per call, inside one transaction with a 3-minute
+ * statement_timeout and 5s lock_timeout. A batch that times out rolls back whole; the row cap is then
  * halved (floor 1,000) for the next run, and doubled back (ceiling 100,000)
  * after each success. The database resumes an unfinished snapshot purge from
  * its last committed batch and splits large snapshots, so a smaller cap
@@ -258,7 +259,12 @@ export async function retainTrustEvidence(
 
     await client.query('BEGIN')
     try {
-      await client.query(`SET LOCAL statement_timeout = '120s'`)
+      // 3 minutes per 100k-row batch. Never the migration's 30min (that is a
+      // SET LOCAL of the migration transaction only): a long purge transaction
+      // would hold back autovacuum and ingest writes. A timeout halves the cap.
+      await client.query(
+        `SET LOCAL statement_timeout = '${TRUST_EVIDENCE_RETENTION_STATEMENT_TIMEOUT}'`
+      )
       await client.query(`SET LOCAL lock_timeout = '5s'`)
       const { rows } = await client.query<{ result: Record<string, unknown> }>(
         `SELECT arena.retain_trust_evidence($1::boolean, $2::integer) AS result`,

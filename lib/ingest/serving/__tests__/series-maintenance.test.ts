@@ -123,7 +123,7 @@ describe('trust evidence retention entrypoint', () => {
     expect(sql).toEqual(
       expect.arrayContaining([
         'BEGIN',
-        "SET LOCAL statement_timeout = '120s'",
+        "SET LOCAL statement_timeout = '180s'",
         "SET LOCAL lock_timeout = '5s'",
         'COMMIT',
       ])
