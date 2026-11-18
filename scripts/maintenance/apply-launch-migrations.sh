@@ -397,6 +397,11 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # live board has less time to move while it is paged. It requires the
 # page_size 20 pre-state that 204948 also requires, so it follows 204948; it
 # changes page_size only and touches no table 192134 guards.
+# 20261118134500 registers binance_futures and binance_spot as live boards
+# (reported_total_drift, 1% of the board) in the append-only exhaustion
+# registry. It needs the declaration 114230 makes valid, so it follows it; the
+# worker release that captures binance in this mode is deployed after it. It
+# touches no table 192134 guards.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -416,6 +421,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261118112703_metric_trust_exhaustion_observation_authority.sql
   20261118113319_binance_leaderboard_page_size_served_caps.sql
   20261118114230_leaderboard_exhaustion_reported_total_drift.sql
+  20261118134500_register_binance_live_board_exhaustion_contracts.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
