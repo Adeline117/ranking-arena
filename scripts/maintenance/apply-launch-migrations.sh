@@ -368,6 +368,11 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # reached both boards). It changes fetch_region only, needs a running local
 # worker release with both profile capture contracts registered, so it follows
 # 015119; it touches no table 192134 guards.
+# 20261118112703 adds the exhaustion-completeness branch (20261115141050) to
+# the observation lineage trigger, the rankable view and the readiness RPC:
+# without it okx_futures, okx_spot and binance_web3_bsc fail every real
+# publication. It re-creates the 20261117130152 readiness body, so it follows
+# it; no worker code depends on it and it touches no table 192134 guards.
 # 040440 forward replacement. V1_EXECUTION_STATUS requires the RAW-only
 # bridge SHA to be deployed and legacy callers drained before the legacy
 # position-history relations are frozen. Current main never reads or writes
@@ -397,6 +402,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261117015119_register_profile_capture_contracts.sql
   20261117204948_move_binance_sources_to_local_region.sql
   20261117204557_source_capabilities_refresh_index_probe.sql
+  20261118112703_metric_trust_exhaustion_observation_authority.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
