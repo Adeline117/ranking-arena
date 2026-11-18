@@ -381,6 +381,11 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # the refresh to hourly at :17. It depends on no worker release and touches no
 # table 192134 guards; apply it outside a running refresh (it waits 5s for the
 # view lock, then rolls back).
+# 20261118114212 registers attempt-bound V3 capture for gmx (exhausted mode,
+# one verbatim response) with its metric and exhaustion contracts, and sets
+# gmx page_size to the adapter limit. Registered before the worker that ships
+# the gmx capture, every gmx Tier-A run would fail, so it follows that worker
+# release and 160917; it touches no table 192134 guards, so 192134 stays last.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -397,6 +402,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261117015119_register_profile_capture_contracts.sql
   20261117204948_move_binance_sources_to_local_region.sql
   20261117204557_source_capabilities_refresh_index_probe.sql
+  20261118114212_gmx_attempt_bound_capture_contract.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS

@@ -7,14 +7,16 @@
  * budget + circuit accounting without ever launching a browser.
  *
  * Surfaces:
- *   Tier A  POST {subgraph} periodAccountStats(where:{from, maxCapital_gte})
+ *   Tier A  POST {subgraph} periodAccountStats(where:{from, to, maxCapital_gte})
  *           — ONE query per TF returns every account active in the window
- *           (~3k for 7d). The resolver requires `from` rounded to 00:00:00
- *           UTC. Arena passes BOTH `from` and `to`, so 7d/30d/90d each cover
- *           an exact number of completed UTC days. This is at most 24h behind
- *           a rolling-now window and is disclosed in every RAW/stat payload.
- *           Unsorted → sort by realized-basis window PnL desc, truncate to
- *           meta.board_depth (default 60 = survey count), chunk page_size.
+ *           (~2.5k/3.3k/4.9k for 7d/30d/90d). The resolver requires `from`
+ *           rounded to 00:00:00 UTC. Arena passes BOTH `from` and `to`, so
+ *           7d/30d/90d each cover an exact number of completed UTC days. This
+ *           is at most 24h behind a rolling-now window and is disclosed in
+ *           every RAW/stat payload. Attempt-bound capture (manifest v3,
+ *           exhausted mode): the verbatim response is the one source page, the
+ *           full population is published, and the parser orders it by
+ *           realized-basis window PnL desc.
  *   Tier B/C POST periodAccountStats(id_eq) + accountPnlHistoryStats — both
  *           per (trader, TF). IDs are CASE-SENSITIVE checksummed addresses
  *           (lowercase id_eq returns []) → viem getAddress() at fetch time.
@@ -38,19 +40,28 @@ import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { BlockedUpstreamError, isBlockedStatus } from '../../fetch/rate-limiter'
 import {
-  gmxRealizedPnlUsd,
+  captureNumericLeaderboard,
+  type JsonFetcher,
+  type LeaderboardCapture,
+  type LeaderboardPublicRequestProjectionInput,
+  type NumericLeaderboardPageMeta,
+} from '../../fetch/capture'
+import type { LeaderboardExhaustionDeclaration } from '../../acquisition-exhaustion'
+import { ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT } from '../../acquisition-attempts'
+import {
+  gmxWindowEchoAlias,
   parseGmxHistory,
   parseGmxLeaderboardPage,
   parseGmxPositions,
   parseGmxProfile,
+  readGmxWindowEcho,
 } from './parsers'
+
+export { sortGmxLeaderboardRows } from './parsers'
 
 /** Official production GraphQL endpoint published by GMX. */
 export const GMX_SUBGRAPH_URL = 'https://gmx.squids.live/gmx-synthetics-arbitrum:prod/api/graphql'
 const TOKENS_URL = 'https://arbitrum-api.gmxinfra.io/tokens'
-
-const DEFAULT_BOARD_DEPTH = 60 // survey count (spec §7 #32: 20 × 3 pages)
-const BOARD_FETCH_LIMIT = 50_000 // resolver computes server-side; one shot
 
 /** All PeriodAccountStatObject fields — raw keeps everything (spec §3). */
 const PERIOD_FIELDS =
@@ -116,27 +127,185 @@ export function gmxWindowFrom(timeframe: RankingTimeframe, nowMs: number): numbe
   return gmxWindowBounds(timeframe, nowMs).from
 }
 
-/** Effective board depth: meta.board_depth (production knob, default 60),
- *  further capped by meta.max_rows (smoke-run knob). */
-function effectiveDepth(src: SourceRow): number {
-  const boardDepth = Number(src.meta.board_depth) || DEFAULT_BOARD_DEPTH
-  const maxRows = Number(src.meta.max_rows) || null
-  return maxRows !== null ? Math.min(boardDepth, maxRows) : boardDepth
+// ── Tier A: attempt-bound capture ──
+
+/**
+ * Upstream `limit` of the one board request, and the source's page_size. The
+ * resolver answers the whole window in one unsorted response (live
+ * 2026-11-18: 2,516 / 3,274 / 4,920 accounts for 7d/30d/90d), so a response
+ * shorter than the limit is the end of the population (short_page). A full
+ * response could hide more accounts; the capture then stops at the caller cap
+ * and the attempt can never verify.
+ */
+export const GMX_LEADERBOARD_PAGE_SIZE = 50_000
+
+/**
+ * Exhausted completeness (no reported total). Mirrored by
+ * arena.leaderboard_exhaustion_contracts for `gmx`. Row order is stable for
+ * a completed-day window (verified live: identical ids and values on repeat),
+ * so a first-page re-read proves the board did not move during the capture.
+ */
+export const GMX_LEADERBOARD_EXHAUSTION: LeaderboardExhaustionDeclaration = Object.freeze({
+  completeness_mode: 'exhausted',
+  list_path: ['data', 'periodAccountStats'],
+  row_key_path: ['id'],
+  end_signal: Object.freeze({ kind: 'short_page' }),
+  board_version: Object.freeze({ kind: 'first_page_reread' }),
+  max_duplicate_rows: 0,
+}) as LeaderboardExhaustionDeclaration
+
+/**
+ * Public request body: the GraphQL document and a request ordinal in
+ * `extensions` (the GraphQL-over-HTTP map for client metadata, ignored by the
+ * server). The subgraph has no page argument; the ordinal binds the capture's
+ * page index, and the document's offset is (ordinal − 1) × limit.
+ */
+export const GMX_LEADERBOARD_PAGE_BINDING = Object.freeze({
+  location: 'body' as const,
+  path: ['extensions', 'arenaPage'],
+})
+
+export function buildGmxLeaderboardRequestBody(input: {
+  timeframe: RankingTimeframe
+  from: number
+  to: number
+  pageIndex: number
+  pageSize: number
+}): { query: string; extensions: { arenaPage: number } } {
+  const { timeframe, from, to, pageIndex, pageSize } = input
+  if (!Number.isSafeInteger(pageIndex) || pageIndex < 1) {
+    throw new TypeError('[gmx] leaderboard page index must be a positive safe integer')
+  }
+  if (!Number.isSafeInteger(pageSize) || pageSize < 1) {
+    throw new TypeError('[gmx] leaderboard page size must be a positive safe integer')
+  }
+  const offset = (pageIndex - 1) * pageSize
+  return {
+    query:
+      `query ArenaGmxLeaderboard { ${gmxWindowEchoAlias(timeframe, from, to)}: __typename ` +
+      `periodAccountStats(limit: ${pageSize}, offset: ${offset}, ` +
+      `where: { from: ${from}, to: ${to}, maxCapital_gte: "0" }) { ${PERIOD_FIELDS} } }`,
+    extensions: { arenaPage: pageIndex },
+  }
 }
 
-/** Validate every candidate before sorting. A missing component is an
- * upstream schema/completeness failure, never a zero-PnL trader. */
-export function sortGmxLeaderboardRows(rows: Dict[]): Dict[] {
-  const ranked = rows.map((row) => {
-    const pnl = gmxRealizedPnlUsd(row)
-    if (pnl === null) throw new Error('[gmx] incomplete realized-net leaderboard components')
-    return { row, pnl }
+/** Exact public projection: the body has no credential and is kept whole. */
+export function projectGmxLeaderboardRequest(request: {
+  method: string
+  url: string
+  body?: unknown
+}): LeaderboardPublicRequestProjectionInput {
+  if (request.method !== 'POST') throw new TypeError('[gmx] leaderboard request must be POST')
+  const url = new URL(request.url)
+  if ([...url.searchParams].length > 0) {
+    throw new TypeError('[gmx] leaderboard endpoint must not contain query parameters')
+  }
+  const body = request.body as Dict | null | undefined
+  if (
+    !body ||
+    typeof body !== 'object' ||
+    Object.keys(body).sort().join(',') !== 'extensions,query' ||
+    typeof body.query !== 'string'
+  ) {
+    throw new TypeError('[gmx] leaderboard request body must be exactly { query, extensions }')
+  }
+  return { method: 'POST', url: url.href, body: { query: body.query, extensions: body.extensions } }
+}
+
+/**
+ * Page meta of one verbatim response. GraphQL errors arrive with HTTP 200, so
+ * an `errors` array, a missing list, or a window echo other than the one
+ * requested is an upstream error, never an empty board.
+ */
+export function gmxLeaderboardMeta(
+  payload: unknown,
+  expected: { timeframe: RankingTimeframe; from: number; to: number }
+): NumericLeaderboardPageMeta {
+  const root = payload as Dict | null
+  if (!root || typeof root !== 'object' || Array.isArray(root)) {
+    throw new TypeError('[gmx] leaderboard response must be a JSON object')
+  }
+  if (Array.isArray(root.errors) && root.errors.length > 0) {
+    throw new TypeError('[gmx] leaderboard response carries GraphQL errors')
+  }
+  const data = root.data as Dict | null | undefined
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new TypeError('[gmx] leaderboard response has no data object')
+  }
+  const window = readGmxWindowEcho(data)
+  if (
+    window.timeframe !== expected.timeframe ||
+    window.from !== expected.from ||
+    window.to !== expected.to
+  ) {
+    throw new TypeError('[gmx] leaderboard response echoes a different window')
+  }
+  if (!Array.isArray(data.periodAccountStats)) {
+    throw new TypeError('[gmx] leaderboard response must contain data.periodAccountStats')
+  }
+  return {
+    rowCount: data.periodAccountStats.length,
+    reportedPopulation: null,
+    reportedPageCount: null,
+    reportedCurrentPage: null,
+    reportedPageSize: null,
+  }
+}
+
+/** Plain POST; capture paces it and records every status it answers. */
+const fetchGmxLeaderboardJson: JsonFetcher = async (template) => {
+  const response = await fetch(template.url, {
+    method: template.method,
+    headers: template.headers,
+    body: JSON.stringify(template.body),
   })
-  ranked.sort((a, b) => {
-    if (b.pnl !== a.pnl) return b.pnl - a.pnl
-    return String(a.row.id ?? '').localeCompare(String(b.row.id ?? ''))
+  let json: unknown = null
+  try {
+    json = await response.json()
+  } catch {
+    // Non-JSON body: capture records the status and validation fails closed.
+  }
+  return { status: response.status, json }
+}
+
+/**
+ * One request per TF for the exact completed-UTC-day window, re-read once for
+ * board stability. The bounds are fixed before the first request, so the
+ * re-read asks for the same window even across midnight.
+ */
+async function captureGmxLeaderboard(
+  session: FetchSession,
+  src: SourceRow,
+  timeframe: RankingTimeframe,
+  options?: { signal?: AbortSignal }
+): Promise<LeaderboardCapture> {
+  if (src.page_size !== GMX_LEADERBOARD_PAGE_SIZE) {
+    throw new TypeError(
+      `[gmx] leaderboard capture requires page_size ${GMX_LEADERBOARD_PAGE_SIZE} (got ${src.page_size})`
+    )
+  }
+  const pageSize = GMX_LEADERBOARD_PAGE_SIZE
+  const { from, to } = gmxWindowBounds(timeframe, Date.now())
+  const url = endpoint(src, 'subgraph', GMX_SUBGRAPH_URL)
+  return captureNumericLeaderboard({
+    session,
+    fetcher: fetchGmxLeaderboardJson,
+    signal: options?.signal,
+    buildRequest: (pageIndex) => ({
+      url,
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: buildGmxLeaderboardRequestBody({ timeframe, from, to, pageIndex, pageSize }),
+    }),
+    projectPublicRequest: projectGmxLeaderboardRequest,
+    pageBinding: GMX_LEADERBOARD_PAGE_BINDING,
+    extractMeta: (payload) => gmxLeaderboardMeta(payload, { timeframe, from, to }),
+    pageSize,
+    exhaustion: GMX_LEADERBOARD_EXHAUSTION,
+    // Ranks are assigned over the whole response; a second page would need a
+    // cross-page sort, so a full first page ends the capture unverified.
+    callerPageCap: 1,
   })
-  return ranked.map(({ row }) => row)
 }
 
 // ── Session-memoized markets + tokens (symbol resolution for positions) ──
@@ -189,46 +358,17 @@ const gmxAdapter: SourceAdapter = {
     copiers: false, // DEX — no copy trading
   },
 
-  /**
-   * One periodAccountStats query per TF → sort by realized-basis PnL desc
-   * (deterministic tie-breaks) → truncate to the depth knob → chunk into
-   * page_size pages. Chunk-local ranks are re-anchored by the Tier-A
-   * processor via (pageIndex−1)×page_size.
-   */
+  leaderboardAcquisitionContract: ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
+  captureLeaderboard: captureGmxLeaderboard,
+
+  /** Legacy stream view of the attempt-bound capture (one verbatim page). */
   async *listLeaderboard(
     session: FetchSession,
     src: SourceRow,
     timeframe: RankingTimeframe
   ): AsyncIterable<RawPage> {
-    const { from, to } = gmxWindowBounds(timeframe, Date.now())
-    const data = await gql<{ periodAccountStats: Dict[] }>(
-      session,
-      src,
-      `query { periodAccountStats(limit: ${BOARD_FETCH_LIMIT}, ` +
-        `where: { from: ${from}, to: ${to}, maxCapital_gte: "0" }) { ${PERIOD_FIELDS} } }`
-    )
-    const rows = data.periodAccountStats ?? []
-    const fetchedAt = new Date().toISOString()
-
-    const sorted = sortGmxLeaderboardRows(rows)
-    const truncated = sorted.slice(0, effectiveDepth(src))
-
-    const chunkSize = src.page_size ?? 20
-    for (let i = 0; i < truncated.length; i += chunkSize) {
-      yield {
-        pageIndex: Math.floor(i / chunkSize) + 1,
-        payload: {
-          timeframe,
-          from,
-          to,
-          windowSemantics: 'completed_utc_days',
-          reportedTotal: rows.length, // pre-truncation account count
-          rows: truncated.slice(i, i + chunkSize),
-        },
-        url: endpoint(src, 'subgraph', GMX_SUBGRAPH_URL),
-        fetchedAt,
-      }
-    }
+    const capture = await captureGmxLeaderboard(session, src, timeframe)
+    yield* capture.parsePages
   },
 
   /** Profile bundle: 2 subgraph queries for the SAME midnight-aligned

@@ -18,6 +18,7 @@ import {
 } from '../parsers'
 import { GMX_SUBGRAPH_URL, gmxWindowBounds, gmxWindowFrom, sortGmxLeaderboardRows } from '../index'
 import type { ParseCtx } from '../../../core/types'
+import { resolveHeadlineLineage } from '../../../testing/headline-lineage'
 
 function fixture(name: string): Record<string, unknown> {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
@@ -441,6 +442,89 @@ describe('sortGmxLeaderboardRows', () => {
     expect(() => sortGmxLeaderboardRows([incomplete])).toThrow(
       'incomplete realized-net leaderboard components'
     )
+  })
+})
+
+/**
+ * board-capture-7d.json: one live attempt-bound response (2026-11-18, 7d
+ * window 1794355200..1794960000, 2,516 accounts) trimmed to its first 12
+ * rows in upstream (unsorted) order, window echo alias intact.
+ */
+describe('parseGmxLeaderboardPage (verbatim capture response)', () => {
+  const response = fixture('board-capture-7d.json') as {
+    data: Record<string, unknown> & { periodAccountStats: Array<Record<string, unknown>> }
+  }
+  const upstream = response.data.periodAccountStats
+
+  it('orders the whole response by realized-net pnl and ranks it globally', () => {
+    const page = parseGmxLeaderboardPage(response, ctx)
+    expect(page.reportedTotal).toBeNull()
+    expect(page.rows).toHaveLength(upstream.length)
+    expect(page.rows.map((row) => row.rank)).toEqual(upstream.map((_, index) => index + 1))
+    const pnls = page.rows.map((row) => row.headlinePnl!)
+    expect(pnls).toEqual([...pnls].sort((a, b) => b - a))
+    expect(new Set(page.rows.map((row) => row.exchangeTraderId))).toEqual(
+      new Set(upstream.map((row) => String(row.id).toLowerCase()))
+    )
+  })
+
+  it('reads the window from the echo alias and claims registered field paths', () => {
+    const page = parseGmxLeaderboardPage(response, ctx)
+    for (const row of page.rows) {
+      expect(row.headlineExtras).toMatchObject({
+        window_from: 1794355200,
+        window_to: 1794960000,
+        window_duration_days: 7,
+        window_semantics: 'completed_utc_days',
+      })
+      expect(row.headlineMetricSources?.pnl).toEqual({
+        fieldPath: 'data.periodAccountStats[].realizedPnl',
+      })
+      if (row.headlineRoi === null) expect(row.headlineMetricSources?.roi).toBeUndefined()
+      else
+        expect(row.headlineMetricSources?.roi).toEqual({
+          fieldPath: 'data.periodAccountStats[].realizedPnl/maxCapital',
+        })
+    }
+  })
+
+  it('resolves every non-null headline against the registered gmx contract', () => {
+    const page = parseGmxLeaderboardPage(response, ctx)
+    const nonNull = page.rows.reduce(
+      (count, row) =>
+        count + (row.headlinePnl === null ? 0 : 1) + (row.headlineRoi === null ? 0 : 1),
+      0
+    )
+    expect(resolveHeadlineLineage(page.rows, 'gmx')).toEqual({ resolved: nonNull, unresolved: [] })
+  })
+
+  it('agrees with the legacy composite parse of the same rows', () => {
+    const verbatim = parseGmxLeaderboardPage(response, ctx).rows
+    const legacy = parseGmxLeaderboardPage(
+      {
+        timeframe: 7,
+        from: 1794355200,
+        to: 1794960000,
+        reportedTotal: upstream.length,
+        rows: sortGmxLeaderboardRows(upstream),
+      },
+      ctx
+    ).rows
+    expect(verbatim.map(({ headlineMetricSources: _sources, ...row }) => row)).toEqual(legacy)
+  })
+
+  it('fails closed on GraphQL errors, a missing list, or a missing/duplicated echo', () => {
+    const { arenaWindow_7d_1794355200_1794960000: _echo, ...noEcho } = response.data
+    const cases: unknown[] = [
+      { ...response, errors: [{ message: 'from should be rounded to 00:00:00' }] },
+      { data: null, errors: [{ message: 'boom' }] },
+      { data: { arenaWindow_7d_1794355200_1794960000: 'Query' } },
+      { data: noEcho },
+      { data: { ...response.data, arenaWindow_30d_1792368000_1794960000: 'Query' } },
+      { data: { ...noEcho, arenaWindow_7d_1794355200_1794960001: 'Query' } },
+      { data: { ...noEcho, arenaWindow_7d_1794355200_1794960000: 'Other' } },
+    ]
+    for (const raw of cases) expect(() => parseGmxLeaderboardPage(raw, ctx)).toThrow('[gmx]')
   })
 })
 

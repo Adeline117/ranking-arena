@@ -22,7 +22,7 @@ const src: SourceRow = {
   profile_cache_ttl: '6 hours',
   copier_table_depth: 'none',
   currency: 'USDC',
-  page_size: 20,
+  page_size: 50_000,
   pagination_kind: 'numeric',
   cadence_tier_a: '4 hours',
   cadence_tier_b: '12 hours',
@@ -64,7 +64,8 @@ describe('gmx exact-window transport', () => {
       if (query.includes('accountPnlHistoryStats')) {
         return response({ data: { accountPnlHistoryStats: [] } })
       }
-      return response({ data: { periodAccountStats: [] } })
+      const echo = /(arenaWindow_\w+): __typename/.exec(query)?.[1]
+      return response({ data: { ...(echo ? { [echo]: 'Query' } : {}), periodAccountStats: [] } })
     }) as unknown as typeof fetch
 
     const pages = []
@@ -79,8 +80,9 @@ describe('gmx exact-window transport', () => {
       windowSemantics: 'completed_utc_days',
     })
 
+    // Board capture (+ its first-page re-read) and the profile query.
     const periodQueries = queries.filter((query) => query.includes('periodAccountStats'))
-    expect(periodQueries).toHaveLength(2)
+    expect(periodQueries).toHaveLength(3)
     for (const query of periodQueries) {
       expect(query).toContain(`from: ${bounds.from}`)
       expect(query).toContain(`to: ${bounds.to}`)
