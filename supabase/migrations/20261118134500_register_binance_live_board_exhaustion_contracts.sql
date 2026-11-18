@@ -33,10 +33,11 @@ SET LOCAL search_path = pg_catalog, pg_temp;
 LOCK TABLE arena.sources IN SHARE MODE;
 LOCK TABLE arena.leaderboard_exhaustion_contracts IN SHARE ROW EXCLUSIVE MODE;
 
+-- Session-local seed (pg_temp); it disappears with the applying session.
 CREATE TEMPORARY TABLE binance_live_board_seed (
   source_slug text PRIMARY KEY,
   declaration jsonb NOT NULL
-) ON COMMIT DROP;
+);
 
 INSERT INTO binance_live_board_seed VALUES
   ('binance_futures',
