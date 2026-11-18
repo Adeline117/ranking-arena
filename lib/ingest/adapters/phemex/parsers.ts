@@ -13,9 +13,11 @@
  * Board model (spec §11.19 — 30/90 only, NO 7d): one endpoint serves both
  * TF boards. Every recommend row carries 30d AND 90d metric variants and
  * the site's TF dropdown is purely client-side (verified: switching TF
- * refires the identical request). The adapter wraps each page as a
- * composite { board|aiList, timeframe } so parsing stays a pure function of
- * stored RAW (spec §5.5).
+ * refires the identical request). Attempt-bound capture stores each page
+ * verbatim; the parser selects the variant from the Tier-A window in
+ * ParseCtx.timeframe, so parsing stays a pure function of stored RAW plus
+ * the attempt's recorded window (spec §5.5). Pre-capture RAW is the composite
+ * { board|aiList, timeframe } and still re-parses.
  *
  * Endpoint payload shapes (base api10.phemex.com/phemex-lb/public/data):
  *   leaderboard: GET v3/user/recommend?hideFullyCopied=false&keyword=
@@ -153,18 +155,46 @@ function cardRow(item: Dict, positionalRank: number, tf: number): ParsedLeaderbo
   }
 }
 
+/** Registered board field paths (lib/metric-trust.ts phemex_futures). */
+export function phemexBoardFieldPath(metric: 'roi' | 'pnl', tf: 30 | 90): string {
+  return `data.rows[].${metric === 'roi' ? 'pnlRate' : 'pnl'}${tf}d`
+}
+
+function boardWindow(value: unknown): 30 | 90 {
+  if (value !== 30 && value !== 90) {
+    throw new Error('[phemex] leaderboard parse needs the 30d or 90d window')
+  }
+  return value
+}
+
 /**
- * Composite page: { board: <recommend resp>, timeframe } for the main board
- * or { aiList: <ai-trader/list resp>, timeframe } for the house AI carousel
- * (appended as a final page; duplicates collapse in staging dedupe).
+ * Three RAW shapes:
+ *  - verbatim attempt-bound response { code, msg, data: { total, rows } }:
+ *    window-agnostic (rows carry 30d and 90d variants), so the window is the
+ *    Tier-A attempt's ctx.timeframe; non-null headlines claim their field path
+ *  - legacy composite { board: <recommend resp>, timeframe } from the
+ *    pre-capture stream
+ *  - legacy composite { aiList: <ai-trader/list resp>, timeframe } for the
+ *    house AI carousel (no longer captured; duplicates collapsed in staging)
  */
-export function parsePhemexLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLeaderboardPage {
-  const composite = (raw ?? {}) as LeaderboardComposite
-  const tf = composite.timeframe === 90 ? 90 : 30
+export function parsePhemexLeaderboardPage(raw: unknown, ctx: ParseCtx): ParsedLeaderboardPage {
+  const composite = (raw ?? {}) as LeaderboardComposite & { code?: unknown; data?: unknown }
+  const verbatim = composite.board === undefined && composite.aiList === undefined
+  const tf = verbatim ? boardWindow(ctx.timeframe) : composite.timeframe === 90 ? 90 : 30
 
   let items: Dict[] = []
   let reportedTotal: number | null = null
-  if (composite.aiList !== undefined) {
+  if (verbatim) {
+    if (composite.code !== 0) {
+      throw new Error(`[phemex] leaderboard response code ${String(composite.code)}`)
+    }
+    const d = data(composite) as Dict | null
+    if (!Array.isArray(d?.rows)) {
+      throw new Error('[phemex] leaderboard response must contain data.rows')
+    }
+    items = d.rows as Dict[]
+    reportedTotal = int(d.total)
+  } else if (composite.aiList !== undefined) {
     const list = data(composite.aiList)
     items = Array.isArray(list) ? (list as Dict[]) : []
   } else {
@@ -176,7 +206,18 @@ export function parsePhemexLeaderboardPage(raw: unknown, _ctx: ParseCtx): Parsed
   const rows: ParsedLeaderboardRow[] = []
   for (let i = 0; i < items.length; i++) {
     const row = cardRow(items[i], i + 1, tf)
-    if (row) rows.push(row)
+    if (!row) continue
+    if (verbatim) {
+      row.headlineMetricSources = {
+        ...(row.headlineRoi === null
+          ? {}
+          : { roi: { fieldPath: phemexBoardFieldPath('roi', tf) } }),
+        ...(row.headlinePnl === null
+          ? {}
+          : { pnl: { fieldPath: phemexBoardFieldPath('pnl', tf) } }),
+      }
+    }
+    rows.push(row)
   }
   return { rows, reportedTotal }
 }

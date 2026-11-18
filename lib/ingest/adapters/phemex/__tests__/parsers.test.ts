@@ -13,6 +13,7 @@ import {
   parsePhemexProfile,
 } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
+import { getRegisteredMetricSourceContract } from '@/lib/metric-trust'
 
 function fixture(name: string): unknown {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
@@ -79,6 +80,66 @@ describe('parsePhemexLeaderboardPage', () => {
       headlineRoi: 86.03, // pnlRate30d "0.8603"
     })
     expect((page.rows[0].raw as Record<string, unknown>).aiDescription).toBeDefined()
+  })
+})
+
+describe('parsePhemexLeaderboardPage (verbatim capture response)', () => {
+  const board = fixture('recommend-p1.json')
+
+  it('selects the variant from the Tier-A window and claims its field paths', () => {
+    for (const [timeframe, roi, pnl] of [
+      [30, 43.03, 50182.4014],
+      [90, 74.76, 78846.795],
+    ] as const) {
+      const page = parsePhemexLeaderboardPage(board, { ...ctx, timeframe })
+      expect(page.reportedTotal).toBe(229)
+      expect(page.rows).toHaveLength(3)
+      expect(page.rows[0]).toMatchObject({
+        exchangeTraderId: '2874961',
+        rank: 1,
+        headlineRoi: roi,
+        headlinePnl: pnl,
+        headlineMetricSources: {
+          roi: { fieldPath: `data.rows[].pnlRate${timeframe}d` },
+          pnl: { fieldPath: `data.rows[].pnl${timeframe}d` },
+        },
+      })
+      // Same rows as the legacy composite parse, plus the lineage claims.
+      const legacy = parsePhemexLeaderboardPage({ board, timeframe }, ctx).rows
+      expect(page.rows.map(({ headlineMetricSources: _sources, ...row }) => row)).toEqual(legacy)
+    }
+  })
+
+  it('claims exactly the registered field of the window for every non-null headline', () => {
+    const contract = getRegisteredMetricSourceContract('phemex_futures')!
+    for (const timeframe of [30, 90] as const) {
+      const registered = new Map(
+        contract.fields
+          .filter((field) => field.windowKeys.includes(`${timeframe}D`))
+          .map((field) => [field.metric, field.fieldPath])
+      )
+      expect([...registered.keys()].sort()).toEqual(['pnl', 'roi'])
+      for (const row of parsePhemexLeaderboardPage(board, { ...ctx, timeframe }).rows) {
+        expect(row.headlineMetricSources?.roi?.fieldPath).toBe(registered.get('roi'))
+        expect(row.headlineMetricSources?.pnl?.fieldPath).toBe(registered.get('pnl'))
+      }
+    }
+  })
+
+  it('fails closed without a 30d/90d window, on an error code, or without rows', () => {
+    expect(() => parsePhemexLeaderboardPage(board, ctx)).toThrow('30d or 90d window')
+    expect(() => parsePhemexLeaderboardPage(board, { ...ctx, timeframe: 7 })).toThrow(
+      '30d or 90d window'
+    )
+    expect(() =>
+      parsePhemexLeaderboardPage(
+        { code: 10001, msg: 'blocked', data: null },
+        { ...ctx, timeframe: 30 }
+      )
+    ).toThrow('response code')
+    expect(() =>
+      parsePhemexLeaderboardPage({ code: 0, msg: 'OK', data: {} }, { ...ctx, timeframe: 30 })
+    ).toThrow('data.rows')
   })
 })
 
