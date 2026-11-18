@@ -386,6 +386,11 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # the refresh to hourly at :17. It depends on no worker release and touches no
 # table 192134 guards; apply it outside a running refresh (it waits 5s for the
 # view lock, then rolls back).
+# 20261118113319 raises the leaderboard page size of binance_futures (20 -> 30)
+# and binance_spot (20 -> 100), the largest pages those endpoints serve, so a
+# live board has less time to move while it is paged. It requires the
+# page_size 20 pre-state that 204948 also requires, so it follows 204948; it
+# changes page_size only and touches no table 192134 guards.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -403,6 +408,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261117204948_move_binance_sources_to_local_region.sql
   20261117204557_source_capabilities_refresh_index_probe.sql
   20261118112703_metric_trust_exhaustion_observation_authority.sql
+  20261118113319_binance_leaderboard_page_size_served_caps.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
