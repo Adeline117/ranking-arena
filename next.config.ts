@@ -635,7 +635,9 @@ const nextConfig = {
       // pipeline (frozen/garbage performance). Redirect old links/SEO to home.
       { source: '/rankings/bots', destination: '/', permanent: true },
       { source: '/bot/:id', destination: '/', permanent: true },
-      // /library removed (feature deprecated)
+      // /library removed (feature deprecated). 只把入口页导到 /learn；书目详情页
+      // (/library/:id) 没有对应内容，保持 404 —— 批量重定向到无关页面会被判软 404。
+      { source: '/library', destination: '/learn', permanent: true },
       // Dead pages removed in frontend simplification (2026-03)
       { source: '/pk/:a/:b', destination: '/compare', permanent: true },
       { source: '/membership', destination: '/pricing', permanent: true },
