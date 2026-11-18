@@ -139,7 +139,6 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
   }
 
   const shardId = Number(shard)
-  const now = new Date().toISOString()
 
   // Shard 0: static pages (no DB)
   if (shardId === 0) {
@@ -182,7 +181,8 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
       urlsetXml(
         urls.map((u) => ({
           loc: `${BASE_URL}${u.url}`,
-          lastmod: now,
+          // 不写 lastmod：请求时刻不是这些页面的修改时间，每次都变的 lastmod
+          // 会让搜索引擎不再信任整站的 lastmod（交易员分片用的是真实来源水位）。
           changefreq: u.freq,
           priority: u.priority,
         }))
