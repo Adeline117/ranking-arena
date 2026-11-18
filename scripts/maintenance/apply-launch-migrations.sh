@@ -368,6 +368,17 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # reached both boards). It changes fetch_region only, needs a running local
 # worker release with both profile capture contracts registered, so it follows
 # 015119; it touches no table 192134 guards.
+# 20261118112703 adds the exhaustion-completeness branch (20261115141050) to
+# the observation lineage trigger, the rankable view and the readiness RPC:
+# without it okx_futures, okx_spot and binance_web3_bsc fail every real
+# publication. It re-creates the 20261117130152 readiness body, so it follows
+# it; no worker code depends on it and it touches no table 192134 guards.
+# 20261118114230 lets the exhausted completeness proof accept a third board
+# version kind, reported_total_drift (bounded relative drift, at most 1%), for
+# live boards that change while they are paged. It only replaces two function
+# bodies and is inert until a source registers such a declaration; it follows
+# 112703 (which makes exhausted outcomes publishable) and touches no table
+# 192134 guards.
 # 040440 forward replacement. V1_EXECUTION_STATUS requires the RAW-only
 # bridge SHA to be deployed and legacy callers drained before the legacy
 # position-history relations are frozen. Current main never reads or writes
@@ -381,6 +392,11 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # the refresh to hourly at :17. It depends on no worker release and touches no
 # table 192134 guards; apply it outside a running refresh (it waits 5s for the
 # view lock, then rolls back).
+# 20261118113319 raises the leaderboard page size of binance_futures (20 -> 30)
+# and binance_spot (20 -> 100), the largest pages those endpoints serve, so a
+# live board has less time to move while it is paged. It requires the
+# page_size 20 pre-state that 204948 also requires, so it follows 204948; it
+# changes page_size only and touches no table 192134 guards.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -397,6 +413,9 @@ POSTDEPLOY_MIGRATIONS=(
   20261117015119_register_profile_capture_contracts.sql
   20261117204948_move_binance_sources_to_local_region.sql
   20261117204557_source_capabilities_refresh_index_probe.sql
+  20261118112703_metric_trust_exhaustion_observation_authority.sql
+  20261118113319_binance_leaderboard_page_size_served_caps.sql
+  20261118114230_leaderboard_exhaustion_reported_total_drift.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS

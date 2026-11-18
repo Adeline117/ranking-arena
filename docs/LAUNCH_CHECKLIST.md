@@ -9,7 +9,7 @@
 2026-11-13 起，2026-08-04 之后新增的迁移已全部分类，`scripts/qa/launch-inventory-gap.json` 为空列表。`launch-inventory-gap.test.mjs` 保证以后新增的迁移也必须先分类。分类写在 `scripts/maintenance/apply-launch-migrations.sh` 里：
 
 - **predeploy**（161 个）：部署前，按清单顺序逐文件应用。
-- **postdeploy**（16 个）：目标版本上线后才应用。
+- **postdeploy**（19 个）：目标版本上线后才应用。
 - **ADR-023 单文件**（`ADR023_SINGLE_FILE_MIGRATIONS`，2 个）：已分类，但执行脚本不会输出它们，`render-predeploy-one` 也会拒绝。每个都必须走 ADR-023 单文件通道，在下文规定的位置、各自的操作窗口里单独应用。
 - **superseded**：永不重放。
 
@@ -87,6 +87,7 @@
 - **永久不进公开榜**：bitget_futures（尾页不稳定，凑不满总数）、hyperliquid 与 gmx（上游全量文件，截断由我们做）、gtrade、xt_spot、bitmart_futures；mexc、phemex 因 CDN 403 未能探测。
 - **上线金丝雀的放行条件**：worker 首个完整周期后，7D/30D/90D 每个窗口实际出证据的来源都必须超过期望集的一半，且 binance_futures 与 bybit_copytrade 至少一个出证据；否则不开放榜单，先处理失败来源。
 - **来源激活（2026-11-15 owner 已定）**：okx_futures、okx_spot、toobit_futures、xt_futures 改为 active/serving，采集区域改为 `local`。依据：2026-11-15 从本机只读探测 okx `public-lead-traders`、toobit `leaders-new`、xt `leader-list-v3` 均成功，无地域封锁，不再需要 VPS 出口。由 postdeploy 迁移 `20261116204359` 执行，排在 `20261115160917` 之后、`20261111192134` 之前，并且只能在带这些采集实现的 worker 上线之后应用：来源一激活就会排进 Tier-A，没有采集实现或没注册采集契约时 Tier-A 直接失败。四行都必须等于种子值加 160917 校正后的状态（okx/toobit 为 blocked_pending_vps/legacy/vps_sg，xt 为 inactive/legacy/local），否则整份迁移拒绝。`20261115160917` 仍按种子值校正 kucoin/okx 原生窗口、binance_web3_bsc 币种和 toobit/xt 的 page_size，生产值不一致时整份迁移拒绝。
+- **币安榜单页大小（迁移 `20261118113319`，postdeploy）**：binance_futures 20→30、binance_spot 20→100，只改 `arena.sources.page_size`。依据：20 条/页时合约一个窗口 660 次请求约 35 分钟，期间榜单变动导致每次采集都有重复行、报告总数页间不一致，被采集可信门拒绝。30 / 100 是接口实际返回的上限（2026-11-18 本机真实浏览器只读实测：请求 100/200/500 时合约只返回 30 行、现货只返回 100 行，页间无重叠），配置超过上限会让每页都像短页、采集在第一页后结束。合约仍需约 440 次请求，单靠页大小不够。
 - **能力表刷新改写（迁移 `20261117204557`，postdeploy）**：原每 30 分钟的 pg_cron 刷新每次跑满 600 秒超时，并在整点、半点后的十分钟内持锁，会挡住采集 worker 启动时的建分区（2026-11-18 一次部署因此超过 300 秒交接时限而回滚）。应用本迁移前，采集部署的切换步骤要避开每小时 :00–:10 和 :30–:40；应用本迁移本身也要避开这两个窗口（等视图锁 5 秒，拿不到即整体回滚）。应用后刷新改为每小时 :17，生产只读实测新定义约 43 秒。
 - **币安改由本机采集（2026-11-17 owner 已定）**：binance_futures、binance_spot 的采集区域由 `vps_sg` 改为 `local`（迁移 `20261117204948`，postdeploy），其余字段不变。依据：SG 节点未运行导致两源过期；2026-11-18 从本机用真实浏览器按适配器的预热方式只读探测，合约榜（7/30/90 天，total 13127）、现货榜（total 2469）、合约详情/曲线、现货详情均返回 `000000`。bitmart_futures 仍留在 `vps_sg`（本机被 Turnstile 拦，curl 403）。
 
