@@ -148,7 +148,6 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
       { url: '/pricing', priority: 0.7, freq: 'monthly' },
       { url: '/methodology', priority: 0.7, freq: 'monthly' },
       { url: '/learn', priority: 0.75, freq: 'weekly' },
-      { url: '/search', priority: 0.6, freq: 'weekly' },
       { url: '/flash-news', priority: 0.7, freq: 'hourly' },
       { url: '/feed', priority: 0.7, freq: 'hourly' },
       { url: '/compare', priority: 0.6, freq: 'weekly' },
