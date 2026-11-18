@@ -1,6 +1,10 @@
 /**
  * Sitemap API Route — serves sitemap index + shard XML
  *
+ * This is the ONLY sitemap implementation (robots.txt points here and
+ * /sitemap.xml rewrites here). app/sitemap.ts was deleted: it served a second,
+ * diverging URL set under /sitemap/*.xml with looser audience filters.
+ *
  * Why not app/sitemap.ts? Next.js metadata sitemap routes pre-render at
  * build time and cache the result. At build time, Supabase env vars are
  * placeholders, so all DB queries fail and sitemaps come back empty.
