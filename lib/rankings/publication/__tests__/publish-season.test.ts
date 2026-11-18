@@ -205,6 +205,12 @@ describe('createPgRpcClient', () => {
 describe('publishLeaderboardSeason gate', () => {
   const now = new Date()
   const iso = (date: Date) => date.toISOString().replace('Z', '000Z')
+  // Most fixtures declare two or three sources; the expected-set floor has its
+  // own tests below.
+  const publish = (
+    season: Parameters<typeof publishLeaderboardSeason>[0],
+    deps: Parameters<typeof publishLeaderboardSeason>[1]
+  ) => publishLeaderboardSeason(season, { minExpectedSources: 1, ...deps })
 
   function passedBoard(source: string, snapshotId: number) {
     return {
@@ -250,16 +256,32 @@ describe('publishLeaderboardSeason gate', () => {
       isolationSupported?: boolean
       trustEvidenceInstalled?: boolean
       untrustedSnapshotIds?: number[]
+      /** 20261118113759 installed; `unsupported` is what its reader returns. */
+      captureContractGate?: boolean
+      unsupported?: string[]
     } = {}
   ) {
     const statements: string[] = []
     const parameters: unknown[][] = []
     const sources = options.sources ?? ['binance_futures', 'bybit']
+    const unsupported = options.unsupported ?? []
     const untrusted = new Set(options.untrustedSnapshotIds ?? [])
     const executor: RankPublicationSqlExecutor = {
       async query(text, values) {
         statements.push(text)
         parameters.push([...(values ?? [])])
+        if (text.includes("to_regclass('arena.leaderboard_publication_unsupported_sources')")) {
+          return {
+            rows: [{ supported: options.captureContractGate === true }] as never[],
+            rowCount: 1,
+          }
+        }
+        if (text.includes('FROM public.arena_publication_unsupported_sources()')) {
+          return {
+            rows: unsupported.map((source) => ({ source })) as never[],
+            rowCount: unsupported.length,
+          }
+        }
         if (text.includes('leaderboard-rank-publication-evidence@2')) {
           return {
             rows: [{ supported: options.trustEvidenceInstalled !== false }] as never[],
@@ -320,7 +342,7 @@ describe('publishLeaderboardSeason gate', () => {
       { isolationSupported: true, trustEvidenceInstalled: false }
     )
     const scoreCohort = jest.fn()
-    await expect(publishLeaderboardSeason('90D', { database, scoreCohort })).rejects.toMatchObject({
+    await expect(publish('90D', { database, scoreCohort })).rejects.toMatchObject({
       code: 'trust_evidence_not_installed',
     })
     expect(scoreCohort).not.toHaveBeenCalled()
@@ -342,7 +364,7 @@ describe('publishLeaderboardSeason gate', () => {
     // The fixture authority does not shrink, so the cross-check refuses after
     // the isolation write; what matters is the isolation reason.
     await expect(
-      publishLeaderboardSeason('90D', { database, scoreCohort: jest.fn(), coreSources: [] })
+      publish('90D', { database, scoreCohort: jest.fn(), coreSources: [] })
     ).rejects.toMatchObject({ code: 'isolation_not_applied' })
     const isolationInsert = statements.findIndex((text) =>
       /INSERT INTO arena\.leaderboard_publication_source_isolations/.test(text)
@@ -363,7 +385,7 @@ describe('publishLeaderboardSeason gate', () => {
       }
     )
     await expect(
-      publishLeaderboardSeason('90D', { database, scoreCohort: jest.fn(), coreSources: [] })
+      publish('90D', { database, scoreCohort: jest.fn(), coreSources: [] })
     ).rejects.toMatchObject({
       code: 'expected_source_not_fresh',
       message: expect.stringContaining('bybit(untrusted), hyperliquid(untrusted)'),
@@ -379,7 +401,7 @@ describe('publishLeaderboardSeason gate', () => {
       missingBoard('bybit'),
     ])
     const scoreCohort = jest.fn()
-    const error = await publishLeaderboardSeason('90D', { database, scoreCohort }).catch(
+    const error = await publish('90D', { database, scoreCohort }).catch(
       (failure: unknown) => failure
     )
     expect(error).toBeInstanceOf(RankPublicationError)
@@ -399,7 +421,7 @@ describe('publishLeaderboardSeason gate', () => {
       { sources: ['binance_futures', 'bybit', 'hyperliquid'], isolationSupported: true }
     )
     const alerts: unknown[] = []
-    const error = await publishLeaderboardSeason('90D', {
+    const error = await publish('90D', {
       database,
       scoreCohort: jest.fn(),
       alert: (alert) => void alerts.push(alert),
@@ -420,7 +442,7 @@ describe('publishLeaderboardSeason gate', () => {
       { sources: ['binance_futures', 'bybit', 'hyperliquid'], isolationSupported: true }
     )
     await expect(
-      publishLeaderboardSeason('90D', {
+      publish('90D', {
         database,
         scoreCohort: jest.fn(),
         coreSources: ['bybit'],
@@ -439,7 +461,7 @@ describe('publishLeaderboardSeason gate', () => {
     // The fixture's authority does not shrink after the isolation insert, so
     // the orchestrator's post-isolation cross-check must refuse.
     await expect(
-      publishLeaderboardSeason('90D', { database, scoreCohort: jest.fn(), coreSources: [] })
+      publish('90D', { database, scoreCohort: jest.fn(), coreSources: [] })
     ).rejects.toMatchObject({ code: 'isolation_not_applied' })
     const isolationInsert = statements.findIndex((text) =>
       /INSERT INTO arena\.leaderboard_publication_source_isolations/.test(text)
@@ -513,9 +535,7 @@ describe('publishLeaderboardSeason gate', () => {
       )
     const scoreCohort = jest.fn(async () => [])
 
-    const error = await publishLeaderboardSeason('90D', { database, scoreCohort }).catch(
-      (caught: unknown) => caught
-    )
+    const error = await publish('90D', { database, scoreCohort }).catch((caught: unknown) => caught)
 
     expect(error).toBeInstanceOf(RankPublicationError)
     expect((error as RankPublicationError).code).toBe('no_publishable_rows')
@@ -535,8 +555,245 @@ describe('publishLeaderboardSeason gate', () => {
 
   it('refuses a season whose sources are fresh but yield no publishable row', async () => {
     const { database } = harness([passedBoard('binance_futures', 1), passedBoard('bybit', 2)])
-    await expect(
-      publishLeaderboardSeason('90D', { database, scoreCohort: async () => [] })
-    ).rejects.toMatchObject({ code: 'no_publishable_rows' })
+    await expect(publish('90D', { database, scoreCohort: async () => [] })).rejects.toMatchObject({
+      code: 'no_publishable_rows',
+    })
+  })
+
+  describe('capture-contract expected set (20261118113759)', () => {
+    const registered = [
+      'binance_futures',
+      'bybit',
+      'okx_futures',
+      'gate_futures',
+      'htx_futures',
+      'blofin_futures',
+      'coinex_futures',
+      'lbank_futures',
+    ]
+    const uncontracted = [
+      'bingx_futures',
+      'bitfinex',
+      'bitget_futures',
+      'bitmart_futures',
+      'gmx',
+      'gtrade',
+      'hyperliquid',
+      'mexc_futures',
+      'phemex_futures',
+      'xt_spot',
+    ]
+    const boards = (fresh: readonly string[], missing: readonly string[] = []) => [
+      ...fresh.map((source, index) => passedBoard(source, index + 1)),
+      ...missing.map((source) => missingBoard(source)),
+    ]
+    const unsupportedInsert = (statements: string[]) =>
+      statements.findIndex((text) =>
+        /INSERT INTO arena\.leaderboard_publication_unsupported_sources/.test(text)
+      )
+
+    it('does not count unsupported sources against the fresh ratio and records them', async () => {
+      const { statements, parameters, database } = harness(boards(registered), {
+        sources: registered,
+        unsupported: uncontracted,
+        captureContractGate: true,
+        isolationSupported: true,
+      })
+      const logs: string[] = []
+      // Before the gate, 10 uncontracted of 18 expected (>50%) refused the
+      // season; now the 8 registered sources are all fresh and it proceeds.
+      await expect(
+        publishLeaderboardSeason('90D', {
+          database,
+          scoreCohort: async () => [],
+          log: (message) => void logs.push(message),
+        })
+      ).rejects.toMatchObject({ code: 'no_publishable_rows' })
+      const insert = unsupportedInsert(statements)
+      expect(insert).toBeGreaterThan(-1)
+      expect(parameters[insert][0]).toBe('90D')
+      expect(parameters[insert][2]).toEqual([...uncontracted].sort())
+      expect(
+        logs.some((line) => line.includes('unsupported') && line.includes('hyperliquid'))
+      ).toBe(true)
+      expect(
+        statements.some((text) =>
+          /INSERT INTO arena\.leaderboard_publication_source_isolations/.test(text)
+        )
+      ).toBe(false)
+    })
+
+    it('records an empty unsupported list too', async () => {
+      const { statements, parameters, database } = harness(boards(registered), {
+        sources: registered,
+        captureContractGate: true,
+        isolationSupported: true,
+      })
+      await expect(
+        publishLeaderboardSeason('90D', { database, scoreCohort: async () => [] })
+      ).rejects.toMatchObject({ code: 'no_publishable_rows' })
+      expect(parameters[unsupportedInsert(statements)][2]).toEqual([])
+    })
+
+    it('still applies the >50% rule to the reduced expected set', async () => {
+      const fresh = registered.slice(0, 3)
+      const missing = registered.slice(3)
+      const { statements, database } = harness(boards(fresh, missing), {
+        sources: registered,
+        unsupported: uncontracted,
+        captureContractGate: true,
+        isolationSupported: true,
+      })
+      const error = await publishLeaderboardSeason('90D', {
+        database,
+        scoreCohort: jest.fn(),
+      }).catch((failure: unknown) => failure)
+      expect(error).toMatchObject({
+        code: 'expected_source_not_fresh',
+        message: expect.stringContaining('5/8 expected source(s)'),
+      })
+      expect((error as RankPublicationError).message).toContain('more than 50%')
+      expect((error as RankPublicationError).details.unsupportedSources).toEqual(
+        [...uncontracted].sort()
+      )
+      expect(statements.some((text) => /claim_leaderboard_rank_generation/.test(text))).toBe(false)
+    })
+
+    it('treats an unsupported core source as down for the every-core-source rule', async () => {
+      // binance_futures, bybit and okx_futures are stale; hyperliquid and
+      // bitget_futures are unsupported. 3/8 stale stays under the ratio, but
+      // every core source is down, so the season is refused.
+      const stale = ['binance_futures', 'bybit', 'okx_futures']
+      const { database } = harness(
+        boards(
+          registered.filter((source) => !stale.includes(source)),
+          stale
+        ),
+        {
+          sources: registered,
+          unsupported: uncontracted,
+          captureContractGate: true,
+          isolationSupported: true,
+        }
+      )
+      await expect(
+        publishLeaderboardSeason('90D', { database, scoreCohort: jest.fn() })
+      ).rejects.toMatchObject({
+        code: 'expected_source_not_fresh',
+        message: expect.stringContaining(
+          'every core source (binance_futures, bitget_futures(unsupported), bybit, hyperliquid(unsupported), okx_futures)'
+        ),
+      })
+    })
+
+    it('refuses when every core source is unsupported even with no stale expected source', async () => {
+      // A passed (e.g. legacy) board of an unsupported source is never core
+      // evidence.
+      const { database } = harness(boards([...registered, 'hyperliquid']), {
+        sources: registered,
+        unsupported: uncontracted,
+        captureContractGate: true,
+        isolationSupported: true,
+      })
+      await expect(
+        publishLeaderboardSeason('90D', {
+          database,
+          scoreCohort: jest.fn(),
+          coreSources: ['hyperliquid', 'bitget_futures'],
+        })
+      ).rejects.toMatchObject({
+        code: 'expected_source_not_fresh',
+        message: expect.stringContaining(
+          'every core source (bitget_futures(unsupported), hyperliquid(unsupported))'
+        ),
+      })
+    })
+
+    it('keeps one fresh core source enough, as before', async () => {
+      const stale = ['bybit', 'okx_futures']
+      const { statements, database } = harness(
+        boards(
+          registered.filter((source) => !stale.includes(source)),
+          stale
+        ),
+        {
+          sources: registered,
+          unsupported: uncontracted,
+          captureContractGate: true,
+          isolationSupported: true,
+        }
+      )
+      // Isolation proceeds (the fixture authority does not shrink, so the
+      // post-isolation cross-check is what refuses here).
+      await expect(
+        publishLeaderboardSeason('90D', { database, scoreCohort: jest.fn() })
+      ).rejects.toMatchObject({ code: 'isolation_not_applied' })
+      expect(
+        statements.some((text) =>
+          /INSERT INTO arena\.leaderboard_publication_source_isolations/.test(text)
+        )
+      ).toBe(true)
+    })
+
+    it('refuses below the expected-set floor with an explicit reason', async () => {
+      const seven = registered.slice(0, 7)
+      const { statements, database } = harness(boards(seven), {
+        sources: seven,
+        unsupported: uncontracted,
+        captureContractGate: true,
+        isolationSupported: true,
+      })
+      const alerts: unknown[] = []
+      const error = await publishLeaderboardSeason('90D', {
+        database,
+        scoreCohort: jest.fn(),
+        alert: (alert) => void alerts.push(alert),
+      }).catch((failure: unknown) => failure)
+      expect(error).toBeInstanceOf(RankPublicationError)
+      expect((error as RankPublicationError).code).toBe('expected_set_below_floor')
+      expect((error as RankPublicationError).message).toContain('below the floor of 8')
+      expect((error as RankPublicationError).details).toMatchObject({
+        expectedSources: [...seven].sort(),
+        floor: 8,
+      })
+      expect(alerts).toEqual([
+        expect.objectContaining({ severity: 'critical', code: 'season_publication_refused' }),
+      ])
+      expect(
+        statements.some((text) => /INSERT INTO arena\.leaderboard_publication/.test(text))
+      ).toBe(false)
+    })
+
+    it('never passes an emptied contract registry as 0/0', async () => {
+      const { database } = harness([], {
+        sources: [],
+        unsupported: [...registered, ...uncontracted],
+        captureContractGate: true,
+        isolationSupported: true,
+      })
+      await expect(
+        publishLeaderboardSeason('90D', { database, scoreCohort: jest.fn() })
+      ).rejects.toMatchObject({
+        code: 'expected_set_below_floor',
+        message: expect.stringContaining('expected set has 0 source(s)'),
+      })
+    })
+
+    it('reads and records nothing before the migration is installed', async () => {
+      const { statements, database } = harness(boards(registered), {
+        sources: registered,
+        captureContractGate: false,
+        isolationSupported: true,
+      })
+      await expect(
+        publishLeaderboardSeason('90D', { database, scoreCohort: async () => [] })
+      ).rejects.toMatchObject({ code: 'no_publishable_rows' })
+      expect(
+        statements.some((text) =>
+          text.includes('FROM public.arena_publication_unsupported_sources()')
+        )
+      ).toBe(false)
+      expect(unsupportedInsert(statements)).toBe(-1)
+    })
   })
 })
