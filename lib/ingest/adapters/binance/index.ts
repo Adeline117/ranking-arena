@@ -125,10 +125,11 @@ function terminalClaim(observations: HistoryTerminalClaim['observations']): Hist
  * is ~13,000 traders), so a trader crossing the cursor is seen twice, another
  * slides past unseen, and data.total moves between pages. The board therefore
  * ends at its short (or empty) final page, and the proof bounds how far it
- * moved instead of demanding a frozen snapshot. Allowances are about 1% of
- * each board.
+ * moved instead of demanding a frozen snapshot: at most 1% of the last
+ * reported total, and never more than `rowCap` rows (1% of a board about
+ * four times today's size).
  */
-function binanceLiveBoardExhaustion(allowance: number): LeaderboardExhaustionDeclaration {
+function binanceLiveBoardExhaustion(rowCap: number): LeaderboardExhaustionDeclaration {
   return Object.freeze({
     completeness_mode: 'exhausted' as const,
     list_path: ['data', 'list'],
@@ -137,13 +138,13 @@ function binanceLiveBoardExhaustion(allowance: number): LeaderboardExhaustionDec
     board_version: {
       kind: 'reported_total_drift' as const,
       path: ['data', 'total'],
-      max_drift_rows: allowance,
+      max_drift_bps: 100,
     },
-    max_duplicate_rows: allowance,
+    max_duplicate_rows: rowCap,
   })
 }
-export const BINANCE_FUTURES_LEADERBOARD_EXHAUSTION = binanceLiveBoardExhaustion(130)
-export const BINANCE_SPOT_LEADERBOARD_EXHAUSTION = binanceLiveBoardExhaustion(25)
+export const BINANCE_FUTURES_LEADERBOARD_EXHAUSTION = binanceLiveBoardExhaustion(500)
+export const BINANCE_SPOT_LEADERBOARD_EXHAUSTION = binanceLiveBoardExhaustion(100)
 
 function boardKeyOf(src: SourceRow): string {
   return (src.meta.boardKey as string) ?? 'futures'

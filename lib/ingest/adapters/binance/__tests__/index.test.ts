@@ -144,19 +144,18 @@ describe('Binance live board completeness', () => {
     }
   }
 
-  it('declares the same contract for both boards with a per-board allowance', () => {
+  it('declares one contract for both boards: 1% of the board, with a per-board row cap', () => {
     expect(BINANCE_SPOT_LEADERBOARD_EXHAUSTION).toEqual({
       completeness_mode: 'exhausted',
       list_path: ['data', 'list'],
       row_key_path: ['leadPortfolioId'],
       end_signal: { kind: 'short_page' },
-      board_version: { kind: 'reported_total_drift', path: ['data', 'total'], max_drift_rows: 25 },
-      max_duplicate_rows: 25,
+      board_version: { kind: 'reported_total_drift', path: ['data', 'total'], max_drift_bps: 100 },
+      max_duplicate_rows: 100,
     })
     expect(BINANCE_FUTURES_LEADERBOARD_EXHAUSTION).toEqual({
       ...BINANCE_SPOT_LEADERBOARD_EXHAUSTION,
-      board_version: { kind: 'reported_total_drift', path: ['data', 'total'], max_drift_rows: 130 },
-      max_duplicate_rows: 130,
+      max_duplicate_rows: 500,
     })
   })
 
@@ -165,39 +164,40 @@ describe('Binance live board completeness', () => {
     const { result, bound } = await capture(() => rows)
     expect(result.terminationReason).toBe('short_page')
     expect(result.sourcePages).toHaveLength(3)
+    expect(result.sourcePages[0].sourceReports.population).toEqual({ state: 'not_reported' })
     expect(bound).toMatchObject({ completenessMode: 'exhausted', trustBound: true })
     expect(bound.projection).toMatchObject({ populationState: 'unknown', exhaustionVerified: true })
   })
 
   it('binds when a trader crosses the cursor while the board is paged', async () => {
-    const before = board(10)
+    const before = board(202)
     // After page 1 is read, its last trader drops two ranks: seen again on
     // page 2, while the trader who took the vacated rank is never seen.
     const after = [...before.slice(0, 3), before[4], before[5], before[3], ...before.slice(6)]
     const { result, bound } = await capture((pageNumber) => (pageNumber === 1 ? before : after))
-    expect(result.completeness?.row_keys).toEqual({ observed: 10, distinct: 9, duplicate: 1 })
+    expect(result.completeness?.row_keys).toEqual({ observed: 202, distinct: 201, duplicate: 1 })
     expect(bound.trustBound).toBe(true)
   })
 
   it('reads to the real end when the board grows while it is paged', async () => {
-    const before = board(8)
-    const after = board(10)
+    const before = board(200)
+    const after = board(202)
     const { result, bound } = await capture((pageNumber) => (pageNumber === 1 ? before : after))
-    // A total-mode capture would have stopped after 8 rows.
-    expect(result.completeness?.row_keys.distinct).toBe(10)
+    // A total-mode capture would have stopped after 200 rows.
+    expect(result.completeness?.row_keys.distinct).toBe(202)
     expect(result.completeness?.board_version).toEqual({
       kind: 'reported_total_drift',
-      reported_totals: { min: 8, max: 10, last: 10 },
+      reported_totals: { min: 200, max: 202, last: 202 },
     })
     expect(bound.trustBound).toBe(true)
   })
 
-  it('refuses a board that moved by more than its allowance', async () => {
-    const before = board(120)
-    // Pages 1-7 are read, then the first 28 traders all drop below the cursor.
-    const after = [...before.slice(28), ...before.slice(0, 28)]
-    const { result, bound } = await capture((pageNumber) => (pageNumber <= 7 ? before : after))
-    expect(result.completeness?.row_keys.duplicate).toBeGreaterThan(25)
+  it('refuses a board that moved by more than 1%', async () => {
+    const before = board(202)
+    // Pages 1-10 are read, then three of their traders drop below the cursor.
+    const after = [...before.slice(3), ...before.slice(0, 3)]
+    const { result, bound } = await capture((pageNumber) => (pageNumber <= 10 ? before : after))
+    expect(result.completeness?.row_keys.duplicate).toBe(3)
     expect(bound.trustBound).toBe(false)
   })
 
