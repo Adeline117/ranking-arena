@@ -397,11 +397,12 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # live board has less time to move while it is paged. It requires the
 # page_size 20 pre-state that 204948 also requires, so it follows 204948; it
 # changes page_size only and touches no table 192134 guards.
-# 20261118114254 registers mexc_futures' attempt-bound V3 capture (7D board,
-# reported-total mode), its 7D metric contract and page_size 100, the same way
-# as 160917. Registered before the worker that ships the mexc capture, every
-# Tier-A run of mexc_futures would fail, so it is postdeploy, after 160917; it
-# touches no table 192134 guards, so 192134 stays last.
+# 20261118114254 registers mexc_futures' attempt-bound V3 capture as a live
+# board (7D; exhausted to the empty page, reported_total_drift within 1%, at
+# most 71 rows), its 7D metric contract and page_size 100. Registered before
+# the worker that ships the mexc capture, every Tier-A run of mexc_futures
+# would fail, so it is postdeploy; it requires 114230 (the drift proof), so it
+# follows it, and touches no table 192134 guards, so 192134 stays last.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
