@@ -344,6 +344,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:arena-bot-legacy-publication-isolation-pg17
 
+      - name: Prove expected sources require a capture contract registration
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:expected-sources-capture-contract-pg17
+
       - name: Prove trader-series publication isolation
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin

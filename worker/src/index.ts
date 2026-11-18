@@ -130,7 +130,7 @@ async function main() {
             alert: rankPublicationAlert,
           })
           job.log(
-            `published ${season}: cohort=${published.scoreCohortId} rows=${published.publishedRankCount} sources=${published.sources.length}`
+            `published ${season}: cohort=${published.scoreCohortId} rows=${published.publishedRankCount} sources=${published.sources.length} unsupported=[${published.unsupportedSources.join(',')}]`
           )
           // Output watermark (audit P2-8): only a successful publication counts.
           await recordWorkerProgress(

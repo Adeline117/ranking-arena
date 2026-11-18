@@ -397,6 +397,14 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # live board has less time to move while it is paged. It requires the
 # page_size 20 pre-state that 204948 also requires, so it follows 204948; it
 # changes page_size only and touches no table 192134 guards.
+# 20261118113759 makes the season expected-source set (the publication
+# denominator in public.arena_freshness_expected_sources) require a valid
+# attempt-bound capture contract registration and lists the rest as
+# unsupported. The orchestrator release that records unsupported sources and
+# refuses below the expected-set floor must serve first: the previous one would
+# publish the reduced set without either. It pins the body 20261113011058
+# leaves (prosrc sha256) and touches no table 192134 guards, so 192134 stays
+# last.
 # 20261118141652 raises the leaderboard page size of toobit_futures (1000 -> 5000)
 # so the whole board is one request: the server orders tied traders differently
 # between requests, which repeated rows across its three pages. It changes
@@ -421,6 +429,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261118112703_metric_trust_exhaustion_observation_authority.sql
   20261118113319_binance_leaderboard_page_size_served_caps.sql
   20261118114230_leaderboard_exhaustion_reported_total_drift.sql
+  20261118113759_expected_sources_require_capture_contract.sql
   20261118141652_toobit_leaderboard_single_page.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
