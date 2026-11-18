@@ -26,6 +26,8 @@ import {
 } from '../../../fetch/capture'
 import { validateLeaderboardRows } from '../../../staging/validate'
 import { attemptBoundEvidenceForCapture } from '../../../testing/attempt-bound-evidence'
+import { hasRegisteredLeaderboardMetricTrust } from '../../../serving/metric-trust-publish'
+import { getRegisteredMetricSourceContract } from '../../../../metric-trust'
 
 const BOARD_URL = 'https://stats-data.hyperliquid.xyz/Mainnet/leaderboard'
 
@@ -207,5 +209,37 @@ describe('hyperliquid captureLeaderboard', () => {
     for await (const page of hyperliquidAdapter.listLeaderboard(session, src, 30)) pages.push(page)
     expect(pages).toHaveLength(1)
     expect(pages[0].payload).toEqual(board())
+  })
+})
+
+describe('hyperliquid board metric contract', () => {
+  it('covers exactly the 7D and 30D board windows in USDC', () => {
+    expect(hasRegisteredLeaderboardMetricTrust(src, 7)).toBe(true)
+    expect(hasRegisteredLeaderboardMetricTrust(src, 30)).toBe(true)
+    expect(hasRegisteredLeaderboardMetricTrust(src, 90)).toBe(false)
+    expect(hasRegisteredLeaderboardMetricTrust({ ...src, currency: 'USDT' }, 7)).toBe(false)
+  })
+
+  it.each([
+    [7, '7D'],
+    [30, '30D'],
+  ] as const)('%sd parser lineage claims are the registered field paths', (timeframe, key) => {
+    const contract = getRegisteredMetricSourceContract('hyperliquid')!
+    const registered = contract.fields
+      .filter((field) => field.windowKeys.includes(key))
+      .map((field) => `${field.metric}:${field.fieldPath}`)
+      .sort()
+    const [row] = hyperliquidAdapter.parseLeaderboard(board(), {
+      sourceSlug: 'hyperliquid',
+      currency: 'USDC',
+      tfLabelMap: {},
+      scrapedAt: '2026-11-18T19:00:00.000Z',
+      meta: {},
+      timeframe,
+    }).rows
+    const claimed = Object.entries(row.headlineMetricSources ?? {})
+      .map(([metric, source]) => `${metric}:${source!.fieldPath}`)
+      .sort()
+    expect(claimed).toEqual(registered)
   })
 })
