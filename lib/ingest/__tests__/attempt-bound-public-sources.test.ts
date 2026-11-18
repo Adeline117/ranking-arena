@@ -98,6 +98,7 @@ function fakeSession(slug: string, respond: Responder): FetchSession {
   const page = {
     goto: async () => undefined,
     waitForLoadState: async () => undefined,
+    url: () => 'about:blank',
   }
   const apiResponse = (request: ReplayRequestTemplate) => {
     const answer = respond(request)
