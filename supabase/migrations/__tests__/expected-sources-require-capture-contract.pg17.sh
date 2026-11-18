@@ -4,6 +4,11 @@
 # valid attempt-bound capture contract registration (20261118113759), that the
 # excluded sources are listed as unsupported instead of disappearing, and that
 # the isolation rewrite (20261113011058) still applies on top.
+#
+# Like Supabase, the cluster superuser is supabase_admin and every fixture
+# object and migration runs as a NOSUPERUSER postgres role, so a statement only
+# a superuser may run (e.g. a function-level SET of a custom parameter) fails
+# here exactly as it does in production.
 
 set -Eeuo pipefail
 
@@ -52,6 +57,11 @@ psql_drift() {
     -h "$SOCKET_DIR" -p "$PORT" -U postgres -d drift "$@"
 }
 
+psql_admin() {
+  "$PG_BIN/psql" -X -v ON_ERROR_STOP=1 \
+    -h "$SOCKET_DIR" -p "$PORT" -U supabase_admin -d postgres "$@"
+}
+
 body_sha256() {
   psql_cmd -Atqc "
     SELECT pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(prosrc, 'UTF8')), 'hex')
@@ -70,17 +80,28 @@ expect_eq() {
   fi
 }
 
-"$PG_BIN/initdb" -D "$DATA_DIR" -A trust -U postgres --encoding=UTF8 --no-locale >/dev/null
+"$PG_BIN/initdb" -D "$DATA_DIR" -A trust -U supabase_admin --encoding=UTF8 --no-locale >/dev/null
 "$PG_BIN/pg_ctl" \
   -D "$DATA_DIR" \
   -l "$LOG_FILE" \
   -o "-F -p $PORT -k $SOCKET_DIR -c listen_addresses=" \
   -w start >/dev/null
 
+psql_admin -q <<'SQL'
+CREATE ROLE postgres LOGIN NOSUPERUSER CREATEROLE NOBYPASSRLS;
+CREATE ROLE anon NOLOGIN NOSUPERUSER;
+CREATE ROLE authenticated NOLOGIN NOSUPERUSER;
+CREATE ROLE service_role NOLOGIN NOSUPERUSER;
+GRANT anon, authenticated, service_role TO postgres;
+GRANT CREATE ON DATABASE postgres TO postgres;
+ALTER SCHEMA public OWNER TO postgres;
+SQL
+if [[ "$(psql_cmd -Atqc "SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname = current_user")" != "f" ]]; then
+  echo "migrations must run as a non-superuser postgres role" >&2
+  exit 1
+fi
+
 psql_cmd -q <<'SQL'
-CREATE ROLE anon NOLOGIN;
-CREATE ROLE authenticated NOLOGIN;
-CREATE ROLE service_role NOLOGIN;
 CREATE SCHEMA arena;
 GRANT USAGE ON SCHEMA arena TO service_role, anon, authenticated;
 
@@ -207,7 +228,7 @@ expect_eq "isolated body digest" "$(body_sha256)" \
   "9427c4e01af650268ec07534a61101d9f177b38f07ceec621ae4e4b0a8cbc56b"
 
 # Negative: any other body refuses the whole migration (copy of this state).
-psql_cmd -qc "CREATE DATABASE drift TEMPLATE postgres;"
+psql_admin -qc "CREATE DATABASE drift TEMPLATE postgres OWNER postgres;"
 psql_drift -qc "
   CREATE OR REPLACE FUNCTION public.arena_freshness_expected_sources()
   RETURNS TABLE (registry_slug text, filter_source text, exchange_name text, season_id text)
@@ -244,11 +265,11 @@ expect_eq "pre-migration expected set" "$BEFORE" \
 
 apply 20261118113759_expected_sources_require_capture_contract.sql
 expect_eq "final body digest" "$(body_sha256)" \
-  "2d7d679a100ed09b60c40a53e57d7bd2907d624a6738c7c49ce81496b0e9ebd2"
+  "93af178c85a81f21ea77d671d25e2e8bedacef289989f65cd46aed7b59873f67"
 # Replay converges to the same body.
 apply 20261118113759_expected_sources_require_capture_contract.sql
 expect_eq "replayed body digest" "$(body_sha256)" \
-  "2d7d679a100ed09b60c40a53e57d7bd2907d624a6738c7c49ce81496b0e9ebd2"
+  "93af178c85a81f21ea77d671d25e2e8bedacef289989f65cd46aed7b59873f67"
 
 MARKERS="$(
   psql_cmd -Atqc "
@@ -299,15 +320,39 @@ UNION="$(
 )"
 expect_eq "expected ∪ unsupported" "$UNION" "$BEFORE"
 
-# The unsupported reader's local setting must not leak into the session.
-LEAK="$(
+# No session state decides membership: reading the unsupported list first, or
+# setting the retired custom parameter, leaves the expected set unchanged.
+STATELESS="$(
   psql_cmd -Atqc "
     SELECT pg_catalog.count(*) FROM public.arena_publication_unsupported_sources();
+    SELECT pg_catalog.set_config('arena.freshness_include_unsupported', 'on', false);
     SELECT pg_catalog.count(DISTINCT season_id || filter_source)
       FROM public.arena_freshness_expected_sources();
   " | tail -1
 )"
-expect_eq "setting leak" "$LEAK" "4"
+expect_eq "session-state independence" "$STATELESS" "4"
+
+# No function this migration owns carries a custom (non search_path) setting,
+# and the internal body is callable by no API role.
+CONFIG="$(
+  psql_cmd -Atqc "
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_proc AS function_row
+    CROSS JOIN LATERAL pg_catalog.unnest(function_row.proconfig) AS setting(value)
+    WHERE function_row.pronamespace IN ('arena'::regnamespace, 'public'::regnamespace)
+      AND setting.value NOT LIKE 'search_path=%';
+  "
+)"
+expect_eq "custom function settings" "$CONFIG" "0"
+INTERNAL_ACL="$(
+  psql_cmd -Atqc "
+    SELECT has_function_privilege('service_role',
+             'arena.freshness_expected_sources_internal(boolean)', 'EXECUTE') || '|' ||
+           has_function_privilege('anon',
+             'arena.freshness_expected_sources_internal(boolean)', 'EXECUTE');
+  "
+)"
+expect_eq "internal function ACL" "$INTERNAL_ACL" "false|false"
 
 # Registering a contract moves the source into the expected set; removing one
 # moves it back out. Derived from DB state only.

@@ -61,7 +61,11 @@ describe('expected sources require a capture contract registration (202611181137
     )
     expect(migration).toContain(`-- ${CAPTURE_CONTRACT_REGISTRATION_MARKER}`)
     expect(migration).toMatch(
-      /AND source_row\.serving_mode = 'serving'\n {4}-- leaderboard-capture-contract-registration@1\n {4}AND \(\n {6}arena\.leaderboard_capture_contract_registered\(\n {8}source_row\.id::integer,\n {8}source_row\.adapter_slug\n {6}\)/
+      /AND source_row\.serving_mode = 'serving'\n {4}-- leaderboard-capture-contract-registration@1\n {4}AND \(\n {6}p_include_unsupported\n {6}OR arena\.leaderboard_capture_contract_registered\(\n {8}source_row\.id::integer,\n {8}source_row\.adapter_slug\n {6}\)/
+    )
+    // The public function is the internal body with the predicate on.
+    expect(migration).toMatch(
+      /FUNCTION public\.arena_freshness_expected_sources\(\)[\s\S]*?FROM arena\.freshness_expected_sources_internal\(false\) AS expected;/
     )
     // Isolation and the Bitget-bot quarantine are kept verbatim.
     expect(migration).toContain('-- leaderboard-publication-source-isolation@1')
@@ -74,8 +78,12 @@ describe('expected sources require a capture contract registration (202611181137
 
   it('lists unsupported sources from the same function and records them per cohort', () => {
     expect(migration).toMatch(
-      /FUNCTION public\.arena_publication_unsupported_sources\(\)[\s\S]*?SET arena\.freshness_include_unsupported = 'on'[\s\S]*?FROM public\.arena_freshness_expected_sources\(\) AS declared/
+      /FUNCTION public\.arena_publication_unsupported_sources\(\)[\s\S]*?FROM arena\.freshness_expected_sources_internal\(true\) AS declared/
     )
+    // Supabase's postgres is not a superuser: no function-level custom
+    // setting, no set_config, no session state decides membership.
+    expect(migration).not.toMatch(/^\s*SET\s+(?!LOCAL\b|search_path\b)[a-z_]+\.[a-z_]+/im)
+    expect(migration).not.toMatch(/current_setting|set_config/)
     expect(migration).toContain(
       'CREATE TABLE IF NOT EXISTS arena.leaderboard_publication_unsupported_sources'
     )
