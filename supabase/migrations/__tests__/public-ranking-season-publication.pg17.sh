@@ -806,6 +806,29 @@ assert_equal "immediate re-publication is generation 6" "6" "$(json_field "$OUT"
 assert_equal "view still serves 7 rows" "7" "$(view_count)"
 
 # ---------------------------------------------------------------------------
+# Positive 4: a fresh, attempt-bound source whose every row is unpublishable
+# (bybit's profile capture failed closed: no win rate) contributes zero rows.
+# Only that source's rows leave the board; the season still seals.
+# ---------------------------------------------------------------------------
+psql_db -qc "UPDATE arena.fixture_trader_metrics SET win_rate = NULL WHERE trader_id IN (21, 22)" >/dev/null
+OUT="$(publish 90D)"
+assert_equal "season with a zero-row source publishes" "true" "$(json_field "$OUT" ok)"
+assert_equal "only the other sources' rows are published" "5" \
+  "$(json_field "$OUT" result.publishedRankCount)"
+assert_equal "the zero-row source is not isolated" "[]" "$(json_field "$OUT" result.isolatedSources)"
+assert_equal "view serves the other sources and no bybit row" "5|0" "$(psql_db -Atqc "
+  SELECT pg_catalog.count(*) || '|' || pg_catalog.count(*) FILTER (WHERE source = 'bybit')
+  FROM public.public_ranked_leaderboard WHERE season_id = '90D'")"
+# Its rows return with the next cohort once the metric is back.
+psql_db -q >/dev/null <<'SQL'
+UPDATE arena.fixture_trader_metrics SET win_rate = 68.0 WHERE trader_id = 21;
+UPDATE arena.fixture_trader_metrics SET win_rate = 51.0 WHERE trader_id = 22;
+SQL
+OUT="$(publish 90D)"
+assert_equal "the source's rows return with the next cohort" "true|7" \
+  "$(json_field "$OUT" ok)|$(view_count)"
+
+# ---------------------------------------------------------------------------
 # Public snapshot readers (20261113012028): anon RPCs serve only sealed, fresh
 # boards. Extend the fixture with the reader columns, install marker-bearing
 # stand-ins for the 20261111134416 bodies, then apply the forward migration.
