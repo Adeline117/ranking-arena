@@ -6,8 +6,10 @@
  *   futures: /bapi/futures/v1/.../future/copy-trade/...
  *   spot:    /bapi/futures/v1/.../future/spot-copy-trade/...
  *
- * Binance is us_blocked (spec §4): sources rows pin fetch_region='vps_sg'
- * and openSession() routes everything through the SG remote browser. The
+ * Region: the seed pinned fetch_region='vps_sg' (spec §4 assumed Binance is
+ * blocked from the local host). A local read-only browser probe on 2026-11-18
+ * reached both boards, so migration 20261117204948 moves both sources to
+ * 'local'; openSession() follows src.fetch_region either way. The
  * bapi endpoints accept same-origin in-page fetches after one warm page
  * load (external replay was not validated — pageFetcher is the proven
  * path, verified 2026-06-11), so all calls go through pageFetcher.

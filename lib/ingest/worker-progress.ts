@@ -78,3 +78,61 @@ export function evaluateWorkerProgress(input: {
   for (const node of input.scoringNodes) check(node, 'scoring', input.scoring)
   return { stalled, unknown }
 }
+
+/**
+ * Deep-crawl completion marks (2026-11 audit HOP-2), one Redis hash per tier
+ * keyed by source slug. Tier-B/D errors reach the daily digest, but a wedged
+ * bulk queue or a starved slot produces no error at all — only silence. The
+ * bulk consumer records every COMPLETED Tier-B/D job here and the 30-minute
+ * freshness sentinel pages when an active source's mark is too old.
+ */
+export const DEEP_CRAWL_PROGRESS_KEYS = {
+  B: 'arena:ingest:progress:tier_b',
+  D: 'arena:ingest:progress:tier_d',
+} as const
+
+export type DeepCrawlTier = keyof typeof DEEP_CRAWL_PROGRESS_KEYS
+
+/** Stalled = no completion for 2× the source's cadence, never less than this
+ *  floor: bulk jobs legitimately queue for hours behind a heavy Tier-A crawl. */
+export const DEEP_CRAWL_STALE_FLOOR_MS = 6 * 3600_000
+
+export interface DeepCrawlSource {
+  slug: string
+  cadence_tier_b_seconds: number
+  cadence_tier_d_seconds: number
+}
+
+export interface DeepCrawlFinding {
+  tier: DeepCrawlTier
+  slug: string
+}
+
+/**
+ * Compare active sources against their completion marks. A source with no
+ * mark is `unseen`: the caller records the current time as its baseline, so
+ * a tier that never completes after a deploy still pages one threshold later.
+ */
+export function findStalledDeepCrawls(input: {
+  sources: readonly DeepCrawlSource[]
+  marks: Record<DeepCrawlTier, Record<string, unknown> | null>
+  now: number
+}): { stalled: (DeepCrawlFinding & { age_hours: number })[]; unseen: DeepCrawlFinding[] } {
+  const stalled: (DeepCrawlFinding & { age_hours: number })[] = []
+  const unseen: DeepCrawlFinding[] = []
+  for (const tier of ['B', 'D'] as const) {
+    for (const src of input.sources) {
+      const cadenceSeconds = tier === 'B' ? src.cadence_tier_b_seconds : src.cadence_tier_d_seconds
+      const mark = toMs(input.marks[tier]?.[src.slug])
+      if (mark === null) {
+        unseen.push({ tier, slug: src.slug })
+        continue
+      }
+      const age = input.now - mark
+      if (age > Math.max(2 * cadenceSeconds * 1000, DEEP_CRAWL_STALE_FLOOR_MS)) {
+        stalled.push({ tier, slug: src.slug, age_hours: Math.round(age / 360_000) / 10 })
+      }
+    }
+  }
+  return { stalled, unseen }
+}

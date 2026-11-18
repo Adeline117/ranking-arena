@@ -5,7 +5,12 @@
  */
 
 import type IORedis from 'ioredis'
-import { WORKER_PROGRESS_KEYS, type WorkerProgressKind } from '@/lib/ingest/worker-progress'
+import {
+  DEEP_CRAWL_PROGRESS_KEYS,
+  WORKER_PROGRESS_KEYS,
+  type DeepCrawlTier,
+  type WorkerProgressKind,
+} from '@/lib/ingest/worker-progress'
 
 type ProgressRedis = Pick<IORedis, 'hset'>
 
@@ -49,6 +54,24 @@ export function noteTierAPublished(): void {
     } catch (err) {
       console.error(
         '[worker-progress] tier_a watermark not recorded:',
+        err instanceof Error ? err.message : err
+      )
+    }
+  })()
+}
+
+/**
+ * Bulk-consumer hook: a Tier-B/D job for `slug` COMPLETED (see
+ * DEEP_CRAWL_PROGRESS_KEYS). Fire-and-forget like noteTierAPublished.
+ */
+export function noteDeepCrawlCompleted(tier: DeepCrawlTier, slug: string): void {
+  void (async () => {
+    try {
+      const { getConnection } = await import('../connection')
+      await write(getConnection(), DEEP_CRAWL_PROGRESS_KEYS[tier], slug, Date.now())
+    } catch (err) {
+      console.error(
+        `[worker-progress] tier ${tier} completion not recorded for ${slug}:`,
         err instanceof Error ? err.message : err
       )
     }

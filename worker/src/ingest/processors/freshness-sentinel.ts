@@ -10,6 +10,11 @@ import { getConnection } from '../../connection'
 import { getIngestPool } from '@/lib/ingest/db'
 import { alert } from '@/lib/ingest/alerting'
 import { alertUncoveredRegions } from '../region-coverage'
+import {
+  DEEP_CRAWL_PROGRESS_KEYS,
+  findStalledDeepCrawls,
+  type DeepCrawlSource,
+} from '@/lib/ingest/worker-progress'
 
 interface StaleSurface {
   slug: string
@@ -19,9 +24,12 @@ interface StaleSurface {
   max_age_hours: number
 }
 
-export async function processFreshness(
-  _job: Job
-): Promise<{ stale: number; pendingShifts: number; uncoveredRegions: string[] }> {
+export async function processFreshness(_job: Job): Promise<{
+  stale: number
+  pendingShifts: number
+  stalledDeepCrawls: number
+  uncoveredRegions: string[]
+}> {
   const redis = getConnection()
   // Before the DB query: region coverage must not depend on it.
   const uncoveredRegions = await alertUncoveredRegions(redis)
@@ -85,7 +93,54 @@ export async function processFreshness(
     console.warn(`[freshness] ${rows.length} stale Tier-A surfaces`)
   }
   const pendingShifts = await alertPendingCountShifts(redis)
-  return { stale: rows.length, pendingShifts, uncoveredRegions }
+  const stalledDeepCrawls = await alertStalledDeepCrawls(redis)
+  return { stale: rows.length, pendingShifts, stalledDeepCrawls, uncoveredRegions }
+}
+
+/**
+ * Tier-B/D silence page (audit HOP-2): ONE page per tier listing every active
+ * source whose last completed job is older than its threshold, so a wedged
+ * bulk queue is one page per cooldown window, not one per source.
+ */
+export async function alertStalledDeepCrawls(
+  redis: Parameters<typeof alert>[0],
+  now = Date.now()
+): Promise<number> {
+  const { rows: sources } = await getIngestPool().query<DeepCrawlSource>(
+    `SELECT slug,
+            EXTRACT(EPOCH FROM cadence_tier_b)::int AS cadence_tier_b_seconds,
+            EXTRACT(EPOCH FROM cadence_tier_d)::int AS cadence_tier_d_seconds
+       FROM arena.sources
+      WHERE status = 'active'
+      ORDER BY slug`
+  )
+  const [tierB, tierD] = await Promise.all([
+    redis.hgetall(DEEP_CRAWL_PROGRESS_KEYS.B),
+    redis.hgetall(DEEP_CRAWL_PROGRESS_KEYS.D),
+  ])
+  const { stalled, unseen } = findStalledDeepCrawls({
+    sources,
+    marks: { B: tierB, D: tierD },
+    now,
+  })
+  // First sight of a source: start its clock now (never overwrites a real mark).
+  for (const { tier, slug } of unseen) {
+    await redis.hsetnx(DEEP_CRAWL_PROGRESS_KEYS[tier], slug, String(now))
+  }
+  for (const tier of ['B', 'D'] as const) {
+    const list = stalled.filter((item) => item.tier === tier)
+    if (list.length === 0) continue
+    await alert(redis, {
+      sourceSlug: 'framework:deep-crawl-stalled',
+      phase: 0,
+      tier,
+      page: true,
+      message:
+        `no completed Tier-${tier} job for ${list.length} active source(s): ` +
+        list.map((item) => `${item.slug} ${item.age_hours}h`).join(', '),
+    })
+  }
+  return stalled.length
 }
 
 interface PendingCountShift {
