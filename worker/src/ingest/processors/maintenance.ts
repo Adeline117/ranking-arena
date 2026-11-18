@@ -87,7 +87,8 @@ export async function processMaintenance(_job: Job): Promise<Record<string, unkn
     ['series_downsample', () => downsampleOldSeries(90)],
     ['entries_downsample', () => downsampleSnapshotEntries(7)],
     ['snapshot_retention', () => pruneLeaderboardSnapshots(180)],
-    ['trust_evidence_retention', () => retainTrustEvidence()],
+    // Adaptive row cap survives restarts in Redis (halved after a timeout).
+    ['trust_evidence_retention', () => retainTrustEvidence({ rowCapStore: redis })],
     ['history_retention', () => pruneLongTailHistories(180)],
     [
       'positions_off_cohort',
