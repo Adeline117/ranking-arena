@@ -12,7 +12,7 @@ import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/uni
 import { isDeadPlatform } from '@/lib/constants/exchanges'
 import { isRetiredSource } from '@/lib/constants/retired-sources'
 import { getDataMode } from '@/lib/constants/serving-cutover'
-import { resolveServingTrader } from '@/lib/data/serving/resolve'
+import { resolveServingTraderOutcome, SERVING_RESOLVE_ERRORED } from '@/lib/data/serving/resolve'
 import { getPublicFirstScreen } from '@/lib/data/serving/first-screen'
 import { headlineWindowFor } from '@/lib/data/serving/headline-window'
 import { fetchSimilarTraders } from '@/lib/data/trader/similar'
@@ -148,7 +148,9 @@ const getCurrentPublicTraderDetail = async (platform: string, traderKey: string)
 
 const cachedServingResolveISR = unstable_cache(
   async (handle: string, source: string | undefined) => {
-    const result = await resolveServingTrader(getReadReplica(), { handle, source })
+    const result = await resolveServingTraderOutcome(getReadReplica(), { handle, source })
+    // Neither a failed lookup nor a null may be cached; only the latter is a not-found.
+    if (result === SERVING_RESOLVE_ERRORED) throw new Error('TRADER_RESOLVE_ERRORED')
     if (!result) throw new Error('TRADER_RESOLVE_NULL') // never cache null
     return result
   },
@@ -197,7 +199,9 @@ const cachedServingResolveOutcome = cache(async (handle: string, source?: string
   // Timed out: one direct retry, bypassing the (contended) unstable_cache layer.
   try {
     return await Promise.race([
-      resolveServingTrader(getReadReplica(), { handle, source }),
+      resolveServingTraderOutcome(getReadReplica(), { handle, source }).then((outcome) =>
+        outcome === SERVING_RESOLVE_ERRORED ? SERVING_RESOLVE_UNAVAILABLE : outcome
+      ),
       new Promise<typeof SERVING_RESOLVE_UNAVAILABLE>((resolve) =>
         setTimeout(() => resolve(SERVING_RESOLVE_UNAVAILABLE), SERVING_RESOLVE_TIMEOUT_MS)
       ),
