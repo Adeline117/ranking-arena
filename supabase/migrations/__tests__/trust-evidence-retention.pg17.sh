@@ -57,7 +57,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-export PGOPTIONS='-c client_min_messages=warning -c statement_timeout=60s'
+export PGOPTIONS='-c client_min_messages=warning -c statement_timeout=180s'
 psql_db() { "$PG_BIN/psql" -X -v ON_ERROR_STOP=1 -h "$SOCKET_DIR" -p "$PORT" -U postgres -d postgres "$@"; }
 assert_equal() { [[ "$2" == "$3" ]] || { echo "$1: expected '$2', got '$3'" >&2; exit 1; }; }
 assert_fails() {
@@ -272,6 +272,14 @@ assert_fails "daily window below the superseded window is refused" "SELECT arena
 assert_fails "row cap is bounded" "SELECT arena.retain_trust_evidence(false, 10)"
 assert_fails "an unbounded statement_timeout is refused" "SET statement_timeout = 0; SELECT arena.retain_trust_evidence()"
 assert_fails "delete mode is refused while the switch is off" "SELECT arena.retain_trust_evidence(true)"
+assert_fails "a delete batch under the migration's 30min statement_timeout is refused" \
+  "UPDATE arena.trust_evidence_retention_settings SET delete_enabled = true; SET statement_timeout = '30min'; SELECT arena.retain_trust_evidence(true)"
+assert_equal "no retention function carries its own statement_timeout (the batch inherits only the caller's 3min)" "0" "$(psql_db -Atqc "
+  SELECT count(*) FROM pg_proc
+   WHERE pronamespace = 'arena'::regnamespace
+     AND (proname LIKE 'trust_evidence_retention%' OR proname IN ('retain_trust_evidence', 'metric_trust_run_purge_authorized'))
+     AND EXISTS (SELECT 1 FROM unnest(proconfig) AS c WHERE c LIKE 'statement_timeout=%')")"
+assert_equal "the migration's 30min statement_timeout did not leak into later sessions" "3min" "$(psql_db -Atqc "SHOW statement_timeout")"
 
 DRY="$(psql_db -Atqc "SELECT arena.retain_trust_evidence() - 'would_delete'")"
 echo "dry run: $DRY"

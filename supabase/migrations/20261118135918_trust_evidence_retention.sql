@@ -757,6 +757,14 @@ BEGIN
   END IF;
 
   -- ── Delete mode ──
+  -- A delete batch must be short: long transactions hold back autovacuum and
+  -- ingest writes. The worker runs each batch under 3 minutes; nothing here
+  -- (no function-level SET) extends it, and a longer session value is refused.
+  IF (SELECT setting.setting::bigint FROM pg_catalog.pg_settings AS setting
+       WHERE setting.name = 'statement_timeout') > 180000 THEN
+    RAISE EXCEPTION 'trust evidence retention delete batches require statement_timeout <= 3min'
+      USING ERRCODE = '55000';
+  END IF;
   IF NOT COALESCE(
        (SELECT settings.delete_enabled
           FROM arena.trust_evidence_retention_settings AS settings
