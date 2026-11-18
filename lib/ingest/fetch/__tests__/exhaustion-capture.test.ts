@@ -253,6 +253,139 @@ describe('exhausted completeness capture', () => {
     })
   })
 
+  describe('reported_total_drift (a live board that moves while it is paged)', () => {
+    const live: LeaderboardExhaustionDeclaration = {
+      ...flagDeclaration,
+      end_signal: { kind: 'short_page' },
+      board_version: { kind: 'reported_total_drift', path: ['data', 'total'], max_drift_rows: 1 },
+      max_duplicate_rows: 1,
+    }
+
+    it('binds a quiet capture and records the totals it saw', async () => {
+      const { capture, requests } = await run(
+        [
+          ok({ uids: ['a', 'b'], total: 5 }),
+          ok({ uids: ['c', 'd'], total: 5 }),
+          ok({ uids: ['e'], total: 5 }),
+        ],
+        live
+      )
+      // No re-read, and the total is drift evidence, not a population claim.
+      expect(requests).toHaveLength(3)
+      expect(capture.terminationReason).toBe('short_page')
+      expect(capture.sourcePages.map((p) => p.sourceReports.population.state)).toEqual([
+        'not_reported',
+        'not_reported',
+        'not_reported',
+      ])
+      expect(capture.completeness?.board_version).toEqual({
+        kind: 'reported_total_drift',
+        reported_totals: { min: 5, max: 5, last: 5 },
+      })
+      expect(evidence(capture, live).trustBound).toBe(true)
+    })
+
+    it('binds one trader crossing the cursor: one duplicate, one missing, inside the allowance', async () => {
+      // 'b' moved down past the cursor: seen on pages 1 and 2, and 'c' slid up unseen.
+      const { capture } = await run(
+        [
+          ok({ uids: ['a', 'b'], total: 5 }),
+          ok({ uids: ['b', 'd'], total: 5 }),
+          ok({ uids: ['e'], total: 5 }),
+        ],
+        live
+      )
+      expect(capture.completeness?.row_keys).toEqual({ observed: 5, distinct: 4, duplicate: 1 })
+      expect(evidence(capture, live).trustBound).toBe(true)
+    })
+
+    it('reads past the first reported total to the real end of the board', async () => {
+      // The board grew from 4 to 5 while it was paged; a total-mode capture would stop at 4 rows.
+      const { capture, requests } = await run(
+        [
+          ok({ uids: ['a', 'b'], total: 4 }),
+          ok({ uids: ['c', 'd'], total: 5 }),
+          ok({ uids: ['e'], total: 5 }),
+        ],
+        live
+      )
+      expect(requests).toHaveLength(3)
+      expect(capture.completeness?.board_version).toEqual({
+        kind: 'reported_total_drift',
+        reported_totals: { min: 4, max: 5, last: 5 },
+      })
+      expect(evidence(capture, live).trustBound).toBe(true)
+    })
+
+    it('ends on the empty page when the board is a whole number of pages', async () => {
+      const { capture } = await run(
+        [
+          ok({ uids: ['a', 'b'], total: 4 }),
+          ok({ uids: ['c', 'd'], total: 4 }),
+          ok({ uids: [], total: 0 }),
+        ],
+        live
+      )
+      expect(capture.terminationReason).toBe('empty_page')
+      // The empty page's total is not evidence about the board.
+      expect(capture.completeness?.board_version).toEqual({
+        kind: 'reported_total_drift',
+        reported_totals: { min: 4, max: 4, last: 4 },
+      })
+      expect(evidence(capture, live).trustBound).toBe(true)
+    })
+
+    it.each([
+      [
+        'more duplicates than the allowance',
+        [
+          ok({ uids: ['a', 'b'], total: 6 }),
+          ok({ uids: ['a', 'b'], total: 6 }),
+          ok({ uids: ['e'], total: 6 }),
+        ],
+      ],
+      [
+        'the reported total moving by more than the allowance',
+        [
+          ok({ uids: ['a', 'b'], total: 3 }),
+          ok({ uids: ['c', 'd'], total: 5 }),
+          ok({ uids: ['e'], total: 5 }),
+        ],
+      ],
+      [
+        'more rows missing against the last total than the allowance',
+        [
+          ok({ uids: ['a', 'b'], total: 7 }),
+          ok({ uids: ['c', 'd'], total: 7 }),
+          ok({ uids: ['e'], total: 7 }),
+        ],
+      ],
+    ])('does not verify %s', async (_label, answers) => {
+      const { capture } = await run(answers, live)
+      expect(capture.terminationReason).toBe('short_page')
+      expect(evidence(capture, live).trustBound).toBe(false)
+    })
+
+    it('fails the page when a page with rows reports no total', async () => {
+      await expect(run([ok({ uids: ['a', 'b'] })], live)).rejects.toBeInstanceOf(
+        LeaderboardCaptureUpstreamError
+      )
+    })
+
+    it('does not verify under a different registered allowance', async () => {
+      const { capture } = await run(
+        [ok({ uids: ['a', 'b'], total: 3 }), ok({ uids: ['c'], total: 3 })],
+        live
+      )
+      const stricter = {
+        ...live,
+        board_version: { ...live.board_version, max_drift_rows: 0 },
+      } as LeaderboardExhaustionDeclaration
+      expect(evidence(capture, live).trustBound).toBe(true)
+      expect(evidence(capture, stricter).trustBound).toBe(false)
+    })
+  })
+
   it('binds a page-count board that stops exactly at the reported page count', async () => {
     const pageCount: LeaderboardExhaustionDeclaration = {
       ...flagDeclaration,

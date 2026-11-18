@@ -17,7 +17,10 @@
  *    above the declared allowance, and distinct keys = accepted population with
  *    zero rejected rows;
  *  - board stability: every page carries the same version token, or page one
- *    re-read after the last page yields identical row keys.
+ *    re-read after the last page yields identical row keys; or, for a live
+ *    board that keeps moving while it is paged, bounded drift: the total each
+ *    page reports varies by no more than the declared allowance and the
+ *    distinct rows differ from the last reported total by no more than it.
  *
  * The declaration is the per-source capture contract. The database holds the
  * reviewed copy (arena.leaderboard_exhaustion_contracts) and re-checks the same
@@ -82,6 +85,19 @@ export const leaderboardExhaustionBoardVersionSchema = z.discriminatedUnion('kin
   z.object({ kind: z.literal('token'), path: payloadPathSchema }).strict(),
   /** No token: page one is re-read after the last page and must yield identical row keys. */
   z.object({ kind: z.literal('first_page_reread') }).strict(),
+  /**
+   * A live board: members and ranks change while it is paged, so no snapshot
+   * can be frozen. Every page reports the board total at `path`; the proof
+   * bounds how far the board moved during the capture instead of denying it.
+   */
+  z
+    .object({
+      kind: z.literal('reported_total_drift'),
+      path: payloadPathSchema,
+      /** Rows the per-page total may vary by, and the distinct rows may differ from it. */
+      max_drift_rows: safeNonNegativeIntegerSchema,
+    })
+    .strict(),
 ])
 
 /** The per-source capture contract for exhausted completeness (reviewed, DB-registered). */
@@ -148,6 +164,19 @@ export const leaderboardExhaustionCompletenessSchema = z
           kind: z.literal('first_page_reread'),
           /** null when the re-read request failed: stability is then unproven. */
           reread: rereadSchema.nullable(),
+        })
+        .strict(),
+      z
+        .object({
+          kind: z.literal('reported_total_drift'),
+          /** The board total each page reported: smallest, largest, and the last page's. */
+          reported_totals: z
+            .object({
+              min: safeNonNegativeIntegerSchema,
+              max: safeNonNegativeIntegerSchema,
+              last: safeNonNegativeIntegerSchema,
+            })
+            .strict(),
         })
         .strict(),
     ]),
@@ -270,6 +299,17 @@ function boardVersionHolds(completeness: LeaderboardExhaustionCompleteness): boo
   if (completeness.board_version.kind === 'token') {
     const token = pages[0].version_token_sha256
     return token !== null && pages.every((page) => page.version_token_sha256 === token)
+  }
+  if (completeness.board_version.kind === 'reported_total_drift') {
+    const declared = completeness.declaration.board_version
+    if (declared.kind !== 'reported_total_drift') return false
+    const totals = completeness.board_version.reported_totals
+    return (
+      totals.min <= totals.last &&
+      totals.last <= totals.max &&
+      totals.max - totals.min <= declared.max_drift_rows &&
+      Math.abs(totals.last - completeness.row_keys.distinct) <= declared.max_drift_rows
+    )
   }
   const reread = completeness.board_version.reread
   return (
