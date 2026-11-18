@@ -20,7 +20,9 @@
 BEGIN;
 
 SET LOCAL lock_timeout = '5s';
-SET LOCAL statement_timeout = '120s';
+-- The definition ran 43s on a cold production cache (read-only EXPLAIN ANALYZE,
+-- 2026-11-18); the old one never finished inside 600s.
+SET LOCAL statement_timeout = '300s';
 
 DROP MATERIALIZED VIEW arena.mv_source_capabilities;
 
