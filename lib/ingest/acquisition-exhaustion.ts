@@ -19,8 +19,8 @@
  *  - board stability: every page carries the same version token, or page one
  *    re-read after the last page yields identical row keys; or, for a live
  *    board that keeps moving while it is paged, bounded drift: the total each
- *    page reports varies by no more than the declared allowance and the
- *    distinct rows differ from the last reported total by no more than it.
+ *    page reports, the distinct rows against the last reported total, and the
+ *    duplicate rows each stay within the declared share of the board.
  *
  * The declaration is the per-source capture contract. The database holds the
  * reviewed copy (arena.leaderboard_exhaustion_contracts) and re-checks the same
@@ -35,6 +35,9 @@ export const LEADERBOARD_EXHAUSTION_COMPLETENESS_CONTRACT =
   'arena.ingest.leaderboard-exhaustion-completeness@1' as const
 
 const SHA256 = /^[0-9a-f]{64}$/
+
+/** A live-board contract may tolerate at most 1% of the board moving. */
+export const MAX_REPORTED_TOTAL_DRIFT_BPS = 100
 
 const sha256Schema = z
   .string()
@@ -94,8 +97,22 @@ export const leaderboardExhaustionBoardVersionSchema = z.discriminatedUnion('kin
     .object({
       kind: z.literal('reported_total_drift'),
       path: payloadPathSchema,
-      /** Rows the per-page total may vary by, and the distinct rows may differ from it. */
-      max_drift_rows: safeNonNegativeIntegerSchema,
+      /**
+       * The allowance in basis points of the last reported total (100 = 1%,
+       * the most a contract may declare). Relative, because a registered
+       * declaration is immutable while the board keeps growing; the
+       * declaration's max_duplicate_rows caps it in absolute rows.
+       */
+      max_drift_bps: z
+        .number()
+        .refine(
+          (value) =>
+            Number.isSafeInteger(value) &&
+            !Object.is(value, -0) &&
+            value >= 0 &&
+            value <= MAX_REPORTED_TOTAL_DRIFT_BPS,
+          'must be an integer between 0 and 100 basis points'
+        ),
     })
     .strict(),
 ])
@@ -304,11 +321,16 @@ function boardVersionHolds(completeness: LeaderboardExhaustionCompleteness): boo
     const declared = completeness.declaration.board_version
     if (declared.kind !== 'reported_total_drift') return false
     const totals = completeness.board_version.reported_totals
+    const allowance = Math.min(
+      Math.floor((totals.last * declared.max_drift_bps) / 10_000),
+      completeness.declaration.max_duplicate_rows
+    )
     return (
       totals.min <= totals.last &&
       totals.last <= totals.max &&
-      totals.max - totals.min <= declared.max_drift_rows &&
-      Math.abs(totals.last - completeness.row_keys.distinct) <= declared.max_drift_rows
+      totals.max - totals.min <= allowance &&
+      Math.abs(totals.last - completeness.row_keys.distinct) <= allowance &&
+      completeness.row_keys.duplicate <= allowance
     )
   }
   const reread = completeness.board_version.reread

@@ -521,7 +521,8 @@ assert_equal "earlier exhausted board still binds" "t" "$(trust_bound 100)"
 # ── 20261118114230: reported_total_drift, the proof for a live board ──
 
 DRIFT_TARGET="$MIGRATIONS/20261118114230_leaderboard_exhaustion_reported_total_drift.sql"
-DRIFT_DECLARATION='{"completeness_mode":"exhausted","list_path":["data","rows"],"row_key_path":["uid"],"end_signal":{"kind":"short_page"},"board_version":{"kind":"reported_total_drift","path":["data","total"],"max_drift_rows":1},"max_duplicate_rows":1}'
+# 1% of the last reported total, never more than 3 rows.
+DRIFT_DECLARATION='{"completeness_mode":"exhausted","list_path":["data","rows"],"row_key_path":["uid"],"end_signal":{"kind":"short_page"},"board_version":{"kind":"reported_total_drift","path":["data","total"],"max_drift_bps":100},"max_duplicate_rows":3}'
 psql_cmd -q -c "INSERT INTO arena.sources (
     id, slug, adapter_slug, status, serving_mode, currency, product_type,
     fetch_region, timeframes_native, page_size)
@@ -549,10 +550,13 @@ fi
 echo "ok: drift migration replay refused"
 
 expect_failure "drift declaration without an allowance" \
-  "$(register_drift_sql "'$DRIFT_DECLARATION'::jsonb #- '{board_version,max_drift_rows}'")" \
+  "$(register_drift_sql "'$DRIFT_DECLARATION'::jsonb #- '{board_version,max_drift_bps}'")" \
   "leaderboard_exhaustion_contracts_declaration_check" "23514"
-expect_failure "drift declaration with a negative allowance" \
-  "$(register_drift_sql "jsonb_set('$DRIFT_DECLARATION'::jsonb, '{board_version,max_drift_rows}', '-1')")" \
+expect_failure "drift declaration above 1%" \
+  "$(register_drift_sql "jsonb_set('$DRIFT_DECLARATION'::jsonb, '{board_version,max_drift_bps}', '101')")" \
+  "leaderboard_exhaustion_contracts_declaration_check" "23514"
+expect_failure "drift declaration with an absolute row allowance" \
+  "$(register_drift_sql "jsonb_set('$DRIFT_DECLARATION'::jsonb #- '{board_version,max_drift_bps}', '{board_version,max_drift_rows}', '5')")" \
   "leaderboard_exhaustion_contracts_declaration_check" "23514"
 psql_cmd -q -c "$(register_drift_sql "'$DRIFT_DECLARATION'")"
 echo "ok: registered live source 3"
@@ -591,30 +595,39 @@ drift_refuses() {
   assert_equal "$label snapshot is not trust-bound" "f" "$(trust_bound "$1")"
 }
 
-drift_binds "quiet live board binds" 150 short_page '[[2,null],[2,null],[1,null]]' 5 "$(totals 5 5 5)"
-psql_cmd -q -c "$(metric_run_sql "$CASE_ID" NULL 5)" >/dev/null
+# A 201-row board read two rows per page: 100 full pages and one short page.
+LIVE_201="$(psql_cmd -Atqc "SELECT jsonb_agg(CASE WHEN n <= 100 THEN '[2,null]'::jsonb ELSE '[1,null]'::jsonb END)::text FROM generate_series(1, 101) AS n")"
+LIVE_200="$(psql_cmd -Atqc "SELECT jsonb_agg(CASE WHEN n <= 100 THEN '[2,null]'::jsonb ELSE '[0,null]'::jsonb END)::text FROM generate_series(1, 101) AS n")"
+LIVE_801="$(psql_cmd -Atqc "SELECT jsonb_agg(CASE WHEN n <= 400 THEN '[2,null]'::jsonb ELSE '[1,null]'::jsonb END)::text FROM generate_series(1, 401) AS n")"
+
+drift_binds "quiet live board binds" 150 short_page "$LIVE_201" 201 "$(totals 201 201 201)"
+psql_cmd -q -c "$(metric_run_sql "$CASE_ID" NULL 201)" >/dev/null
 echo "ok: metric-trust run authorized for a live board"
 drift_binds "one trader crossing the cursor (1 duplicate, 1 missing) binds" \
-  151 short_page '[[2,null],[2,null],[1,null]]' 4 "$(totals 5 5 5)"
-drift_binds "total moving by one row binds" \
-  152 short_page '[[2,null],[2,null],[1,null]]' 5 "$(totals 4 5 5)"
+  151 short_page "$LIVE_201" 200 "$(totals 201 201 201)"
+drift_binds "total moving by 1% binds" \
+  152 short_page "$LIVE_201" 201 "$(totals 199 201 201)"
 drift_binds "board ending on an empty page binds" \
-  153 empty_page '[[2,null],[2,null],[0,null]]' 4 "$(totals 4 4 4)"
+  153 empty_page "$LIVE_200" 200 "$(totals 200 200 200)"
 
-drift_refuses "total moving by more than the allowance" \
-  160 short_page '[[2,null],[2,null],[1,null]]' 5 "$(totals 3 5 5)"
-drift_refuses "more rows missing against the last total than the allowance" \
-  161 short_page '[[2,null],[2,null],[1,null]]' 5 "$(totals 7 7 7)"
+drift_refuses "total moving by more than 1%" \
+  160 short_page "$LIVE_201" 201 "$(totals 198 201 201)"
+drift_refuses "more rows missing against the last total than 1%" \
+  161 short_page "$LIVE_201" 201 "$(totals 204 204 204)"
 drift_refuses "more distinct rows than the last total allows" \
-  162 short_page '[[2,null],[2,null],[1,null]]' 5 "$(totals 3 3 3)"
+  162 short_page "$LIVE_201" 201 "$(totals 198 198 198)"
 drift_refuses "last total outside the recorded range" \
-  163 short_page '[[2,null],[2,null],[1,null]]' 5 "$(totals 5 5 6)"
-drift_refuses "duplicates above the allowance" \
-  164 short_page '[[2,null],[2,null],[1,null]]' 3 "$(totals 4 4 4)"
+  163 short_page "$LIVE_201" 201 "$(totals 201 201 202)"
+drift_refuses "duplicates above 1%" \
+  164 short_page "$LIVE_201" 198 "$(totals 200 200 200)"
+drift_refuses "duplicates above the absolute cap on a large board" \
+  165 short_page "$LIVE_801" 797 "$(totals 801 801 801)"
 drift_refuses "token evidence for a live declaration" \
-  165 short_page '[[2,null],[2,null],[1,null]]' 5 '{"kind":"token"}'
+  166 short_page "$LIVE_201" 201 '{"kind":"token"}'
 drift_refuses "live board that did not end on a short or empty page" \
-  166 short_page '[[2,null],[2,null],[2,null]]' 6 "$(totals 6 6 6)"
+  167 short_page '[[2,null],[2,null],[2,null]]' 6 "$(totals 6 6 6)"
+drift_refuses "any duplicate on a board too small for 1% to be a row" \
+  168 short_page '[[2,null],[2,null],[1,null]]' 4 "$(totals 5 5 5)"
 
 assert_equal "earlier token board still binds" "t" "$(trust_bound 100)"
 assert_equal "earlier re-read board still binds" "t" "$(trust_bound 120)"
