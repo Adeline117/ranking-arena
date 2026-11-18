@@ -442,7 +442,8 @@ export async function generateMetadata({
   // Root layout template appends ' | Arena', so the metadata title must NOT
   // include it (else the tab/SEO title doubles to '… | Arena | Arena').
   // OG/Twitter titles are NOT run through the template, so they keep the suffix.
-  const title = `${name} — Performance & Stats`
+  // 带上交易所名：钱包地址类和跨交易所同名的交易员，标题否则只差一串字符。
+  const title = `${name} — ${exchange} Trader Performance & Stats`
   const ogTitle = `${title} | Arena`
   const rawDescription = parts.length
     ? `${name} is a ${exchange} trader with ${parts.join(', ')}${pnl != null ? `. PnL: $${pnl >= 0 ? '+' : ''}${pnl >= 1000 || pnl <= -1000 ? (pnl / 1000).toFixed(1) + 'K' : pnl.toFixed(0)}` : ''}. Track performance history, analytics, and rankings on Arena.`
