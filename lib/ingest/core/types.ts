@@ -103,6 +103,13 @@ export interface ParseCtx {
   tfLabelMap: Record<string, number | null>
   scrapedAt: string
   meta: Record<string, unknown>
+  /**
+   * Tier-A only: the ranking window being parsed. Set for every leaderboard
+   * parse so an adapter whose one upstream document carries every window
+   * (Hyperliquid stats-data) can select the window without wrapping the
+   * captured response. A re-parse takes it from the RAW object's timeframe.
+   */
+  timeframe?: RankingTimeframe
 }
 
 // ── Parsed (canonical) rows ──
