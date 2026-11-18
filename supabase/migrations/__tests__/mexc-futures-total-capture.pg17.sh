@@ -9,8 +9,10 @@
 #   + the metric contract rows equal lib/metric-trust.ts mexc_futures field by
 #     field, the exhaustion row equals MEXC_FUTURES_LEADERBOARD_EXHAUSTION, one
 #     V3 capture row is registered
-#   + the registered declaration holds for the live shape (7100 rows, 7098
-#     distinct, 2 duplicates) and fails at 72 duplicates
+#   + the registered declaration (allowance min(last x 50 bps, 40 rows))
+#     holds for the live shape (7100 rows, 7098 distinct, 2 duplicates); at
+#     7100 it holds at 35 duplicates and fails at 36; on an 8200-row board the
+#     40-row cap binds: 40 holds, 41 fails
 #   + page_size 30 -> 100 (the upstream limit); nothing else changes
 #   - a replay refuses and changes nothing
 #   - adapter drift, a native window the contract does not cover and a
@@ -308,11 +310,11 @@ SELECT contract.declaration = :'expected'::jsonb
 SQL
 )"
 
-# The registered declaration against a 72-page capture (71 full pages, then
-# the empty page 72), every page reporting 7100: the database's own check.
+# The registered declaration against a capture of TOTAL/100 full pages, then
+# the empty page, every page reporting TOTAL: the database's own check.
 mexc_holds() {
-  local distinct="$1" duplicate="$2"
-  psql_db main -Atq -v distinct="$distinct" -v duplicate="$duplicate" <<'SQL'
+  local total="$1" distinct="$2" duplicate="$3"
+  psql_db main -Atq -v total="$total" -v distinct="$distinct" -v duplicate="$duplicate" <<'SQL'
 WITH contract AS (
   SELECT contract.source_id, contract.declaration
     FROM arena.leaderboard_exhaustion_contracts AS contract
@@ -324,11 +326,11 @@ pages AS (
            'ordinal', n,
            'request_sha256', pg_catalog.md5('req' || n) || pg_catalog.md5('q' || n),
            'response_sha256', pg_catalog.md5('res' || n) || pg_catalog.md5('s' || n),
-           'row_count', CASE WHEN n <= 71 THEN 100 ELSE 0 END,
+           'row_count', CASE WHEN n <= :total / 100 THEN 100 ELSE 0 END,
            'row_keys_sha256', pg_catalog.md5('key' || n) || pg_catalog.md5('k' || n),
            'version_token_sha256', NULL,
            'end_signal_value', NULL) ORDER BY n) AS value
-    FROM pg_catalog.generate_series(1, 72) AS n
+    FROM pg_catalog.generate_series(1, :total / 100 + 1) AS n
 )
 SELECT arena.leaderboard_exhaustion_completeness_holds(
   contract.source_id,
@@ -337,19 +339,21 @@ SELECT arena.leaderboard_exhaustion_completeness_holds(
     'declaration', contract.declaration,
     'pages', pages.value,
     'row_keys', pg_catalog.jsonb_build_object(
-      'observed', 7100, 'distinct', :distinct, 'duplicate', :duplicate),
+      'observed', :total, 'distinct', :distinct, 'duplicate', :duplicate),
     'board_version', pg_catalog.jsonb_build_object(
       'kind', 'reported_total_drift',
-      'reported_totals', pg_catalog.jsonb_build_object('min', 7100, 'max', 7100, 'last', 7100))
+      'reported_totals', pg_catalog.jsonb_build_object('min', :total, 'max', :total, 'last', :total))
   ),
-  'empty_page', 72, 'unknown', 7100, :distinct, 0, :duplicate
+  'empty_page', :total / 100 + 1, 'unknown', :total, :distinct, 0, :duplicate
 )
 FROM contract, pages
 SQL
 }
-assert_equal "live shape (7098 distinct, 2 duplicates) holds" "t" "$(mexc_holds 7098 2)"
-assert_equal "71 duplicates, the allowance, holds" "t" "$(mexc_holds 7029 71)"
-assert_equal "72 duplicates exceed the allowance" "f" "$(mexc_holds 7028 72)"
+assert_equal "live shape (7098 distinct, 2 duplicates) holds" "t" "$(mexc_holds 7100 7098 2)"
+assert_equal "at 7100, 35 duplicates (0.5%) hold" "t" "$(mexc_holds 7100 7065 35)"
+assert_equal "at 7100, 36 duplicates exceed 0.5%" "f" "$(mexc_holds 7100 7064 36)"
+assert_equal "at 8200, 40 duplicates (the row cap) hold" "t" "$(mexc_holds 8200 8160 40)"
+assert_equal "at 8200, 41 duplicates exceed the row cap" "f" "$(mexc_holds 8200 8159 41)"
 
 assert_equal "mexc_futures page_size raised to the upstream limit, windows unchanged" \
   "{7}:USDT:100:inactive" \

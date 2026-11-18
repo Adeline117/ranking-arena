@@ -1,6 +1,6 @@
 -- Migration: 20261118114254_mexc_futures_total_capture_contract.sql
 -- Description: Register attempt-bound V3 capture for mexc_futures as a live
---   board: exhausted completeness bounded by reported-total drift (1%).
+--   board: exhausted completeness bounded by reported-total drift.
 --   (The file name predates the switch from the total mode; it is unapplied.)
 --
 -- Every row mirrors the code registry exactly:
@@ -8,7 +8,8 @@
 --     (data.content[].roi percent, data.content[].pnl USDT; 7D only)
 --   * arena.leaderboard_exhaustion_contracts <- MEXC_FUTURES_LEADERBOARD_EXHAUSTION
 --     (lib/ingest/adapters/mexc): short_page end, reported_total_drift on
---     data.total with max_drift_bps 100, max_duplicate_rows 71 (1% of 7,100)
+--     data.total with max_drift_bps 50, max_duplicate_rows 40 (35 rows at
+--     7,100: min(floor(last x 50 / 10000), 40))
 --   * arena.leaderboard_capture_contracts (manifest@3) <- the mexc adapter's
 --     captureLeaderboard (GET traders/v2 to the empty page past the end).
 --
@@ -18,7 +19,12 @@
 -- board re-sorts while it is paged: four sequential full crawls (16 s to
 -- 3 min) each served 1-6 traders on two pages (the 16 s crawl: 7098 distinct
 -- of 7100, 2 duplicates), and parallel page requests answer code 510, so the
--- total mode can never hold. Owner decision 2026-11-18: tolerate 1%.
+-- total mode can never hold.
+--
+-- Allowance: the most rows a capture judged complete may be missing, in an
+-- append-only registry. It is a multiple of the largest observed movement
+-- (6 repeated traders per crawl), never above the 1% ceiling and not the
+-- ceiling by default: 0.5% of the last total, at most 40 rows.
 --
 -- Source configuration the capture requires (guarded on the adapter; any
 -- other value is left alone and the preflight/windows check refuses it):
@@ -66,7 +72,7 @@ CREATE TEMPORARY TABLE exhaustion_contract_seed (
 
 INSERT INTO exhaustion_contract_seed VALUES
   ('mexc_futures', 'mexc',
-   '{"completeness_mode": "exhausted", "list_path": ["data", "content"], "row_key_path": ["uid"], "end_signal": {"kind": "short_page"}, "board_version": {"kind": "reported_total_drift", "path": ["data", "total"], "max_drift_bps": 100}, "max_duplicate_rows": 71}');
+   '{"completeness_mode": "exhausted", "list_path": ["data", "content"], "row_key_path": ["uid"], "end_signal": {"kind": "short_page"}, "board_version": {"kind": "reported_total_drift", "path": ["data", "total"], "max_drift_bps": 50}, "max_duplicate_rows": 40}');
 
 CREATE TEMPORARY TABLE board_metric_contract_seed (
   source_slug text NOT NULL,
