@@ -1359,7 +1359,12 @@ describe('Tier-A board-series publication guard', () => {
     expect(captureLeaderboard).toHaveBeenCalledTimes(1)
     expect(listLeaderboard).not.toHaveBeenCalled()
     expect(parseLeaderboard).toHaveBeenCalledTimes(1)
-    expect(parseLeaderboard).toHaveBeenCalledWith(parsePage.payload, expect.any(Object))
+    // The parse ctx names the window, so a single all-window document can be
+    // parsed from the exact captured response.
+    expect(parseLeaderboard).toHaveBeenCalledWith(
+      parsePage.payload,
+      expect.objectContaining({ timeframe: 30 })
+    )
     expect(parseLeaderboard).not.toHaveBeenCalledWith(terminalPage.payload, expect.any(Object))
     expect(mockWriteRawObject).not.toHaveBeenCalled()
     expect(attemptBoundRawWrites()).toContainEqual(

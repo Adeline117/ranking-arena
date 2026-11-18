@@ -7,13 +7,16 @@
  * launching a browser (PlaywrightFetchSession is lazy).
  *
  * Surfaces:
- *   Tier A  GET  stats-data.hyperliquid.xyz/Mainnet/leaderboard — ONE ~32 MB
- *           S3 object covering BOTH native TFs (week→7, month→30); memoized
- *           per session so the 7d and 30d crawls share a single download.
- *           The file is unsorted → sort by window PnL desc (site default,
- *           meta.derived_board_sort), truncate to meta.board_depth (spike §6:
- *           38.6k×2TF×4/day uncapped ≈ 309k entries/day — board capped at
- *           top 10k; the long tail stays reachable via Tier-C by address).
+ *   Tier A  GET  stats-data.hyperliquid.xyz/Mainnet/leaderboard — ONE ~39 MB
+ *           S3/CloudFront object (48,027 rows on 2026-11-18) carrying every
+ *           window (week→7, month→30, allTime→90 per owner plan A). The
+ *           attempt-bound capture stores that document VERBATIM, one capture
+ *           per timeframe, and the parser ranks the whole population for the
+ *           window (ParseCtx.timeframe). No truncation: Tier-A publication
+ *           requires the accepted rows to equal the observed population.
+ *           Completeness is exhaustion mode (HYPERLIQUID_LEADERBOARD_EXHAUSTION):
+ *           one short page (rows < sources.page_size) ends the board, and the
+ *           document is re-read to prove it did not change mid-capture.
  *   Tier B/C POST api.hyperliquid.xyz/info {portfolio} + {clearinghouseState}
  *           (weights 20 + 2 of 1200/min — rate_budget_ms=1100). One portfolio
  *           response serves all three TFs (90D ROI/PnL = board allTime, plan A),
@@ -39,6 +42,9 @@ import {
 } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { BlockedUpstreamError, isBlockedStatus } from '../../fetch/rate-limiter'
+import { captureNumericLeaderboard, type JsonFetcher } from '../../fetch/capture'
+import { allowlistedPublicRequest, collectionMeta } from '../../fetch/replay-capture'
+import type { LeaderboardExhaustionDeclaration } from '../../acquisition-exhaustion'
 import {
   parseHyperliquidHistory,
   parseHyperliquidLeaderboardPage,
@@ -55,8 +61,30 @@ import {
 const LEADERBOARD_URL = 'https://stats-data.hyperliquid.xyz/Mainnet/leaderboard'
 const INFO_URL = 'https://api.hyperliquid.xyz/info'
 
-const DEFAULT_BOARD_DEPTH = 10_000
-const DEFAULT_CHUNK_SIZE = 5_000
+/**
+ * Reviewed exhaustion contract (registered in
+ * arena.leaderboard_exhaustion_contracts). The board is one document: its
+ * single page is short against sources.page_size (a declared ceiling far
+ * above the population), and a re-read must return the same row keys.
+ */
+export const HYPERLIQUID_LEADERBOARD_EXHAUSTION: LeaderboardExhaustionDeclaration = Object.freeze({
+  completeness_mode: 'exhausted' as const,
+  list_path: ['leaderboardRows'],
+  row_key_path: ['ethAddress'],
+  end_signal: { kind: 'short_page' as const },
+  board_version: { kind: 'first_page_reread' as const },
+  max_duplicate_rows: 0,
+})
+
+/**
+ * The document has no pagination. The numeric capture contract binds every
+ * request to a 1-based page in its public request, so the request carries
+ * `page=1`, which the endpoint ignores (live 2026-11-18: identical bytes and
+ * ETag with and without it). The capture never asks for page 2: a document at
+ * or above the page-size ceiling ends at the one-request safety cap and
+ * cannot verify.
+ */
+const BOARD_PAGE_QUERY_KEY = 'page'
 
 type Dict = Record<string, unknown>
 
@@ -86,7 +114,7 @@ async function fetchJson(
   })
 }
 
-// ── Board download, memoized per session (one 32 MB GET serves both TFs) ──
+// ── Board download for the 90D profile block (native allTime), memoized per session ──
 
 interface BoardFetch {
   rows: Dict[]
@@ -159,27 +187,47 @@ function boardAllTime(
   return index.then((byAddress) => byAddress?.get(address) ?? null)
 }
 
-/** window pnl for the fetch-side sort (mirrors parsers.windowPerf). */
-function windowPnlRoi(row: Dict, windowKey: string): { pnl: number; roi: number } {
-  const wp = row.windowPerformances
-  let perf: Dict | undefined
-  if (Array.isArray(wp)) {
-    const hit = wp.find((pair) => Array.isArray(pair) && pair[0] === windowKey)
-    perf = hit ? (hit as [string, Dict])[1] : undefined
-  } else if (wp && typeof wp === 'object') {
-    perf = (wp as Record<string, Dict>)[windowKey]
+/** Unpaced plain GET for the capture, which paces each request itself. */
+function boardFetcher(signal: AbortSignal | undefined): JsonFetcher {
+  return async (template) => {
+    const response = await fetch(template.url, {
+      method: 'GET',
+      headers: { accept: 'application/json' },
+      signal,
+    })
+    let json: unknown = null
+    try {
+      json = await response.json()
+    } catch {
+      // non-JSON body: the capture records it as a failed answer
+    }
+    return { status: response.status, json }
   }
-  const pnl = Number(perf?.pnl)
-  const roi = Number(perf?.roi)
-  return { pnl: Number.isFinite(pnl) ? pnl : 0, roi: Number.isFinite(roi) ? roi : 0 }
 }
 
-/** Effective board depth: meta.board_depth (production knob, default 10k),
- *  further capped by meta.max_rows (smoke-run knob). */
-function effectiveDepth(src: SourceRow): number {
-  const boardDepth = Number(src.meta.board_depth) || DEFAULT_BOARD_DEPTH
-  const maxRows = Number(src.meta.max_rows) || null
-  return maxRows !== null ? Math.min(boardDepth, maxRows) : boardDepth
+/** The whole document is the board: a missing row array is an upstream error. */
+const hyperliquidBoardMeta = collectionMeta({
+  label: 'hyperliquid',
+  assertSuccess: (payload) => {
+    if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new TypeError('[hyperliquid] leaderboard response is not a JSON object')
+    }
+  },
+  list: ['leaderboardRows'],
+})
+
+/**
+ * `page=<n>` is really sent on the wire and is recorded as-is in the request
+ * evidence (public projection, request_sha256). The upstream IGNORES it: the
+ * CloudFront/S3 object returns the same bytes and ETag for any query string
+ * (verified 2026-11-18). It therefore never selects a slice of the board; the
+ * whole population is always the single response, and only n=1 is requested
+ * (safetyPageCap 1; the exhaustion re-read asks for page 1 again).
+ */
+function boardRequestUrl(src: SourceRow, pageIndex: number): string {
+  const url = new URL(endpoint(src, 'leaderboard', LEADERBOARD_URL))
+  url.searchParams.set(BOARD_PAGE_QUERY_KEY, String(pageIndex))
+  return url.href
 }
 
 // ── Profile base + fills, independently memoized per trader/session ──
@@ -325,42 +373,46 @@ const hyperliquidAdapter: SourceAdapter = {
   },
 
   /**
-   * One S3 download (memoized across both TFs in this session) → sort by
-   * the TF's window PnL desc (deterministic tie-breaks) → truncate to the
-   * depth knob → chunk into page_size pages. Chunk-local ranks are
-   * re-anchored by the Tier-A processor via (pageIndex−1)×page_size, so
-   * chunk size MUST equal sources.page_size.
+   * One verbatim document per timeframe, plus the exhaustion re-read. Never
+   * memoized across timeframes: each capture's evidence is its own requests.
    */
+  async captureLeaderboard(session, src, timeframe, options) {
+    options?.signal?.throwIfAborted()
+    if (!Object.prototype.hasOwnProperty.call(TF_WINDOW, timeframe)) {
+      throw new Error(`[hyperliquid] no board window for ${timeframe}d`)
+    }
+    const pageSize = src.page_size
+    if (pageSize === null || !Number.isSafeInteger(pageSize) || pageSize < 1) {
+      throw new Error('[hyperliquid] board capture requires sources.page_size (the row ceiling)')
+    }
+    if (src.pagination_kind !== 'numeric') {
+      throw new Error('[hyperliquid] board capture requires numeric sources.pagination_kind')
+    }
+    return captureNumericLeaderboard({
+      session,
+      fetcher: boardFetcher(options?.signal),
+      signal: options?.signal,
+      buildRequest: (pageIndex) => ({
+        url: boardRequestUrl(src, pageIndex),
+        method: 'GET',
+        headers: {},
+      }),
+      projectPublicRequest: allowlistedPublicRequest({ query: [BOARD_PAGE_QUERY_KEY] }),
+      pageBinding: { location: 'query', key: BOARD_PAGE_QUERY_KEY },
+      extractMeta: hyperliquidBoardMeta,
+      pageSize,
+      safetyPageCap: 1,
+      exhaustion: HYPERLIQUID_LEADERBOARD_EXHAUSTION,
+    })
+  },
+
   async *listLeaderboard(
     session: FetchSession,
     src: SourceRow,
     timeframe: RankingTimeframe
   ): AsyncIterable<RawPage> {
-    const board = await getBoard(session, src)
-    const windowKey = TF_WINDOW[timeframe]
-
-    const sorted = [...board.rows].sort((a, b) => {
-      const pa = windowPnlRoi(a, windowKey)
-      const pb = windowPnlRoi(b, windowKey)
-      if (pb.pnl !== pa.pnl) return pb.pnl - pa.pnl
-      if (pb.roi !== pa.roi) return pb.roi - pa.roi
-      return String(a.ethAddress ?? '').localeCompare(String(b.ethAddress ?? ''))
-    })
-    const truncated = sorted.slice(0, effectiveDepth(src))
-
-    const chunkSize = src.page_size ?? DEFAULT_CHUNK_SIZE
-    for (let i = 0; i < truncated.length; i += chunkSize) {
-      yield {
-        pageIndex: Math.floor(i / chunkSize) + 1,
-        payload: {
-          timeframe,
-          reportedTotal: board.rows.length, // pre-truncation file count
-          rows: truncated.slice(i, i + chunkSize),
-        },
-        url: board.url,
-        fetchedAt: board.fetchedAt,
-      }
-    }
+    const capture = await hyperliquidAdapter.captureLeaderboard!(session, src, timeframe)
+    yield* capture.parsePages
   },
 
   /**

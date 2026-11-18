@@ -602,6 +602,34 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
       { metric: 'pnl', fieldPath: 'result.items[].income' },
     ],
   }),
+  // One stats-data document carries every window; the parser reads the
+  // window's own entry (week → 7D, month → 30D) and scales ROI ×100. allTime
+  // is not a 90-day window, so 90D has no board contract.
+  hyperliquid: registeredSourceContract({
+    sourceId: 'hyperliquid',
+    version: '1',
+    fields: (
+      [
+        ['week', '7D'],
+        ['month', '30D'],
+      ] as const
+    ).flatMap(([windowKey, rankingWindow]) =>
+      (['roi', 'pnl'] as const).map((metric) => ({
+        metric,
+        fieldPath: `leaderboardRows[].windowPerformances[${windowKey}].${metric}`,
+        provenance: 'source_reported',
+        methodologyVersion: `hyperliquid-board-${metric}@1`,
+        metricSetId: 'hyperliquid-board-roi-pnl@1',
+        windowKeys: [rankingWindow],
+        valueUnit: metric === 'roi' ? 'percent' : 'currency',
+        currencies: ['USDC'],
+        requiredRawRoles: DIRECT_RAW_ROLES,
+        sourcePayloadScope: 'population_snapshot',
+        maxFreshnessMs: 6 * 60 * 60 * 1000,
+        maxWindowEndLagMs: 5 * 60 * 1000,
+      }))
+    ),
+  }),
   okx_web3_solana: boardHeadlineContract({
     sourceId: 'okx_web3_solana',
     methodology: 'okx-web3',
