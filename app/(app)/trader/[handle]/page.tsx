@@ -168,7 +168,14 @@ const cachedServingResolveISR = unstable_cache(
 // direct retry on timeout, bypassing the contended unstable_cache layer.
 const SERVING_RESOLVE_TIMEOUT = Symbol('serving-resolve-timeout')
 
-const cachedServingResolve = cache(async (handle: string, source?: string) => {
+// A lookup that threw or timed out twice is UNAVAILABLE, not "no such trader".
+// Callers that only need the row use cachedServingResolve (null either way);
+// isMissingTrader must tell the two apart — a serving-only trader has no legacy
+// row, so collapsing a contended lookup to null stamped valid traders with
+// "Trader Not Found" + noindex.
+const SERVING_RESOLVE_UNAVAILABLE = Symbol('serving-resolve-unavailable')
+
+const cachedServingResolveOutcome = cache(async (handle: string, source?: string) => {
   try {
     const raced = await Promise.race([
       cachedServingResolveISR(handle, source),
@@ -183,22 +190,29 @@ const cachedServingResolve = cache(async (handle: string, source?: string) => {
       '[trader/page] resolveServingTrader failed:',
       err instanceof Error ? err.message : err
     )
-    return null
+    return SERVING_RESOLVE_UNAVAILABLE
   }
 
   // Timed out: one direct retry, bypassing the (contended) unstable_cache layer.
   try {
     return await Promise.race([
       resolveServingTrader(getReadReplica(), { handle, source }),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), SERVING_RESOLVE_TIMEOUT_MS)),
+      new Promise<typeof SERVING_RESOLVE_UNAVAILABLE>((resolve) =>
+        setTimeout(() => resolve(SERVING_RESOLVE_UNAVAILABLE), SERVING_RESOLVE_TIMEOUT_MS)
+      ),
     ])
   } catch (err) {
     logger.error(
       '[trader/page] serving resolve retry failed:',
       err instanceof Error ? err.message : err
     )
-    return null
+    return SERVING_RESOLVE_UNAVAILABLE
   }
+})
+
+const cachedServingResolve = cache(async (handle: string, source?: string) => {
+  const outcome = await cachedServingResolveOutcome(handle, source)
+  return outcome === SERVING_RESOLVE_UNAVAILABLE ? null : outcome
 })
 
 /**
@@ -211,7 +225,8 @@ const isMissingTrader = cache(async (decoded: string): Promise<boolean> => {
   const resolved = await cachedResolveTrader(decoded)
   if (resolved === RESOLVE_UNAVAILABLE) return false
   if (resolved && !isRetiredSource(resolved.platform)) return false
-  const serving = await cachedServingResolve(decoded)
+  const serving = await cachedServingResolveOutcome(decoded)
+  if (serving === SERVING_RESOLVE_UNAVAILABLE) return false
   return !serving || (await getDataMode(serving.source)) !== 'serving'
 })
 
