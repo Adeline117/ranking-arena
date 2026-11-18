@@ -53,8 +53,12 @@
 
 BEGIN;
 
-SET LOCAL lock_timeout = '10s';
-SET LOCAL statement_timeout = '10min';
+-- The two plain (non-CONCURRENTLY) index builds below hold a SHARE lock on
+-- their table while they run: give up after 5s if writers hold it, and bound
+-- the build. If metric_trust_observations is too large for 30min, pre-build
+-- the same index names CONCURRENTLY first; IF NOT EXISTS then skips them.
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '30min';
 SET LOCAL search_path = pg_catalog, pg_temp;
 
 DO $preflight$
