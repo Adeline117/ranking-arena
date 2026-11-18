@@ -381,6 +381,14 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # the refresh to hourly at :17. It depends on no worker release and touches no
 # table 192134 guards; apply it outside a running refresh (it waits 5s for the
 # view lock, then rolls back).
+# 20261118113759 makes the season expected-source set (the publication
+# denominator in public.arena_freshness_expected_sources) require a valid
+# attempt-bound capture contract registration and lists the rest as
+# unsupported. The orchestrator release that records unsupported sources and
+# refuses below the expected-set floor must serve first: the previous one would
+# publish the reduced set without either. It pins the body 20261113011058
+# leaves (prosrc sha256) and touches no table 192134 guards, so 192134 stays
+# last.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -397,6 +405,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261117015119_register_profile_capture_contracts.sql
   20261117204948_move_binance_sources_to_local_region.sql
   20261117204557_source_capabilities_refresh_index_probe.sql
+  20261118113759_expected_sources_require_capture_contract.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
