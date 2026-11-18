@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 # PG17 proof for 20261118114254 (postdeploy registration of mexc_futures'
-# attempt-bound V3 capture in reported-total mode). The real metric-trust /
-# attempt-ledger chain, 20261114193017, 20261114211033/211034, 20261115141050
-# and 20261115160917 run on stub base tables first.
+# attempt-bound V3 capture as a live board: exhausted, reported_total_drift).
+# The real metric-trust / attempt-ledger chain, 20261114193017,
+# 20261114211033/211034, 20261115141050, 20261115160917 and 20261118114230 run
+# on stub base tables first.
 #
+#   - before 20261118114230 the declaration is not valid: refused, no write
 #   + the metric contract rows equal lib/metric-trust.ts mexc_futures field by
-#     field, one V3 capture row is registered, no exhaustion contract
+#     field, the exhaustion row equals MEXC_FUTURES_LEADERBOARD_EXHAUSTION, one
+#     V3 capture row is registered
+#   + the registered declaration holds for the live shape (7100 rows, 7098
+#     distinct, 2 duplicates) and fails at 72 duplicates
 #   + page_size 30 -> 100 (the upstream limit); nothing else changes
 #   - a replay refuses and changes nothing
 #   - adapter drift, a native window the contract does not cover and a
@@ -216,9 +221,18 @@ for migration in \
   psql_db postgres -q -f "$MIGRATIONS/$migration" >/dev/null
 done
 
+"$PG_BIN/createdb" -h "$SOCKET_DIR" -p "$PORT" -T postgres no_drift
+psql_db postgres -q -f "$MIGRATIONS/20261118114230_leaderboard_exhaustion_reported_total_drift.sql" >/dev/null
+
 for db in main absent adapter_drift window_gap currency_drift; do
   "$PG_BIN/createdb" -h "$SOCKET_DIR" -p "$PORT" -T postgres "$db"
 done
+
+NO_DRIFT_BEFORE="$(registry_rows no_drift)"
+expect_failure no_drift "registration before the drift proof" \
+  "requires the reported_total_drift proof (20261118114230)"
+assert_equal "refused pre-drift registration leaves no rows" "$NO_DRIFT_BEFORE" \
+  "$(registry_rows no_drift)"
 BEFORE="$(registry_rows main)"
 OTHERS_BEFORE="$(psql_db main -Atqc "
   SELECT string_agg(s::text, '|' ORDER BY s.id) FROM arena.sources AS s WHERE slug <> 'mexc_futures'")"
@@ -265,7 +279,7 @@ SELECT (SELECT count(*) FROM actual) = 2
 SQL
 )"
 
-assert_equal "one exact V3 capture row for mexc_futures, no exhaustion contract" "1|0" \
+assert_equal "one exact V3 capture row and one exhaustion row for mexc_futures" "1|1" \
   "$(psql_db main -Atqc "
     SELECT (SELECT count(*)
               FROM arena.leaderboard_capture_contracts AS capture
@@ -279,6 +293,63 @@ assert_equal "one exact V3 capture row for mexc_futures, no exhaustion contract"
               FROM arena.leaderboard_exhaustion_contracts AS contract
               JOIN arena.sources AS source_row ON source_row.id = contract.source_id
              WHERE source_row.slug = 'mexc_futures')")"
+
+EXHAUSTION_EXPECTED="$(cd "$ROOT_DIR" && npx --no-install tsx -e '
+import { MEXC_FUTURES_LEADERBOARD_EXHAUSTION } from "./lib/ingest/adapters/mexc"
+console.log(JSON.stringify(MEXC_FUTURES_LEADERBOARD_EXHAUSTION))
+')"
+assert_equal "exhaustion row equals the adapter declaration" "t" "$(
+  psql_db main -Atq -v expected="$EXHAUSTION_EXPECTED" <<'SQL'
+SELECT contract.declaration = :'expected'::jsonb
+   AND contract.completeness_contract = 'arena.ingest.leaderboard-exhaustion-completeness@1'
+  FROM arena.leaderboard_exhaustion_contracts AS contract
+  JOIN arena.sources AS source_row ON source_row.id = contract.source_id
+ WHERE source_row.slug = 'mexc_futures'
+SQL
+)"
+
+# The registered declaration against a 72-page capture (71 full pages, then
+# the empty page 72), every page reporting 7100: the database's own check.
+mexc_holds() {
+  local distinct="$1" duplicate="$2"
+  psql_db main -Atq -v distinct="$distinct" -v duplicate="$duplicate" <<'SQL'
+WITH contract AS (
+  SELECT contract.source_id, contract.declaration
+    FROM arena.leaderboard_exhaustion_contracts AS contract
+    JOIN arena.sources AS source_row ON source_row.id = contract.source_id
+   WHERE source_row.slug = 'mexc_futures'
+),
+pages AS (
+  SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+           'ordinal', n,
+           'request_sha256', pg_catalog.md5('req' || n) || pg_catalog.md5('q' || n),
+           'response_sha256', pg_catalog.md5('res' || n) || pg_catalog.md5('s' || n),
+           'row_count', CASE WHEN n <= 71 THEN 100 ELSE 0 END,
+           'row_keys_sha256', pg_catalog.md5('key' || n) || pg_catalog.md5('k' || n),
+           'version_token_sha256', NULL,
+           'end_signal_value', NULL) ORDER BY n) AS value
+    FROM pg_catalog.generate_series(1, 72) AS n
+)
+SELECT arena.leaderboard_exhaustion_completeness_holds(
+  contract.source_id,
+  pg_catalog.jsonb_build_object(
+    'data_contract', 'arena.ingest.leaderboard-exhaustion-completeness@1',
+    'declaration', contract.declaration,
+    'pages', pages.value,
+    'row_keys', pg_catalog.jsonb_build_object(
+      'observed', 7100, 'distinct', :distinct, 'duplicate', :duplicate),
+    'board_version', pg_catalog.jsonb_build_object(
+      'kind', 'reported_total_drift',
+      'reported_totals', pg_catalog.jsonb_build_object('min', 7100, 'max', 7100, 'last', 7100))
+  ),
+  'empty_page', 72, 'unknown', 7100, :distinct, 0, :duplicate
+)
+FROM contract, pages
+SQL
+}
+assert_equal "live shape (7098 distinct, 2 duplicates) holds" "t" "$(mexc_holds 7098 2)"
+assert_equal "71 duplicates, the allowance, holds" "t" "$(mexc_holds 7029 71)"
+assert_equal "72 duplicates exceed the allowance" "f" "$(mexc_holds 7028 72)"
 
 assert_equal "mexc_futures page_size raised to the upstream limit, windows unchanged" \
   "{7}:USDT:100:inactive" \

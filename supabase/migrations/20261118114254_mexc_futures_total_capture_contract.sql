@@ -1,30 +1,38 @@
 -- Migration: 20261118114254_mexc_futures_total_capture_contract.sql
--- Description: Register attempt-bound V3 capture for mexc_futures, in the
---   same shape 20261115160917 used for the other total-mode public boards.
+-- Description: Register attempt-bound V3 capture for mexc_futures as a live
+--   board: exhausted completeness bounded by reported-total drift (1%).
+--   (The file name predates the switch from the total mode; it is unapplied.)
 --
 -- Every row mirrors the code registry exactly:
 --   * arena.metric_source_contracts      <- lib/metric-trust.ts mexc_futures
 --     (data.content[].roi percent, data.content[].pnl USDT; 7D only)
+--   * arena.leaderboard_exhaustion_contracts <- MEXC_FUTURES_LEADERBOARD_EXHAUSTION
+--     (lib/ingest/adapters/mexc): short_page end, reported_total_drift on
+--     data.total with max_drift_bps 100, max_duplicate_rows 71 (1% of 7,100)
 --   * arena.leaderboard_capture_contracts (manifest@3) <- the mexc adapter's
---     captureLeaderboard: GET traders/v2 in reported-total mode, bound by
---     data.total (no exhaustion contract).
+--     captureLeaderboard (GET traders/v2 to the empty page past the end).
 --
--- Live probe 2026-11-18 (headless page, same-origin fetch): limit=100 page 1
--- reports data.total=7100, page 71 serves orders 7001-7100, page 72 is empty
--- and still reports 7100; any limit above 100 answers code 600.
+-- Why: live probe 2026-11-18 (headless page, same-origin fetch): limit=100
+-- page 1 reports data.total=7100, page 71 serves orders 7001-7100, page 72 is
+-- empty and still reports 7100; any limit above 100 answers code 600. The
+-- board re-sorts while it is paged: four sequential full crawls (16 s to
+-- 3 min) each served 1-6 traders on two pages (the 16 s crawl: 7098 distinct
+-- of 7100, 2 duplicates), and parallel page requests answer code 510, so the
+-- total mode can never hold. Owner decision 2026-11-18: tolerate 1%.
 --
 -- Source configuration the capture requires (guarded on the adapter; any
 -- other value is left alone and the preflight/windows check refuses it):
 --   * page_size -> 100: the upstream maximum. At the seeded 30 rows a page the
---     7100-row board needs 237 requests and moves during the crawl.
+--     7100-row board needs 237 requests and moves further during the crawl.
 --   * timeframes_native must already be {7}: the board request carries no
 --     window and the adapter refuses 7D-less captures; 30D/90D stay derived.
 --
--- POSTDEPLOY, after 20261115160917 and before 20261111192134: a registered
--- source whose deployed adapter has no capture fails every Tier-A run, so this
--- must follow the worker release that ships the mexc capture. If mexc_futures
--- does not exist the migration changes nothing. An existing row must use the
--- mexc adapter, must not already be registered, and must end up with an active
+-- POSTDEPLOY, after 20261118114230 (which makes the declaration valid) and
+-- before 20261111192134: a registered source whose deployed adapter has no
+-- capture fails every Tier-A run, so this must follow the worker release that
+-- ships the mexc capture. If mexc_futures does not exist the migration changes
+-- nothing. An existing row must use the mexc adapter, must not already be
+-- registered (capture, metric or exhaustion), and must end up with an active
 -- population metric contract in its own currency for every native window;
 -- otherwise the whole migration refuses.
 --
@@ -39,6 +47,7 @@ SET LOCAL search_path = pg_catalog, pg_temp;
 LOCK TABLE arena.sources IN SHARE ROW EXCLUSIVE MODE;
 LOCK TABLE arena.metric_source_contracts IN SHARE ROW EXCLUSIVE MODE;
 LOCK TABLE arena.leaderboard_capture_contracts IN SHARE ROW EXCLUSIVE MODE;
+LOCK TABLE arena.leaderboard_exhaustion_contracts IN SHARE ROW EXCLUSIVE MODE;
 
 -- Session-local seeds (pg_temp); they disappear with the applying session.
 CREATE TEMPORARY TABLE capture_source_seed (
@@ -48,6 +57,16 @@ CREATE TEMPORARY TABLE capture_source_seed (
 
 INSERT INTO capture_source_seed VALUES
   ('mexc_futures', 'mexc');
+
+CREATE TEMPORARY TABLE exhaustion_contract_seed (
+  source_slug text PRIMARY KEY,
+  adapter_slug text NOT NULL,
+  declaration jsonb NOT NULL
+);
+
+INSERT INTO exhaustion_contract_seed VALUES
+  ('mexc_futures', 'mexc',
+   '{"completeness_mode": "exhausted", "list_path": ["data", "content"], "row_key_path": ["uid"], "end_signal": {"kind": "short_page"}, "board_version": {"kind": "reported_total_drift", "path": ["data", "total"], "max_drift_bps": 100}, "max_duplicate_rows": 71}');
 
 CREATE TEMPORARY TABLE board_metric_contract_seed (
   source_slug text NOT NULL,
@@ -73,8 +92,19 @@ DECLARE
 BEGIN
   IF pg_catalog.to_regclass('arena.sources') IS NULL
      OR pg_catalog.to_regclass('arena.metric_source_contracts') IS NULL
-     OR pg_catalog.to_regclass('arena.leaderboard_capture_contracts') IS NULL THEN
-    RAISE EXCEPTION 'mexc_futures capture registration requires the capture and metric-contract registries';
+     OR pg_catalog.to_regclass('arena.leaderboard_capture_contracts') IS NULL
+     OR pg_catalog.to_regclass('arena.leaderboard_exhaustion_contracts') IS NULL
+     OR pg_catalog.to_regprocedure(
+       'arena.leaderboard_exhaustion_declaration_valid(jsonb)'
+     ) IS NULL THEN
+    RAISE EXCEPTION 'mexc_futures capture registration requires the capture, metric-contract and exhaustion registries';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM exhaustion_contract_seed AS seed
+     WHERE NOT arena.leaderboard_exhaustion_declaration_valid(seed.declaration)
+  ) THEN
+    RAISE EXCEPTION 'mexc_futures registration requires the reported_total_drift proof (20261118114230)';
   END IF;
 
   IF NOT EXISTS (
@@ -96,6 +126,8 @@ BEGIN
       SELECT seed.source_slug, seed.adapter_slug FROM capture_source_seed AS seed
       UNION ALL
       SELECT seed.source_slug, seed.adapter_slug FROM board_metric_contract_seed AS seed
+      UNION ALL
+      SELECT seed.source_slug, seed.adapter_slug FROM exhaustion_contract_seed AS seed
     ) AS seed
     JOIN arena.sources AS source_row
       ON source_row.slug = seed.source_slug
@@ -125,6 +157,17 @@ BEGIN
      AND capture.capture_contract = 'arena.ingest.leaderboard-acquisition-manifest@3';
   IF v_bad IS NOT NULL THEN
     RAISE EXCEPTION 'attempt-bound V3 capture already registered for: %', v_bad;
+  END IF;
+
+  SELECT pg_catalog.string_agg(source_row.slug, ', ' ORDER BY source_row.slug)
+    INTO v_bad
+    FROM exhaustion_contract_seed AS seed
+    JOIN arena.sources AS source_row
+      ON source_row.slug = seed.source_slug
+    JOIN arena.leaderboard_exhaustion_contracts AS contract
+      ON contract.source_id = source_row.id;
+  IF v_bad IS NOT NULL THEN
+    RAISE EXCEPTION 'leaderboard exhaustion contract already registered for: %', v_bad;
   END IF;
 END
 $preflight$;
@@ -220,6 +263,21 @@ BEGIN
 END
 $windows$;
 
+INSERT INTO arena.leaderboard_exhaustion_contracts (
+  source_id,
+  completeness_contract,
+  declaration
+)
+SELECT
+  source_row.id,
+  'arena.ingest.leaderboard-exhaustion-completeness@1',
+  seed.declaration
+FROM exhaustion_contract_seed AS seed
+JOIN arena.sources AS source_row
+  ON source_row.slug = seed.source_slug
+ AND source_row.adapter_slug = seed.adapter_slug
+ORDER BY source_row.slug;
+
 INSERT INTO arena.leaderboard_capture_contracts (
   source_id,
   capture_contract,
@@ -255,6 +313,20 @@ BEGIN
      ) <> (
        SELECT pg_catalog.count(*)
          FROM board_metric_contract_seed AS seed
+         JOIN arena.sources AS source_row
+           ON source_row.slug = seed.source_slug
+     )
+     OR (
+       SELECT pg_catalog.count(*)
+         FROM arena.leaderboard_exhaustion_contracts AS contract
+         JOIN arena.sources AS source_row
+           ON source_row.id = contract.source_id
+         JOIN exhaustion_contract_seed AS seed
+           ON seed.source_slug = source_row.slug
+          AND seed.declaration = contract.declaration
+     ) <> (
+       SELECT pg_catalog.count(*)
+         FROM exhaustion_contract_seed AS seed
          JOIN arena.sources AS source_row
            ON source_row.slug = seed.source_slug
      )
