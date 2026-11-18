@@ -2,9 +2,13 @@
  * RAW retention backlog (20261118134316). Runs from the worker maintenance
  * job right after the routine single-batch cleanupRawObjects(30).
  *
- * Count-only by default. Every run reports the pointer-side census and walks
- * a bounded slice of the raw-snapshots bucket looking for objects that have no
- * arena.raw_objects pointer (they can never enter arena.raw_object_gc_queue).
+ * Count-only by default. Every run reports single-table aggregates, then walks
+ * bounded id pages of arena.raw_objects (expired / pinned / eligible) and
+ * bounded name pages of the raw-snapshots bucket looking for objects that have
+ * no arena.raw_objects pointer (they can never enter arena.raw_object_gc_queue).
+ * No statement joins the two large tables wholesale; each runs under a 60s
+ * statement_timeout. Storage objects are only removed through the Storage API
+ * (supabase.storage.from(bucket).remove), never by deleting storage.objects rows.
  *
  * Deletion needs BOTH keys:
  *   - worker env INGEST_RAW_RETENTION_DELETE=1, and
@@ -45,16 +49,39 @@ export interface RawOrphanScanTally {
   skipped: string | null
 }
 
+export interface RawPointerScanTally {
+  pages: number
+  rows: number
+  expired_rows: number
+  snapshot_pinned_rows: number
+  trust_pinned_rows: number
+  eligible_rows: number
+  eligible_bytes: number
+  pass_complete: boolean
+}
+
 export interface RawRetentionReport {
   contract: 'arena.raw-retention-run@1'
   mode: 'count' | 'delete'
   delete_blocked_by: Array<'env' | 'db_switch'>
   census: Record<string, unknown>
+  pointer_scan: RawPointerScanTally
+  last_completed_pointer_pass: Record<string, unknown> | null
   orphan_scan: RawOrphanScanTally
   last_completed_orphan_pass: Record<string, unknown> | null
   orphan_gc_removed: number
   pointer_gc_removed: number
   stopped_by_deadline: boolean
+}
+
+interface PointerPageResult {
+  page_rows?: number
+  page_expired_rows?: number
+  page_snapshot_pinned_rows?: number
+  page_trust_pinned_rows?: number
+  page_eligible_rows?: number
+  page_eligible_bytes?: number
+  pass_complete?: boolean
 }
 
 interface ScanPageResult {
@@ -136,7 +163,9 @@ export async function runRawRetention(
     )
     if (installed[0]?.present !== true) return 'not_installed'
 
-    await client.query(`SET statement_timeout = '120s'`)
+    // Every statement below is one bounded page or a single-table aggregate;
+    // the database functions refuse to run without this bound.
+    await client.query(`SET statement_timeout = '60s'`)
 
     const { rows: settingsRows } = await client.query<{ delete_enabled: boolean }>(
       `SELECT delete_enabled FROM arena.raw_retention_settings WHERE singleton`
@@ -150,6 +179,32 @@ export async function runRawRetention(
       `SELECT arena.raw_retention_census($1::integer) AS census`,
       [retentionDays]
     )
+
+    const pointer: RawPointerScanTally = {
+      pages: 0,
+      rows: 0,
+      expired_rows: 0,
+      snapshot_pinned_rows: 0,
+      trust_pinned_rows: 0,
+      eligible_rows: 0,
+      eligible_bytes: 0,
+      pass_complete: false,
+    }
+    while (pointer.pages < maxScanPages && !pointer.pass_complete && !pastDeadline()) {
+      const { rows } = await client.query<{ result: PointerPageResult }>(
+        `SELECT arena.scan_raw_pointer_retention($1::integer, $2::integer) AS result`,
+        [scanPageSize, retentionDays]
+      )
+      const page = rows[0]?.result ?? {}
+      pointer.pages += 1
+      pointer.rows += asNumber(page.page_rows)
+      pointer.expired_rows += asNumber(page.page_expired_rows)
+      pointer.snapshot_pinned_rows += asNumber(page.page_snapshot_pinned_rows)
+      pointer.trust_pinned_rows += asNumber(page.page_trust_pinned_rows)
+      pointer.eligible_rows += asNumber(page.page_eligible_rows)
+      pointer.eligible_bytes += asNumber(page.page_eligible_bytes)
+      pointer.pass_complete = page.pass_complete === true
+    }
 
     const scan: RawOrphanScanTally = {
       pages: 0,
@@ -184,9 +239,12 @@ export async function runRawRetention(
       mode === 'delete' ? await drainOrphanQueue(client, maxOrphanBatches, pastDeadline) : 0
 
     const { rows: passRows } = await client.query<{
-      pass: Record<string, unknown> | null
+      pointer_pass: Record<string, unknown> | null
+      orphan_pass: Record<string, unknown> | null
     }>(
-      `SELECT last_completed_orphan_pass AS pass FROM arena.raw_retention_settings WHERE singleton`
+      `SELECT last_completed_pointer_pass AS pointer_pass,
+              last_completed_orphan_pass AS orphan_pass
+         FROM arena.raw_retention_settings WHERE singleton`
     )
 
     report = {
@@ -194,8 +252,10 @@ export async function runRawRetention(
       mode,
       delete_blocked_by: blockedBy,
       census: censusRows[0]?.census ?? {},
+      pointer_scan: pointer,
+      last_completed_pointer_pass: passRows[0]?.pointer_pass ?? null,
       orphan_scan: scan,
-      last_completed_orphan_pass: passRows[0]?.pass ?? null,
+      last_completed_orphan_pass: passRows[0]?.orphan_pass ?? null,
       orphan_gc_removed: orphanRemoved,
       pointer_gc_removed: 0,
       stopped_by_deadline: false,

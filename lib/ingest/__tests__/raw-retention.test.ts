@@ -28,7 +28,24 @@ function fakeDb({ installed = true, deleteEnabled = false, pages = [], claims = 
   mockQuery.mockImplementation(async (sql: string, params?: unknown[]) => {
     if (sql.includes('to_regprocedure')) return { rows: [{ present: installed }] }
     if (sql.includes('SELECT delete_enabled')) return { rows: [{ delete_enabled: deleteEnabled }] }
-    if (sql.includes('raw_retention_census')) return { rows: [{ census: { eligible_rows: 4 } }] }
+    if (sql.includes('raw_retention_census')) return { rows: [{ census: { expired_rows: 4 } }] }
+    if (sql.includes('scan_raw_pointer_retention')) {
+      return {
+        rows: [
+          {
+            result: {
+              page_rows: 6,
+              page_expired_rows: 4,
+              page_snapshot_pinned_rows: 1,
+              page_trust_pinned_rows: 2,
+              page_eligible_rows: 1,
+              page_eligible_bytes: 400,
+              pass_complete: true,
+            },
+          },
+        ],
+      }
+    }
     if (sql.includes('scan_raw_storage_orphans')) {
       scanModes.push(params?.[2] as boolean)
       return { rows: [{ result: pages.shift() ?? { page_objects: 0, pass_complete: true } }] }
@@ -37,7 +54,9 @@ function fakeDb({ installed = true, deleteEnabled = false, pages = [], claims = 
     if (sql.includes('claim_raw_orphan_gc_batch')) {
       return { rows: (claims.shift() ?? []).map((storage_path) => ({ storage_path })) }
     }
-    if (sql.includes('last_completed_orphan_pass')) return { rows: [{ pass: { orphans: 3 } }] }
+    if (sql.includes('last_completed_orphan_pass')) {
+      return { rows: [{ pointer_pass: { eligible_rows: 1 }, orphan_pass: { orphans: 3 } }] }
+    }
     return { rows: [], rowCount: 0 }
   })
   return scanModes
@@ -75,7 +94,9 @@ describe('runRawRetention', () => {
     expect(report).toMatchObject({
       mode: 'count',
       delete_blocked_by: ['env'],
-      census: { eligible_rows: 4 },
+      census: { expired_rows: 4 },
+      pointer_scan: { pages: 1, rows: 6, expired_rows: 4, eligible_rows: 1, eligible_bytes: 400 },
+      last_completed_pointer_pass: { eligible_rows: 1 },
       orphan_scan: { pages: 2, objects: 3, bytes: 35, orphans: 2, orphan_bytes: 15, enqueued: 0 },
       last_completed_orphan_pass: { orphans: 3 },
       orphan_gc_removed: 0,
@@ -84,6 +105,7 @@ describe('runRawRetention', () => {
     expect(scanModes).toEqual([false, false])
     expect(mockRemove).not.toHaveBeenCalled()
     expect(mockCleanup).not.toHaveBeenCalled()
+    expect(mockQuery).toHaveBeenCalledWith("SET statement_timeout = '60s'")
   })
 
   it('stays count-only when the env key is on but the database switch is off', async () => {
