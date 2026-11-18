@@ -168,23 +168,75 @@ export async function pruneLeaderboardSnapshots(
 /** Worker env key for trust evidence retention deletes (second key: DB switch). */
 export const TRUST_EVIDENCE_RETENTION_DELETE_ENV = 'INGEST_TRUST_EVIDENCE_RETENTION_DELETE'
 
+export const TRUST_EVIDENCE_RETENTION_DEFAULT_ROW_CAP = 100_000
+export const TRUST_EVIDENCE_RETENTION_MIN_ROW_CAP = 1_000
+export const TRUST_EVIDENCE_RETENTION_ROW_CAP_KEY = 'arena:ingest:trust-retention:row-cap'
+
+/** Where the adaptive row cap survives between maintenance runs (Redis in the worker). */
+export interface TrustEvidenceRowCapStore {
+  get(key: string): Promise<string | null>
+  set(key: string, value: string): Promise<unknown>
+}
+
+function memoryRowCapStore(): TrustEvidenceRowCapStore {
+  const values = new Map<string, string>()
+  return {
+    get: async (key) => values.get(key) ?? null,
+    set: async (key, value) => values.set(key, value),
+  }
+}
+const processRowCapStore = memoryRowCapStore()
+
 export interface TrustEvidenceRetentionReport {
   mode: 'count' | 'delete'
   delete_blocked_by: Array<'env' | 'db_switch'>
+  row_cap: number
+  next_row_cap: number
   result: Record<string, unknown>
+}
+
+/** statement_timeout (57014) or lock_timeout (55P03): the batch was too big or contended. */
+function isBatchTimeout(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code
+  return code === '57014' || code === '55P03'
+}
+
+export function nextTrustEvidenceRowCap(current: number, timedOut: boolean): number {
+  if (timedOut) return Math.max(TRUST_EVIDENCE_RETENTION_MIN_ROW_CAP, Math.floor(current / 2))
+  return Math.min(TRUST_EVIDENCE_RETENTION_DEFAULT_ROW_CAP, current * 2)
+}
+
+async function readRowCap(store: TrustEvidenceRowCapStore): Promise<number> {
+  const raw = await store.get(TRUST_EVIDENCE_RETENTION_ROW_CAP_KEY)
+  const stored = raw === null || raw.trim() === '' ? NaN : Number(raw)
+  if (!Number.isSafeInteger(stored)) return TRUST_EVIDENCE_RETENTION_DEFAULT_ROW_CAP
+  return Math.min(
+    TRUST_EVIDENCE_RETENTION_DEFAULT_ROW_CAP,
+    Math.max(TRUST_EVIDENCE_RETENTION_MIN_ROW_CAP, stored)
+  )
 }
 
 /**
  * Trust evidence retention (20261118135918). Count-only unless BOTH the
  * worker env INGEST_TRUST_EVIDENCE_RETENTION_DELETE=1 and the owner-only
- * arena.trust_evidence_retention_settings.delete_enabled are on. One bounded
- * batch per call, inside one transaction with statement/lock timeouts; the
- * database function decides what is eligible and refuses delete mode on its
- * own if the switch is off. Skips (returns a marker) until installed.
+ * arena.trust_evidence_retention_settings.delete_enabled are on.
+ *
+ * One row-budgeted batch per call, inside one transaction with statement/lock
+ * timeouts. A batch that times out rolls back whole; the row cap is then
+ * halved (floor 1,000) for the next run, and doubled back (ceiling 100,000)
+ * after each success. The database resumes an unfinished snapshot purge from
+ * its last committed batch and splits large snapshots, so a smaller cap
+ * always makes progress instead of retrying the same oversized batch.
+ * Skips (returns a marker) until installed.
  */
 export async function retainTrustEvidence(
-  env: Record<string, string | undefined> = process.env
+  options: {
+    env?: Record<string, string | undefined>
+    rowCapStore?: TrustEvidenceRowCapStore
+  } = {}
 ): Promise<TrustEvidenceRetentionReport | 'not_installed'> {
+  const env = options.env ?? process.env
+  const store = options.rowCapStore ?? processRowCapStore
   const client = await ingestClientConnect()
   let destroyClient = false
   try {
@@ -202,24 +254,43 @@ export async function retainTrustEvidence(
     if (env[TRUST_EVIDENCE_RETENTION_DELETE_ENV] !== '1') blockedBy.push('env')
     if (settings[0]?.delete_enabled !== true) blockedBy.push('db_switch')
     const mode: 'count' | 'delete' = blockedBy.length === 0 ? 'delete' : 'count'
+    const rowCap = await readRowCap(store)
 
     await client.query('BEGIN')
     try {
       await client.query(`SET LOCAL statement_timeout = '120s'`)
       await client.query(`SET LOCAL lock_timeout = '5s'`)
       const { rows } = await client.query<{ result: Record<string, unknown> }>(
-        `SELECT arena.retain_trust_evidence($1::boolean) AS result`,
-        [mode === 'delete']
+        `SELECT arena.retain_trust_evidence($1::boolean, $2::integer) AS result`,
+        [mode === 'delete', rowCap]
       )
       await client.query('COMMIT')
       const result = rows[0]?.result
       if (!result) throw new Error('[retention] trust evidence retention returned no result')
-      return { mode, delete_blocked_by: blockedBy, result }
+      const nextRowCap = mode === 'delete' ? nextTrustEvidenceRowCap(rowCap, false) : rowCap
+      if (nextRowCap !== rowCap) {
+        await store.set(TRUST_EVIDENCE_RETENTION_ROW_CAP_KEY, String(nextRowCap))
+      }
+      return {
+        mode,
+        delete_blocked_by: blockedBy,
+        row_cap: rowCap,
+        next_row_cap: nextRowCap,
+        result,
+      }
     } catch (error) {
       try {
         await client.query('ROLLBACK')
       } catch {
         destroyClient = true
+      }
+      if (isBatchTimeout(error)) {
+        const nextRowCap = nextTrustEvidenceRowCap(rowCap, true)
+        await store.set(TRUST_EVIDENCE_RETENTION_ROW_CAP_KEY, String(nextRowCap))
+        throw new Error(
+          `[retention] trust evidence batch of ${rowCap} rows timed out and rolled back; ` +
+            `next run uses ${nextRowCap}: ${error instanceof Error ? error.message : String(error)}`
+        )
       }
       throw error
     }
