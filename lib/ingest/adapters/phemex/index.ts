@@ -15,8 +15,11 @@
  *   list:      GET v3/user/recommend?…&pageNum&pageSize≤50&sortBy=
  *              (one endpoint serves the 30d AND 90d boards — rows carry both
  *              field variants; TF dropdown is client-side. NO 7d board.)
+ *              Attempt-bound capture (manifest v3, reported-total mode on
+ *              data.total); RAW is the verbatim response.
  *   AI roster: GET v3/ai-trader/list?lang=en → house AI bots (spec §11.19
- *              carousel) appended as a final composite page, bot/ai rows.
+ *              carousel). Not part of the board population; no longer
+ *              appended to the Tier-A capture.
  *   profile:   GET v3/user + user/pnl-rate-chart?period={30,90} +
  *              user/pnl-chart?period={30,90} + v3/user/symbol-metric
  *   positions: GET position/current/v2?pageNum&pageSize&userId
@@ -37,7 +40,12 @@ import type {
 } from '../../core/types'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
-import { replayJson, replayPaged, type JsonFetcher } from '../../fetch/capture'
+import { replayJson, type JsonFetcher } from '../../fetch/capture'
+import {
+  captureReplayLeaderboard,
+  collectionMeta,
+  requireEnvelopeValue,
+} from '../../fetch/replay-capture'
 import {
   parsePhemexHistory,
   parsePhemexLeaderboardPage,
@@ -86,6 +94,22 @@ function phemexFetcher(session: FetchSession): JsonFetcher {
   }
 }
 
+/** Server cap on the recommend board's pageSize (live 2026-06-11). */
+export const PHEMEX_PAGE_SIZE_CAP = 50
+
+/**
+ * Upstream page meta: { code: 0, data: { total, rows } }. Rows are counted
+ * before parser validation; data.total is the board population (total mode).
+ * A non-zero code or a missing row array is an upstream error, never an
+ * empty board.
+ */
+export const phemexLeaderboardMeta = collectionMeta({
+  label: 'phemex',
+  assertSuccess: requireEnvelopeValue('phemex', ['code'], [0]),
+  list: ['data', 'rows'],
+  total: ['data', 'total'],
+})
+
 /** The `data` object of a positions envelope, if any. */
 function phemexData(payload: unknown): Record<string, unknown> | null {
   const d = (payload as Record<string, unknown> | null)?.data
@@ -104,69 +128,53 @@ const phemexAdapter: SourceAdapter = {
   },
 
   /**
-   * One crawl per TF over the same endpoint (rows carry both TF variants);
-   * pages are wrapped as { board, timeframe } composites so the pure parser
-   * picks the right variant. The house AI carousel is appended as a final
-   * { aiList, timeframe } page (additive — its failure must not kill Tier A).
+   * Attempt-bound board capture (manifest v3, reported-total mode). One
+   * crawl per TF over the same endpoint; the response is TF-agnostic (rows
+   * carry both 30d and 90d variants), so RAW is the verbatim response and the
+   * parser selects the variant from the Tier-A window in ParseCtx. The house
+   * AI carousel is a separate surface, not part of this board's population,
+   * and is no longer appended.
    */
+  async captureLeaderboard(session, src, timeframe, options) {
+    options?.signal?.throwIfAborted()
+    if (timeframe !== 30 && timeframe !== 90) {
+      throw new TypeError(`[phemex] no native ${timeframe}d board (30d/90d only)`)
+    }
+    await warmSession(session, src)
+    const fetcher = phemexFetcher(session)
+    options?.signal?.throwIfAborted()
+    const listUrl = endpoint(src, 'list', `${BASE}/v3/user/recommend`)
+    const pageSize = src.page_size ?? PHEMEX_PAGE_SIZE_CAP
+    if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > PHEMEX_PAGE_SIZE_CAP) {
+      throw new TypeError(`[phemex] page_size must be 1-${PHEMEX_PAGE_SIZE_CAP}`)
+    }
+    return captureReplayLeaderboard(
+      { session, fetcher, src, label: 'phemex', signal: options?.signal },
+      {
+        buildRequest: (pageIndex) => ({
+          url:
+            `${listUrl}?hideFullyCopied=false&keyword=&pageNum=${pageIndex}` +
+            `&pageSize=${pageSize}&showChart=false&sortBy=`,
+          method: 'GET',
+          headers: {},
+        }),
+        publicRequest: {
+          query: ['hideFullyCopied', 'keyword', 'pageNum', 'pageSize', 'showChart', 'sortBy'],
+        },
+        pageBinding: { location: 'query', key: 'pageNum' },
+        extractMeta: phemexLeaderboardMeta,
+        pageSize,
+      }
+    )
+  },
+
   async *listLeaderboard(
     session: FetchSession,
     src: SourceRow,
     timeframe: RankingTimeframe
   ): AsyncIterable<RawPage> {
-    await warmSession(session, src)
-    const fetcher = phemexFetcher(session)
-    const listUrl = endpoint(src, 'list', `${BASE}/v3/user/recommend`)
-    const pageSize = src.page_size ?? 50 // server cap: 50
-    const maxPages = Number(src.meta.max_pages) || null
-
-    let pagesYielded = 0
-    let truncated = false
-    for await (const page of replayPaged({
-      session,
-      fetcher,
-      buildRequest: (pageIndex) => ({
-        url:
-          `${listUrl}?hideFullyCopied=false&keyword=&pageNum=${pageIndex}` +
-          `&pageSize=${pageSize}&showChart=false&sortBy=`,
-        method: 'GET',
-        headers: {},
-      }),
-      extractMeta: (payload) => {
-        const parsed = parsePhemexLeaderboardPage({ board: payload, timeframe }, dummyCtx(src))
-        return { rowCount: parsed.rows.length, reportedTotal: parsed.reportedTotal }
-      },
-      pageSize,
-    })) {
-      yield { ...page, payload: { board: page.payload, timeframe } }
-      pagesYielded += 1
-      if (maxPages !== null && pagesYielded >= maxPages) {
-        truncated = true
-        break
-      }
-    }
-
-    if (!truncated) {
-      const aiUrl = endpoint(src, 'aiList', `${BASE}/v3/ai-trader/list`)
-      try {
-        const aiList = await replayJson(session, fetcher, {
-          url: `${aiUrl}?lang=en`,
-          method: 'GET',
-          headers: {},
-        })
-        yield {
-          pageIndex: pagesYielded + 1,
-          payload: { aiList, timeframe },
-          url: aiUrl,
-          fetchedAt: new Date().toISOString(),
-        }
-      } catch (err) {
-        console.warn(
-          `[phemex] AI carousel fetch failed (board published without AI rows):`,
-          err instanceof Error ? err.message : err
-        )
-      }
-    }
+    const capture = await phemexAdapter.captureLeaderboard!(session, src, timeframe)
+    yield* capture.parsePages
   },
 
   /**
