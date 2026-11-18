@@ -137,6 +137,7 @@
     "qa:retention-trust-evidence-pg17": "bash supabase/migrations/__tests__/retention-preserves-metric-trust-evidence.pg17.sh",
     "qa:public-source-capture-contracts-pg17": "bash supabase/migrations/__tests__/public-source-attempt-bound-capture.pg17.sh",
     "qa:public-source-exhaustion-capture-pg17": "bash supabase/migrations/__tests__/public-source-exhaustion-and-total-capture.pg17.sh",
+    "qa:phemex-capture-contract-pg17": "bash supabase/migrations/__tests__/phemex-attempt-bound-capture-contract.pg17.sh",
     "qa:exhaustion-completeness-pg17": "bash supabase/migrations/__tests__/leaderboard-exhaustion-completeness-evidence.pg17.sh",
     "qa:metric-contract-retirement-pg17": "bash supabase/migrations/__tests__/metric-source-contract-retirement.pg17.sh",
     "qa:snapshot-retention-pg17": "bash supabase/migrations/__tests__/leaderboard-snapshot-retention.pg17.sh && bash worker/src/ingest/processors/__tests__/positions-off-cohort.pg17.sh",
