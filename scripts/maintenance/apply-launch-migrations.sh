@@ -410,6 +410,11 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # between requests, which repeated rows across its three pages. It changes
 # page_size only, depends on no worker release and touches no table 192134
 # guards.
+# 20261118150737 raises the leaderboard page size of xt_futures (1000 -> 5000,
+# one request), bitget_cfd and bitget_spot (30 -> 50) and bybit_copytrade
+# (16 -> 50), the largest pages those endpoints serve, so a board has less time
+# to move and fewer page boundaries while it is paged. It changes page_size
+# only, depends on no worker release and touches no table 192134 guards.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -431,6 +436,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261118114230_leaderboard_exhaustion_reported_total_drift.sql
   20261118113759_expected_sources_require_capture_contract.sql
   20261118141652_toobit_leaderboard_single_page.sql
+  20261118150737_public_boards_larger_served_pages.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
