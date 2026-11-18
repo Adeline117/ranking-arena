@@ -397,7 +397,7 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # live board has less time to move while it is paged. It requires the
 # page_size 20 pre-state that 204948 also requires, so it follows 204948; it
 # changes page_size only and touches no table 192134 guards.
-# 20261118134500 registers binance_futures and binance_spot as live boards
+# 20261118134500 registers binance_futures as a live board
 # (reported_total_drift, 1% of the board) in the append-only exhaustion
 # registry. It needs the declaration 114230 makes valid, so it follows it; the
 # worker release that captures binance in this mode is deployed after it. It
