@@ -10,6 +10,8 @@
  *   list:      GET traders/v2?condition=[]&limit≤100&orderBy=COMPREHENSIVE&page=N
  *   aiRoster:  GET traders/ai                       (AI 交易员 tab roster)
  *   aiDetail:  GET traders/aiDetail?interval=...&uids=a,b,c
+ *              (neither is crawled any more: the AI tab reports no
+ *              population, so it cannot join the attempt-bound board)
  *   profile:   GET trader?intervalType=...&uid=     (带单表现 stats block)
  *              GET trader/statAccumulate?dataType=ACCUMULATE_PNL_ROI|DAY_PNL
  *              GET trader/abilityRating / trader/holdStats / trader/contract/stat
@@ -35,8 +37,14 @@ import type {
 import { COPIER_PAGE_CEILING, CopierPageCapReachedError } from '../../core/history-page-cap'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
-import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
+import { pageFetcher, replayJson } from '../../fetch/capture'
+import {
+  captureReplayLeaderboard,
+  collectionMeta,
+  requireEnvelopeValue,
+} from '../../fetch/replay-capture'
 import { extractCopierCandidateRecords } from '../../copier-candidate-conservation'
+import type { LeaderboardExhaustionDeclaration } from '../../acquisition-exhaustion'
 import {
   parseMexcHistory,
   parseMexcLeaderboardPage,
@@ -78,35 +86,50 @@ async function warmSession(session: FetchSession, src: SourceRow): Promise<void>
   warmedSessions.add(session)
 }
 
-/** AI 交易员 roster uids (traders/ai), cached per session — consulted on
- *  every board page so AI traders are bot-marked wherever they appear. */
-const aiRosterCache = new WeakMap<FetchSession, string[]>()
+/** Upstream page meta: rows counted before parser validation; board population as reported. */
+const mexcEnvelopeCode = requireEnvelopeValue('mexc', ['code'], [0])
+const mexcEnvelopeSuccess = requireEnvelopeValue('mexc', ['success'], [true])
+const mexcLeaderboardMeta = collectionMeta({
+  label: 'mexc',
+  assertSuccess: (payload) => {
+    mexcEnvelopeCode(payload)
+    mexcEnvelopeSuccess(payload)
+  },
+  list: ['data', 'content'],
+  total: ['data', 'total'],
+})
 
-async function getAiRoster(session: FetchSession, src: SourceRow): Promise<string[]> {
-  const cached = aiRosterCache.get(session)
-  if (cached) return cached
-  const url = endpoint(src, 'aiRoster', `${BASE}/traders/ai`)
-  try {
-    const payload = (await replayJson(session, pageFetcher(session), {
-      url,
-      method: 'GET',
-      headers: HEADERS,
-    })) as { data?: { traders?: Array<{ uid?: unknown }> } }
-    const uids = (payload?.data?.traders ?? [])
-      .map((t) => (t.uid ? String(t.uid) : null))
-      .filter((u): u is string => u !== null)
-    aiRosterCache.set(session, uids)
-    return uids
-  } catch (err) {
-    // The roster is additive (bot marking) — a miss must not kill Tier A.
-    console.warn(
-      `[mexc] AI roster fetch failed (continuing without bot marks):`,
-      err instanceof Error ? err.message : err
-    )
-    aiRosterCache.set(session, [])
-    return []
-  }
-}
+/** traders/v2 rejects any limit above 100 with code 600 ("invalid limit"). */
+const MAX_PAGE_SIZE = 100
+
+/**
+ * Exhausted-completeness contract for mexc_futures (registered in
+ * arena.leaderboard_exhaustion_contracts). The board is live (~7,100 traders,
+ * 71 pages at the 100-row upstream limit) and re-sorts while it is paged:
+ * four live crawls on 2026-11-18 (16 s to 3 min) each served 1-6 traders on
+ * two pages, so the reported total was never reached by distinct rows, and
+ * parallel page requests are refused (code 510). The capture therefore reads
+ * to the empty page past the end and the proof bounds how far the board
+ * moved: page totals, |last total - distinct rows| and duplicate rows each
+ * within min(⌊last × 50 / 10000⌋, 40) rows (35 rows at 7,100).
+ *
+ * The allowance is the most rows a complete capture may be missing, and the
+ * registered row is immutable, so it is sized from the observed movement
+ * (at most 6 repeated traders per crawl) with headroom, not set to the 1%
+ * ceiling: 0.5% of the last total, and never more than 40 rows.
+ */
+export const MEXC_FUTURES_LEADERBOARD_EXHAUSTION: LeaderboardExhaustionDeclaration = Object.freeze({
+  completeness_mode: 'exhausted' as const,
+  list_path: ['data', 'content'],
+  row_key_path: ['uid'],
+  end_signal: { kind: 'short_page' as const },
+  board_version: {
+    kind: 'reported_total_drift' as const,
+    path: ['data', 'total'],
+    max_drift_bps: 50,
+  },
+  max_duplicate_rows: 40,
+})
 
 const mexcAdapter: SourceAdapter = {
   slug: 'mexc',
@@ -120,77 +143,58 @@ const mexcAdapter: SourceAdapter = {
   },
 
   /**
-   * 全部交易员 board (native 7d only) + the AI 交易员 tab appended as one
-   * extra page. Pages are composite payloads { list|aiDetail, aiUids } so
-   * parseLeaderboard stays a pure function of stored RAW (spec §5.5).
+   * 全部交易员 board (native 7d only; the request carries no window). One
+   * attempt-bound crawl of GET traders/v2 to the short or empty final page,
+   * proven complete by MEXC_FUTURES_LEADERBOARD_EXHAUSTION (data.total is
+   * drift evidence, not a population claim); every exact response is RAW.
+   *
+   * The AI 交易员 tab (traders/aiDetail) is a separate competition roster
+   * from another endpoint that data.total does not count, so it is not part
+   * of the Tier-A population snapshot. Rows flagged traderType='AI' on the main
+   * board are still marked bot/ai by the parser.
    */
+  async captureLeaderboard(session, src, timeframe, options) {
+    if (timeframe !== 7) {
+      throw new Error(`[mexc] ${timeframe}d board is derived, not natively listed`)
+    }
+    const pageSize = src.page_size ?? MAX_PAGE_SIZE
+    if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
+      throw new TypeError(
+        `[mexc] source page_size must be 1..${MAX_PAGE_SIZE} (the upstream limit)`
+      )
+    }
+    options?.signal?.throwIfAborted()
+    await warmSession(session, src)
+    options?.signal?.throwIfAborted()
+    const listUrl = endpoint(src, 'list', `${BASE}/traders/v2`)
+    const orderBy =
+      typeof src.meta.list_order_by === 'string' ? src.meta.list_order_by : 'COMPREHENSIVE'
+    return captureReplayLeaderboard(
+      { session, fetcher: pageFetcher(session), src, label: 'mexc', signal: options?.signal },
+      {
+        buildRequest: (pageIndex) => ({
+          url:
+            `${listUrl}?condition=%5B%5D&limit=${pageSize}` +
+            `&orderBy=${encodeURIComponent(orderBy)}&page=${pageIndex}`,
+          method: 'GET',
+          headers: HEADERS,
+        }),
+        publicRequest: { query: ['condition', 'limit', 'orderBy', 'page'] },
+        pageBinding: { location: 'query', key: 'page' },
+        extractMeta: mexcLeaderboardMeta,
+        exhaustion: MEXC_FUTURES_LEADERBOARD_EXHAUSTION,
+        pageSize,
+      }
+    )
+  },
+
   async *listLeaderboard(
     session: FetchSession,
     src: SourceRow,
     timeframe: RankingTimeframe
   ): AsyncIterable<RawPage> {
-    await warmSession(session, src)
-    const fetcher = pageFetcher(session)
-    const aiUids = await getAiRoster(session, src)
-    const listUrl = endpoint(src, 'list', `${BASE}/traders/v2`)
-    const pageSize = src.page_size ?? 100
-    const orderBy =
-      typeof src.meta.list_order_by === 'string' ? src.meta.list_order_by : 'COMPREHENSIVE'
-    // Validation knob: src.meta.max_pages caps the crawl (smoke runs). Early
-    // generator return — replayPaged never sees a truncation, so its
-    // completeness assertion stays scoped to real crawls.
-    const maxPages = Number(src.meta.max_pages) || null
-
-    let pagesYielded = 0
-    let truncated = false
-    for await (const page of replayPaged({
-      session,
-      fetcher,
-      buildRequest: (pageIndex) => ({
-        url:
-          `${listUrl}?condition=%5B%5D&limit=${pageSize}` + `&orderBy=${orderBy}&page=${pageIndex}`,
-        method: 'GET',
-        headers: HEADERS,
-      }),
-      extractMeta: (payload) => {
-        const parsed = parseMexcLeaderboardPage({ list: payload, aiUids: [] }, dummyCtx(src))
-        return { rowCount: parsed.rows.length, reportedTotal: parsed.reportedTotal }
-      },
-      pageSize,
-    })) {
-      yield { ...page, payload: { list: page.payload, aiUids } }
-      pagesYielded += 1
-      if (maxPages !== null && pagesYielded >= maxPages) {
-        truncated = true
-        break
-      }
-    }
-
-    // AI 交易员 tab as a final page — bot rows rank after the main board;
-    // duplicates collapse in staging dedupe (better rank wins). The tab is
-    // additive: a failure here must not fail the whole crawl.
-    if (aiUids.length > 0) {
-      const aiUrl = endpoint(src, 'aiDetail', `${BASE}/traders/aiDetail`)
-      try {
-        const aiDetail = await replayJson(session, fetcher, {
-          url: `${aiUrl}?interval=${TF_INTERVAL[timeframe]}&uids=${encodeURIComponent(aiUids.join(','))}`,
-          method: 'GET',
-          headers: HEADERS,
-        })
-        yield {
-          pageIndex: pagesYielded + 1,
-          payload: { aiDetail, aiUids },
-          url: aiUrl,
-          fetchedAt: new Date().toISOString(),
-        }
-      } catch (err) {
-        if (truncated) return // smoke runs: don't even warn
-        console.warn(
-          `[mexc] AI tab fetch failed (board published without AI rows):`,
-          err instanceof Error ? err.message : err
-        )
-      }
-    }
+    const capture = await mexcAdapter.captureLeaderboard!(session, src, timeframe)
+    yield* capture.parsePages
   },
 
   /**

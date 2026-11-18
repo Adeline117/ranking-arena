@@ -8,7 +8,8 @@
  * USDT numbers. Timestamps are ms epochs (UTC).
  *
  * Composite payload shapes (built by the adapter, replayable from RAW):
- *   leaderboard page: { list: <traders/v2 resp>, aiUids: string[] }
+ *   leaderboard page: the exact <traders/v2 resp> (attempt-bound capture);
+ *                     legacy RAW: { list: <traders/v2 resp>, aiUids: string[] }
  *   AI-tab page:      { aiDetail: <traders/aiDetail resp>, aiUids: string[] }
  *   profile bundle:   { trader, accumulate, dayPnl, ability, hold,
  *                       contractStat, timeframe }
@@ -129,11 +130,14 @@ export function parseMexcLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLe
   // aiDetail rows vs 10 roster uids). The roster only widens marking for
   // main-board rows.
   const forceAi = composite.aiDetail !== undefined
+  // Attempt-bound capture stores the exact traders/v2 response (no composite
+  // wrapper): only that page's field paths are the reviewed board lineage.
+  const bare = !forceAi && composite.list === undefined
   if (forceAi) {
     const d = data(composite.aiDetail)
     items = Array.isArray(d?.traders) ? (d.traders as Dict[]) : []
   } else {
-    const d = data(composite.list)
+    const d = data(bare ? raw : composite.list)
     items = Array.isArray(d?.content) ? (d.content as Dict[]) : []
     reportedTotal = int(d?.total)
   }
@@ -141,7 +145,14 @@ export function parseMexcLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLe
   const rows: ParsedLeaderboardRow[] = []
   for (let i = 0; i < items.length; i++) {
     const row = cardRow(items[i], i + 1, aiUids, forceAi)
-    if (row) rows.push(row)
+    if (!row) continue
+    if (bare) {
+      row.headlineMetricSources = {
+        ...(row.headlineRoi === null ? {} : { roi: { fieldPath: 'data.content[].roi' } }),
+        ...(row.headlinePnl === null ? {} : { pnl: { fieldPath: 'data.content[].pnl' } }),
+      }
+    }
+    rows.push(row)
   }
   return { rows, reportedTotal }
 }

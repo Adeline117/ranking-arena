@@ -526,6 +526,18 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
       { metric: 'pnl', fieldPath: 'data.records[].pl' },
     ],
   }),
+  // traders/v2 board: roi is a fraction the parser scales to percent, pnl is
+  // USDT; both over the board's only native window (7D).
+  mexc_futures: boardHeadlineContract({
+    sourceId: 'mexc_futures',
+    methodology: 'mexc',
+    windowKeys: ['7D'],
+    currency: 'USDT',
+    fields: [
+      { metric: 'roi', fieldPath: 'data.content[].roi' },
+      { metric: 'pnl', fieldPath: 'data.content[].pnl' },
+    ],
+  }),
   lbank_futures: boardHeadlineContract({
     sourceId: 'lbank_futures',
     methodology: 'lbank',
