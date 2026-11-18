@@ -6,11 +6,13 @@
 #
 #   + metric contract, exhaustion contract and V3 capture rows equal the code
 #     registry (lib/metric-trust.ts `gmx`, GMX_LEADERBOARD_EXHAUSTION) and
-#     page_size becomes the adapter limit (GMX_LEADERBOARD_PAGE_SIZE)
+#     page_size becomes the adapter limit (GMX_LEADERBOARD_PAGE_SIZE) and
+#     expected_count (the truncated 60) is cleared; seeds match production
 #   + the registered declaration holds for one short, re-read-stable page and
 #     fails for a moved re-read or a full page
 #   - a replay refuses and changes nothing
-#   - adapter drift, a pre-v2 PnL contract, an unexpected page_size and a
+#   - adapter drift, a missing realized-net basis or contract version, an
+#     unexpected page_size or expected_count, and a
 #     currency the contract does not cover refuse with no rows
 #   + an absent source is skipped
 
@@ -177,8 +179,13 @@ INSERT INTO arena.sources (
   (11, 'xt_spot', 'xt', 'inactive', 'legacy', 'USDT', 'spot', 'local', '{7,30,90}', 10),
   (12, 'lbank_futures', 'lbank', 'active', 'serving', 'USDT', 'futures', 'local', '{7,30}', 20),
   (13, 'gmx', 'gmx', 'active', 'serving', 'USDC', 'onchain', 'local', '{7,30,90}', 20);
--- gmx after the 20260715232500 CUTOVER (GMX PnL contract v2).
-UPDATE arena.sources SET meta = '{"pnl_basis_board": "gmx_period_realized_net", "roi_basis_board": "max_capital_usd", "pnl_includes_unrealized": false, "pnl_contract_version": 2, "window_semantics": "completed_utc_days"}'
+-- gmx as production holds it (read-only 2026-11-18): active/serving/local,
+-- USDC, native {7,30,90}, page_size 20, expected_count 60, realized-net
+-- contract declared in meta, no gmx metric contract rows.
+ALTER TABLE arena.sources ADD COLUMN expected_count int;
+UPDATE arena.sources
+   SET expected_count = 60,
+       meta = '{"pnl_basis_board": "gmx_period_realized_net", "roi_basis_board": "max_capital_usd", "pnl_contract_version": 2}'
  WHERE slug = 'gmx';
 GRANT USAGE ON SCHEMA arena TO service_role;
 GRANT SELECT ON ALL TABLES IN SCHEMA arena TO service_role;
@@ -219,7 +226,7 @@ done
 
 psql_db postgres -q -f "$MIGRATIONS/20261115160917_public_source_exhaustion_and_total_capture_contracts.sql" >/dev/null
 
-for db in main absent adapter_drift v1_contract page_drift currency_drift; do
+for db in main absent adapter_drift v1_contract v1_version page_drift count_drift currency_drift; do
   "$PG_BIN/createdb" -h "$SOCKET_DIR" -p "$PORT" -T postgres "$db"
 done
 BEFORE="$(registry_rows main)"
@@ -293,11 +300,12 @@ assert_equal "gmx V3 capture registered next to the earlier sources" \
        AND capture.attempt_binding_contract = 'arena.ingest.leaderboard-acquisition-attempt-binding@1'
        AND capture.requires_runner_git_sha")"
 
-assert_equal "gmx page_size equals the adapter limit, nothing else changed" \
-  "gmx:{7,30,90}:USDC:$(node -e "console.log(JSON.parse(process.argv[1]).page_size)" "$EXPECTED_JSON"):active:serving" \
+assert_equal "gmx page_size is the adapter limit, expected_count cleared, nothing else changed" \
+  "gmx:{7,30,90}:USDC:$(node -e "console.log(JSON.parse(process.argv[1]).page_size)" "$EXPECTED_JSON"):null:active:serving:local" \
   "$(psql_db main -Atqc "
     SELECT slug || ':' || timeframes_native::text || ':' || currency || ':' ||
-           page_size::text || ':' || status || ':' || serving_mode
+           page_size::text || ':' || COALESCE(expected_count::text, 'null') || ':' ||
+           status || ':' || serving_mode || ':' || fetch_region
       FROM arena.sources WHERE slug = 'gmx'")"
 
 # ── The registered declaration holds for one complete short page ──
@@ -357,14 +365,24 @@ expect_failure adapter_drift "adapter drift" "gmx capture adapter drift: gmx"
 assert_equal "refused adapter drift leaves no rows" "$BEFORE" "$(registry_rows adapter_drift)"
 
 psql_db v1_contract -q -c "UPDATE arena.sources SET meta = meta - 'pnl_basis_board' WHERE slug = 'gmx'"
-expect_failure v1_contract "pre-v2 pnl contract" "gmx capture requires the v2 realized-net source contract"
-assert_equal "refused pre-v2 contract leaves no rows" "$BEFORE" "$(registry_rows v1_contract)"
+expect_failure v1_contract "missing realized-net basis" "gmx capture requires the realized-net source contract"
+assert_equal "refused missing basis leaves no rows" "$BEFORE" "$(registry_rows v1_contract)"
+
+psql_db v1_version -q -c "UPDATE arena.sources SET meta = meta || '{\"pnl_contract_version\": 1}' WHERE slug = 'gmx'"
+expect_failure v1_version "pnl contract version 1" "gmx capture requires the realized-net source contract"
+assert_equal "refused contract version leaves no rows" "$BEFORE" "$(registry_rows v1_version)"
 
 psql_db page_drift -q -c "UPDATE arena.sources SET page_size = 60 WHERE slug = 'gmx'"
 expect_failure page_drift "unexpected page_size" "gmx capture page_size drift: gmx"
 assert_equal "refused page drift leaves no rows" "$BEFORE" "$(registry_rows page_drift)"
 assert_equal "refused page drift leaves the source configuration" "60" \
   "$(psql_db page_drift -Atqc "SELECT page_size FROM arena.sources WHERE slug = 'gmx'")"
+
+psql_db count_drift -q -c "UPDATE arena.sources SET expected_count = 75 WHERE slug = 'gmx'"
+expect_failure count_drift "unexpected expected_count" "gmx capture expected_count drift: gmx"
+assert_equal "refused count drift leaves no rows" "$BEFORE" "$(registry_rows count_drift)"
+assert_equal "refused count drift leaves the source configuration" "75:20" \
+  "$(psql_db count_drift -Atqc "SELECT expected_count || ':' || page_size FROM arena.sources WHERE slug = 'gmx'")"
 
 psql_db currency_drift -q -c "UPDATE arena.sources SET currency = 'USDT' WHERE slug = 'gmx'"
 expect_failure currency_drift "currency the contract does not cover" \

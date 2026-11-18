@@ -21,17 +21,24 @@
 -- anything else is left alone and the preflight refuses it):
 --   * gmx page_size 20 -> 50000: the short-page proof compares each response
 --     with the source's page_size, and the adapter refuses any other value.
+--   * gmx expected_count 60 -> NULL: 60 was the truncated-board survey count.
+--     The full population (2.5k-4.9k per window) would fail the ±30% day-one
+--     count gate against it; NULL lets the rolling baseline of real passing
+--     crawls govern (as okx_web3_solana). Production read-only 2026-11-18:
+--     page_size 20, expected_count 60, no gmx metric contract rows.
 --
 -- Metric provenance is source_normalized (the population publisher refuses
 -- self-certified provenance): both values are normalized from the row's own
--- 1e30 fixed-point components under the GMX v2 realized-net contract, so the
--- source must already carry that contract (20260715232500 CUTOVER).
+-- 1e30 fixed-point components under the GMX realized-net contract, so the
+-- source meta must already declare it: pnl_contract_version = 2,
+-- pnl_basis_board = gmx_period_realized_net, roi_basis_board =
+-- max_capital_usd. This migration registers the metric contracts itself.
 --
 -- POSTDEPLOY, after 20261115160917 and before 20261111192134: registered
 -- before the worker release that ships the gmx capture, every Tier-A run of
 -- gmx would fail. It requires the capture, metric-contract and exhaustion
 -- registries (20261115141050). An absent gmx row is skipped. An existing one
--- must use adapter gmx, currency USDC, the v2 realized-net contract, and must
+-- must use adapter gmx, currency USDC, that realized-net contract, and must
 -- not already be registered; otherwise the whole migration refuses.
 --
 -- Generated only; not applied to any environment.
@@ -128,7 +135,8 @@ BEGIN
     RAISE EXCEPTION 'gmx capture adapter drift: %', v_bad;
   END IF;
 
-  -- The registered methodology is the v2 realized-net board contract.
+  -- The registered methodology is the realized-net board contract the
+  -- source meta declares (keys present in production, 2026-11-18).
   SELECT pg_catalog.string_agg(source_row.slug, ', ' ORDER BY source_row.slug)
     INTO v_bad
     FROM capture_source_seed AS seed
@@ -136,10 +144,9 @@ BEGIN
       ON source_row.slug = seed.source_slug
    WHERE source_row.meta->>'pnl_basis_board' IS DISTINCT FROM 'gmx_period_realized_net'
       OR source_row.meta->>'roi_basis_board' IS DISTINCT FROM 'max_capital_usd'
-      OR source_row.meta->>'pnl_contract_version' IS DISTINCT FROM '2'
-      OR source_row.meta->>'window_semantics' IS DISTINCT FROM 'completed_utc_days';
+      OR source_row.meta->>'pnl_contract_version' IS DISTINCT FROM '2';
   IF v_bad IS NOT NULL THEN
-    RAISE EXCEPTION 'gmx capture requires the v2 realized-net source contract (20260715232500): %', v_bad;
+    RAISE EXCEPTION 'gmx capture requires the realized-net source contract (pnl_contract_version 2): %', v_bad;
   END IF;
 
   SELECT pg_catalog.string_agg(DISTINCT source_row.slug, ', ' ORDER BY source_row.slug)
@@ -195,6 +202,13 @@ UPDATE arena.sources AS source_row
    AND source_row.adapter_slug = seed.adapter_slug
    AND source_row.page_size = 20;
 
+UPDATE arena.sources AS source_row
+   SET expected_count = NULL
+  FROM capture_source_seed AS seed
+ WHERE source_row.slug = seed.source_slug
+   AND source_row.adapter_slug = seed.adapter_slug
+   AND source_row.expected_count = 60;
+
 DO $configuration$
 DECLARE
   v_bad text;
@@ -207,6 +221,16 @@ BEGIN
    WHERE source_row.page_size IS DISTINCT FROM seed.page_size;
   IF v_bad IS NOT NULL THEN
     RAISE EXCEPTION 'gmx capture page_size drift: %', v_bad;
+  END IF;
+
+  SELECT pg_catalog.string_agg(DISTINCT source_row.slug, ', ' ORDER BY source_row.slug)
+    INTO v_bad
+    FROM capture_source_seed AS seed
+    JOIN arena.sources AS source_row
+      ON source_row.slug = seed.source_slug
+   WHERE source_row.expected_count IS NOT NULL;
+  IF v_bad IS NOT NULL THEN
+    RAISE EXCEPTION 'gmx capture expected_count drift: %', v_bad;
   END IF;
 
   SELECT pg_catalog.string_agg(DISTINCT source_row.slug, ', ' ORDER BY source_row.slug)
