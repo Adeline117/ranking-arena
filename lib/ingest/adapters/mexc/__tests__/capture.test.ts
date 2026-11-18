@@ -6,6 +6,11 @@
  * orders 7001-7100; page 72 is an empty content array that still reports
  * total 7100; limit=500 answers {"success":false,"code":600}. The board is
  * therefore captured in reported-total mode at the 100-row upstream limit.
+ *
+ * The board re-sorts live: four sequential full crawls (16 s to 3 min, sorted
+ * COMPREHENSIVE and FOLLOWERS) each served 1-6 traders on two pages, so as
+ * many others were never served; parallel page requests answer code 510
+ * ("Request frequently too fast!"). Such a crawl must never bind.
  */
 
 import { readFileSync } from 'fs'
@@ -13,7 +18,10 @@ import { join } from 'path'
 import { mexcAdapter } from '..'
 import type { SourceRow } from '../../../core/types'
 import type { FetchSession, ReplayRequestTemplate } from '../../../fetch/types'
-import { isPartitionedNumericLeaderboardCapture } from '../../../fetch/capture'
+import {
+  LeaderboardCaptureUpstreamError,
+  isPartitionedNumericLeaderboardCapture,
+} from '../../../fetch/capture'
 import { validateLeaderboardRows } from '../../../staging/validate'
 import { attemptBoundEvidenceForCapture } from '../../../testing/attempt-bound-evidence'
 
@@ -148,6 +156,58 @@ describe('mexc captureLeaderboard', () => {
 
     expect(capture.terminationReason).not.toBe('reported_population_reached')
     expect(bound.trustBound).toBe(false)
+  })
+
+  it('a crawl that serves a moved trader twice is never trust-bound', async () => {
+    const src = source(5)
+    const live = board(10, 10)(1) as { data: Content }
+    const pages = [live.data.content.slice(0, 5), live.data.content.slice(4, 9)]
+    const requests: ReplayRequestTemplate[] = []
+    const capture = await mexcAdapter.captureLeaderboard!(
+      session(requests, (request) => ({
+        ...live,
+        data: { total: 10, content: pages[pageOf(request) - 1] ?? [] },
+      })),
+      src,
+      7
+    )
+    if (isPartitionedNumericLeaderboardCapture(capture)) throw new Error('identity capture')
+    const rows = capture.parsePages.flatMap(
+      (page) =>
+        mexcAdapter.parseLeaderboard(page.payload, {
+          sourceSlug: src.slug,
+          currency: 'USDT',
+          tfLabelMap: {},
+          scrapedAt: '2026-11-18T00:00:00.000Z',
+          meta: {},
+        }).rows
+    )
+    const validated = validateLeaderboardRows(rows)
+    expect(rows).toHaveLength(10)
+    expect(validated.valid).toHaveLength(9)
+    const bound = attemptBoundEvidenceForCapture({
+      capture,
+      source: src,
+      timeframe: 7,
+      acceptedPopulation: validated.valid.length,
+      rejectedRowCount: validated.rejects.length,
+    })
+    expect(bound.trustBound).toBe(false)
+  })
+
+  it('a rate-limited page fails the capture as an upstream error', async () => {
+    const requests: ReplayRequestTemplate[] = []
+    const pages = board(5, 10)
+    const failure = mexcAdapter.captureLeaderboard!(
+      session(requests, (request) =>
+        pageOf(request) === 1 ? pages(1) : fixture('traders-v2-rate-limited.json')
+      ),
+      source(5),
+      7
+    )
+    await expect(failure).rejects.toBeInstanceOf(LeaderboardCaptureUpstreamError)
+    await expect(failure).rejects.toThrow(/code=510/)
+    expect(requests.map(pageOf)).toEqual([1, 2])
   })
 
   it('treats the upstream limit rejection as an upstream error, never an empty board', async () => {
