@@ -11,7 +11,8 @@
  * many others were never served (the 16 s crawl: 7100 rows, 7098 distinct,
  * 2 duplicates); parallel page requests answer code 510 ("Request frequently
  * too fast!"). The capture is therefore exhausted to the empty page and
- * bound by reported-total drift within 1% (MEXC_FUTURES_LEADERBOARD_EXHAUSTION).
+ * bound by reported-total drift (MEXC_FUTURES_LEADERBOARD_EXHAUSTION):
+ * allowance = min(⌊last × 50 / 10000⌋, 40), i.e. 35 rows at 7,100.
  */
 
 import { readFileSync } from 'fs'
@@ -137,11 +138,11 @@ const LIVE_TOTAL = 7100
 const LIVE_PAGE = 100
 
 /** Serve a board in which each listed trader is seen again at the top of the next page. */
-function boardWithRepeats(repeatAfterPages: readonly number[]) {
-  const board = traders(LIVE_TOTAL)
+function boardWithRepeats(repeatAfterPages: readonly number[], total = LIVE_TOTAL) {
+  const board = traders(total)
   const pages: Row[][] = []
   let cursor = 0
-  for (let page = 1; page <= LIVE_TOTAL / LIVE_PAGE; page += 1) {
+  for (let page = 1; page <= total / LIVE_PAGE; page += 1) {
     const repeat = repeatAfterPages.includes(page - 1) ? [pages[page - 2].at(-1)!] : []
     const fresh = board.slice(cursor, cursor + LIVE_PAGE - repeat.length)
     cursor += fresh.length
@@ -149,19 +150,22 @@ function boardWithRepeats(repeatAfterPages: readonly number[]) {
   }
   return (page: number) => ({
     ...LIVE,
-    data: { total: LIVE_TOTAL, content: pages[page - 1] ?? [] },
+    data: { total, content: pages[page - 1] ?? [] },
   })
 }
 
+/** Repeat one trader on each of the first `count` page boundaries. */
+const repeatsOn = (count: number) => Array.from({ length: count }, (_, index) => index + 1)
+
 describe('mexc captureLeaderboard', () => {
-  it('declares a live board: short_page end, 1% total drift, at most 71 rows', () => {
+  it('declares a live board: short_page end, 0.5% total drift, at most 40 rows', () => {
     expect(MEXC_FUTURES_LEADERBOARD_EXHAUSTION).toEqual({
       completeness_mode: 'exhausted',
       list_path: ['data', 'content'],
       row_key_path: ['uid'],
       end_signal: { kind: 'short_page' },
-      board_version: { kind: 'reported_total_drift', path: ['data', 'total'], max_drift_bps: 100 },
-      max_duplicate_rows: 71,
+      board_version: { kind: 'reported_total_drift', path: ['data', 'total'], max_drift_bps: 50 },
+      max_duplicate_rows: 40,
     })
   })
 
@@ -219,49 +223,49 @@ describe('mexc captureLeaderboard', () => {
     expect(bound).toMatchObject({ completenessMode: 'exhausted', trustBound: true })
   })
 
-  it('binds 70 repeated rows, within the 71-row allowance', async () => {
-    const repeats = Array.from({ length: 70 }, (_, index) => index + 1)
-    const { capture, bound } = await evidence(LIVE_PAGE, boardWithRepeats(repeats))
-    expect(capture.completeness?.row_keys).toEqual({
+  it('at 7,100 rows the allowance is 35: 35 repeats bind, 36 do not', async () => {
+    const within = await evidence(LIVE_PAGE, boardWithRepeats(repeatsOn(35)))
+    expect(within.capture.completeness?.row_keys).toEqual({
       observed: 7100,
-      distinct: 7030,
-      duplicate: 70,
+      distinct: 7065,
+      duplicate: 35,
     })
-    expect(bound.trustBound).toBe(true)
+    expect(within.bound.trustBound).toBe(true)
+
+    const beyond = await evidence(LIVE_PAGE, boardWithRepeats(repeatsOn(36)))
+    expect(beyond.capture.completeness?.row_keys.duplicate).toBe(36)
+    expect(beyond.bound.trustBound).toBe(false)
   })
 
-  it('refuses a board whose distinct rows miss the last total by more than 1%', async () => {
-    // 7000 rows served (short final page) while every page reports 7100.
-    const board = traders(7000)
-    const { capture, bound } = await evidence(LIVE_PAGE, (page) =>
-      servedPage(board, page, LIVE_PAGE, LIVE_TOTAL)
-    )
-    expect(capture.terminationReason).toBe('empty_page')
-    expect(capture.completeness?.row_keys.distinct).toBe(7000)
-    expect(bound.trustBound).toBe(false)
+  it('the absolute cap is 40 rows: on an 8,200-row board 40 repeats bind, 41 do not', async () => {
+    // 0.5% of 8,200 is 41, so the 40-row cap is what binds here.
+    const within = await evidence(LIVE_PAGE, boardWithRepeats(repeatsOn(40), 8200))
+    expect(within.capture.completeness?.row_keys).toEqual({
+      observed: 8200,
+      distinct: 8160,
+      duplicate: 40,
+    })
+    expect(within.bound.trustBound).toBe(true)
+
+    const beyond = await evidence(LIVE_PAGE, boardWithRepeats(repeatsOn(41), 8200))
+    expect(beyond.capture.completeness?.row_keys.duplicate).toBe(41)
+    expect(beyond.bound.trustBound).toBe(false)
   })
 
-  it('refuses more repeated rows than the allowance', async () => {
-    // Two traders repeated on each of 36 page boundaries: 72 duplicates > 71.
-    const board = traders(LIVE_TOTAL)
-    const pages: Row[][] = []
-    let cursor = 0
-    for (let page = 1; page <= 71; page += 1) {
-      const repeat = page >= 2 && page <= 37 ? pages[page - 2].slice(-2) : []
-      const fresh = board.slice(cursor, cursor + LIVE_PAGE - repeat.length)
-      cursor += fresh.length
-      pages.push([...repeat, ...fresh])
+  it('distinct rows may miss the last total by 35 rows at 7,100, not 36', async () => {
+    // A short final page while every page reports 7100.
+    const missing = async (served: number) => {
+      const board = traders(served)
+      return evidence(LIVE_PAGE, (page) => servedPage(board, page, LIVE_PAGE, LIVE_TOTAL))
     }
-    const { capture, bound } = await evidence(LIVE_PAGE, (page) => ({
-      ...LIVE,
-      data: { total: LIVE_TOTAL, content: pages[page - 1] ?? [] },
-    }))
-    expect(capture.completeness?.row_keys).toEqual({
-      observed: 7100,
-      distinct: 7028,
-      duplicate: 72,
-    })
-    expect(bound.trustBound).toBe(false)
+    const within = await missing(7065)
+    expect(within.capture.terminationReason).toBe('short_page')
+    expect(within.capture.completeness?.row_keys.distinct).toBe(7065)
+    expect(within.bound.trustBound).toBe(true)
+
+    const beyond = await missing(7064)
+    expect(beyond.capture.completeness?.row_keys.distinct).toBe(7064)
+    expect(beyond.bound.trustBound).toBe(false)
   })
 
   it('a rate-limited page fails the capture as an upstream error', async () => {

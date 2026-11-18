@@ -111,7 +111,12 @@ const MAX_PAGE_SIZE = 100
  * parallel page requests are refused (code 510). The capture therefore reads
  * to the empty page past the end and the proof bounds how far the board
  * moved: page totals, |last total - distinct rows| and duplicate rows each
- * within 1% of the last reported total, and never above 71 rows (1% of 7,100).
+ * within min(⌊last × 50 / 10000⌋, 40) rows (35 rows at 7,100).
+ *
+ * The allowance is the most rows a complete capture may be missing, and the
+ * registered row is immutable, so it is sized from the observed movement
+ * (at most 6 repeated traders per crawl) with headroom, not set to the 1%
+ * ceiling: 0.5% of the last total, and never more than 40 rows.
  */
 export const MEXC_FUTURES_LEADERBOARD_EXHAUSTION: LeaderboardExhaustionDeclaration = Object.freeze({
   completeness_mode: 'exhausted' as const,
@@ -121,9 +126,9 @@ export const MEXC_FUTURES_LEADERBOARD_EXHAUSTION: LeaderboardExhaustionDeclarati
   board_version: {
     kind: 'reported_total_drift' as const,
     path: ['data', 'total'],
-    max_drift_bps: 100,
+    max_drift_bps: 50,
   },
-  max_duplicate_rows: 71,
+  max_duplicate_rows: 40,
 })
 
 const mexcAdapter: SourceAdapter = {
