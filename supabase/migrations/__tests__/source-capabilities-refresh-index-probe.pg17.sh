@@ -60,6 +60,8 @@ assert_equal() {
   -l "$LOG_FILE" -w start >/dev/null
 
 psql_db -q <<'SQL'
+CREATE ROLE anon NOLOGIN;
+CREATE ROLE authenticated NOLOGIN;
 -- pg_cron stand-in: the two entry points the migrations call.
 CREATE SCHEMA cron;
 CREATE TABLE cron.job (jobname text PRIMARY KEY, schedule text NOT NULL, command text NOT NULL);
@@ -143,6 +145,10 @@ assert_equal "fixture exercises true and false surface flags" \
 
 psql_db -q -f "$MIGRATION" >/dev/null
 assert_equal "rewritten view returns exactly the original rows" "$BEFORE" "$(snapshot)"
+assert_equal "the old view is kept under its legacy name and anon cannot read the new one" \
+  "$BEFORE|f" "$(psql_db -Atqc "SELECT slug || ' ' || cap::text
+     FROM arena.mv_source_capabilities_legacy_20260703 ORDER BY slug")|$(psql_db -Atqc "
+     SELECT pg_catalog.has_table_privilege('anon', 'arena.mv_source_capabilities', 'SELECT')")"
 
 # A refresh picks up a new surface and still runs CONCURRENTLY (unique index kept).
 psql_db -qc "INSERT INTO arena.order_records VALUES (21, '2026-10-20')" >/dev/null

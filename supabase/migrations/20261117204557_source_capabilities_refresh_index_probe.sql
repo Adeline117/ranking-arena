@@ -24,7 +24,13 @@ SET LOCAL lock_timeout = '5s';
 -- 2026-11-18); the old one never finished inside 600s.
 SET LOCAL statement_timeout = '300s';
 
-DROP MATERIALIZED VIEW arena.mv_source_capabilities;
+-- The definition of a materialized view cannot be altered in place. The old
+-- view is kept under a legacy name (nothing is destroyed; renaming it back is
+-- the rollback) and is no longer refreshed.
+ALTER MATERIALIZED VIEW arena.mv_source_capabilities
+  RENAME TO mv_source_capabilities_legacy_20260703;
+ALTER INDEX arena.idx_mv_source_capabilities_slug
+  RENAME TO idx_mv_source_capabilities_legacy_20260703_slug;
 
 CREATE MATERIALIZED VIEW arena.mv_source_capabilities AS
   WITH mp AS (
@@ -120,6 +126,9 @@ CREATE MATERIALIZED VIEW arena.mv_source_capabilities AS
 
 CREATE UNIQUE INDEX idx_mv_source_capabilities_slug
   ON arena.mv_source_capabilities (slug);
+
+-- Read only through public.arena_source_capabilities() (SECURITY DEFINER).
+REVOKE ALL ON TABLE arena.mv_source_capabilities FROM PUBLIC, anon, authenticated;
 
 CREATE OR REPLACE FUNCTION public.refresh_source_capabilities_mv()
   RETURNS void
