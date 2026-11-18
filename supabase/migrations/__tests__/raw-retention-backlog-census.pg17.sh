@@ -37,6 +37,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
+export PGOPTIONS='-c client_min_messages=warning -c statement_timeout=60s'
 psql_db() { "$PG_BIN/psql" -X -v ON_ERROR_STOP=1 -h "$SOCKET_DIR" -p "$PORT" -U postgres -d postgres "$@"; }
 assert_equal() { [[ "$2" == "$3" ]] || { echo "$1: expected '$2', got '$3'" >&2; exit 1; }; }
 assert_fails() {
@@ -108,12 +109,33 @@ psql_db -q -f "$MIGRATION" >/dev/null # idempotent replay
 
 assert_equal "switch starts off" "f" "$(psql_db -Atqc "SELECT delete_enabled FROM arena.raw_retention_settings")"
 
-assert_equal "census counts expired, pinned and eligible pointer rows" \
-  "6|4|1|2|1|400|0" "$(psql_db -Atqc "
-  SELECT concat_ws('|', c->>'pointer_rows', c->>'expired_rows', c->>'expired_snapshot_pinned_rows',
-                   c->>'expired_trust_pinned_rows', c->>'eligible_rows',
-                   c->>'eligible_bytes', c->>'orphan_queue_rows')
+assert_equal "census: single-table aggregates only" "6|4|1000|0" "$(psql_db -Atqc "
+  SELECT concat_ws('|', c->>'pointer_rows', c->>'expired_rows', c->>'expired_bytes',
+                   c->>'orphan_queue_rows')
   FROM (SELECT arena.raw_retention_census(30) AS c) AS census")"
+assert_fails "census refuses an unbounded statement_timeout" \
+  "SET statement_timeout = 0; SELECT arena.raw_retention_census(30)"
+assert_fails "pointer scan refuses an unbounded statement_timeout" \
+  "SET statement_timeout = 0; SELECT arena.scan_raw_pointer_retention(10, 30)"
+assert_fails "orphan scan refuses an unbounded statement_timeout" \
+  "SET statement_timeout = 0; SELECT arena.scan_raw_storage_orphans(10, 30, false)"
+
+# Pointer classification in id pages of 4: ids 1..6 -> pages of 4 and 2.
+assert_equal "pointer page 1: 4 rows, 4 expired, 1 snapshot pin, 2 trust pins, 1 eligible" \
+  "4|4|1|2|1|400|false" "$(psql_db -Atqc "
+  SELECT concat_ws('|', r->>'page_rows', r->>'page_expired_rows', r->>'page_snapshot_pinned_rows',
+                   r->>'page_trust_pinned_rows', r->>'page_eligible_rows', r->>'page_eligible_bytes',
+                   r->>'pass_complete')
+  FROM (SELECT arena.scan_raw_pointer_retention(4, 30) AS r) AS scan")"
+assert_equal "pointer page 2 completes the pass (young and quarantined rows are not expired)" \
+  "2|0|true" "$(psql_db -Atqc "
+  SELECT concat_ws('|', r->>'page_rows', r->>'page_expired_rows', r->>'pass_complete')
+  FROM (SELECT arena.scan_raw_pointer_retention(4, 30) AS r) AS scan")"
+assert_equal "completed pointer pass tally, cursor reset" "6|4|1|2|1|400|0" "$(psql_db -Atqc "
+  SELECT concat_ws('|', p->>'rows', p->>'expired_rows', p->>'snapshot_pinned_rows',
+                   p->>'trust_pinned_rows', p->>'eligible_rows', p->>'eligible_bytes',
+                   pointer_scan_after)
+  FROM (SELECT last_completed_pointer_pass AS p, pointer_scan_after FROM arena.raw_retention_settings) AS s")"
 assert_fails "census rejects a window under 30 days" "SELECT arena.raw_retention_census(7)"
 
 # Count-only walk in pages of 4: 11 bucket objects -> pages of 4, 4, 3.
@@ -155,8 +177,9 @@ assert_equal "claim returns only still-orphaned paths" "b/o1.json.gz,b/o3.json.g
   SELECT string_agg(storage_path, ',' ORDER BY storage_path) FROM arena.claim_raw_orphan_gc_batch(10)")"
 assert_equal "the re-pointed path left the queue" "2" "$(psql_db -Atqc "SELECT count(*) FROM arena.raw_orphan_gc_queue")"
 
-assert_equal "service_role: execute yes, switch/enqueue writes no" "true|true|true|false|false" "$(psql_db -Atqc "
+assert_equal "service_role: execute yes, switch/enqueue writes no" "true|true|true|true|false|false" "$(psql_db -Atqc "
   SELECT has_function_privilege('service_role', 'arena.raw_retention_census(integer)', 'EXECUTE')
+    || '|' || has_function_privilege('service_role', 'arena.scan_raw_pointer_retention(integer,integer)', 'EXECUTE')
     || '|' || has_function_privilege('service_role', 'arena.scan_raw_storage_orphans(integer,integer,boolean)', 'EXECUTE')
     || '|' || has_function_privilege('service_role', 'arena.claim_raw_orphan_gc_batch(integer)', 'EXECUTE')
     || '|' || has_table_privilege('service_role', 'arena.raw_retention_settings', 'UPDATE')

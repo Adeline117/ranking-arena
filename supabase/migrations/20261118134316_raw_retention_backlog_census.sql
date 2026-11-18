@@ -21,8 +21,13 @@
 --   * arena.raw_retention_settings: singleton; delete_enabled defaults false.
 --     Flipping it is an owner/launch-driver production action. It also keeps
 --     the resumable orphan-scan cursor and the tallies of the current pass.
---   * arena.raw_retention_census(days): count-only pointer-side census
---     (expired / pinned / eligible rows and bytes, queue depths).
+--   * arena.raw_retention_census(days): count-only single-table aggregates
+--     over arena.raw_objects (no join) plus queue depths.
+--   * arena.scan_raw_pointer_retention(page, days): count-only, one bounded
+--     id page of arena.raw_objects per call, classifying expired rows as
+--     snapshot-pinned / trust-pinned / eligible; resumable cursor + pass tally.
+--   * Every function refuses to run without a bounded statement_timeout and
+--     never joins storage.objects with arena.raw_objects table-wide.
 --   * arena.scan_raw_storage_orphans(page, days, enqueue): walks
 --     storage.objects of bucket raw-snapshots in name order, one bounded page
 --     per call, and counts objects older than the window with no pointer row
@@ -73,6 +78,17 @@ CREATE TABLE IF NOT EXISTS arena.raw_retention_settings (
   orphan_pass_orphans bigint NOT NULL DEFAULT 0 CHECK (orphan_pass_orphans >= 0),
   orphan_pass_orphan_bytes bigint NOT NULL DEFAULT 0 CHECK (orphan_pass_orphan_bytes >= 0),
   last_completed_orphan_pass jsonb,
+  pointer_scan_after bigint NOT NULL DEFAULT 0,
+  pointer_pass_started_at timestamptz,
+  pointer_pass_rows bigint NOT NULL DEFAULT 0 CHECK (pointer_pass_rows >= 0),
+  pointer_pass_expired_rows bigint NOT NULL DEFAULT 0 CHECK (pointer_pass_expired_rows >= 0),
+  pointer_pass_snapshot_pinned_rows bigint NOT NULL DEFAULT 0
+    CHECK (pointer_pass_snapshot_pinned_rows >= 0),
+  pointer_pass_trust_pinned_rows bigint NOT NULL DEFAULT 0
+    CHECK (pointer_pass_trust_pinned_rows >= 0),
+  pointer_pass_eligible_rows bigint NOT NULL DEFAULT 0 CHECK (pointer_pass_eligible_rows >= 0),
+  pointer_pass_eligible_bytes bigint NOT NULL DEFAULT 0 CHECK (pointer_pass_eligible_bytes >= 0),
+  last_completed_pointer_pass jsonb,
   updated_at timestamptz NOT NULL DEFAULT pg_catalog.statement_timestamp()
 );
 
@@ -106,8 +122,28 @@ COMMENT ON TABLE arena.raw_retention_settings IS
 COMMENT ON TABLE arena.raw_orphan_gc_queue IS
   'Durable obligations to remove raw-snapshots objects that never had (or no longer have) an arena.raw_objects pointer.';
 
--- Count-only pointer-side census. The eligibility predicate mirrors
--- lib/ingest/raw.ts rawObjectRetentionCandidateSql (trust evidence present).
+-- Every function below refuses to run without a bounded statement_timeout,
+-- and none joins two large tables in one statement: storage.objects (~5.8M)
+-- and arena.raw_objects (~5.6M) are only ever read one bounded page at a
+-- time, with per-row index lookups (raw_objects.storage_path is UNIQUE,
+-- storage.objects is keyed by (bucket_id, name)).
+CREATE OR REPLACE FUNCTION arena.raw_retention_require_statement_timeout()
+RETURNS void
+LANGUAGE plpgsql
+STABLE
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  IF pg_catalog.current_setting('statement_timeout') IN ('0', '0ms') THEN
+    RAISE EXCEPTION 'RAW retention requires a bounded statement_timeout'
+      USING ERRCODE = '55000';
+  END IF;
+END;
+$function$;
+
+-- Count-only census: single-table aggregates (one sequential pass over
+-- arena.raw_objects, no join) plus queue depths. Pin classification is paged
+-- separately by arena.scan_raw_pointer_retention.
 CREATE OR REPLACE FUNCTION arena.raw_retention_census(p_retention_days integer DEFAULT 30)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -119,51 +155,23 @@ DECLARE
   v_cutoff timestamptz;
   v_result jsonb;
 BEGIN
+  PERFORM arena.raw_retention_require_statement_timeout();
   IF p_retention_days IS NULL OR p_retention_days < 30 OR p_retention_days > 3650 THEN
     RAISE EXCEPTION 'RAW retention window must be between 30 and 3650 days'
       USING ERRCODE = '22023';
   END IF;
   v_cutoff := pg_catalog.statement_timestamp() - pg_catalog.make_interval(days => p_retention_days);
 
-  WITH expired AS MATERIALIZED (
-    SELECT raw.id,
-           raw.bytes::bigint AS bytes,
-           EXISTS (
-             SELECT 1 FROM arena.leaderboard_snapshots AS snapshot
-              WHERE snapshot.raw_object_id = raw.id
-           ) AS snapshot_pinned,
-           (
-             EXISTS (
-               SELECT 1 FROM arena.metric_trust_runs AS run
-                WHERE run.population_raw_object_id = raw.id
-                   OR run.manifest_raw_object_id = raw.id
-             )
-             OR EXISTS (
-               SELECT 1 FROM arena.metric_trust_artifacts AS artifact
-                WHERE artifact.raw_object_id = raw.id
-             )
-           ) AS trust_pinned
-      FROM arena.raw_objects AS raw
-     WHERE NOT raw.quarantined
-       AND raw.fetched_at < v_cutoff
-  )
   SELECT pg_catalog.jsonb_build_object(
-    'contract', 'arena.raw-retention-census@1',
+    'contract', 'arena.raw-retention-census@2',
     'retention_days', p_retention_days,
     'cutoff', v_cutoff,
-    'pointer_rows', (SELECT pg_catalog.count(*) FROM arena.raw_objects),
-    'pointer_bytes', (SELECT COALESCE(pg_catalog.sum(bytes::bigint), 0) FROM arena.raw_objects),
-    'quarantined_rows', (SELECT pg_catalog.count(*) FROM arena.raw_objects WHERE quarantined),
-    'oldest_pointer_fetched_at', (SELECT pg_catalog.min(fetched_at) FROM arena.raw_objects),
-    'expired_rows', (SELECT pg_catalog.count(*) FROM expired),
-    'expired_bytes', (SELECT COALESCE(pg_catalog.sum(bytes), 0) FROM expired),
-    'expired_snapshot_pinned_rows', (SELECT pg_catalog.count(*) FROM expired WHERE snapshot_pinned),
-    'expired_trust_pinned_rows', (SELECT pg_catalog.count(*) FROM expired WHERE trust_pinned),
-    'eligible_rows',
-      (SELECT pg_catalog.count(*) FROM expired WHERE NOT snapshot_pinned AND NOT trust_pinned),
-    'eligible_bytes',
-      (SELECT COALESCE(pg_catalog.sum(bytes), 0) FROM expired
-        WHERE NOT snapshot_pinned AND NOT trust_pinned),
+    'pointer_rows', totals.pointer_rows,
+    'pointer_bytes', totals.pointer_bytes,
+    'quarantined_rows', totals.quarantined_rows,
+    'oldest_pointer_fetched_at', totals.oldest_fetched_at,
+    'expired_rows', totals.expired_rows,
+    'expired_bytes', totals.expired_bytes,
     'gc_queue_rows', (SELECT pg_catalog.count(*) FROM arena.raw_object_gc_queue),
     'gc_queue_failed_rows',
       (SELECT pg_catalog.count(*) FROM arena.raw_object_gc_queue WHERE attempts > 0),
@@ -172,8 +180,162 @@ BEGIN
       (SELECT pg_catalog.count(*) FROM arena.raw_orphan_gc_queue WHERE attempts > 0),
     'delete_enabled', (SELECT settings.delete_enabled FROM arena.raw_retention_settings AS settings)
   )
-  INTO v_result;
+  INTO v_result
+  FROM (
+    SELECT pg_catalog.count(*) AS pointer_rows,
+           COALESCE(pg_catalog.sum(raw.bytes::bigint), 0) AS pointer_bytes,
+           pg_catalog.count(*) FILTER (WHERE raw.quarantined) AS quarantined_rows,
+           pg_catalog.min(raw.fetched_at) AS oldest_fetched_at,
+           pg_catalog.count(*) FILTER (WHERE NOT raw.quarantined AND raw.fetched_at < v_cutoff)
+             AS expired_rows,
+           COALESCE(
+             pg_catalog.sum(raw.bytes::bigint)
+               FILTER (WHERE NOT raw.quarantined AND raw.fetched_at < v_cutoff),
+             0
+           ) AS expired_bytes
+      FROM arena.raw_objects AS raw
+  ) AS totals;
   RETURN v_result;
+END;
+$function$;
+
+-- One bounded id page of pointer rows, classified with the predicate of
+-- lib/ingest/raw.ts rawObjectRetentionCandidateSql (trust evidence present).
+-- Count-only; it advances a resumable cursor and keeps the pass tallies.
+CREATE OR REPLACE FUNCTION arena.scan_raw_pointer_retention(
+  p_page_size integer DEFAULT 50000,
+  p_retention_days integer DEFAULT 30
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+SET lock_timeout = '5s'
+AS $function$
+DECLARE
+  v_settings arena.raw_retention_settings%ROWTYPE;
+  v_cutoff timestamptz;
+  v_rows bigint;
+  v_expired bigint;
+  v_snapshot_pinned bigint;
+  v_trust_pinned bigint;
+  v_eligible bigint;
+  v_eligible_bytes bigint;
+  v_last_id bigint;
+  v_pass_complete boolean;
+  v_completed jsonb;
+BEGIN
+  PERFORM arena.raw_retention_require_statement_timeout();
+  IF p_page_size IS NULL OR p_page_size < 1 OR p_page_size > 200000 THEN
+    RAISE EXCEPTION 'pointer scan page must be between 1 and 200000 rows'
+      USING ERRCODE = '22023';
+  END IF;
+  IF p_retention_days IS NULL OR p_retention_days < 30 OR p_retention_days > 3650 THEN
+    RAISE EXCEPTION 'RAW retention window must be between 30 and 3650 days'
+      USING ERRCODE = '22023';
+  END IF;
+  v_cutoff := pg_catalog.statement_timestamp() - pg_catalog.make_interval(days => p_retention_days);
+
+  SELECT settings.* INTO STRICT v_settings
+    FROM arena.raw_retention_settings AS settings
+   WHERE settings.singleton
+   FOR UPDATE;
+
+  WITH page AS MATERIALIZED (
+    SELECT raw.id, raw.bytes::bigint AS bytes,
+           NOT raw.quarantined AND raw.fetched_at < v_cutoff AS expired
+      FROM arena.raw_objects AS raw
+     WHERE raw.id > v_settings.pointer_scan_after
+     ORDER BY raw.id
+     LIMIT p_page_size
+  ),
+  classified AS MATERIALIZED (
+    SELECT page.id,
+           page.bytes,
+           EXISTS (
+             SELECT 1 FROM arena.leaderboard_snapshots AS snapshot
+              WHERE snapshot.raw_object_id = page.id
+           ) AS snapshot_pinned,
+           (
+             EXISTS (
+               SELECT 1 FROM arena.metric_trust_runs AS run
+                WHERE run.population_raw_object_id = page.id
+             )
+             OR EXISTS (
+               SELECT 1 FROM arena.metric_trust_runs AS run
+                WHERE run.manifest_raw_object_id = page.id
+             )
+             OR EXISTS (
+               SELECT 1 FROM arena.metric_trust_artifacts AS artifact
+                WHERE artifact.raw_object_id = page.id
+             )
+           ) AS trust_pinned
+      FROM page
+     WHERE page.expired
+  )
+  SELECT (SELECT pg_catalog.count(*) FROM page),
+         (SELECT pg_catalog.count(*) FROM classified),
+         (SELECT pg_catalog.count(*) FROM classified WHERE snapshot_pinned),
+         (SELECT pg_catalog.count(*) FROM classified WHERE trust_pinned),
+         (SELECT pg_catalog.count(*) FROM classified WHERE NOT snapshot_pinned AND NOT trust_pinned),
+         (SELECT COALESCE(pg_catalog.sum(classified.bytes), 0) FROM classified
+           WHERE NOT snapshot_pinned AND NOT trust_pinned),
+         (SELECT pg_catalog.max(page.id) FROM page)
+    INTO v_rows, v_expired, v_snapshot_pinned, v_trust_pinned, v_eligible, v_eligible_bytes, v_last_id;
+
+  v_pass_complete := v_rows < p_page_size;
+
+  UPDATE arena.raw_retention_settings AS settings
+     SET pointer_pass_started_at = COALESCE(settings.pointer_pass_started_at, pg_catalog.statement_timestamp()),
+         pointer_pass_rows = settings.pointer_pass_rows + v_rows,
+         pointer_pass_expired_rows = settings.pointer_pass_expired_rows + v_expired,
+         pointer_pass_snapshot_pinned_rows = settings.pointer_pass_snapshot_pinned_rows + v_snapshot_pinned,
+         pointer_pass_trust_pinned_rows = settings.pointer_pass_trust_pinned_rows + v_trust_pinned,
+         pointer_pass_eligible_rows = settings.pointer_pass_eligible_rows + v_eligible,
+         pointer_pass_eligible_bytes = settings.pointer_pass_eligible_bytes + v_eligible_bytes,
+         pointer_scan_after = COALESCE(v_last_id, settings.pointer_scan_after),
+         updated_at = pg_catalog.statement_timestamp()
+   WHERE settings.singleton
+  RETURNING pg_catalog.jsonb_build_object(
+    'started_at', settings.pointer_pass_started_at,
+    'completed_at', pg_catalog.statement_timestamp(),
+    'retention_days', p_retention_days,
+    'rows', settings.pointer_pass_rows,
+    'expired_rows', settings.pointer_pass_expired_rows,
+    'snapshot_pinned_rows', settings.pointer_pass_snapshot_pinned_rows,
+    'trust_pinned_rows', settings.pointer_pass_trust_pinned_rows,
+    'eligible_rows', settings.pointer_pass_eligible_rows,
+    'eligible_bytes', settings.pointer_pass_eligible_bytes
+  )
+  INTO v_completed;
+
+  IF v_pass_complete THEN
+    UPDATE arena.raw_retention_settings AS settings
+       SET last_completed_pointer_pass = v_completed,
+           pointer_scan_after = 0,
+           pointer_pass_started_at = NULL,
+           pointer_pass_rows = 0,
+           pointer_pass_expired_rows = 0,
+           pointer_pass_snapshot_pinned_rows = 0,
+           pointer_pass_trust_pinned_rows = 0,
+           pointer_pass_eligible_rows = 0,
+           pointer_pass_eligible_bytes = 0,
+           updated_at = pg_catalog.statement_timestamp()
+     WHERE settings.singleton;
+  END IF;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'contract', 'arena.raw-pointer-retention-scan@1',
+    'retention_days', p_retention_days,
+    'page_rows', v_rows,
+    'page_expired_rows', v_expired,
+    'page_snapshot_pinned_rows', v_snapshot_pinned,
+    'page_trust_pinned_rows', v_trust_pinned,
+    'page_eligible_rows', v_eligible,
+    'page_eligible_bytes', v_eligible_bytes,
+    'pass_complete', v_pass_complete,
+    'pass', v_completed
+  );
 END;
 $function$;
 
@@ -206,6 +368,7 @@ DECLARE
   v_pass_complete boolean;
   v_completed jsonb;
 BEGIN
+  PERFORM arena.raw_retention_require_statement_timeout();
   IF p_page_size IS NULL OR p_page_size < 1 OR p_page_size > 200000 THEN
     RAISE EXCEPTION 'orphan scan page must be between 1 and 200000 objects'
       USING ERRCODE = '22023';
@@ -339,6 +502,7 @@ SET search_path = pg_catalog, pg_temp
 SET lock_timeout = '5s'
 AS $function$
 BEGIN
+  PERFORM arena.raw_retention_require_statement_timeout();
   IF p_limit IS NULL OR p_limit < 1 OR p_limit > 1000 THEN
     RAISE EXCEPTION 'orphan GC batch must be between 1 and 1000' USING ERRCODE = '22023';
   END IF;
@@ -378,7 +542,9 @@ $function$;
 
 ALTER TABLE arena.raw_retention_settings OWNER TO postgres;
 ALTER TABLE arena.raw_orphan_gc_queue OWNER TO postgres;
+ALTER FUNCTION arena.raw_retention_require_statement_timeout() OWNER TO postgres;
 ALTER FUNCTION arena.raw_retention_census(integer) OWNER TO postgres;
+ALTER FUNCTION arena.scan_raw_pointer_retention(integer, integer) OWNER TO postgres;
 ALTER FUNCTION arena.scan_raw_storage_orphans(integer, integer, boolean) OWNER TO postgres;
 ALTER FUNCTION arena.claim_raw_orphan_gc_batch(integer) OWNER TO postgres;
 
@@ -396,11 +562,16 @@ GRANT UPDATE (attempts, last_attempt_at, last_error)
 
 REVOKE ALL ON FUNCTION arena.raw_retention_census(integer)
   FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION arena.scan_raw_pointer_retention(integer, integer)
+  FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION arena.raw_retention_require_statement_timeout()
+  FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION arena.scan_raw_storage_orphans(integer, integer, boolean)
   FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION arena.claim_raw_orphan_gc_batch(integer)
   FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION arena.raw_retention_census(integer) TO service_role;
+GRANT EXECUTE ON FUNCTION arena.scan_raw_pointer_retention(integer, integer) TO service_role;
 GRANT EXECUTE ON FUNCTION arena.scan_raw_storage_orphans(integer, integer, boolean) TO service_role;
 GRANT EXECUTE ON FUNCTION arena.claim_raw_orphan_gc_batch(integer) TO service_role;
 
