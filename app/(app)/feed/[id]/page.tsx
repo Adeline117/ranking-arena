@@ -76,7 +76,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const activity = await fetchActivity(id)
 
   if (!activity) {
-    return { title: 'Activity Not Found' }
+    return { title: 'Activity Not Found', robots: { index: false, follow: false } }
   }
 
   const rawName = activity.handle ?? activity.source_trader_id
@@ -90,6 +90,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return {
     title,
     description,
+    alternates: { canonical: `${BASE_URL}/feed/${id}` },
     openGraph: {
       title,
       description,
