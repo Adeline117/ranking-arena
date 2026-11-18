@@ -216,6 +216,14 @@ const hyperliquidBoardMeta = collectionMeta({
   list: ['leaderboardRows'],
 })
 
+/**
+ * `page=<n>` is really sent on the wire and is recorded as-is in the request
+ * evidence (public projection, request_sha256). The upstream IGNORES it: the
+ * CloudFront/S3 object returns the same bytes and ETag for any query string
+ * (verified 2026-11-18). It therefore never selects a slice of the board; the
+ * whole population is always the single response, and only n=1 is requested
+ * (safetyPageCap 1; the exhaustion re-read asks for page 1 again).
+ */
 function boardRequestUrl(src: SourceRow, pageIndex: number): string {
   const url = new URL(endpoint(src, 'leaderboard', LEADERBOARD_URL))
   url.searchParams.set(BOARD_PAGE_QUERY_KEY, String(pageIndex))
