@@ -35,32 +35,48 @@ function finiteOrNull(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
+// 畸形的 % 序列会让 decodeURIComponent 抛 URIError（→ 500）。
+function safeDecodeHandle(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ handle: string }>
 }): Promise<Metadata> {
   const { handle } = await params
-  const decoded = decodeURIComponent(handle)
+  const decoded = safeDecodeHandle(handle)
 
   // Fetch profile + claimed trader data for richer social previews
   let avatarUrl: string | null = null
   let traderMeta: { roi?: number; score?: number; platform?: string } | null = null
   try {
     const supabase = getSupabaseAdmin()
-    const { data } = await Promise.race([
+    const lookup = await Promise.race([
       supabase
         .from('user_profiles')
         .select(
           'id, handle, avatar_url, bio, verified_trader_source, verified_trader_id, deleted_at, banned_at, is_banned, ban_expires_at'
         )
         .eq('handle', decoded)
-        .maybeSingle(),
-      new Promise<{ data: null }>((resolve) =>
-        setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)
+        .maybeSingle()
+        .then(({ data, error }) => ({ data, settled: !error })),
+      new Promise<{ data: null; settled: false }>((resolve) =>
+        setTimeout(() => resolve({ data: null, settled: false }), SSR_TIMEOUT_MS)
       ),
     ])
+    const { data } = lookup
     const publicData = data && isPublicProfileActive(data) ? data : null
+    // 查询确实完成且没有这个公开用户：页面仍是 200（流式外壳），所以必须 noindex，
+    // 否则任意 /u/xxx 都是可收录的自指空页。超时或出错时不下结论。
+    if (!publicData && lookup.settled) {
+      return { title: 'User Not Found', robots: { index: false, follow: false } }
+    }
     avatarUrl = publicData?.avatar_url || null
 
     // If user claimed a trader, fetch their trading stats for meta description
@@ -176,7 +192,7 @@ interface UserProfileData {
 
 async function fetchUserProfile(handle: string): Promise<UserProfileData | null> {
   const supabase = getSupabaseAdmin()
-  const decodedHandle = decodeURIComponent(handle)
+  const decodedHandle = safeDecodeHandle(handle)
 
   // Parallel lookup: by handle + by UUID (if applicable)
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
