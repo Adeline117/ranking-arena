@@ -119,18 +119,21 @@ function terminalClaim(observations: HistoryTerminalClaim['observations']): Hist
 }
 
 /**
- * Exhausted-completeness contracts for binance_futures and binance_spot
- * (registered per source in arena.leaderboard_exhaustion_contracts). Both
- * boards are live: ranks and membership change while they are paged (futures
- * is ~13,000 traders), so a trader crossing the cursor is seen twice, another
- * slides past unseen, and data.total moves between pages. The board therefore
- * ends at its short (or empty) final page, and the proof bounds how far it
- * moved instead of demanding a frozen snapshot: at most 1% of the last
- * reported total, and never more than `rowCap` rows (1% of a board about
- * four times today's size).
+ * Exhausted-completeness contract for binance_futures (registered in
+ * arena.leaderboard_exhaustion_contracts). The board is live and large
+ * (~13,000 traders, hundreds of pages): ranks and membership change while it
+ * is paged, so a trader crossing the cursor is seen twice, another slides
+ * past unseen, and data.total moves between pages. It therefore ends at its
+ * short (or empty) final page, and the proof bounds how far it moved instead
+ * of demanding a frozen snapshot: at most 1% of the last reported total, and
+ * never more than 200 rows (1% of a 20,000-trader board).
+ *
+ * binance_spot stays in the total mode: at 100 rows per page it is read in
+ * about 25 requests and its reported total is reached exactly on most
+ * attempts, so it needs no allowance.
  */
-function binanceLiveBoardExhaustion(rowCap: number): LeaderboardExhaustionDeclaration {
-  return Object.freeze({
+export const BINANCE_FUTURES_LEADERBOARD_EXHAUSTION: LeaderboardExhaustionDeclaration =
+  Object.freeze({
     completeness_mode: 'exhausted' as const,
     list_path: ['data', 'list'],
     row_key_path: ['leadPortfolioId'],
@@ -140,11 +143,8 @@ function binanceLiveBoardExhaustion(rowCap: number): LeaderboardExhaustionDeclar
       path: ['data', 'total'],
       max_drift_bps: 100,
     },
-    max_duplicate_rows: rowCap,
+    max_duplicate_rows: 200,
   })
-}
-export const BINANCE_FUTURES_LEADERBOARD_EXHAUSTION = binanceLiveBoardExhaustion(500)
-export const BINANCE_SPOT_LEADERBOARD_EXHAUSTION = binanceLiveBoardExhaustion(100)
 
 function boardKeyOf(src: SourceRow): string {
   return (src.meta.boardKey as string) ?? 'futures'
@@ -311,10 +311,7 @@ const binanceAdapter: SourceAdapter = {
       pageSize,
       callerPageCap,
       signal: options?.signal,
-      exhaustion:
-        boardKeyOf(src) === 'spot'
-          ? BINANCE_SPOT_LEADERBOARD_EXHAUSTION
-          : BINANCE_FUTURES_LEADERBOARD_EXHAUSTION,
+      exhaustion: boardKeyOf(src) === 'futures' ? BINANCE_FUTURES_LEADERBOARD_EXHAUSTION : null,
     })
   },
 

@@ -28,6 +28,7 @@ import { isPartitionedNumericLeaderboardCapture } from '../fetch/capture'
 import type { FetchSession, ReplayRequestTemplate } from '../fetch/types'
 import { hasRegisteredLeaderboardMetricTrust } from '../serving/metric-trust-publish'
 import { validateLeaderboardRows } from '../staging/validate'
+import { binanceAdapter } from '../adapters/binance'
 import { bitunixAdapter } from '../adapters/bitunix'
 import { blofinAdapter } from '../adapters/blofin'
 import { btccAdapter } from '../adapters/btcc'
@@ -207,6 +208,21 @@ function okxWeb3Page(total: number): Record<string, unknown> {
 }
 
 const CASES: SourceCase[] = [
+  fixtureCase(
+    {
+      slug: 'binance_spot',
+      adapter: binanceAdapter,
+      adapterSlug: 'binance',
+      currency: 'USDT',
+      timeframe: 30,
+      pageSize: 20,
+      meta: { boardKey: 'spot' },
+    },
+    fixture('binance', 'spot-leaderboard-p1.json'),
+    ['data', 'list'],
+    ['data'],
+    'total'
+  ),
   fixtureCase(
     {
       slug: 'coinex_futures',

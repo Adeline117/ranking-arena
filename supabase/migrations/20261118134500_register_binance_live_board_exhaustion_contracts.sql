@@ -1,28 +1,32 @@
 -- Migration: 20261118134500_register_binance_live_board_exhaustion_contracts.sql
--- Description: Register binance_futures and binance_spot as live boards in
+-- Description: Register binance_futures as a live board in
 --   arena.leaderboard_exhaustion_contracts (the reviewed copy of
---   BINANCE_FUTURES_/BINANCE_SPOT_LEADERBOARD_EXHAUSTION in
+--   BINANCE_FUTURES_LEADERBOARD_EXHAUSTION in
 --   lib/ingest/adapters/binance/index.ts).
 --
--- Why: both boards change while they are paged, so neither the total mode nor
---   a frozen-board exhaustion proof can ever hold for them (20261118114230).
---   Their capture now reads to the short or empty final page and is proven
---   complete by bounded drift: the total each page reports, the distinct rows
---   against the last total and the duplicate rows each stay within 1% of the
---   last reported total (max_drift_bps 100), and never above max_duplicate_rows
---   (500 rows for futures, 100 for spot: 1% of a board about four times
---   today's ~13,200 and ~2,470 traders).
+-- Why: the board (~13,200 traders, 440 pages at the 30-row page the endpoint
+--   serves) changes while it is paged, so neither the total mode nor a
+--   frozen-board exhaustion proof can ever hold for it (20261118114230). Its
+--   capture now reads to the short or empty final page and is proven complete
+--   by bounded drift: the total each page reports, the distinct rows against
+--   the last total and the duplicate rows each stay within 1% of the last
+--   reported total (max_drift_bps 100), and never above max_duplicate_rows
+--   (200 rows: 1% of a 20,000-trader board).
 --
---   The registry is append-only: these declarations cannot be changed later,
---   which is why the allowance is a share of the board and not a row count.
+--   The allowance is the most rows a capture judged complete may be missing.
+--   The registry is append-only, so the declaration cannot be changed later:
+--   it is a share of the board, with a tight absolute cap.
+--
+--   binance_spot is not registered: at 100 rows per page it is read in about
+--   25 requests and reaches its reported total exactly on most attempts, so
+--   it stays in the stricter total mode.
 --
 -- POSTDEPLOY, after 20261118114230 (which makes this declaration valid). The
--- worker release that captures binance in this mode must be deployed after
--- this file: until then a binance capture is refused as it was before.
+-- worker release that captures binance_futures in this mode must be deployed
+-- after this file: until then its capture is refused as it was before.
 --
--- A missing or re-adaptered source, an existing registration for either source
--- (including a replay) or a database without 20261118114230 refuses the whole
--- migration.
+-- A missing or re-adaptered source, an existing registration (including a
+-- replay) or a database without 20261118114230 refuses the whole migration.
 
 BEGIN;
 
@@ -41,9 +45,7 @@ CREATE TEMPORARY TABLE binance_live_board_seed (
 
 INSERT INTO binance_live_board_seed VALUES
   ('binance_futures',
-   '{"completeness_mode": "exhausted", "list_path": ["data", "list"], "row_key_path": ["leadPortfolioId"], "end_signal": {"kind": "short_page"}, "board_version": {"kind": "reported_total_drift", "path": ["data", "total"], "max_drift_bps": 100}, "max_duplicate_rows": 500}'),
-  ('binance_spot',
-   '{"completeness_mode": "exhausted", "list_path": ["data", "list"], "row_key_path": ["leadPortfolioId"], "end_signal": {"kind": "short_page"}, "board_version": {"kind": "reported_total_drift", "path": ["data", "total"], "max_drift_bps": 100}, "max_duplicate_rows": 100}');
+   '{"completeness_mode": "exhausted", "list_path": ["data", "list"], "row_key_path": ["leadPortfolioId"], "end_signal": {"kind": "short_page"}, "board_version": {"kind": "reported_total_drift", "path": ["data", "total"], "max_drift_bps": 100}, "max_duplicate_rows": 200}');
 
 DO $preflight$
 DECLARE
@@ -101,7 +103,7 @@ BEGIN
       JOIN arena.leaderboard_exhaustion_contracts AS contract
         ON contract.source_id = source_row.id
        AND contract.declaration = seed.declaration
-  ) <> 2 THEN
+  ) <> 1 THEN
     RAISE EXCEPTION 'binance live board registration postflight failed';
   END IF;
 END

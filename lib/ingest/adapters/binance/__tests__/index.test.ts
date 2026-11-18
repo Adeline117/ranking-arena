@@ -12,7 +12,6 @@ import { captureHistoryAcquisition } from '../../../history-acquisition'
 import { assessLeaderboardNativeWindowRequest } from '../../../leaderboard-request-evidence'
 import {
   BINANCE_FUTURES_LEADERBOARD_EXHAUSTION,
-  BINANCE_SPOT_LEADERBOARD_EXHAUSTION,
   binanceAdapter,
   projectBinanceLeaderboardRequest,
 } from '../index'
@@ -100,12 +99,11 @@ function historyVerifier(src: SourceRow) {
 
 describe('Binance live board completeness', () => {
   const PAGE_SIZE = 4
-  const template = (
-    fixture('spot-leaderboard-p1.json').data as { list: Array<Record<string, unknown>> }
-  ).list[0]
+  const template = (fixture('leaderboard-p1.json').data as { list: Array<Record<string, unknown>> })
+    .list[0]
   const trader = (n: number) => ({ ...template, leadPortfolioId: String(4_000_000_000 + n) })
   const board = (count: number) => Array.from({ length: count }, (_, index) => trader(index + 1))
-  const spot = { ...source({ boardKey: 'spot' }), slug: 'binance_spot', page_size: PAGE_SIZE }
+  const live = { ...source(), page_size: PAGE_SIZE }
 
   /** Serve `ranking(pageNumber)` (the board as it is when that page is read), one page at a time. */
   async function capture(ranking: (pageNumber: number) => Array<Record<string, unknown>>) {
@@ -113,21 +111,21 @@ describe('Binance live board completeness', () => {
       const pageNumber = (request.body as { pageNumber: number }).pageNumber
       const rows = ranking(pageNumber)
       const payload = withRows(
-        'spot-leaderboard-p1.json',
+        'leaderboard-p1.json',
         rows.slice((pageNumber - 1) * PAGE_SIZE, pageNumber * PAGE_SIZE),
         rows.length
       )
       return { status: 200, json: payload }
     })
-    const result = await binanceAdapter.captureLeaderboard!(fetchSession, spot, 30)
+    const result = await binanceAdapter.captureLeaderboard!(fetchSession, live, 30)
     const parsed = result.parsePages.flatMap(
       (page) =>
         binanceAdapter.parseLeaderboard(page.payload, {
-          sourceSlug: spot.slug,
-          currency: spot.currency,
-          tfLabelMap: spot.tf_label_map,
+          sourceSlug: live.slug,
+          currency: live.currency,
+          tfLabelMap: live.tf_label_map,
           scrapedAt: '2026-11-18T12:00:00.000Z',
-          meta: spot.meta,
+          meta: live.meta,
         }).rows
     )
     const validated = validateLeaderboardRows(parsed)
@@ -135,27 +133,23 @@ describe('Binance live board completeness', () => {
       result,
       bound: attemptBoundEvidenceForCapture({
         capture: result,
-        source: spot,
+        source: live,
         timeframe: 30,
         acceptedPopulation: validated.valid.length,
         rejectedRowCount: validated.rejects.length,
-        registeredExhaustion: BINANCE_SPOT_LEADERBOARD_EXHAUSTION,
+        registeredExhaustion: BINANCE_FUTURES_LEADERBOARD_EXHAUSTION,
       }),
     }
   }
 
-  it('declares one contract for both boards: 1% of the board, with a per-board row cap', () => {
-    expect(BINANCE_SPOT_LEADERBOARD_EXHAUSTION).toEqual({
+  it('declares 1% of the board, never more than 200 rows', () => {
+    expect(BINANCE_FUTURES_LEADERBOARD_EXHAUSTION).toEqual({
       completeness_mode: 'exhausted',
       list_path: ['data', 'list'],
       row_key_path: ['leadPortfolioId'],
       end_signal: { kind: 'short_page' },
       board_version: { kind: 'reported_total_drift', path: ['data', 'total'], max_drift_bps: 100 },
-      max_duplicate_rows: 100,
-    })
-    expect(BINANCE_FUTURES_LEADERBOARD_EXHAUSTION).toEqual({
-      ...BINANCE_SPOT_LEADERBOARD_EXHAUSTION,
-      max_duplicate_rows: 500,
+      max_duplicate_rows: 200,
     })
   })
 
@@ -208,7 +202,7 @@ describe('Binance live board completeness', () => {
       return {
         status: 200,
         json: withRows(
-          'spot-leaderboard-p1.json',
+          'leaderboard-p1.json',
           rows.slice((pageNumber - 1) * PAGE_SIZE, pageNumber * PAGE_SIZE),
           rows.length
         ),
@@ -216,18 +210,18 @@ describe('Binance live board completeness', () => {
     })
     const result = await binanceAdapter.captureLeaderboard!(
       fetchSession,
-      { ...spot, meta: { ...spot.meta, max_pages: 1 } },
+      { ...live, meta: { ...live.meta, max_pages: 1 } },
       30
     )
     expect(result.terminationReason).toBe('caller_limit')
     expect(
       attemptBoundEvidenceForCapture({
         capture: result,
-        source: spot,
+        source: live,
         timeframe: 30,
         acceptedPopulation: PAGE_SIZE,
         rejectedRowCount: 0,
-        registeredExhaustion: BINANCE_SPOT_LEADERBOARD_EXHAUSTION,
+        registeredExhaustion: BINANCE_FUTURES_LEADERBOARD_EXHAUSTION,
       }).trustBound
     ).toBe(false)
   })
@@ -257,17 +251,25 @@ describe('Binance evidence-preserving leaderboard capture', () => {
 
       expect(capture.terminationReason).toBe('empty_page')
       expect(capture.sourcePages[0].sourceRowCount).toBe(20)
-      // The total of a live board is drift evidence, never a population claim.
+      // Futures is a live board: its total is drift evidence, never a
+      // population claim. Spot stays in the total mode.
       expect(capture.sourcePages[0].sourceReports).toEqual({
-        population: { state: 'not_reported' },
+        population:
+          boardKey === 'futures'
+            ? { state: 'not_reported' }
+            : { state: 'reported', value: expectedTotal },
         page_count: { state: 'not_reported' },
         current_page: { state: 'not_reported' },
         page_size: { state: 'not_reported' },
       })
-      expect(capture.completeness?.board_version).toEqual({
-        kind: 'reported_total_drift',
-        reported_totals: { min: expectedTotal, max: expectedTotal, last: expectedTotal },
-      })
+      expect(capture.completeness?.board_version).toEqual(
+        boardKey === 'futures'
+          ? {
+              kind: 'reported_total_drift',
+              reported_totals: { min: expectedTotal, max: expectedTotal, last: expectedTotal },
+            }
+          : undefined
+      )
       expect(capture.parsePages).toHaveLength(1)
     }
   )

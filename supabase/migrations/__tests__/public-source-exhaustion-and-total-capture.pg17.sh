@@ -559,12 +559,12 @@ assert_equal "okx keeps its derived windows and page size" "{7,30}:20|{7,30}:20"
 
 echo "local public source activation PG17 proof passed"
 
-# ── 20261118134500: binance_futures / binance_spot as live boards ──
+# ── 20261118134500: binance_futures as a live board ──
 #
 #   - before 20261118114230 the declaration is not valid: refused, no write
-#   + after it both sources are registered, and the rows equal the adapter's
-#     own declarations (BINANCE_FUTURES_/BINANCE_SPOT_LEADERBOARD_EXHAUSTION)
-#   - a replay, or a missing / re-adaptered source, refuses with no write
+#   + after it the source is registered, and the row equals the adapter's own
+#     declaration (BINANCE_FUTURES_LEADERBOARD_EXHAUSTION)
+#   - a replay or a re-adaptered source refuses with no write
 
 LIVE_PROOF="$MIGRATIONS/20261118114230_leaderboard_exhaustion_reported_total_drift.sql"
 LIVE_REGISTRATION="$MIGRATIONS/20261118134500_register_binance_live_board_exhaustion_contracts.sql"
@@ -586,42 +586,27 @@ expect_live_failure() {
 }
 
 "$PG_BIN/createdb" -h "$SOCKET_DIR" -p "$PORT" -T main live_main
-psql_db live_main -q -c "INSERT INTO arena.sources (
-    id, slug, adapter_slug, status, serving_mode, currency, product_type,
-    fetch_region, timeframes_native, page_size)
-  VALUES (13, 'binance_spot', 'binance', 'active', 'serving', 'USDT', 'spot', 'local', '{7,30,90}', 100)"
 expect_live_failure live_main "live registration before the drift proof" \
   "requires the reported_total_drift proof (20261118114230)"
 psql_db live_main -q -f "$LIVE_PROOF"
-"$PG_BIN/createdb" -h "$SOCKET_DIR" -p "$PORT" -T live_main live_absent
 "$PG_BIN/createdb" -h "$SOCKET_DIR" -p "$PORT" -T live_main live_adapter
 
 psql_db live_main -q -f "$LIVE_REGISTRATION"
 echo "ok: live registration applies"
 LIVE_EXPECTED="$(cd "$ROOT_DIR" && npx --no-install tsx -e '
-import {
-  BINANCE_FUTURES_LEADERBOARD_EXHAUSTION,
-  BINANCE_SPOT_LEADERBOARD_EXHAUSTION,
-} from "./lib/ingest/adapters/binance"
-console.log(JSON.stringify({
-  binance_futures: BINANCE_FUTURES_LEADERBOARD_EXHAUSTION,
-  binance_spot: BINANCE_SPOT_LEADERBOARD_EXHAUSTION,
-}))
+import { BINANCE_FUTURES_LEADERBOARD_EXHAUSTION } from "./lib/ingest/adapters/binance"
+console.log(JSON.stringify({ binance_futures: BINANCE_FUTURES_LEADERBOARD_EXHAUSTION }))
 ')"
-assert_equal "live registrations equal the adapter declarations" "t" "$(
+assert_equal "live registration equals the adapter declaration" "t" "$(
   psql_db live_main -Atq -v expected="$LIVE_EXPECTED" <<'SQL'
 SELECT pg_catalog.jsonb_object_agg(source_row.slug, contract.declaration) = :'expected'::jsonb
   FROM arena.leaderboard_exhaustion_contracts AS contract
   JOIN arena.sources AS source_row ON source_row.id = contract.source_id
- WHERE source_row.slug IN ('binance_futures', 'binance_spot')
+ WHERE source_row.slug LIKE 'binance\_%' AND source_row.adapter_slug = 'binance'
 SQL
 )"
-expect_live_failure live_main "live registration replay" \
-  "already exists for: binance_futures, binance_spot"
+expect_live_failure live_main "live registration replay" "already exists for: binance_futures"
 
-psql_db live_absent -q -c "DELETE FROM arena.sources WHERE slug = 'binance_spot'"
-expect_live_failure live_absent "live registration without binance_spot" \
-  "source drift: binance_spot"
 psql_db live_adapter -q -c "UPDATE arena.sources SET adapter_slug = 'binance_v2' WHERE slug = 'binance_futures'"
 expect_live_failure live_adapter "live registration for a re-adaptered source" \
   "source drift: binance_futures"
