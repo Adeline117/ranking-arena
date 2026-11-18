@@ -97,6 +97,37 @@ describe('parseMexcLeaderboardPage', () => {
     expect(page.rows.every((r) => r.traderKind === 'human')).toBe(true)
   })
 
+  it('parses the exact traders/v2 response stored by attempt-bound capture', () => {
+    // Live 2026-11-18, truncated to 10 rows (total kept as served).
+    const page = parseMexcLeaderboardPage(fixture('traders-v2-p1.json'), ctx)
+    expect(page.reportedTotal).toBe(7100)
+    expect(page.rows).toHaveLength(10)
+    expect(page.rows[0]).toMatchObject({
+      exchangeTraderId: '88790103',
+      rank: 1,
+      headlineRoi: 128.13, // roi 1.2813 fraction
+      headlinePnl: 1464.90304981003,
+      headlineWinRate: 64,
+      headlineMdd: 40,
+      traderKind: 'human',
+      headlineMetricSources: {
+        roi: { fieldPath: 'data.content[].roi' },
+        pnl: { fieldPath: 'data.content[].pnl' },
+      },
+    })
+    expect(page.rows.map((row) => row.rank)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+  })
+
+  it('claims board lineage only for the exact traders/v2 response', () => {
+    const legacy = parseMexcLeaderboardPage(
+      { list: fixture('traders-v2-p1.json'), aiUids: [] },
+      ctx
+    )
+    expect(legacy.rows[0].headlineMetricSources).toBeUndefined()
+    const ai = parseMexcLeaderboardPage({ aiDetail: fixture('ai-detail.json'), aiUids: [] }, ctx)
+    expect(ai.rows.every((row) => row.headlineMetricSources === undefined)).toBe(true)
+  })
+
   it('handles empty/malformed payloads', () => {
     expect(parseMexcLeaderboardPage({}, ctx).rows).toHaveLength(0)
     expect(parseMexcLeaderboardPage({ list: { data: null } }, ctx).rows).toHaveLength(0)
