@@ -398,8 +398,8 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # page_size 20 pre-state that 204948 also requires, so it follows 204948; it
 # changes page_size only and touches no table 192134 guards.
 # 20261118114254 registers mexc_futures' attempt-bound V3 capture as a live
-# board (7D; exhausted to the empty page, reported_total_drift within 1%, at
-# most 71 rows), its 7D metric contract and page_size 100. Registered before
+# board (7D; exhausted to the empty page, reported_total_drift within 0.5%,
+# at most 40 rows), its 7D metric contract and page_size 100. Registered before
 # the worker that ships the mexc capture, every Tier-A run of mexc_futures
 # would fail, so it is postdeploy; it requires 114230 (the drift proof), so it
 # follows it, and touches no table 192134 guards, so 192134 stays last.
