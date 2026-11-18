@@ -602,6 +602,29 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
       { metric: 'pnl', fieldPath: 'result.items[].income' },
     ],
   }),
+  // One window-agnostic board response carries both windows' variants, so
+  // each window reads its own field. pnlRate{tf}d is a fraction scaled to
+  // percent (normalized, as kucoin's ratio); pnl{tf}d is copied.
+  phemex_futures: registeredSourceContract({
+    sourceId: 'phemex_futures',
+    version: '1',
+    fields: ([30, 90] as const).flatMap((window) =>
+      (['roi', 'pnl'] as const).map((metric) => ({
+        metric,
+        fieldPath: `data.rows[].${metric === 'roi' ? 'pnlRate' : 'pnl'}${window}d`,
+        provenance: metric === 'roi' ? 'source_normalized' : 'source_reported',
+        methodologyVersion: `phemex-board-${metric}@1`,
+        metricSetId: 'phemex-board-roi-pnl@1',
+        windowKeys: [`${window}D`],
+        valueUnit: metric === 'roi' ? 'percent' : 'currency',
+        currencies: ['USDT'],
+        requiredRawRoles: DIRECT_RAW_ROLES,
+        sourcePayloadScope: 'population_snapshot',
+        maxFreshnessMs: 6 * 60 * 60 * 1000,
+        maxWindowEndLagMs: 5 * 60 * 1000,
+      }))
+    ),
+  }),
   okx_web3_solana: boardHeadlineContract({
     sourceId: 'okx_web3_solana',
     methodology: 'okx-web3',
