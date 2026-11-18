@@ -165,6 +165,69 @@ export async function pruneLeaderboardSnapshots(
   return { deleted_snapshots: result.deleted_snapshots, deleted_entries: result.deleted_entries }
 }
 
+/** Worker env key for trust evidence retention deletes (second key: DB switch). */
+export const TRUST_EVIDENCE_RETENTION_DELETE_ENV = 'INGEST_TRUST_EVIDENCE_RETENTION_DELETE'
+
+export interface TrustEvidenceRetentionReport {
+  mode: 'count' | 'delete'
+  delete_blocked_by: Array<'env' | 'db_switch'>
+  result: Record<string, unknown>
+}
+
+/**
+ * Trust evidence retention (20261118135918). Count-only unless BOTH the
+ * worker env INGEST_TRUST_EVIDENCE_RETENTION_DELETE=1 and the owner-only
+ * arena.trust_evidence_retention_settings.delete_enabled are on. One bounded
+ * batch per call, inside one transaction with statement/lock timeouts; the
+ * database function decides what is eligible and refuses delete mode on its
+ * own if the switch is off. Skips (returns a marker) until installed.
+ */
+export async function retainTrustEvidence(
+  env: Record<string, string | undefined> = process.env
+): Promise<TrustEvidenceRetentionReport | 'not_installed'> {
+  const client = await ingestClientConnect()
+  let destroyClient = false
+  try {
+    const { rows: installed } = await client.query<{ present: boolean }>(
+      `SELECT pg_catalog.to_regprocedure(
+                'arena.retain_trust_evidence(boolean,integer,integer,integer,integer)'
+              ) IS NOT NULL AS present`
+    )
+    if (installed[0]?.present !== true) return 'not_installed'
+
+    const { rows: settings } = await client.query<{ delete_enabled: boolean }>(
+      `SELECT delete_enabled FROM arena.trust_evidence_retention_settings WHERE singleton`
+    )
+    const blockedBy: Array<'env' | 'db_switch'> = []
+    if (env[TRUST_EVIDENCE_RETENTION_DELETE_ENV] !== '1') blockedBy.push('env')
+    if (settings[0]?.delete_enabled !== true) blockedBy.push('db_switch')
+    const mode: 'count' | 'delete' = blockedBy.length === 0 ? 'delete' : 'count'
+
+    await client.query('BEGIN')
+    try {
+      await client.query(`SET LOCAL statement_timeout = '120s'`)
+      await client.query(`SET LOCAL lock_timeout = '5s'`)
+      const { rows } = await client.query<{ result: Record<string, unknown> }>(
+        `SELECT arena.retain_trust_evidence($1::boolean) AS result`,
+        [mode === 'delete']
+      )
+      await client.query('COMMIT')
+      const result = rows[0]?.result
+      if (!result) throw new Error('[retention] trust evidence retention returned no result')
+      return { mode, delete_blocked_by: blockedBy, result }
+    } catch (error) {
+      try {
+        await client.query('ROLLBACK')
+      } catch {
+        destroyClient = true
+      }
+      throw error
+    }
+  } finally {
+    client.release(destroyClient)
+  }
+}
+
 /**
  * History retention by tier (spec §13.5): long-tail traders keep a bounded
  * window; topN/ranked traders keep full history. "Ranked" = appeared in a
