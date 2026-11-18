@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next'
+import { HTML_LIMITED_BOT_UA_RE } from 'next/dist/shared/lib/router/utils/html-bots'
 // withSentryConfig REMOVED — it injects ~194KB Sentry SDK into every page's
 // initial bundle, blocking LCP. Sentry is now loaded entirely via
 // instrumentation-client.ts (requestIdleCallback + dynamic import).
@@ -19,6 +20,12 @@ const nextConfig = {
   // Eliminates manual useMemo/useCallback in 964 components (all passed healthcheck).
   // https://react.dev/learn/react-compiler/introduction
   reactCompiler: true,
+
+  // Googlebot 默认被 Next 归为「会执行脚本」的爬虫，动态页的 <title>、canonical、
+  // robots 标签因此被流式输出到 <body>。谷歌只认 <head> 里的 canonical/noindex，
+  // 渲染被跳过或排队时这些页面就等于「未指定规范网址」。把 Googlebot 并入阻塞
+  // 渲染名单（该选项会整体覆盖默认值，所以保留 Next 自带名单再追加）。
+  htmlLimitedBots: new RegExp(`Googlebot|${HTML_LIMITED_BOT_UA_RE.source}`, 'i'),
 
   // ESLint config removed — deprecated in Next.js 16 (invalid config warning).
   // CI runs lint separately via pre-push hook.
