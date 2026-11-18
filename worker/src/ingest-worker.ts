@@ -425,6 +425,13 @@ async function main(): Promise<void> {
         )
         bulkWorker.on('completed', (job) => {
           console.log(`[ingest-worker] ✓ ${job.name} (${job.id}) [${region}]`)
+          // Completion mark for the deep-crawl stall page (audit HOP-2).
+          const tier =
+            job.name === INGEST_JOB.TIER_B ? 'B' : job.name === INGEST_JOB.TIER_D ? 'D' : null
+          const slug: unknown = job.data?.sourceSlug
+          if (tier && typeof slug === 'string') {
+            void import('./ingest/progress').then((m) => m.noteDeepCrawlCompleted(tier, slug))
+          }
         })
         bulkWorker.on('failed', (job, error) => {
           console.error(`[ingest-worker] ✗ ${job?.name} (${job?.id}) [${region}]:`, error.message)
