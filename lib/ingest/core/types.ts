@@ -103,6 +103,13 @@ export interface ParseCtx {
   tfLabelMap: Record<string, number | null>
   scrapedAt: string
   meta: Record<string, unknown>
+  /**
+   * Tier-A only: the ranking window the leaderboard page was captured for
+   * (the attempt's timeframe, recorded in its manifest). Lets a parser read a
+   * window-agnostic verbatim response whose rows carry every window's
+   * variant (phemex) without wrapping RAW. Absent outside Tier-A.
+   */
+  timeframe?: RankingTimeframe
 }
 
 // ── Parsed (canonical) rows ──

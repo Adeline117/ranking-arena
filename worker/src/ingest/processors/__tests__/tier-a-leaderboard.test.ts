@@ -2178,6 +2178,7 @@ describe('Tier-A board-series publication guard', () => {
       completedTimeframes: [30, 30, 365, '90', null],
     } as unknown as TierJobData)
     mockNativeRankingTimeframes.mockReturnValue([7, 30, 90])
+    const parsedWindows: Array<number | undefined> = []
     mockGetAdapter.mockReturnValue({
       captureLeaderboard: jest.fn(async (_session: unknown, _src: SourceRow, timeframe: number) => {
         attempted.push(timeframe)
@@ -2186,13 +2187,18 @@ describe('Tier-A board-series publication guard', () => {
       listLeaderboard: async function* () {
         throw new Error('Tier-A must never use the uncaptured stream')
       },
-      parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
+      parseLeaderboard: (_raw: unknown, ctx: { timeframe?: number }) => {
+        parsedWindows.push(ctx.timeframe)
+        return { rows: [row], reportedTotal: 1 }
+      },
       parseLeaderboardSeries: () => new Map(),
     })
 
     await expect(processTierA(job)).resolves.toHaveLength(3)
 
     expect(attempted).toEqual([7, 30, 90])
+    // The parser sees the attempt's window (window-agnostic payloads, phemex).
+    expect(parsedWindows).toEqual([7, 30, 90])
     expect(mockJobUpdateData.mock.calls.map(([data]) => data.completedTimeframes)).toEqual([
       [],
       [7],

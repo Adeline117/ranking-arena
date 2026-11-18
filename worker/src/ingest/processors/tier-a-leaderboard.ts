@@ -1085,6 +1085,7 @@ export async function processTierA(
           tfLabelMap: src.tf_label_map,
           scrapedAt,
           meta: src.meta,
+          timeframe,
         }
 
         const pageSize = src.page_size ?? 100
