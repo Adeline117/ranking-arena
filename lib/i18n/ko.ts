@@ -6770,8 +6770,8 @@ const ko = {
   traderActionsAria: '{name} 작업',
   allTime90dShort: '전체 기간',
   // 交易员页服务端摘要（TraderServerSummary）
-  traderSummaryHeading: '{name} 한눈에 보기',
-  traderSummaryLead: '{exchange}에서의 {window} 성과 (Arena 현재 공개 랭킹 기준).',
+  traderSummaryHeading: '한눈에 보기',
+  traderSummaryLead: '{name}의 {exchange} {window} 성과 (Arena 현재 공개 랭킹 기준).',
 } as const
 
 export default ko

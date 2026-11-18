@@ -123,7 +123,9 @@ export default function TraderServerSummary({
             color: tokens.colors.text.primary,
           }}
         >
-          {t('traderSummaryHeading').replace('{name}', name)}
+          {/* No trader name here: the profile's <h1> is the only heading that names
+              the trader (tests and screen readers locate the page by it). */}
+          {t('traderSummaryHeading')}
         </h2>
 
         {rows.length > 0 && (
@@ -136,6 +138,7 @@ export default function TraderServerSummary({
               }}
             >
               {t('traderSummaryLead')
+                .replace('{name}', name)
                 .replace('{window}', windowLabel)
                 .replace('{exchange}', exchange)}
             </p>

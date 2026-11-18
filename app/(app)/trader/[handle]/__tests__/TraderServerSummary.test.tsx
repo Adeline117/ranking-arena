@@ -39,7 +39,7 @@ describe('TraderServerSummary', () => {
         maxDrawdown: 18.2,
       },
     })
-    expect(out).toContain('Alice at a glance')
+    expect(out).toContain('>At a glance</h2>')
     expect(out).toContain(
       '90D performance on OKX (Futures), from Arena&#x27;s current public ranking.'
     )
@@ -49,6 +49,16 @@ describe('TraderServerSummary', () => {
     for (const label of ['Rank', 'Arena Score', 'ROI', 'PnL', 'Win Rate', 'Max Drawdown']) {
       expect(out).toContain(`>${label}</dt>`)
     }
+  })
+
+  it('never repeats the trader name in a heading (the profile h1 is the only one)', () => {
+    const out = html({
+      metrics: { roi: 10 },
+      similar: [{ name: 'Bob', href: '/trader/Bob?platform=x' }],
+    })
+    const headings = out.match(/<h[1-6][^>]*>.*?<\/h[1-6]>/g) ?? []
+    expect(headings.length).toBeGreaterThan(0)
+    for (const heading of headings) expect(heading).not.toContain('Alice')
   })
 
   it('omits a missing metric instead of printing a placeholder', () => {
@@ -74,7 +84,8 @@ describe('TraderServerSummary', () => {
 
   it('has its copy in every language, with the placeholders intact', () => {
     for (const language of [en, zh, ja, ko] as Record<string, string>[]) {
-      expect(language.traderSummaryHeading).toContain('{name}')
+      expect(language.traderSummaryHeading).toBeTruthy()
+      expect(language.traderSummaryLead).toContain('{name}')
       expect(language.traderSummaryLead).toContain('{window}')
       expect(language.traderSummaryLead).toContain('{exchange}')
     }

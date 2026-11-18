@@ -6541,8 +6541,8 @@ const ja = {
   traderActionsAria: '{name} の操作',
   allTime90dShort: '全期間',
   // 交易员页服务端摘要（TraderServerSummary）
-  traderSummaryHeading: '{name} の概要',
-  traderSummaryLead: '{exchange} での {window} の実績（Arena の現行公開ランキングより）。',
+  traderSummaryHeading: '概要',
+  traderSummaryLead: '{name} の {exchange} での {window} 実績（Arena の現行公開ランキングより）。',
 } as const
 
 export default ja

@@ -6709,8 +6709,8 @@ const zh = {
   traderActionsAria: '{name} 的操作',
   allTime90dShort: '全周期',
   // 交易员页服务端摘要（TraderServerSummary）
-  traderSummaryHeading: '{name} 概览',
-  traderSummaryLead: '{exchange} 上的 {window} 表现，来自 Arena 当前公开榜单。',
+  traderSummaryHeading: '概览',
+  traderSummaryLead: '{name}在 {exchange} 上的 {window} 表现，来自 Arena 当前公开榜单。',
 } as const
 
 export default zh
