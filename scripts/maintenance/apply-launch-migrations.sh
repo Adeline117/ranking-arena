@@ -373,6 +373,11 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # without it okx_futures, okx_spot and binance_web3_bsc fail every real
 # publication. It re-creates the 20261117130152 readiness body, so it follows
 # it; no worker code depends on it and it touches no table 192134 guards.
+# 20261118134316 (RAW retention backlog census) adds a switch table (off),
+# an orphan GC queue and count-only census/scan functions; the worker release
+# that calls them treats a missing function as not_installed, so it follows
+# that release. It reads storage.objects, deletes nothing, and touches no
+# table 192134 guards.
 # 040440 forward replacement. V1_EXECUTION_STATUS requires the RAW-only
 # bridge SHA to be deployed and legacy callers drained before the legacy
 # position-history relations are frozen. Current main never reads or writes
@@ -409,6 +414,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261117204557_source_capabilities_refresh_index_probe.sql
   20261118112703_metric_trust_exhaustion_observation_authority.sql
   20261118113319_binance_leaderboard_page_size_served_caps.sql
+  20261118134316_raw_retention_backlog_census.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
