@@ -70,6 +70,7 @@ import {
   BINANCE_HISTORY_PAGE_ENVELOPE_CONTRACT,
   BINANCE_POSITION_HISTORY_URL,
 } from './history-contract'
+import type { LeaderboardExhaustionDeclaration } from '../../acquisition-exhaustion'
 import { binancePositionHistoryTerminalVerifier } from './history-terminal'
 import { BINANCE_PROFILE_PERFORMANCE_URLS } from './profile-capture-contract'
 
@@ -116,6 +117,33 @@ function isRecord(value: unknown): value is Dict {
 function terminalClaim(observations: HistoryTerminalClaim['observations']): HistoryTerminalClaim {
   return { contract: HISTORY_TERMINAL_CLAIM_CONTRACT, observations }
 }
+
+/**
+ * Exhausted-completeness contracts for binance_futures and binance_spot
+ * (registered per source in arena.leaderboard_exhaustion_contracts). Both
+ * boards are live: ranks and membership change while they are paged (futures
+ * is ~13,000 traders), so a trader crossing the cursor is seen twice, another
+ * slides past unseen, and data.total moves between pages. The board therefore
+ * ends at its short (or empty) final page, and the proof bounds how far it
+ * moved instead of demanding a frozen snapshot. Allowances are about 1% of
+ * each board.
+ */
+function binanceLiveBoardExhaustion(allowance: number): LeaderboardExhaustionDeclaration {
+  return Object.freeze({
+    completeness_mode: 'exhausted' as const,
+    list_path: ['data', 'list'],
+    row_key_path: ['leadPortfolioId'],
+    end_signal: { kind: 'short_page' as const },
+    board_version: {
+      kind: 'reported_total_drift' as const,
+      path: ['data', 'total'],
+      max_drift_rows: allowance,
+    },
+    max_duplicate_rows: allowance,
+  })
+}
+export const BINANCE_FUTURES_LEADERBOARD_EXHAUSTION = binanceLiveBoardExhaustion(130)
+export const BINANCE_SPOT_LEADERBOARD_EXHAUSTION = binanceLiveBoardExhaustion(25)
 
 function boardKeyOf(src: SourceRow): string {
   return (src.meta.boardKey as string) ?? 'futures'
@@ -282,6 +310,10 @@ const binanceAdapter: SourceAdapter = {
       pageSize,
       callerPageCap,
       signal: options?.signal,
+      exhaustion:
+        boardKeyOf(src) === 'spot'
+          ? BINANCE_SPOT_LEADERBOARD_EXHAUSTION
+          : BINANCE_FUTURES_LEADERBOARD_EXHAUSTION,
     })
   },
 

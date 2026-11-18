@@ -10,7 +10,14 @@ import { LeaderboardCaptureUpstreamError } from '../../../fetch/capture'
 import { CopierPageCapReachedError } from '../../../core/history-page-cap'
 import { captureHistoryAcquisition } from '../../../history-acquisition'
 import { assessLeaderboardNativeWindowRequest } from '../../../leaderboard-request-evidence'
-import { binanceAdapter, projectBinanceLeaderboardRequest } from '../index'
+import {
+  BINANCE_FUTURES_LEADERBOARD_EXHAUSTION,
+  BINANCE_SPOT_LEADERBOARD_EXHAUSTION,
+  binanceAdapter,
+  projectBinanceLeaderboardRequest,
+} from '../index'
+import { attemptBoundEvidenceForCapture } from '../../../testing/attempt-bound-evidence'
+import { validateLeaderboardRows } from '../../../staging/validate'
 
 function fixture(name: string): Record<string, unknown> {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8')) as Record<
@@ -91,6 +98,141 @@ function historyVerifier(src: SourceRow) {
   return verifier
 }
 
+describe('Binance live board completeness', () => {
+  const PAGE_SIZE = 4
+  const template = (
+    fixture('spot-leaderboard-p1.json').data as { list: Array<Record<string, unknown>> }
+  ).list[0]
+  const trader = (n: number) => ({ ...template, leadPortfolioId: String(4_000_000_000 + n) })
+  const board = (count: number) => Array.from({ length: count }, (_, index) => trader(index + 1))
+  const spot = { ...source({ boardKey: 'spot' }), slug: 'binance_spot', page_size: PAGE_SIZE }
+
+  /** Serve `ranking(pageNumber)` (the board as it is when that page is read), one page at a time. */
+  async function capture(ranking: (pageNumber: number) => Array<Record<string, unknown>>) {
+    const { session: fetchSession } = session(async (request) => {
+      const pageNumber = (request.body as { pageNumber: number }).pageNumber
+      const rows = ranking(pageNumber)
+      const payload = withRows(
+        'spot-leaderboard-p1.json',
+        rows.slice((pageNumber - 1) * PAGE_SIZE, pageNumber * PAGE_SIZE),
+        rows.length
+      )
+      return { status: 200, json: payload }
+    })
+    const result = await binanceAdapter.captureLeaderboard!(fetchSession, spot, 30)
+    const parsed = result.parsePages.flatMap(
+      (page) =>
+        binanceAdapter.parseLeaderboard(page.payload, {
+          sourceSlug: spot.slug,
+          currency: spot.currency,
+          tfLabelMap: spot.tf_label_map,
+          scrapedAt: '2026-11-18T12:00:00.000Z',
+          meta: spot.meta,
+        }).rows
+    )
+    const validated = validateLeaderboardRows(parsed)
+    return {
+      result,
+      bound: attemptBoundEvidenceForCapture({
+        capture: result,
+        source: spot,
+        timeframe: 30,
+        acceptedPopulation: validated.valid.length,
+        rejectedRowCount: validated.rejects.length,
+        registeredExhaustion: BINANCE_SPOT_LEADERBOARD_EXHAUSTION,
+      }),
+    }
+  }
+
+  it('declares the same contract for both boards with a per-board allowance', () => {
+    expect(BINANCE_SPOT_LEADERBOARD_EXHAUSTION).toEqual({
+      completeness_mode: 'exhausted',
+      list_path: ['data', 'list'],
+      row_key_path: ['leadPortfolioId'],
+      end_signal: { kind: 'short_page' },
+      board_version: { kind: 'reported_total_drift', path: ['data', 'total'], max_drift_rows: 25 },
+      max_duplicate_rows: 25,
+    })
+    expect(BINANCE_FUTURES_LEADERBOARD_EXHAUSTION).toEqual({
+      ...BINANCE_SPOT_LEADERBOARD_EXHAUSTION,
+      board_version: { kind: 'reported_total_drift', path: ['data', 'total'], max_drift_rows: 130 },
+      max_duplicate_rows: 130,
+    })
+  })
+
+  it('binds a board read to its short final page', async () => {
+    const rows = board(10)
+    const { result, bound } = await capture(() => rows)
+    expect(result.terminationReason).toBe('short_page')
+    expect(result.sourcePages).toHaveLength(3)
+    expect(bound).toMatchObject({ completenessMode: 'exhausted', trustBound: true })
+    expect(bound.projection).toMatchObject({ populationState: 'unknown', exhaustionVerified: true })
+  })
+
+  it('binds when a trader crosses the cursor while the board is paged', async () => {
+    const before = board(10)
+    // After page 1 is read, its last trader drops two ranks: seen again on
+    // page 2, while the trader who took the vacated rank is never seen.
+    const after = [...before.slice(0, 3), before[4], before[5], before[3], ...before.slice(6)]
+    const { result, bound } = await capture((pageNumber) => (pageNumber === 1 ? before : after))
+    expect(result.completeness?.row_keys).toEqual({ observed: 10, distinct: 9, duplicate: 1 })
+    expect(bound.trustBound).toBe(true)
+  })
+
+  it('reads to the real end when the board grows while it is paged', async () => {
+    const before = board(8)
+    const after = board(10)
+    const { result, bound } = await capture((pageNumber) => (pageNumber === 1 ? before : after))
+    // A total-mode capture would have stopped after 8 rows.
+    expect(result.completeness?.row_keys.distinct).toBe(10)
+    expect(result.completeness?.board_version).toEqual({
+      kind: 'reported_total_drift',
+      reported_totals: { min: 8, max: 10, last: 10 },
+    })
+    expect(bound.trustBound).toBe(true)
+  })
+
+  it('refuses a board that moved by more than its allowance', async () => {
+    const before = board(120)
+    // Pages 1-7 are read, then the first 28 traders all drop below the cursor.
+    const after = [...before.slice(28), ...before.slice(0, 28)]
+    const { result, bound } = await capture((pageNumber) => (pageNumber <= 7 ? before : after))
+    expect(result.completeness?.row_keys.duplicate).toBeGreaterThan(25)
+    expect(bound.trustBound).toBe(false)
+  })
+
+  it('refuses a board cut off by the caller page cap', async () => {
+    const rows = board(10)
+    const { session: fetchSession } = session(async (request) => {
+      const pageNumber = (request.body as { pageNumber: number }).pageNumber
+      return {
+        status: 200,
+        json: withRows(
+          'spot-leaderboard-p1.json',
+          rows.slice((pageNumber - 1) * PAGE_SIZE, pageNumber * PAGE_SIZE),
+          rows.length
+        ),
+      }
+    })
+    const result = await binanceAdapter.captureLeaderboard!(
+      fetchSession,
+      { ...spot, meta: { ...spot.meta, max_pages: 1 } },
+      30
+    )
+    expect(result.terminationReason).toBe('caller_limit')
+    expect(
+      attemptBoundEvidenceForCapture({
+        capture: result,
+        source: spot,
+        timeframe: 30,
+        acceptedPopulation: PAGE_SIZE,
+        rejectedRowCount: 0,
+        registeredExhaustion: BINANCE_SPOT_LEADERBOARD_EXHAUSTION,
+      }).trustBound
+    ).toBe(false)
+  })
+})
+
 describe('Binance evidence-preserving leaderboard capture', () => {
   it.each([
     ['leaderboard-p1.json', 'futures', 9_806],
@@ -115,48 +257,32 @@ describe('Binance evidence-preserving leaderboard capture', () => {
 
       expect(capture.terminationReason).toBe('empty_page')
       expect(capture.sourcePages[0].sourceRowCount).toBe(20)
+      // The total of a live board is drift evidence, never a population claim.
       expect(capture.sourcePages[0].sourceReports).toEqual({
-        population: { state: 'reported', value: expectedTotal },
+        population: { state: 'not_reported' },
         page_count: { state: 'not_reported' },
         current_page: { state: 'not_reported' },
         page_size: { state: 'not_reported' },
+      })
+      expect(capture.completeness?.board_version).toEqual({
+        kind: 'reported_total_drift',
+        reported_totals: { min: expectedTotal, max: expectedTotal, last: expectedTotal },
       })
       expect(capture.parsePages).toHaveLength(1)
     }
   )
 
-  it('uses the upstream list length before parser ID rejection', async () => {
+  it('fails the capture when a board row has no trader identity', async () => {
     const original = fixture('leaderboard-p1.json')
     const fixtureRows = (original.data as { list: Array<Record<string, unknown>> }).list
-    const valid = { ...fixtureRows[0] }
     const missingIdentity = { ...fixtureRows[1] }
     delete missingIdentity.leadPortfolioId
-    const payload = withRows('leaderboard-p1.json', [valid, missingIdentity])
+    const payload = withRows('leaderboard-p1.json', [{ ...fixtureRows[0] }, missingIdentity])
     const { session: fetchSession } = session(async () => ({ status: 200, json: payload }))
 
-    const capture = await binanceAdapter.captureLeaderboard!(
-      fetchSession,
-      { ...source(), page_size: 20 },
-      30
-    )
-
-    expect(capture.terminationReason).toBe('reported_population_reached')
-    expect(capture.sourcePages[0].sourceRowCount).toBe(2)
-    expect(capture.sourcePages[0].sourceReports).toEqual({
-      population: { state: 'reported', value: 2 },
-      page_count: { state: 'not_reported' },
-      current_page: { state: 'not_reported' },
-      page_size: { state: 'not_reported' },
-    })
-    expect(
-      binanceAdapter.parseLeaderboard(capture.parsePages[0].payload, {
-        sourceSlug: 'binance_futures',
-        currency: 'USDT',
-        tfLabelMap: {},
-        scrapedAt: '2026-07-21T12:00:00.000Z',
-        meta: {},
-      }).rows
-    ).toHaveLength(1)
+    await expect(
+      binanceAdapter.captureLeaderboard!(fetchSession, { ...source(), page_size: 20 }, 30)
+    ).rejects.toThrow(LeaderboardCaptureUpstreamError)
   })
 
   it('turns max_pages into an explicit caller limit instead of a silent return', async () => {
@@ -176,11 +302,10 @@ describe('Binance evidence-preserving leaderboard capture', () => {
     expect(capture.sourcePages).toHaveLength(1)
   })
 
-  it('keeps a missing total explicitly not_reported and binds the requested window', async () => {
+  it('fails the capture when a page with rows reports no total, and binds the requested window', async () => {
     const original = fixture('leaderboard-p1.json')
     const rows = (original.data as { list: Array<Record<string, unknown>> }).list.slice(0, 1)
     const payload = withRows('leaderboard-p1.json', rows)
-    delete (payload.data as Record<string, unknown>).total
 
     const seven = await binanceAdapter.captureLeaderboard!(
       session(async () => ({ status: 200, json: payload })).session,
@@ -192,10 +317,18 @@ describe('Binance evidence-preserving leaderboard capture', () => {
       source(),
       30
     )
-
     expect(seven.terminationReason).toBe('short_page')
-    expect(seven.sourcePages[0].sourceReports.population).toEqual({ state: 'not_reported' })
     expect(seven.sourcePages[0].requestSha256).not.toBe(thirty.sourcePages[0].requestSha256)
+
+    const withoutTotal = withRows('leaderboard-p1.json', rows)
+    delete (withoutTotal.data as Record<string, unknown>).total
+    await expect(
+      binanceAdapter.captureLeaderboard!(
+        session(async () => ({ status: 200, json: withoutTotal })).session,
+        source(),
+        30
+      )
+    ).rejects.toThrow(LeaderboardCaptureUpstreamError)
   })
 
   it('round-trips a real adapter capture into the reviewed v3 window contract', async () => {
@@ -254,6 +387,7 @@ describe('Binance evidence-preserving leaderboard capture', () => {
         attempt_id: '00000000-0000-4000-8000-000000000001',
         attempt_seq: 1,
       },
+      completeness: capture.completeness,
     })
 
     expect(assessLeaderboardNativeWindowRequest(built.manifest)).toMatchObject({
