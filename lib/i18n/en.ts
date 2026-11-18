@@ -6899,6 +6899,9 @@ const en = {
   rankTrendAria: 'Rank trend: {from} → {to}',
   traderActionsAria: '{name} actions',
   allTime90dShort: 'All-time',
+  // 交易员页服务端摘要（TraderServerSummary）
+  traderSummaryHeading: '{name} at a glance',
+  traderSummaryLead: "{window} performance on {exchange}, from Arena's current public ranking.",
 } as const
 
 export default en

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, type ReactNode } from 'react'
 import { useRouter, useParams, usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -273,6 +273,11 @@ interface TraderProfileClientProps {
    *  (2026-07-09): the serving /core path carries raw stats only, so
    *  ScoreBreakdownSection and the header style tag were empty in serving mode. */
   servingScores?: ServingScoreRow[]
+  /**
+   * Server-rendered summary (TraderServerSummary). A server node passed through
+   * so the key metrics and similar-trader links are in the HTML before hydration.
+   */
+  serverSummary?: ReactNode
 }
 
 export interface ServingScoreRow {
@@ -298,6 +303,7 @@ export default function TraderProfileClient({
   servingCapability: serverCapability,
   serverSimilarTraders,
   servingScores,
+  serverSummary,
 }: TraderProfileClientProps) {
   // ROOT-CAUSE FIX (2026-06-11): key serving mode off dataMode ALONE, not the
   // presence of servingFirstScreen. A serving source must never fall back to the
@@ -1870,6 +1876,8 @@ export default function TraderProfileClient({
             }
           }
         `}</style>
+
+        {serverSummary}
 
         {/* Data disclaimer */}
         <Text

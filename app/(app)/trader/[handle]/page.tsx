@@ -23,6 +23,8 @@ import { fetchSimilarTraders } from '@/lib/data/trader/similar'
 import { getSourceCapabilities } from '@/lib/data/serving/capabilities'
 import { getTraderAvatarSrc } from '@/lib/utils/avatar'
 import type { TraderFirstScreen } from '@/lib/data/serving/types'
+import TraderServerSummary, { type TraderSummarySimilar } from './TraderServerSummary'
+import { getServerTranslation } from '@/lib/i18n/server'
 import {
   LOOKUP_UNAVAILABLE,
   requestedPlatform,
@@ -240,6 +242,34 @@ const resolveIdentity = cache((decoded: string, platform: string | undefined) =>
     platform
   )
 )
+
+// Similar-trader links in the server summary use the canonical profile URL, so
+// they are real internal links to the same URL the target declares canonical.
+// The legacy page payload is loosely typed, so the rows are validated here
+// rather than cast: anything without a string id + source is dropped.
+function toSummarySimilar(traders: unknown): TraderSummarySimilar[] {
+  if (!Array.isArray(traders)) return []
+  const text = (value: unknown) => (typeof value === 'string' && value ? value : null)
+  const num = (value: unknown) => (typeof value === 'number' ? value : null)
+  return traders.flatMap((raw: unknown) => {
+    if (typeof raw !== 'object' || raw === null) return []
+    const trader = raw as Record<string, unknown>
+    const id = text(trader.id)
+    const source = text(trader.source)
+    if (!id || !source) return []
+    const handle = text(trader.handle)
+    return [
+      {
+        name: handle ?? id,
+        href: traderCanonicalPath({ handle, sourceTraderId: id, source }),
+        roi: num(trader.roi_90d),
+        arenaScore: num(trader.arena_score),
+      },
+    ]
+  })
+}
+
+const SUMMARY_WINDOW_KEY = { '7d': 'days7', '30d': 'days30', '90d': 'days90' } as const
 
 // Metadata for a handle with no public profile. The page renders the
 // not-found view in place (see TraderPage) instead of throwing notFound():
@@ -700,6 +730,30 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
       { name: servingTraderData.handle, url: servingCanonicalUrl },
     ])
 
+    // Server-rendered summary: the numbers already resolved above, as real HTML
+    // (see TraderServerSummary). The Arena Score shown is the one for the same
+    // window as the headline ROI/PnL, never a different period's.
+    const { t } = await getServerTranslation()
+    const summaryWindow = servingTraderData.headline_window ?? '90d'
+    const summarySeason = summaryWindow.toUpperCase()
+    const servingSummary = (
+      <TraderServerSummary
+        name={servingTraderData.handle}
+        exchange={EXCHANGE_DISPLAY[servingResolved.source] || servingResolved.source}
+        windowLabel={t(SUMMARY_WINDOW_KEY[summaryWindow])}
+        metrics={{
+          rank: servingTraderData.rank,
+          arenaScore: servingScores.find((row) => row.season_id === summarySeason)?.arena_score,
+          roi: servingTraderData.roi,
+          pnl: servingTraderData.pnl,
+          winRate: servingTraderData.win_rate,
+          maxDrawdown: servingTraderData.max_drawdown,
+        }}
+        similar={toSummarySimilar(serverSimilarTraders)}
+        t={t}
+      />
+    )
+
     // servingFirstScreen is now ALWAYS non-null for serving sources (synthesized
     // above on timeout), so the client stays in serving mode and never falls back
     // to the legacy 404 path. ServingProfilePanel renders the body from the static
@@ -727,6 +781,7 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
             servingCapability={capabilities[servingResolved.source] ?? null}
             serverSimilarTraders={serverSimilarTraders}
             servingScores={servingScores}
+            serverSummary={servingSummary}
           />
         </ErrorBoundary>
       </>
@@ -838,6 +893,26 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
     { name: traderData.handle, url: legacyCanonicalUrl },
   ])
 
+  // Legacy header values are 90D-only (see traderData above).
+  const { t } = await getServerTranslation()
+  const legacySummary = (
+    <TraderServerSummary
+      name={traderData.handle}
+      exchange={EXCHANGE_DISPLAY[resolved.platform] || resolved.platform}
+      windowLabel={t(SUMMARY_WINDOW_KEY['90d'])}
+      metrics={{
+        rank: traderData.rank,
+        arenaScore: traderData.arena_score,
+        roi: traderData.roi,
+        pnl: traderData.pnl,
+        winRate: traderData.win_rate,
+        maxDrawdown: traderData.max_drawdown,
+      }}
+      similar={toSummarySimilar(serverTraderData?.similarTraders ?? [])}
+      t={t}
+    />
+  )
+
   return (
     <>
       <JsonLd data={jsonLd} />
@@ -851,6 +926,7 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
               | null
           }
           claimedUser={claimedUserProfile}
+          serverSummary={legacySummary}
           claimedTraderIdentity={
             userHandle
               ? {
