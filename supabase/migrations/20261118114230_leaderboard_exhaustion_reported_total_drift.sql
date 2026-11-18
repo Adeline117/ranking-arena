@@ -347,7 +347,9 @@ BEGIN
           * (v_declaration->'board_version'->>'max_drift_bps')::bigint / 10000,
         (v_declaration->>'max_duplicate_rows')::bigint
       );
-      IF (v_totals->>'max')::bigint - (v_totals->>'min')::bigint > v_allowance
+      -- A NULL allowance must refuse, never fall through to true.
+      IF v_allowance IS NULL
+         OR (v_totals->>'max')::bigint - (v_totals->>'min')::bigint > v_allowance
          OR pg_catalog.abs((v_totals->>'last')::bigint - (v_rows->>'distinct')::bigint) >
             v_allowance
          OR (v_rows->>'duplicate')::bigint > v_allowance
