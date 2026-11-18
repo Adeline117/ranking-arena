@@ -363,6 +363,11 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # follows 215329 (the reader that consumes profile attestations) and touches
 # no table 192134 guards, so 192134 stays last. It refuses a replay, an earlier
 # registration for a listed source, and a missing or re-adaptered source.
+# 20261117204948 moves binance_futures and binance_spot from fetch_region
+# vps_sg to local (owner decision 2026-11-17; a local read-only browser probe
+# reached both boards). It changes fetch_region only, needs a running local
+# worker release with both profile capture contracts registered, so it follows
+# 015119; it touches no table 192134 guards.
 # 040440 forward replacement. V1_EXECUTION_STATUS requires the RAW-only
 # bridge SHA to be deployed and legacy callers drained before the legacy
 # position-history relations are frozen. Current main never reads or writes
@@ -384,6 +389,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261116210657_rank_publication_evidence_score_input_digest.sql
   20261116215329_publication_score_rows_profile_attested.sql
   20261117015119_register_profile_capture_contracts.sql
+  20261117204948_move_binance_sources_to_local_region.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
