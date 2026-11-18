@@ -9,7 +9,7 @@
 2026-11-13 起，2026-08-04 之后新增的迁移已全部分类，`scripts/qa/launch-inventory-gap.json` 为空列表。`launch-inventory-gap.test.mjs` 保证以后新增的迁移也必须先分类。分类写在 `scripts/maintenance/apply-launch-migrations.sh` 里：
 
 - **predeploy**（161 个）：部署前，按清单顺序逐文件应用。
-- **postdeploy**（16 个）：目标版本上线后才应用。
+- **postdeploy**（17 个）：目标版本上线后才应用。
 - **ADR-023 单文件**（`ADR023_SINGLE_FILE_MIGRATIONS`，2 个）：已分类，但执行脚本不会输出它们，`render-predeploy-one` 也会拒绝。每个都必须走 ADR-023 单文件通道，在下文规定的位置、各自的操作窗口里单独应用。
 - **superseded**：永不重放。
 
@@ -84,7 +84,8 @@
 
 - **覆盖**：约 30 个期望来源中登记了 23 个；其中 17 个经公开接口只读探测确认能出证据，6 个有风险（btcc 中段重排、okx_web3_solana 近实时更新、bybit_mt5 爬取约 1.7 小时、coinex 与 htx 两个因地域未验证）。
 - **余量**：按 23 个算，7D/30D/90D 余量 5/6/6；只按 17 个算，余量 2/2/1。这两组数字已把 okx_futures、okx_spot、toobit_futures、xt_futures 算进期望集和出证据的来源，迁移 `20261116204359` 应用后才成立。未激活时，toobit/xt 不在 7D/30D 期望集，四个都不在 90D 期望集，余量会变成 4/5/4 和 1/1/-1，即 90D 严格口径整季拒发。okx 只有原生 90D，只进 90D 期望集；okx_futures 也是核心来源之一，90D 多了一个能避免"核心来源全缺"拒发的来源。
-- **永久不进公开榜**：bitget_futures（尾页不稳定，凑不满总数）、hyperliquid 与 gmx（上游全量文件，截断由我们做）、gtrade、xt_spot、bitmart_futures；mexc、phemex 因 CDN 403 未能探测。
+- **永久不进公开榜**：bitget_futures（尾页不稳定，凑不满总数）、hyperliquid 与 gmx（上游全量文件，截断由我们做）、gtrade、xt_spot、bitmart_futures；phemex 因 CDN 403 未能探测。
+- **mexc_futures 采集登记（迁移 `20261118114254`，postdeploy）**：curl 直连被 Akamai 403，但 2026-11-18 用无头浏览器按适配器的预热方式同源只读探测 `traders/v2` 成功：limit=100 时 total=7100，第 71 页为 7001–7100，第 72 页为空，limit>100 返回 code 600。适配器按 data.total 判完整（只认原生 7D），迁移登记 7D roi/pnl 指标契约与 manifest@3 采集契约，并把 page_size 改为 100。必须在带 mexc 采集实现的 worker 上线之后应用；AI 交易员页不再并入 Tier-A 总体快照。
 - **上线金丝雀的放行条件**：worker 首个完整周期后，7D/30D/90D 每个窗口实际出证据的来源都必须超过期望集的一半，且 binance_futures 与 bybit_copytrade 至少一个出证据；否则不开放榜单，先处理失败来源。
 - **来源激活（2026-11-15 owner 已定）**：okx_futures、okx_spot、toobit_futures、xt_futures 改为 active/serving，采集区域改为 `local`。依据：2026-11-15 从本机只读探测 okx `public-lead-traders`、toobit `leaders-new`、xt `leader-list-v3` 均成功，无地域封锁，不再需要 VPS 出口。由 postdeploy 迁移 `20261116204359` 执行，排在 `20261115160917` 之后、`20261111192134` 之前，并且只能在带这些采集实现的 worker 上线之后应用：来源一激活就会排进 Tier-A，没有采集实现或没注册采集契约时 Tier-A 直接失败。四行都必须等于种子值加 160917 校正后的状态（okx/toobit 为 blocked_pending_vps/legacy/vps_sg，xt 为 inactive/legacy/local），否则整份迁移拒绝。`20261115160917` 仍按种子值校正 kucoin/okx 原生窗口、binance_web3_bsc 币种和 toobit/xt 的 page_size，生产值不一致时整份迁移拒绝。
 - **能力表刷新改写（迁移 `20261117204557`，postdeploy）**：原每 30 分钟的 pg_cron 刷新每次跑满 600 秒超时，并在整点、半点后的十分钟内持锁，会挡住采集 worker 启动时的建分区（2026-11-18 一次部署因此超过 300 秒交接时限而回滚）。应用本迁移前，采集部署的切换步骤要避开每小时 :00–:10 和 :30–:40；应用本迁移本身也要避开这两个窗口（等视图锁 5 秒，拿不到即整体回滚）。应用后刷新改为每小时 :17，生产只读实测新定义约 43 秒。

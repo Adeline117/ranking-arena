@@ -381,6 +381,11 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # the refresh to hourly at :17. It depends on no worker release and touches no
 # table 192134 guards; apply it outside a running refresh (it waits 5s for the
 # view lock, then rolls back).
+# 20261118114254 registers mexc_futures' attempt-bound V3 capture (7D board,
+# reported-total mode), its 7D metric contract and page_size 100, the same way
+# as 160917. Registered before the worker that ships the mexc capture, every
+# Tier-A run of mexc_futures would fail, so it is postdeploy, after 160917; it
+# touches no table 192134 guards, so 192134 stays last.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -397,6 +402,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261117015119_register_profile_capture_contracts.sql
   20261117204948_move_binance_sources_to_local_region.sql
   20261117204557_source_capabilities_refresh_index_probe.sql
+  20261118114254_mexc_futures_total_capture_contract.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
