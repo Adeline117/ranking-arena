@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/supabase/database.types'
 import { EXCHANGE_CONFIG, resolveExchangeSlug } from '@/lib/constants/exchanges'
 import { TOP_EXCHANGE_SLUGS } from '@/lib/constants/exchange-slugs'
+import { isRetiredSource } from '@/lib/constants/retired-sources'
 import { BASE_URL } from '@/lib/constants/urls'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
 import PageHeader from '@/app/components/ui/PageHeader'
@@ -191,7 +192,8 @@ export async function generateMetadata({
   const sourceKey = resolveExchangeSlug(slug)
   const config = EXCHANGE_CONFIG[sourceKey as keyof typeof EXCHANGE_CONFIG]
 
-  if (!config) {
+  // 已退役来源没有任何数据，落地页只会是空壳（软 404），直接 404。
+  if (!config || isRetiredSource(sourceKey)) {
     notFound()
   }
 
@@ -210,7 +212,8 @@ export async function generateMetadata({
       : `View ${displayName} crypto trader rankings on Arena. Compare performance, Arena Scores, ROI, and PnL across top traders.`
 
   const ogImageUrl = `${BASE_URL}/api/og/exchange?exchange=${encodeURIComponent(sourceKey)}`
-  const canonicalUrl = `${BASE_URL}/exchange/${slug}`
+  // 下划线与连字符两种写法都能访问，规范网址统一成连字符形式。
+  const canonicalUrl = `${BASE_URL}/exchange/${slug.replace(/_/g, '-')}`
 
   return {
     title,
@@ -265,11 +268,13 @@ export default async function ExchangeLandingPage({
   const sourceKey = resolveExchangeSlug(slug)
   const config = EXCHANGE_CONFIG[sourceKey as keyof typeof EXCHANGE_CONFIG]
 
-  if (!config) {
+  // 已退役来源没有任何数据，落地页只会是空壳（软 404），直接 404。
+  if (!config || isRetiredSource(sourceKey)) {
     notFound()
   }
 
   const data = await fetchExchangeData(sourceKey)
+  const canonicalSlug = slug.replace(/_/g, '-')
 
   if (!data) {
     // Fallback: redirect to homepage with exchange filter if data fetch fails
@@ -285,7 +290,7 @@ export default async function ExchangeLandingPage({
       ? null
       : generateExchangeCollectionPageSchema({
           name: data.displayName,
-          slug,
+          slug: canonicalSlug,
           sourceType: data.sourceType,
           traderCount: data.traderCount,
           topTraders: data.topTraders.map((t) => ({
@@ -297,7 +302,7 @@ export default async function ExchangeLandingPage({
   const breadcrumbJsonLd = generateBreadcrumbSchema([
     { name: 'Arena', url: BASE_URL },
     { name: 'Rankings', url: `${BASE_URL}/` },
-    { name: `${data.displayName} Rankings`, url: `${BASE_URL}/exchange/${slug}` },
+    { name: `${data.displayName} Rankings`, url: `${BASE_URL}/exchange/${canonicalSlug}` },
   ])
 
   // Localized page chrome (labels/headings/body). Metadata above stays English
