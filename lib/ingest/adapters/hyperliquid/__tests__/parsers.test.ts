@@ -125,6 +125,78 @@ describe('parseHyperliquidLeaderboardPage', () => {
   })
 })
 
+/**
+ * leaderboard-board.json: 32 real rows of the 48,027-row stats-data document
+ * read 2026-11-18 (the first 24 rows in file order, 3 named accounts, 2 with a
+ * month ROI above the 10,000% clamp, 3 with zero week PnL), stored verbatim as
+ * the capture stores the whole document.
+ */
+describe('parseHyperliquidLeaderboardPage — captured whole document', () => {
+  type Row = { ethAddress: string; windowPerformances: Array<[string, Record<string, string>]> }
+  const board = fixture('leaderboard-board.json') as { leaderboardRows: Row[] }
+  const perf = (row: Row, key: string) => row.windowPerformances.find(([k]) => k === key)![1]
+
+  it('requires the ranking window from ParseCtx', () => {
+    expect(() => parseHyperliquidLeaderboardPage(board, ctx)).toThrow(
+      'requires the ParseCtx ranking timeframe'
+    )
+  })
+
+  it.each([
+    [7, 'week'],
+    [30, 'month'],
+  ] as const)('%sd ranks every row by %s PnL desc with field lineage', (timeframe, windowKey) => {
+    const page = parseHyperliquidLeaderboardPage(board, { ...ctx, timeframe })
+    expect(page.reportedTotal).toBeNull() // the file reports no population
+    expect(page.rows).toHaveLength(board.leaderboardRows.length)
+    expect(page.rows.map((row) => row.rank)).toEqual(page.rows.map((_, index) => index + 1))
+    expect(new Set(page.rows.map((row) => row.exchangeTraderId)).size).toBe(page.rows.length)
+
+    const pnls = page.rows.map((row) => row.headlinePnl ?? 0)
+    expect(pnls).toEqual([...pnls].sort((a, b) => b - a))
+
+    const top = board.leaderboardRows.find(
+      (row) => row.ethAddress === page.rows[0].exchangeTraderId
+    )!
+    expect(page.rows[0].headlinePnl).toBe(Number(perf(top, windowKey).pnl))
+    expect(page.rows[0].headlineRoi).toBeCloseTo(Number(perf(top, windowKey).roi) * 100, 8)
+    expect(page.rows[0].headlineMetricSources).toEqual({
+      roi: { fieldPath: `leaderboardRows[].windowPerformances[${windowKey}].roi` },
+      pnl: { fieldPath: `leaderboardRows[].windowPerformances[${windowKey}].pnl` },
+    })
+  })
+
+  it('a clamped ROI keeps its row but loses ROI lineage', () => {
+    const page = parseHyperliquidLeaderboardPage(board, { ...ctx, timeframe: 30 })
+    const clamped = page.rows.filter((row) => Math.abs(row.headlineRoi ?? 0) === 10_000)
+    expect(clamped).toHaveLength(2)
+    for (const row of clamped) {
+      expect(row.headlineMetricSources).toEqual({
+        pnl: { fieldPath: 'leaderboardRows[].windowPerformances[month].pnl' },
+      })
+    }
+  })
+
+  it('is deterministic: zero-PnL ties order by ROI desc, then address', () => {
+    const page = parseHyperliquidLeaderboardPage(board, { ...ctx, timeframe: 7 })
+    const reversed = parseHyperliquidLeaderboardPage(
+      { leaderboardRows: [...board.leaderboardRows].reverse() },
+      { ...ctx, timeframe: 7 }
+    )
+    expect(reversed.rows.map((row) => row.exchangeTraderId)).toEqual(
+      page.rows.map((row) => row.exchangeTraderId)
+    )
+    const zero = page.rows.filter((row) => row.headlinePnl === 0)
+    expect(zero.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('rejects a malformed row array instead of reading an empty board', () => {
+    expect(() =>
+      parseHyperliquidLeaderboardPage({ leaderboardRows: {} }, { ...ctx, timeframe: 7 })
+    ).toThrow('leaderboardRows must be an array')
+  })
+})
+
 describe('parseHyperliquidProfile', () => {
   const bundle = fixture('profile-bundle.json') as Record<string, unknown>
 

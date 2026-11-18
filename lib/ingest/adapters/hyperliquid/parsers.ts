@@ -1,10 +1,14 @@
 /**
  * Hyperliquid pure parsers (spec §7 #31, docs/hyperliquid-spike.md).
  *
- * Inputs are the composite RAW payloads the adapter stores:
- *   leaderboard page: { timeframe, reportedTotal, rows }  (rows = a chunk of
- *     the stats-data S3 file, already sorted+truncated fetch-side — see the
- *     spike doc §6 for why RAW keeps the truncated board)
+ * Inputs are the RAW payloads the adapter stores:
+ *   leaderboard board: the stats-data response verbatim, { leaderboardRows }
+ *     — one document carrying every window. The attempt-bound capture stores
+ *     it unchanged, so the window comes from ParseCtx.timeframe and the
+ *     parser ranks the WHOLE population (sorted by window PnL, the site
+ *     default). Legacy RAW (before the capture) holds composite chunks
+ *     { timeframe, reportedTotal, rows } that were sorted+truncated
+ *     fetch-side; they still re-parse, without field lineage.
  *   profile bundle:   { portfolio, clearinghouse, timeframe }
  *   positions:        the clearinghouseState response verbatim
  *
@@ -73,19 +77,36 @@ function windowPerf(row: Dict, windowKey: string): Dict | null {
 
 // ── Leaderboard ──
 
-export function parseHyperliquidLeaderboardPage(
-  raw: unknown,
-  _ctx: ParseCtx
-): ParsedLeaderboardPage {
-  const payload = (raw ?? {}) as {
-    timeframe?: unknown
-    reportedTotal?: unknown
-    rows?: unknown
-  }
-  const timeframe = (num(payload.timeframe) ?? 7) as RankingTimeframe
-  const windowKey = TF_WINDOW[timeframe] ?? 'week'
-  const items = Array.isArray(payload.rows) ? (payload.rows as Dict[]) : []
+/** Window PnL/ROI used for the board order; absent/non-numeric reads as 0. */
+function windowPnlRoi(row: Dict, windowKey: string): { pnl: number; roi: number } {
+  const perf = windowPerf(row, windowKey)
+  const pnl = Number(perf?.pnl)
+  const roi = Number(perf?.roi)
+  return { pnl: Number.isFinite(pnl) ? pnl : 0, roi: Number.isFinite(roi) ? roi : 0 }
+}
 
+/**
+ * The upstream file is unsorted: order it like the site board (window PnL
+ * desc), with deterministic tie-breaks (ROI desc, then address) so the same
+ * document always yields the same ranks.
+ */
+export function sortHyperliquidBoardRows(rows: readonly Dict[], windowKey: string): Dict[] {
+  return [...rows].sort((a, b) => {
+    const pa = windowPnlRoi(a, windowKey)
+    const pb = windowPnlRoi(b, windowKey)
+    if (pb.pnl !== pa.pnl) return pb.pnl - pa.pnl
+    if (pb.roi !== pa.roi) return pb.roi - pa.roi
+    return String(a.ethAddress ?? '').localeCompare(String(b.ethAddress ?? ''))
+  })
+}
+
+const ROI_CLAMP_PCT = 10_000
+
+function parseBoardRows(
+  items: readonly Dict[],
+  windowKey: string,
+  lineage: boolean
+): ParsedLeaderboardRow[] {
   const rows: ParsedLeaderboardRow[] = []
   for (const item of items) {
     const address = String(item.ethAddress ?? item.user ?? '')
@@ -95,27 +116,76 @@ export function parseHyperliquidLeaderboardPage(
 
     const perf = windowPerf(item, windowKey)
     const rawRoi = num(perf?.roi)
+    const roiPct = rawRoi === null ? null : rawRoi * 100
+    const headlinePnl = num(perf?.pnl)
+    // A clamped ROI is no longer the upstream value: it carries no lineage.
+    const roiExact = roiPct !== null && Math.abs(roiPct) <= ROI_CLAMP_PCT
+    const roiPath = `leaderboardRows[].windowPerformances[${windowKey}].roi`
+    const pnlPath = `leaderboardRows[].windowPerformances[${windowKey}].pnl`
     rows.push({
       exchangeTraderId: address,
-      rank: rows.length + 1, // chunk-local; tier-a re-anchors by page_size
+      rank: rows.length + 1, // document-local; Tier-A anchors it to the source page
       nickname: typeof item.displayName === 'string' && item.displayName ? item.displayName : null,
       avatarUrlOrigin: null, // no avatars on-chain
       walletAddress: address, // spec §1.4 on-chain identity
       traderKind: 'human',
       botStrategy: null,
-      headlineRoi: clampRoiPct(rawRoi === null ? null : rawRoi * 100),
-      headlinePnl: num(perf?.pnl),
+      headlineRoi: clampRoiPct(roiPct),
+      headlinePnl,
+      ...(lineage
+        ? {
+            headlineMetricSources: {
+              ...(roiExact ? { roi: { fieldPath: roiPath } } : {}),
+              ...(headlinePnl === null ? {} : { pnl: { fieldPath: pnlPath } }),
+            },
+          }
+        : {}),
       headlineWinRate: null, // needs fills analysis — out of v1 (spike §8.3)
       // accountValue = the trader's on-chain equity (absolute USD) — the board IS
-      // the authoritative source for AUM here, and the leaderboard covers ~382k
-      // traders far beyond profile-crawl reach, so capture it for everyone.
+      // the authoritative source for AUM here, and the leaderboard covers the
+      // whole public population, far beyond profile-crawl reach.
       headlineAum: num(item.accountValue),
       traderMeta: null,
       raw: item, // all 4 windows + vlm, verbatim (spec §3)
     })
   }
+  return rows
+}
 
-  return { rows, reportedTotal: num(payload.reportedTotal) }
+export function parseHyperliquidLeaderboardPage(
+  raw: unknown,
+  ctx: ParseCtx
+): ParsedLeaderboardPage {
+  const payload = (raw ?? {}) as {
+    leaderboardRows?: unknown
+    timeframe?: unknown
+    reportedTotal?: unknown
+    rows?: unknown
+  }
+
+  if (payload.leaderboardRows !== undefined) {
+    // Captured upstream document: rank the whole population for ctx's window.
+    if (!Array.isArray(payload.leaderboardRows)) {
+      throw new TypeError('[hyperliquid] leaderboardRows must be an array')
+    }
+    const timeframe = ctx.timeframe
+    if (timeframe === undefined || !Object.prototype.hasOwnProperty.call(TF_WINDOW, timeframe)) {
+      throw new TypeError('[hyperliquid] board parse requires the ParseCtx ranking timeframe')
+    }
+    const windowKey = TF_WINDOW[timeframe]
+    const sorted = sortHyperliquidBoardRows(payload.leaderboardRows as Dict[], windowKey)
+    // The file reports no population; its row count is observed, not reported.
+    return { rows: parseBoardRows(sorted, windowKey, true), reportedTotal: null }
+  }
+
+  // Legacy composite chunk (already sorted+truncated fetch-side).
+  const timeframe = (num(payload.timeframe) ?? 7) as RankingTimeframe
+  const windowKey = TF_WINDOW[timeframe] ?? 'week'
+  const items = Array.isArray(payload.rows) ? (payload.rows as Dict[]) : []
+  return {
+    rows: parseBoardRows(items, windowKey, false),
+    reportedTotal: num(payload.reportedTotal),
+  }
 }
 
 // ── Profile ──
