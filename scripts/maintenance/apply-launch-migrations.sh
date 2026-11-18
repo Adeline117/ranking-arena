@@ -375,6 +375,12 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # breaks no caller, while freezing before it could break the old release
 # still serving during predeploy. No predeploy or later postdeploy file
 # references these relations or create_next_tph_partition.
+# 20261117204557 rebuilds arena.mv_source_capabilities with per-trader index
+# probes (the */30 pg_cron refresh ran into the statement timeout on every run
+# and its locks blocked the ingest worker's startup ensurePartitions) and moves
+# the refresh to hourly at :17. It depends on no worker release and touches no
+# table 192134 guards; apply it outside a running refresh (it waits 5s for the
+# view lock, then rolls back).
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -390,6 +396,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261116215329_publication_score_rows_profile_attested.sql
   20261117015119_register_profile_capture_contracts.sql
   20261117204948_move_binance_sources_to_local_region.sql
+  20261117204557_source_capabilities_refresh_index_probe.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
