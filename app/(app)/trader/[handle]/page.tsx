@@ -12,13 +12,23 @@ import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/uni
 import { isDeadPlatform } from '@/lib/constants/exchanges'
 import { isRetiredSource } from '@/lib/constants/retired-sources'
 import { getDataMode } from '@/lib/constants/serving-cutover'
-import { resolveServingTraderOutcome, SERVING_RESOLVE_ERRORED } from '@/lib/data/serving/resolve'
+import {
+  resolveServingTraderOutcome,
+  SERVING_RESOLVE_ERRORED,
+  type ServingResolved,
+} from '@/lib/data/serving/resolve'
 import { getPublicFirstScreen } from '@/lib/data/serving/first-screen'
 import { headlineWindowFor } from '@/lib/data/serving/headline-window'
 import { fetchSimilarTraders } from '@/lib/data/trader/similar'
 import { getSourceCapabilities } from '@/lib/data/serving/capabilities'
 import { getTraderAvatarSrc } from '@/lib/utils/avatar'
 import type { TraderFirstScreen } from '@/lib/data/serving/types'
+import {
+  LOOKUP_UNAVAILABLE,
+  requestedPlatform,
+  resolveProfileIdentity,
+  type Unavailable,
+} from './profile-identity'
 import { traderCanonicalPath } from '@/lib/seo/trader-url'
 import { BASE_URL } from '@/lib/constants/urls'
 import {
@@ -76,21 +86,20 @@ const cachedResolveTraderISR = unstable_cache(
 // PostgREST, freeing the connection. Promise.race just abandons it.
 // Sentinel to distinguish "not found" from "timed out / error".
 // ROOT-ROOT CAUSE FIX: Previously both returned null → 404.
-// Now timeout/error returns RESOLVE_UNAVAILABLE → generateMetadata skips notFound()
+// Now timeout/error returns LOOKUP_UNAVAILABLE → generateMetadata skips notFound()
 // and lets the page render with client-side retry (TraderProfileClient).
-const RESOLVE_UNAVAILABLE = Symbol('unavailable')
 type ResolveResult =
   | Awaited<ReturnType<typeof cachedResolveTraderISR>>
   | null
-  | typeof RESOLVE_UNAVAILABLE
+  | typeof LOOKUP_UNAVAILABLE
 
 const cachedResolveTrader = cache(
   async (handle: string, platform?: string): Promise<ResolveResult> => {
     try {
       const result = await Promise.race([
         cachedResolveTraderISR(handle, platform),
-        new Promise<typeof RESOLVE_UNAVAILABLE>((resolve) =>
-          setTimeout(() => resolve(RESOLVE_UNAVAILABLE), SSR_QUERY_TIMEOUT_MS)
+        new Promise<typeof LOOKUP_UNAVAILABLE>((resolve) =>
+          setTimeout(() => resolve(LOOKUP_UNAVAILABLE), SSR_QUERY_TIMEOUT_MS)
         ),
       ])
       return result
@@ -102,7 +111,7 @@ const cachedResolveTrader = cache(
       }
       // Real DB failures — return unavailable so page doesn't 404 valid traders
       logger.error('[trader/page] resolveTrader failed:', err instanceof Error ? err.message : err)
-      return RESOLVE_UNAVAILABLE
+      return LOOKUP_UNAVAILABLE
     }
   }
 )
@@ -172,68 +181,65 @@ const cachedServingResolveISR = unstable_cache(
 const SERVING_RESOLVE_TIMEOUT = Symbol('serving-resolve-timeout')
 
 // A lookup that threw or timed out twice is UNAVAILABLE, not "no such trader".
-// Callers that only need the row use cachedServingResolve (null either way);
-// isMissingTrader must tell the two apart — a serving-only trader has no legacy
-// row, so collapsing a contended lookup to null stamped valid traders with
-// "Trader Not Found" + noindex.
-const SERVING_RESOLVE_UNAVAILABLE = Symbol('serving-resolve-unavailable')
+// resolveProfileIdentity (./profile-identity) must tell the two apart — a serving-only trader has no
+// legacy row, so collapsing a contended lookup to null stamped valid traders
+// with "Trader Not Found" + noindex.
 
-const cachedServingResolveOutcome = cache(async (handle: string, source?: string) => {
-  try {
-    const raced = await Promise.race([
-      cachedServingResolveISR(handle, source),
-      new Promise<typeof SERVING_RESOLVE_TIMEOUT>((resolve) =>
-        setTimeout(() => resolve(SERVING_RESOLVE_TIMEOUT), SERVING_RESOLVE_TIMEOUT_MS)
-      ),
-    ])
-    if (raced !== SERVING_RESOLVE_TIMEOUT) return raced
-  } catch (err) {
-    if (err instanceof Error && err.message === 'TRADER_RESOLVE_NULL') return null
-    logger.error(
-      '[trader/page] resolveServingTrader failed:',
-      err instanceof Error ? err.message : err
-    )
-    return SERVING_RESOLVE_UNAVAILABLE
+const cachedServingResolveOutcome = cache(
+  async (handle: string, source?: string): Promise<ServingResolved | null | Unavailable> => {
+    try {
+      const raced = await Promise.race([
+        cachedServingResolveISR(handle, source),
+        new Promise<typeof SERVING_RESOLVE_TIMEOUT>((resolve) =>
+          setTimeout(() => resolve(SERVING_RESOLVE_TIMEOUT), SERVING_RESOLVE_TIMEOUT_MS)
+        ),
+      ])
+      if (raced !== SERVING_RESOLVE_TIMEOUT) return raced
+    } catch (err) {
+      if (err instanceof Error && err.message === 'TRADER_RESOLVE_NULL') return null
+      logger.error(
+        '[trader/page] resolveServingTrader failed:',
+        err instanceof Error ? err.message : err
+      )
+      return LOOKUP_UNAVAILABLE
+    }
+
+    // Timed out: one direct retry, bypassing the (contended) unstable_cache layer.
+    try {
+      return await Promise.race([
+        resolveServingTraderOutcome(getReadReplica(), { handle, source }).then((outcome) =>
+          outcome === SERVING_RESOLVE_ERRORED ? LOOKUP_UNAVAILABLE : outcome
+        ),
+        new Promise<typeof LOOKUP_UNAVAILABLE>((resolve) =>
+          setTimeout(() => resolve(LOOKUP_UNAVAILABLE), SERVING_RESOLVE_TIMEOUT_MS)
+        ),
+      ])
+    } catch (err) {
+      logger.error(
+        '[trader/page] serving resolve retry failed:',
+        err instanceof Error ? err.message : err
+      )
+      return LOOKUP_UNAVAILABLE
+    }
   }
+)
 
-  // Timed out: one direct retry, bypassing the (contended) unstable_cache layer.
-  try {
-    return await Promise.race([
-      resolveServingTraderOutcome(getReadReplica(), { handle, source }).then((outcome) =>
-        outcome === SERVING_RESOLVE_ERRORED ? SERVING_RESOLVE_UNAVAILABLE : outcome
-      ),
-      new Promise<typeof SERVING_RESOLVE_UNAVAILABLE>((resolve) =>
-        setTimeout(() => resolve(SERVING_RESOLVE_UNAVAILABLE), SERVING_RESOLVE_TIMEOUT_MS)
-      ),
-    ])
-  } catch (err) {
-    logger.error(
-      '[trader/page] serving resolve retry failed:',
-      err instanceof Error ? err.message : err
-    )
-    return SERVING_RESOLVE_UNAVAILABLE
-  }
-})
-
-const cachedServingResolve = cache(async (handle: string, source?: string) => {
-  const outcome = await cachedServingResolveOutcome(handle, source)
-  return outcome === SERVING_RESOLVE_UNAVAILABLE ? null : outcome
-})
-
-/**
- * Whether this handle has no public profile: unknown to both resolvers, or
- * known only under a retired source with no live serving account. A lookup
- * that timed out or failed is NOT missing — the page retries client-side.
- * Shared by generateMetadata and the page so both reach the same answer.
- */
-const isMissingTrader = cache(async (decoded: string): Promise<boolean> => {
-  const resolved = await cachedResolveTrader(decoded)
-  if (resolved === RESOLVE_UNAVAILABLE) return false
-  if (resolved && !isRetiredSource(resolved.platform)) return false
-  const serving = await cachedServingResolveOutcome(decoded)
-  if (serving === SERVING_RESOLVE_UNAVAILABLE) return false
-  return !serving || (await getDataMode(serving.source)) !== 'serving'
-})
+// Identity rules (platform preference, serving-wins, missing vs unavailable)
+// live in ./profile-identity and are unit-tested there; this only injects the
+// request-cached lookups. cache() dedupes the call shared by generateMetadata
+// and the page.
+const resolveIdentity = cache((decoded: string, platform: string | undefined) =>
+  resolveProfileIdentity<ServingResolved>(
+    {
+      resolveLegacy: cachedResolveTrader,
+      resolveServing: cachedServingResolveOutcome,
+      isServingSource: async (source) => (await getDataMode(source)) === 'serving',
+      isRetiredSource,
+    },
+    decoded,
+    platform
+  )
+)
 
 // Metadata for a handle with no public profile. The page renders the
 // not-found view in place (see TraderPage) instead of throwing notFound():
@@ -357,12 +363,17 @@ const findUserHandleByTraderFresh = cache(
 // The route remains dynamically rendered because rank-bearing output must not
 // outlive the public serving-head proof.
 
+type TraderPageProps = {
+  params: Promise<{ handle: string }>
+  searchParams: Promise<{ platform?: string | string[] }>
+}
+
 export async function generateMetadata({
   params,
-}: {
-  params: Promise<{ handle: string }>
-}): Promise<Metadata> {
+  searchParams,
+}: TraderPageProps): Promise<Metadata> {
   const { handle } = await params
+  const platform = requestedPlatform((await searchParams).platform)
   // Reject absurdly long handles early to prevent cache key bloat and DB abuse
   if (handle.length > 300) return notFound()
 
@@ -375,40 +386,30 @@ export async function generateMetadata({
   const BASE = BASE_URL
 
   // ---------- resolve trader identity ----------
-  let resolved: Awaited<ReturnType<typeof cachedResolveTrader>> = null
-  try {
-    resolved = await cachedResolveTrader(decoded)
-  } catch (err) {
-    if (err && typeof err === 'object' && 'digest' in err) throw err
-    logger.error(
-      '[trader/generateMetadata] resolveTrader failed:',
-      decoded,
-      err instanceof Error ? err.message : err
-    )
-  }
+  const identity = await resolveIdentity(decoded, platform)
 
   // A missing trader gets noindex metadata and an in-place not-found view
   // (see NOT_FOUND_METADATA). Timeout/error is not "missing": generic metadata
   // is returned and the page retries client-side, so a valid trader is never
   // de-indexed during database contention.
-  if (await isMissingTrader(decoded)) return NOT_FOUND_METADATA
+  if (identity.missing) return NOT_FOUND_METADATA
 
-  // Serving-only traders (arena.* read path, spec §2.4) may not exist in the
-  // legacy tables; their display name comes from the serving resolver.
-  const servingMeta = resolved === null ? await cachedServingResolve(decoded) : null
+  // The page renders the serving account whenever there is one, so the metadata
+  // must describe that same account (name, exchange, rank, canonical) — not a
+  // stale legacy row that merely shares the handle.
+  const legacy = identity.legacy && identity.legacy !== LOOKUP_UNAVAILABLE ? identity.legacy : null
+  const account = identity.serving
+    ? {
+        handle: identity.serving.nickname,
+        platform: identity.serving.source,
+        traderKey: identity.serving.exchangeTraderId,
+      }
+    : legacy && !isRetiredSource(legacy.platform)
+      ? { handle: legacy.handle, platform: legacy.platform, traderKey: legacy.traderKey }
+      : null
 
-  const isUnavailable = resolved === RESOLVE_UNAVAILABLE
-  const resolvedData = (isUnavailable ? null : resolved) as Exclude<
-    ResolveResult,
-    typeof RESOLVE_UNAVAILABLE
-  >
-
-  const name = resolvedData?.handle || servingMeta?.nickname || decoded
-  const exchange = resolvedData
-    ? EXCHANGE_DISPLAY[resolvedData.platform] || resolvedData.platform || 'Crypto'
-    : servingMeta
-      ? EXCHANGE_DISPLAY[servingMeta.source] || servingMeta.source
-      : 'Crypto'
+  const name = account?.handle || decoded
+  const exchange = account ? EXCHANGE_DISPLAY[account.platform] || account.platform : 'Crypto'
 
   // ---------- fetch leaderboard stats (best-effort, never fails metadata) ----------
   let lr: {
@@ -417,9 +418,9 @@ export async function generateMetadata({
     roi?: number | null
     pnl?: number | null
   } | null = null
-  if (resolvedData) {
+  if (account) {
     try {
-      lr = await getCurrentPublicLeaderboardMeta(resolvedData.platform, resolvedData.traderKey)
+      lr = await getCurrentPublicLeaderboardMeta(account.platform, account.traderKey)
     } catch (err) {
       // Leaderboard fetch failure should NOT prevent title generation.
       // The trader name is already known — produce metadata without stats.
@@ -459,7 +460,7 @@ export async function generateMetadata({
   if (roi != null) ogParams.set('roi', roi.toFixed(2))
   if (score != null) ogParams.set('score', score.toFixed(0))
   if (rank != null) ogParams.set('rank', String(rank))
-  if (resolvedData?.platform) ogParams.set('source', resolvedData.platform)
+  if (account) ogParams.set('source', account.platform)
   const ogImageUrl = `${BASE}/api/og/trader?${ogParams.toString()}`
 
   // Single canonical per trader (2026-07-11 SEO 审计:此前 canonical=原始请求段,
@@ -467,23 +468,15 @@ export async function generateMetadata({
   // ASCII handles remain the readable canonical path; non-ASCII handles use
   // the stable exchange-local ID because Vercel has historically rejected some
   // encoded multi-byte paths. **必须带 ?platform=**:同 handle/id 跨
-  // okx_futures/okx_spot 等多账号,裸形式会合并不同交易员。页面不再在 ISR
-  // server 中重定向，因为 server 看不到 query variant；canonical 由 metadata
-  // 表达，认领账户的 /u/ 跳转则在客户端核对复合身份后执行。
-  const canonicalPath = resolvedData
+  // okx_futures/okx_spot 等多账号,裸形式会合并不同交易员。页面不在
+  // server 中重定向；canonical 由 metadata 表达，认领账户的 /u/ 跳转则在客户端核对复合身份后执行。
+  const canonicalPath = account
     ? traderCanonicalPath({
-        handle: resolvedData.handle,
-        sourceTraderId: resolvedData.traderKey,
-        source: resolvedData.platform,
+        handle: account.handle,
+        sourceTraderId: account.traderKey,
+        source: account.platform,
       })
-    : servingMeta
-      ? // 只存在于新数据层的交易员：同样带 ?platform=，不退回裸路径。
-        traderCanonicalPath({
-          handle: servingMeta.nickname,
-          sourceTraderId: servingMeta.exchangeTraderId,
-          source: servingMeta.source,
-        })
-      : `/trader/${encodeURIComponent(decoded)}`
+    : `/trader/${encodeURIComponent(decoded)}`
   const canonicalUrl = `${BASE}${canonicalPath}`
 
   return {
@@ -515,20 +508,16 @@ export async function generateMetadata({
 // after the source's public serving head has changed or been withdrawn.
 export const revalidate = 0
 
-export default async function TraderPage({ params }: { params: Promise<{ handle: string }> }) {
+export default async function TraderPage({ params, searchParams }: TraderPageProps) {
   const { handle } = await params
   if (handle.length > 300) notFound()
 
-  // NOTE: searchParams removed from server component to fix DYNAMIC_SERVER_USAGE error.
-  // Accessing searchParams in a page with generateStaticParams + revalidate causes
-  // Next.js 16 to throw at runtime because it conflicts with ISR static generation —
-  // one cached HTML serves EVERY ?platform= variant, so the param cannot affect
-  // server rendering at all. Both resolvers below therefore run WITHOUT a platform
-  // hint and pick an account automatically; when the URL carries ?platform= for a
-  // DIFFERENT account sharing this handle (e.g. okx_futures vs okx_spot share an
-  // exchange_trader_id), TraderProfileClient detects the mismatch, validates the
-  // platform via /api/traders/[handle]/first-screen, and switches the whole page
-  // (header + capability + /core + /records) onto that account client-side.
+  // ?platform= selects the account when a handle/id is shared across sources.
+  // The route is fully dynamic (revalidate = 0, no generateStaticParams), so the
+  // server can read it; it used to be ignored here, which made the server pick
+  // an account from the handle alone and left the client to detect the mismatch
+  // and re-fetch the right one.
+  const platform = requestedPlatform((await searchParams).platform)
 
   let decodedHandle = handle
   try {
@@ -539,8 +528,9 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
 
   // Phase 1 resolves an account before looking up claim ownership. A display
   // handle alone is not an identity: the same raw value can exist on many
-  // sources. cachedResolveTrader deduplicates the query shared with metadata.
-  const resolved = await cachedResolveTrader(decodedHandle)
+  // sources. resolveIdentity is shared (and deduplicated) with metadata.
+  const identity = await resolveIdentity(decodedHandle, platform)
+  const resolved = identity.legacy
 
   // ── ARENA_DATA_SPEC v1.2 serving branch (spec §2.4-1) ──
   // ROOT-CAUSE FIX (2026-06-12): ALWAYS consult the arena (serving) resolver and
@@ -561,22 +551,7 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
   // sources, so if it returns a serving-mode trader for this handle we use it
   // unconditionally. This guarantees NO stale legacy row can ever shadow a live
   // serving trader, for any source, present or future.
-  let servingResolved: Awaited<ReturnType<typeof cachedServingResolve>> = null
-  {
-    // Only pass the legacy platform as a source hint when it is ITSELF a serving
-    // source. arena_resolve_trader(handle, hint) returns NOTHING when the hint is
-    // a stale non-serving source (e.g. "xt"/"bybit_spot") even though the handle
-    // resolves cleanly with no hint — so a stale legacy hint would defeat the
-    // whole fix. Resolving by handle alone lets the RPC pick the serving trader.
-    const legacyPlatform =
-      resolved && resolved !== RESOLVE_UNAVAILABLE ? resolved.platform : undefined
-    const hint =
-      legacyPlatform && (await getDataMode(legacyPlatform)) === 'serving'
-        ? legacyPlatform
-        : undefined
-    const sr = await cachedServingResolve(decodedHandle, hint)
-    if (sr && (await getDataMode(sr.source)) === 'serving') servingResolved = sr
-  }
+  const servingResolved = identity.serving
 
   if (servingResolved) {
     // Everything here depends only on the resolved identity, so it runs in
@@ -702,7 +677,9 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     }))
 
     const servingCanonicalUrl = `${BASE_URL}${traderCanonicalPath({
-      handle: servingTraderData.handle,
+      // Same inputs as generateMetadata's canonical (resolver nickname, not the
+      // display fallback) so the JSON-LD url and the canonical tag never differ.
+      handle: servingResolved.nickname,
       sourceTraderId: servingResolved.exchangeTraderId,
       source: servingResolved.source,
     })}`
@@ -761,9 +738,9 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
   // notFound() is resolved only in the browser (React error #419) and adds a
   // conflicting robots meta. Render the not-found view in place instead;
   // generateMetadata marks the same handles noindex via isMissingTrader.
-  if (resolved === RESOLVE_UNAVAILABLE) return null
+  if (resolved === LOOKUP_UNAVAILABLE) return null
   if (!resolved || isRetiredSource(resolved.platform)) {
-    return (await isMissingTrader(decodedHandle)) ? <TraderNotFound /> : null
+    return identity.missing ? <TraderNotFound /> : null
   }
 
   // Phase 2: Fetch trader detail. The rank-bearing projection reads the current
