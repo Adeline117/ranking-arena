@@ -18,6 +18,7 @@ import {
 } from '../parsers'
 import { GMX_SUBGRAPH_URL, gmxWindowBounds, gmxWindowFrom, sortGmxLeaderboardRows } from '../index'
 import type { ParseCtx } from '../../../core/types'
+import { resolveHeadlineLineage } from '../../../testing/headline-lineage'
 
 function fixture(name: string): Record<string, unknown> {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
@@ -485,6 +486,16 @@ describe('parseGmxLeaderboardPage (verbatim capture response)', () => {
           fieldPath: 'data.periodAccountStats[].realizedPnl/maxCapital',
         })
     }
+  })
+
+  it('resolves every non-null headline against the registered gmx contract', () => {
+    const page = parseGmxLeaderboardPage(response, ctx)
+    const nonNull = page.rows.reduce(
+      (count, row) =>
+        count + (row.headlinePnl === null ? 0 : 1) + (row.headlineRoi === null ? 0 : 1),
+      0
+    )
+    expect(resolveHeadlineLineage(page.rows, 'gmx')).toEqual({ resolved: nonNull, unresolved: [] })
   })
 
   it('agrees with the legacy composite parse of the same rows', () => {

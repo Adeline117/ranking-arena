@@ -602,6 +602,29 @@ const SOURCE_CONTRACT_REGISTRY: Readonly<Record<string, MetricSourceContract>> =
       { metric: 'pnl', fieldPath: 'result.items[].income' },
     ],
   }),
+  // GMX v2 on-chain board (Squids periodAccountStats, completed-UTC-day
+  // window). Both values are normalized from the row's own 1e30 fixed-point
+  // components: PnL = realizedPnl − realizedFees − realizedSwapFees +
+  // realizedPriceImpact + realizedSwapImpact; ROI = that PnL / maxCapital
+  // (the GMX leaderboard's pnlBps denominator).
+  gmx: boardHeadlineContract({
+    sourceId: 'gmx',
+    methodology: 'gmx',
+    windowKeys: ALL_WINDOWS,
+    currency: 'USDC',
+    fields: [
+      {
+        metric: 'roi',
+        fieldPath: 'data.periodAccountStats[].realizedPnl/maxCapital',
+        provenance: 'source_normalized',
+      },
+      {
+        metric: 'pnl',
+        fieldPath: 'data.periodAccountStats[].realizedPnl',
+        provenance: 'source_normalized',
+      },
+    ],
+  }),
   okx_web3_solana: boardHeadlineContract({
     sourceId: 'okx_web3_solana',
     methodology: 'okx-web3',
