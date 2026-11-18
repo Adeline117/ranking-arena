@@ -386,6 +386,11 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # a run DELETE the same transaction authorized. The worker release that calls
 # it treats a missing function as not_installed, so it follows that release;
 # it touches no table 192134 guards.
+# 20261118144144 makes public.rank_publication_trust_evidence require the
+# board's own metric-trust run and no in_progress / runs_only retention purge.
+# It reads the 20261118135918 audit table, so it follows it. A source whose
+# boards carry outcomes but no metric-trust run becomes untrusted (isolated)
+# at the next publication; it touches no table 192134 guards.
 # 040440 forward replacement. V1_EXECUTION_STATUS requires the RAW-only
 # bridge SHA to be deployed and legacy callers drained before the legacy
 # position-history relations are frozen. Current main never reads or writes
@@ -424,6 +429,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261118113319_binance_leaderboard_page_size_served_caps.sql
   20261118114230_leaderboard_exhaustion_reported_total_drift.sql
   20261118135918_trust_evidence_retention.sql
+  20261118144144_rank_publication_trust_requires_run.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
