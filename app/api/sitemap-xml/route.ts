@@ -23,6 +23,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { parseWatermarkRows, watermarkBySource } from '@/lib/rankings/source-watermark'
 import { TOP_EXCHANGE_SLUGS } from '@/lib/constants/exchange-slugs'
+import { traderCanonicalPath } from '@/lib/seo/trader-url'
 import { ARTICLES } from '@/app/(app)/learn/articles'
 import { ARENA_BOT_AUTHOR_ID } from '@/lib/data/arena-bot-publication-policy'
 
@@ -58,7 +59,8 @@ type SitemapProfileState = {
 }
 
 type PublicSitemapTrader = {
-  handle: string
+  handle: string | null
+  sourceTraderId: string
   source: string
 }
 
@@ -71,11 +73,8 @@ function asPublicSitemapTrader(row: unknown): PublicSitemapTrader | null {
   const record = row as Record<string, unknown>
   const rank = record.rank
   const source = record.source
-  const handle = isNonEmptyString(record.handle)
-    ? record.handle
-    : isNonEmptyString(record.source_trader_id)
-      ? record.source_trader_id
-      : null
+  const handle = isNonEmptyString(record.handle) ? record.handle : null
+  const sourceTraderId = record.source_trader_id
 
   // The view itself enforces full/non-estimated/source-fresh membership. This
   // boundary check is only a fail-closed defense against a malformed response
@@ -85,12 +84,12 @@ function asPublicSitemapTrader(row: unknown): PublicSitemapTrader | null {
     !Number.isSafeInteger(rank) ||
     rank <= 0 ||
     !isNonEmptyString(source) ||
-    !isNonEmptyString(handle)
+    !isNonEmptyString(sourceTraderId)
   ) {
     return null
   }
 
-  return { handle, source }
+  return { handle, sourceTraderId, source }
 }
 
 export function isSitemapProfileActive(profile: SitemapProfileState, now = Date.now()): boolean {
@@ -339,16 +338,14 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
       if (!trader) return false
       // The platform parameter is part of the canonical trader identity, so
       // same-handle accounts across exchanges must not collapse into one URL.
-      const identity = `${trader.source}:${trader.handle}`
+      const identity = `${trader.source}:${trader.sourceTraderId}`
       if (seen.has(identity)) return false
       seen.add(identity)
       return true
     })
     .map((trader) => ({
-      // 与 trader 页 canonical 对齐(2026-07-11 SEO 审计):带 ?platform= 消除
-      // handle-vs-id 双 URL + 跨源同名歧义。ASCII handle 用 handle 段,否则不确定
-      // 就用它本身(sitemap 只是发现入口,canonical 才是权威,Google 会向其收敛)。
-      loc: `${BASE_URL}/trader/${encodeURIComponent(trader.handle)}?platform=${encodeURIComponent(trader.source)}`,
+      // 与 trader 页 canonical 用同一个函数：站点地图只列规范网址。
+      loc: `${BASE_URL}${traderCanonicalPath(trader)}`,
       // lastmod 只用来源水位;未知则省略,不伪造请求时刻或 computed_at。
       lastmod: watermarks.get(trader.source) ?? undefined,
       changefreq: 'daily',

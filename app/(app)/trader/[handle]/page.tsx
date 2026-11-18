@@ -19,6 +19,7 @@ import { fetchSimilarTraders } from '@/lib/data/trader/similar'
 import { getSourceCapabilities } from '@/lib/data/serving/capabilities'
 import { getTraderAvatarSrc } from '@/lib/utils/avatar'
 import type { TraderFirstScreen } from '@/lib/data/serving/types'
+import { traderCanonicalPath } from '@/lib/seo/trader-url'
 import { BASE_URL } from '@/lib/constants/urls'
 import {
   generateTraderProfilePageSchema,
@@ -465,12 +466,19 @@ export async function generateMetadata({
   // server 中重定向，因为 server 看不到 query variant；canonical 由 metadata
   // 表达，认领账户的 /u/ 跳转则在客户端核对复合身份后执行。
   const canonicalPath = resolvedData
-    ? `/trader/${encodeURIComponent(
-        /^[a-zA-Z0-9_.-]+$/.test(resolvedData.handle || '')
-          ? resolvedData.handle!
-          : resolvedData.traderKey
-      )}?platform=${encodeURIComponent(resolvedData.platform)}`
-    : `/trader/${encodeURIComponent(decoded)}`
+    ? traderCanonicalPath({
+        handle: resolvedData.handle,
+        sourceTraderId: resolvedData.traderKey,
+        source: resolvedData.platform,
+      })
+    : servingMeta
+      ? // 只存在于新数据层的交易员：同样带 ?platform=，不退回裸路径。
+        traderCanonicalPath({
+          handle: servingMeta.nickname,
+          sourceTraderId: servingMeta.exchangeTraderId,
+          source: servingMeta.source,
+        })
+      : `/trader/${encodeURIComponent(decoded)}`
   const canonicalUrl = `${BASE}${canonicalPath}`
 
   return {
@@ -688,7 +696,13 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
       arena_score: st.arenaScore ?? undefined,
     }))
 
+    const servingCanonicalUrl = `${BASE_URL}${traderCanonicalPath({
+      handle: servingTraderData.handle,
+      sourceTraderId: servingResolved.exchangeTraderId,
+      source: servingResolved.source,
+    })}`
     const servingJsonLd = generateTraderProfilePageSchema({
+      url: servingCanonicalUrl,
       handle: servingTraderData.handle,
       id: servingResolved.exchangeTraderId,
       bio: undefined,
@@ -699,11 +713,9 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     })
     const servingBreadcrumb = generateBreadcrumbSchema([
       { name: 'Arena', url: BASE_URL },
-      { name: 'Rankings', url: `${BASE_URL}/rankings` },
-      {
-        name: servingTraderData.handle,
-        url: `${BASE_URL}/trader/${encodeURIComponent(decodedHandle)}`,
-      },
+      // 榜单在首页；/rankings 是 308 重定向。
+      { name: 'Rankings', url: `${BASE_URL}/` },
+      { name: servingTraderData.handle, url: servingCanonicalUrl },
     ])
 
     // servingFirstScreen is now ALWAYS non-null for serving sources (synthesized
@@ -821,7 +833,13 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
   }
 
   // JSON-LD structured data — use centralized schema generator
+  const legacyCanonicalUrl = `${BASE_URL}${traderCanonicalPath({
+    handle: resolved.handle,
+    sourceTraderId: resolved.traderKey,
+    source: resolved.platform,
+  })}`
   const traderSchemaInput: TraderSchemaInput = {
+    url: legacyCanonicalUrl,
     handle: traderData.handle,
     id: traderData.source_trader_id ?? decodedHandle,
     bio: undefined,
@@ -834,8 +852,8 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
   const jsonLd = generateTraderProfilePageSchema(traderSchemaInput)
   const breadcrumbJsonLd = generateBreadcrumbSchema([
     { name: 'Arena', url: BASE_URL },
-    { name: 'Rankings', url: `${BASE_URL}/rankings` },
-    { name: traderData.handle, url: `${BASE_URL}/trader/${encodeURIComponent(decodedHandle)}` },
+    { name: 'Rankings', url: `${BASE_URL}/` },
+    { name: traderData.handle, url: legacyCanonicalUrl },
   ])
 
   return (
