@@ -9,7 +9,11 @@
 #     capture row equal the code registry (lib/metric-trust.ts
 #     `phemex_futures`); no exhaustion row; page_size becomes the server cap
 #   - a replay refuses and changes nothing
-#   - adapter drift, a 7d native window, an unexpected page_size and a
+#   + seeds match production (page_size 50, expected_count 323, meta flags):
+#     page_size stays 50, expected_count is cleared, meta is untouched; the
+#     seed page_size 12 is also corrected to 50
+#   - adapter drift, a 7d native window, an unexpected page_size or
+#     expected_count, and a
 #     currency the contract does not cover refuse with no rows
 #   + an absent source is skipped
 
@@ -175,7 +179,13 @@ INSERT INTO arena.sources (
   (10, 'xt_futures', 'xt', 'inactive', 'legacy', 'USDT', 'futures', 'local', '{7,30,90}', 10),
   (11, 'xt_spot', 'xt', 'inactive', 'legacy', 'USDT', 'spot', 'local', '{7,30,90}', 10),
   (12, 'lbank_futures', 'lbank', 'active', 'serving', 'USDT', 'futures', 'local', '{7,30}', 20),
-  (13, 'phemex_futures', 'phemex', 'active', 'serving', 'USDT', 'futures', 'local', '{30,90}', 12);
+  (13, 'phemex_futures', 'phemex', 'active', 'serving', 'USDT', 'futures', 'local', '{30,90}', 50);
+-- phemex_futures as production holds it (read-only 2026-11-18).
+ALTER TABLE arena.sources ADD COLUMN expected_count int;
+UPDATE arena.sources
+   SET expected_count = 323,
+       meta = '{"house_ai_traders": true, "click_all_traders": true, "skip_commentary_tab": true}'
+ WHERE slug = 'phemex_futures';
 GRANT USAGE ON SCHEMA arena TO service_role;
 GRANT SELECT ON ALL TABLES IN SCHEMA arena TO service_role;
 SQL
@@ -215,7 +225,7 @@ done
 
 psql_db postgres -q -f "$MIGRATIONS/20261115160917_public_source_exhaustion_and_total_capture_contracts.sql" >/dev/null
 
-for db in main absent adapter_drift window_drift page_drift currency_drift; do
+for db in main absent seed_page adapter_drift window_drift page_drift count_drift currency_drift; do
   "$PG_BIN/createdb" -h "$SOCKET_DIR" -p "$PORT" -T postgres "$db"
 done
 BEFORE="$(registry_rows main)"
@@ -279,12 +289,20 @@ assert_equal "phemex V3 capture registered next to the earlier sources, no exhau
        AND capture.attempt_binding_contract = 'arena.ingest.leaderboard-acquisition-attempt-binding@1'
        AND capture.requires_runner_git_sha")"
 
-assert_equal "phemex page_size is the server cap, nothing else changed" \
-  "phemex_futures:{30,90}:USDT:50:active:serving" \
-  "$(psql_db main -Atqc "
+SOURCE_STATE_SQL="
     SELECT slug || ':' || timeframes_native::text || ':' || currency || ':' ||
-           page_size::text || ':' || status || ':' || serving_mode
-      FROM arena.sources WHERE slug = 'phemex_futures'")"
+           page_size::text || ':' || COALESCE(expected_count::text, 'null') || ':' ||
+           status || ':' || serving_mode || ':' || fetch_region || ':' || meta::text
+      FROM arena.sources WHERE slug = 'phemex_futures'"
+EXPECTED_STATE='phemex_futures:{30,90}:USDT:50:null:active:serving:local:{"house_ai_traders": true, "click_all_traders": true, "skip_commentary_tab": true}'
+assert_equal "page_size stays 50, expected_count cleared, meta untouched" \
+  "$EXPECTED_STATE" "$(psql_db main -Atqc "$SOURCE_STATE_SQL")"
+
+# The seeded page_size 12 is corrected to the server cap the same way.
+psql_db seed_page -q -c "UPDATE arena.sources SET page_size = 12 WHERE slug = 'phemex_futures'"
+psql_db seed_page -q -f "$TARGET"
+assert_equal "seeded page_size 12 becomes 50" "$EXPECTED_STATE" \
+  "$(psql_db seed_page -Atqc "$SOURCE_STATE_SQL")"
 
 # ── Replay and drift refuse the whole migration ──
 
@@ -305,6 +323,10 @@ expect_failure page_drift "unexpected page_size" "phemex capture page_size drift
 assert_equal "refused page drift leaves no rows" "$BEFORE" "$(registry_rows page_drift)"
 assert_equal "refused page drift leaves the source configuration" "20" \
   "$(psql_db page_drift -Atqc "SELECT page_size FROM arena.sources WHERE slug = 'phemex_futures'")"
+
+psql_db count_drift -q -c "UPDATE arena.sources SET expected_count = 240 WHERE slug = 'phemex_futures'"
+expect_failure count_drift "unexpected expected_count" "phemex capture expected_count drift: phemex_futures"
+assert_equal "refused count drift leaves no rows" "$BEFORE" "$(registry_rows count_drift)"
 
 psql_db currency_drift -q -c "UPDATE arena.sources SET currency = 'USDC' WHERE slug = 'phemex_futures'"
 expect_failure currency_drift "currency the contract does not cover" \

@@ -11,12 +11,24 @@
 -- The capture pages GET v3/user/recommend by pageNum and binds data.total
 -- (the board population) as the reported total. RAW is the verbatim,
 -- window-agnostic response; the parser selects the variant from the Tier-A
--- window (ParseCtx.timeframe). The house AI carousel is no longer appended.
+-- window (ParseCtx.timeframe). The house AI carousel (v3/ai-trader/list)
+-- is no longer appended: it is not part of the board population and would
+-- break the reported total. meta.house_ai_traders is left as is: it
+-- describes the site, and no code reads it; AI traders the recommend board
+-- itself lists are still captured (tagged bot/ai by the parser).
 --
 -- Source configuration the capture requires (guarded on the seeded value;
 -- anything else is left alone and the preflight refuses it):
---   * phemex_futures page_size 12 -> 50 (the server cap): fewer requests per
---     crawl, so the reported total is less likely to move mid-crawl.
+--   * phemex_futures page_size 12 (seed) -> 50 (the server cap): fewer
+--     requests per crawl, so the reported total is less likely to move
+--     mid-crawl. Production already holds 50 (read-only 2026-11-18); the
+--     update then changes nothing and the check below only confirms 50.
+--   * phemex_futures expected_count 323 -> NULL: a survey count that
+--     included the appended AI carousel; the reported total (229 at the
+--     2026-06-11 capture) is the completeness proof, and against 323 the
+--     board would fail the ±30% day-one count gate, whose downward shift
+--     needs a manual ack. NULL lets the rolling baseline of real passing
+--     crawls govern (as okx_web3_solana).
 --
 -- NOT PROBED LIVE: the API answers only a page-warmed browser session (bare
 -- requests get a CloudFront 403 from the reachable hosts), so the response
@@ -153,6 +165,13 @@ UPDATE arena.sources AS source_row
    AND source_row.adapter_slug = seed.adapter_slug
    AND source_row.page_size = 12;
 
+UPDATE arena.sources AS source_row
+   SET expected_count = NULL
+  FROM capture_source_seed AS seed
+ WHERE source_row.slug = seed.source_slug
+   AND source_row.adapter_slug = seed.adapter_slug
+   AND source_row.expected_count = 323;
+
 DO $configuration$
 DECLARE
   v_bad text;
@@ -165,6 +184,16 @@ BEGIN
    WHERE source_row.page_size IS DISTINCT FROM seed.page_size;
   IF v_bad IS NOT NULL THEN
     RAISE EXCEPTION 'phemex capture page_size drift: %', v_bad;
+  END IF;
+
+  SELECT pg_catalog.string_agg(DISTINCT source_row.slug, ', ' ORDER BY source_row.slug)
+    INTO v_bad
+    FROM capture_source_seed AS seed
+    JOIN arena.sources AS source_row
+      ON source_row.slug = seed.source_slug
+   WHERE source_row.expected_count IS NOT NULL;
+  IF v_bad IS NOT NULL THEN
+    RAISE EXCEPTION 'phemex capture expected_count drift: %', v_bad;
   END IF;
 
   SELECT pg_catalog.string_agg(DISTINCT source_row.slug, ', ' ORDER BY source_row.slug)
