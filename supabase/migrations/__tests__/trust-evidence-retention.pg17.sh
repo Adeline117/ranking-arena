@@ -6,23 +6,31 @@
 # the append-only metric-trust trigger (20260721120000 body), an immutable
 # Tier-A receipt, publications/evidence/plans, serving heads and freshness.
 #
-# Snapshots (source 1 = hyperliquid, source 2 = bybit_copytrade alias bybit):
-#   S1  s1/90  passed 40d  trust               -> purge (superseded_success)
-#   S2  s1/90  passed 30d  trust, CURRENT pub  -> keep (serving head cohort)
-#   S3  s1/90  passed 25d  trust, OLD pub only -> purge (old pub no longer pins)
-#   S4  s1/90  passed 20d  trust, Tier-A receipt -> purge body, keep header
-#   S5  s1/90  passed 10d  trust, superseded   -> keep (inside 14 days)
-#   S6  s1/90  failed 2d                       -> keep (inside 7 days)
-#   S7  s1/90  failed 9d                       -> purge (unpublished_failure)
-#   S8  s1/90  passed 5d                       -> keep (latest passed)
-#   S9  s2/90  passed 60d  trust, only passed  -> keep (latest passed, old)
-#   S10 s2/90  failed 50d                      -> purge (unpublished_failure)
-#   S11 s2/30  passed 40d, freshness board     -> keep (current freshness pin)
-#   S12 s2/30  passed 35d                      -> keep (latest passed)
-#   S13 s1/7   passed 30d, recent plan         -> keep (plan planned 3d ago)
-#   S14 s1/7   passed 20d                      -> keep (latest passed)
-#   S15 s1/30  failed 20d, old plan            -> keep (failed but referenced once)
-#   S16 s1/30  passed 1d                       -> keep (latest passed)
+# Snapshots (source 1 = hyperliquid, source 2 = bybit_copytrade alias bybit).
+# "rep" = the day's last passed crawl per source x timeframe (daily
+# representative, same selection as snapshotEntryDownsampleSql).
+#   S1  s1/90  passed 40d 06:00 trust, OLD pub  -> snapshot (dangling cohort audited)
+#   S21 s1/90  passed 40d 20:00 rep, no trust   -> keep (nothing to purge)
+#   S2  s1/90  passed 30d rep trust, CURRENT pub -> keep
+#   S3  s1/90  passed 25d rep trust             -> runs_only (row + entries kept)
+#   S4  s1/90  passed 20d 06:00 trust + receipt -> body_only
+#   S24 s1/90  passed 20d 20:00 rep             -> keep
+#   S5  s1/90  passed 10d rep trust             -> keep (inside 14 days)
+#   S6  s1/90  failed 2d                        -> keep (inside 7 days)
+#   S7  s1/90  failed 9d                        -> snapshot (unpublished_failure)
+#   S8  s1/90  passed 5d                        -> keep (latest passed)
+#   S17 s1/90  passed 200d rep trust            -> snapshot (rep beyond 180 days)
+#   S9  s2/90  passed 60d trust, only passed    -> keep (latest passed, old)
+#   S10 s2/90  failed 50d                       -> snapshot (unpublished_failure)
+#   S11 s2/30  passed 40d, freshness board      -> keep (current freshness pin)
+#   S12 s2/30  passed 35d                       -> keep (latest passed)
+#   S13 s1/7   passed 30d, recent plan          -> keep (plan planned 3d ago)
+#   S14 s1/7   passed 20d                       -> keep (latest passed)
+#   S15 s1/30  failed 20d, old plan             -> keep (failed but referenced once)
+#   S16 s1/30  passed 1d                        -> keep (latest passed)
+#   S18 s2/7   passed 45d 06:00 trust, 1500 traders (4502 rows) -> snapshot, chunked
+#   S28 s2/7   passed 45d 20:00 rep             -> keep
+#   S19 s2/7   passed 1d                        -> keep (latest passed)
 
 set -Eeuo pipefail
 
@@ -49,7 +57,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-export PGOPTIONS='-c client_min_messages=warning'
+export PGOPTIONS='-c client_min_messages=warning -c statement_timeout=60s'
 psql_db() { "$PG_BIN/psql" -X -v ON_ERROR_STOP=1 -h "$SOCKET_DIR" -p "$PORT" -U postgres -d postgres "$@"; }
 assert_equal() { [[ "$2" == "$3" ]] || { echo "$1: expected '$2', got '$3'" >&2; exit 1; }; }
 assert_fails() {
@@ -173,55 +181,71 @@ CREATE TABLE public.leaderboard_source_freshness (
 
 INSERT INTO arena.sources VALUES (1, 'hyperliquid', '{}'), (2, 'bybit_copytrade', '{"legacy_platform": "bybit"}');
 
-CREATE TEMP TABLE fixture (id bigint, source_id smallint, timeframe smallint, age interval, passed boolean, trust boolean);
+CREATE TEMP TABLE fixture (id bigint, source_id smallint, timeframe smallint, at timestamptz, passed boolean, trust boolean, traders int);
 INSERT INTO fixture VALUES
-  (1, 1, 90, '40 days', true, true),  (2, 1, 90, '30 days', true, true),
-  (3, 1, 90, '25 days', true, true),  (4, 1, 90, '20 days', true, true),
-  (5, 1, 90, '10 days', true, true),  (6, 1, 90, '2 days', false, false),
-  (7, 1, 90, '9 days', false, false), (8, 1, 90, '5 days', true, false),
-  (9, 2, 90, '60 days', true, true),  (10, 2, 90, '50 days', false, false),
-  (11, 2, 30, '40 days', true, false), (12, 2, 30, '35 days', true, false),
-  (13, 1, 7, '30 days', true, false), (14, 1, 7, '20 days', true, false),
-  (15, 1, 30, '20 days', false, false), (16, 1, 30, '1 day', true, false);
+  (1, 1, 90, date_trunc('day', now() - interval '40 days') + interval '6 hours', true, true, 2),
+  (21, 1, 90, date_trunc('day', now() - interval '40 days') + interval '20 hours', true, false, 2),
+  (2, 1, 90, date_trunc('day', now() - interval '30 days') + interval '12 hours', true, true, 2),
+  (3, 1, 90, date_trunc('day', now() - interval '25 days') + interval '12 hours', true, true, 2),
+  (4, 1, 90, date_trunc('day', now() - interval '20 days') + interval '6 hours', true, true, 2),
+  (24, 1, 90, date_trunc('day', now() - interval '20 days') + interval '20 hours', true, false, 2),
+  (5, 1, 90, date_trunc('day', now() - interval '10 days') + interval '12 hours', true, true, 2),
+  (6, 1, 90, now() - interval '2 days', false, false, 0),
+  (7, 1, 90, now() - interval '9 days', false, false, 0),
+  (8, 1, 90, now() - interval '5 days', true, false, 2),
+  (17, 1, 90, date_trunc('day', now() - interval '200 days') + interval '12 hours', true, true, 2),
+  (9, 2, 90, now() - interval '60 days', true, true, 2),
+  (10, 2, 90, now() - interval '50 days', false, false, 0),
+  (11, 2, 30, now() - interval '40 days', true, false, 2),
+  (12, 2, 30, now() - interval '35 days', true, false, 2),
+  (13, 1, 7, now() - interval '30 days', true, false, 2),
+  (14, 1, 7, now() - interval '20 days', true, false, 2),
+  (15, 1, 30, now() - interval '20 days', false, false, 0),
+  (16, 1, 30, now() - interval '1 day', true, false, 2),
+  (18, 2, 7, date_trunc('day', now() - interval '45 days') + interval '6 hours', true, true, 1500),
+  (28, 2, 7, date_trunc('day', now() - interval '45 days') + interval '20 hours', true, false, 2),
+  (19, 2, 7, now() - interval '1 day', true, false, 2);
 
 -- Trust snapshots carry RAW 100+id (board payload = population), 200+id
--- (manifest), 300+id (artifact); all RAW fetched 40 days ago.
+-- (manifest), 300+id (artifacts); all RAW fetched 40 days ago.
 INSERT INTO arena.raw_objects
 SELECT r.id, 'raw/' || r.id, 'h' || r.id, false, now() - interval '40 days'
 FROM fixture f CROSS JOIN LATERAL (VALUES (100 + f.id), (200 + f.id), (300 + f.id)) AS r(id)
 WHERE f.trust;
 INSERT INTO arena.leaderboard_snapshots
-SELECT f.id, f.source_id, f.timeframe, date_trunc('second', now() - f.age), f.passed,
+SELECT f.id, f.source_id, f.timeframe, date_trunc('second', f.at), f.passed,
        CASE WHEN f.trust THEN 100 + f.id END
 FROM fixture f;
 INSERT INTO arena.leaderboard_entries
-SELECT s.scraped_at, s.id, t.trader_id, t.rank
-FROM arena.leaderboard_snapshots s CROSS JOIN (VALUES (1000, 1), (1001, 2)) AS t(trader_id, rank)
-WHERE s.count_check_passed;
+SELECT s.scraped_at, s.id, 1000 + t.n, t.n + 1
+FROM arena.leaderboard_snapshots s JOIN fixture f ON f.id = s.id
+CROSS JOIN LATERAL generate_series(0, f.traders - 1) AS t(n);
 INSERT INTO arena.metric_trust_runs
 SELECT 'run-' || f.id, f.id, 100 + f.id, 200 + f.id FROM fixture f WHERE f.trust;
+-- One observation per trust snapshot (trader 1000); S18: one per trader.
 INSERT INTO arena.metric_trust_observations
-SELECT f.id, 1000, f.id, s.scraped_at, 'run-' || f.id
-FROM fixture f JOIN arena.leaderboard_snapshots s ON s.id = f.id WHERE f.trust;
-INSERT INTO arena.metric_trust_artifacts SELECT f.id, 300 + f.id FROM fixture f WHERE f.trust;
+SELECT f.id * 10000 + t.n, 1000 + t.n, f.id, s.scraped_at, 'run-' || f.id
+FROM fixture f JOIN arena.leaderboard_snapshots s ON s.id = f.id
+CROSS JOIN LATERAL generate_series(0, CASE WHEN f.id = 18 THEN f.traders - 1 ELSE 0 END) AS t(n)
+WHERE f.trust;
+INSERT INTO arena.metric_trust_artifacts
+SELECT o.id, 300 + o.snapshot_id FROM arena.metric_trust_observations o;
 INSERT INTO arena.tier_a_execution_window_receipts VALUES (1, 4);
 
 -- CURRENT cohort (serving head; sealed 30 days ago) binds S2. An OLD cohort
--- (sealed 20 days ago, not served) binds S3 by evidence and proof.
+-- (sealed 20 days ago, not served) binds S1 by evidence and proof.
 INSERT INTO arena.leaderboard_rank_publications VALUES
   ('00000000-0000-4000-8000-0000000000c1', '90D', '[]', now() - interval '30 days'),
   ('00000000-0000-4000-8000-0000000000a1', '90D',
    jsonb_build_array(jsonb_build_object('source', 'hyperliquid',
-     'source_as_of', (SELECT scraped_at FROM arena.leaderboard_snapshots WHERE id = 3))),
+     'source_as_of', (SELECT scraped_at FROM arena.leaderboard_snapshots WHERE id = 1))),
    now() - interval '20 days');
 INSERT INTO arena.leaderboard_rank_publication_source_evidence VALUES
   ('00000000-0000-4000-8000-0000000000c1', 'hyperliquid', '{2}'),
-  ('00000000-0000-4000-8000-0000000000a1', 'hyperliquid', '{3}');
+  ('00000000-0000-4000-8000-0000000000a1', 'hyperliquid', '{1}');
 INSERT INTO arena.public_ranked_leaderboard_serving_heads VALUES ('90D', '00000000-0000-4000-8000-0000000000c1');
--- Freshness (current) points at bybit's 30D board S11 by (alias, as_of).
 INSERT INTO public.leaderboard_source_freshness VALUES
   ('30D', 'bybit', (SELECT scraped_at FROM arena.leaderboard_snapshots WHERE id = 11), NULL);
--- A plan planned 3 days ago binds S13; a 30-day-old unsealed plan binds S15.
 INSERT INTO arena.leaderboard_rank_generation_publication_plans VALUES
   ('7D', 1, '00000000-0000-4000-8000-0000000000b1', now() - interval '3 days'),
   ('30D', 1, '00000000-0000-4000-8000-0000000000b2', now() - interval '30 days');
@@ -239,56 +263,112 @@ BEFORE="$(table_counts)"
 assert_fails "a direct DELETE of a trust run is still refused" \
   "DELETE FROM arena.metric_trust_runs WHERE source_run_id = 'run-1'"
 assert_fails "a direct DELETE of an observation is still refused" \
-  "DELETE FROM arena.metric_trust_observations WHERE id = 1"
-assert_fails "superseded window below 14 days is refused" "SELECT arena.retain_trust_evidence(false, 13)"
-assert_fails "failed window below 7 days is refused" "SELECT arena.retain_trust_evidence(false, 14, 6)"
-assert_fails "row cap is bounded" "SELECT arena.retain_trust_evidence(false, 14, 7, 50, 10)"
-assert_fails "delete mode is refused while the switch is off" "SET statement_timeout = '60s'; SELECT arena.retain_trust_evidence(true)"
+  "DELETE FROM arena.metric_trust_observations WHERE id = 10000"
+assert_fails "the private step cannot run outside retain_trust_evidence" \
+  "SELECT arena.trust_evidence_retention_step(1, 'snapshot', 1000)"
+assert_fails "superseded window below 14 days is refused" "SELECT arena.retain_trust_evidence(false, 100000, 13)"
+assert_fails "failed window below 7 days is refused" "SELECT arena.retain_trust_evidence(false, 100000, 14, 6)"
+assert_fails "daily window below the superseded window is refused" "SELECT arena.retain_trust_evidence(false, 100000, 30, 7, 20)"
+assert_fails "row cap is bounded" "SELECT arena.retain_trust_evidence(false, 10)"
+assert_fails "an unbounded statement_timeout is refused" "SET statement_timeout = 0; SELECT arena.retain_trust_evidence()"
+assert_fails "delete mode is refused while the switch is off" "SELECT arena.retain_trust_evidence(true)"
 
-DRY="$(psql_db -Atqc "SELECT arena.retain_trust_evidence()")"
+DRY="$(psql_db -Atqc "SELECT arena.retain_trust_evidence() - 'would_delete'")"
 echo "dry run: $DRY"
-assert_equal "dry run: eligible = S1,S3,S4 superseded + S7,S10 failed" "count|5|3|2" "$(psql_db -Atqc "
-  SELECT concat_ws('|', r->>'mode', r->>'eligible_snapshots_total',
-                   r->>'eligible_superseded_success', r->>'eligible_unpublished_failure')
+assert_equal "dry run: 7 eligible (5 superseded, 2 failed; 5 snapshot, 1 body_only, 1 runs_only)" \
+  "count|7|5|2|5|1|1|0" "$(psql_db -Atqc "
+  SELECT concat_ws('|', r->>'mode', r->>'eligible_snapshots_total', r->>'eligible_superseded_success',
+                   r->>'eligible_unpublished_failure', r->>'eligible_disposition_snapshot',
+                   r->>'eligible_disposition_body_only', r->>'eligible_disposition_runs_only',
+                   r->>'in_progress_purges')
   FROM (SELECT arena.retain_trust_evidence() AS r) AS x")"
-assert_equal "dry run: per-table counts of the would-delete batch" \
-  '{"snapshots": 5, "snapshot_rows": 4, "metric_trust_runs": 3, "body_only_snapshots": 1, "leaderboard_entries": 6, "metric_trust_artifacts": 3, "raw_object_refs_released": 8, "metric_trust_observations": 3}' \
-  "$(psql_db -Atqc "SELECT arena.retain_trust_evidence()->'would_delete'")"
+assert_equal "dry run: dispositions per snapshot, oldest first, up to the row cap" \
+  "17:snapshot,10:snapshot,18:snapshot,1:snapshot,3:runs_only,4:body_only,7:snapshot" "$(psql_db -Atqc "
+  SELECT string_agg((item->>'snapshot_id') || ':' || (item->>'disposition'), ',' ORDER BY ord)
+  FROM jsonb_array_elements(arena.retain_trust_evidence()->'would_delete'->'snapshots') WITH ORDINALITY AS t(item, ord)")"
+assert_equal "dry run: per-table rows in scope (S18 = 1500 obs + 1500 artifacts + 1500 entries)" \
+  "1504|1504|5|1506|5|4524" "$(psql_db -Atqc "
+  SELECT concat_ws('|', w->>'metric_trust_observations', w->>'metric_trust_artifacts', w->>'metric_trust_runs',
+                   w->>'leaderboard_entries', w->>'snapshot_rows', w->>'rows_in_scope')
+  FROM (SELECT arena.retain_trust_evidence()->'would_delete' AS w) AS x")"
+assert_equal "dry run with the minimum cap stops its scope at the big snapshot" "17,10,18" "$(psql_db -Atqc "
+  SELECT string_agg(item->>'snapshot_id', ',' ORDER BY ord)
+  FROM jsonb_array_elements(arena.retain_trust_evidence(false, 1000)->'would_delete'->'snapshots') WITH ORDINALITY AS t(item, ord)")"
 assert_equal "dry run deletes nothing" "$BEFORE" "$(table_counts)"
-assert_equal "snapshot limit 1 counts only the oldest eligible (S10)" "1|0" "$(psql_db -Atqc "
-  SELECT concat_ws('|', r->'would_delete'->>'snapshots', r->'would_delete'->>'leaderboard_entries')
-  FROM (SELECT arena.retain_trust_evidence(false, 14, 7, 1) AS r) AS x")"
-assert_equal "a 14-day window larger than every age keeps all of them" "0" "$(psql_db -Atqc "
-  SELECT arena.retain_trust_evidence(false, 3650, 3650)->>'eligible_snapshots_total'")"
 
 psql_db -qc "UPDATE arena.trust_evidence_retention_settings SET delete_enabled = true"
-assert_fails "delete mode needs a bounded statement_timeout" \
-  "SET statement_timeout = 0; SELECT arena.retain_trust_evidence(true)"
 
-DELETED="$(psql_db -Atqc "SET statement_timeout = '60s'; SELECT arena.retain_trust_evidence(true)->'deleted'")"
-assert_equal "delete mode removes exactly what the dry run counted" \
-  '{"snapshots": 5, "snapshot_rows": 4, "metric_trust_runs": 3, "body_only_snapshots": 1, "leaderboard_entries": 6, "metric_trust_artifacts": 3, "raw_object_refs_released": 8, "metric_trust_observations": 3}' \
-  "$DELETED"
+# A batch that times out rolls back whole: hold S18's row lock so the purge
+# waits past a 1s statement_timeout after it already purged S17 and S10.
+"$PG_BIN/psql" -X -q -h "$SOCKET_DIR" -p "$PORT" -U postgres -d postgres -c "
+  BEGIN; SELECT 1 FROM arena.leaderboard_snapshots WHERE id = 18 FOR UPDATE; SELECT pg_sleep(4); COMMIT;" \
+  >/dev/null 2>&1 &
+LOCKER=$!
+sleep 1
+assert_fails "a purge batch that hits statement_timeout fails" \
+  "SET statement_timeout = '1s'; SELECT arena.retain_trust_evidence(true, 100000)"
+wait "$LOCKER"
+assert_equal "the timed-out batch left every row in place (whole rollback)" "$BEFORE" "$(table_counts)"
+assert_equal "and opened no purge" "0" "$(psql_db -Atqc "SELECT count(*) FROM arena.trust_evidence_retention_purges")"
 
-assert_equal "surviving snapshots" "2,4,5,6,8,9,11,12,13,14,15,16" "$(psql_db -Atqc "
+# Row-budgeted batches at the minimum cap: S18 (4502 rows) spans batches, and
+# every batch makes progress (no batch is stuck on the same snapshot).
+FIRST="$(psql_db -Atqc "SELECT arena.retain_trust_evidence(true, 1000)->'deleted'")"
+echo "first batch: $FIRST"
+assert_equal "first batch: S17 and S10 complete, S18 in progress, within (and near) the 1000-row cap" "t|3|2|3" "$(psql_db -Atqc "
+  SELECT concat_ws('|', (d->>'rows')::int BETWEEN 990 AND 1000, d->>'purges_started', d->>'purges_completed', d->>'snapshots_touched')
+  FROM (SELECT '$FIRST'::jsonb AS d) AS x")"
+assert_equal "S18 is in progress with its header still present" "in_progress|1" "$(psql_db -Atqc "
+  SELECT concat_ws('|', (SELECT state FROM arena.trust_evidence_retention_purges WHERE snapshot_id = 18),
+                   (SELECT count(*) FROM arena.leaderboard_snapshots WHERE id = 18))")"
+BATCHES=1
+PREVIOUS=""
+while :; do
+  STATE="$(psql_db -Atqc "SELECT concat_ws('|', r->>'eligible_snapshots_total', r->>'in_progress_purges')
+                          FROM (SELECT arena.retain_trust_evidence() AS r) AS x")"
+  [[ "$STATE" == "0|0" ]] && break
+  REMAINING="$(table_counts)"
+  [[ "$REMAINING" != "$PREVIOUS" ]] || { echo "a batch made no progress: $REMAINING" >&2; exit 1; }
+  PREVIOUS="$REMAINING"
+  psql_db -Atqc "SELECT arena.retain_trust_evidence(true, 1000)" >/dev/null
+  BATCHES=$((BATCHES + 1))
+  (( BATCHES < 20 )) || { echo "purge did not converge" >&2; exit 1; }
+done
+echo "ok - converged in $BATCHES batches of 1000 rows"
+(( BATCHES >= 5 )) || { echo "expected S18 to span several batches, got $BATCHES" >&2; exit 1; }
+
+assert_equal "surviving snapshots" "2,3,4,5,6,8,9,11,12,13,14,15,16,19,21,24,28" "$(psql_db -Atqc "
   SELECT string_agg(id::text, ',' ORDER BY id) FROM arena.leaderboard_snapshots")"
 assert_equal "current-publication evidence (S2) is intact" "2|1|1|1" "$(psql_db -Atqc "
   SELECT concat_ws('|',
     (SELECT count(*) FROM arena.leaderboard_entries WHERE snapshot_id = 2),
     (SELECT count(*) FROM arena.metric_trust_runs WHERE snapshot_id = 2),
     (SELECT count(*) FROM arena.metric_trust_observations WHERE snapshot_id = 2),
-    (SELECT count(*) FROM arena.metric_trust_artifacts WHERE observation_id = 2))")"
+    (SELECT count(*) FROM arena.metric_trust_artifacts WHERE observation_id = 20000))")"
 assert_equal "latest successful snapshot (S9, 60 days old) keeps all evidence" "2|1|1|1" "$(psql_db -Atqc "
   SELECT concat_ws('|',
     (SELECT count(*) FROM arena.leaderboard_entries WHERE snapshot_id = 9),
     (SELECT count(*) FROM arena.metric_trust_runs WHERE snapshot_id = 9),
     (SELECT count(*) FROM arena.metric_trust_observations WHERE snapshot_id = 9),
-    (SELECT count(*) FROM arena.metric_trust_artifacts WHERE observation_id = 9))")"
+    (SELECT count(*) FROM arena.metric_trust_artifacts WHERE observation_id = 90000))")"
 assert_equal "inside the 14-day window (S5) nothing is deleted" "2|1|1" "$(psql_db -Atqc "
   SELECT concat_ws('|',
     (SELECT count(*) FROM arena.leaderboard_entries WHERE snapshot_id = 5),
     (SELECT count(*) FROM arena.metric_trust_runs WHERE snapshot_id = 5),
     (SELECT count(*) FROM arena.metric_trust_observations WHERE snapshot_id = 5))")"
+assert_equal "daily representative S3 (25d) keeps row + entries, loses runs/observations/artifacts" \
+  "1|2|0|0|0" "$(psql_db -Atqc "
+  SELECT concat_ws('|',
+    (SELECT count(*) FROM arena.leaderboard_snapshots WHERE id = 3),
+    (SELECT count(*) FROM arena.leaderboard_entries WHERE snapshot_id = 3),
+    (SELECT count(*) FROM arena.metric_trust_runs WHERE snapshot_id = 3),
+    (SELECT count(*) FROM arena.metric_trust_observations WHERE snapshot_id = 3),
+    (SELECT count(*) FROM arena.metric_trust_artifacts WHERE observation_id = 30000))")"
+assert_equal "daily representatives without trust (S21, S24, S28) keep their entries" "2|2|2" "$(psql_db -Atqc "
+  SELECT concat_ws('|',
+    (SELECT count(*) FROM arena.leaderboard_entries WHERE snapshot_id = 21),
+    (SELECT count(*) FROM arena.leaderboard_entries WHERE snapshot_id = 24),
+    (SELECT count(*) FROM arena.leaderboard_entries WHERE snapshot_id = 28))")"
 assert_equal "receipt-bound S4 keeps header and receipt, loses its body" "1|1|0|0|0" "$(psql_db -Atqc "
   SELECT concat_ws('|',
     (SELECT count(*) FROM arena.leaderboard_snapshots WHERE id = 4),
@@ -296,52 +376,72 @@ assert_equal "receipt-bound S4 keeps header and receipt, loses its body" "1|1|0|
     (SELECT count(*) FROM arena.leaderboard_entries WHERE snapshot_id = 4),
     (SELECT count(*) FROM arena.metric_trust_runs WHERE snapshot_id = 4),
     (SELECT count(*) FROM arena.metric_trust_observations WHERE snapshot_id = 4))")"
+
+# Read paths: a kept representative without runs is never a trusted current
+# board. Publication boards are the latest passed snapshot per source x
+# timeframe (20261116215329 latest_passed); rankable observations come from
+# observations JOIN runs (20261118112703 metric_rankable_observations).
+assert_equal "the publication board for hyperliquid 90D is the latest passed (S8), not S3" "8" "$(psql_db -Atqc "
+  SELECT DISTINCT ON (source_id) id FROM arena.leaderboard_snapshots
+   WHERE count_check_passed AND source_id = 1 AND timeframe = 90
+   ORDER BY source_id, scraped_at DESC, id DESC")"
+assert_equal "no rankable observation (observations JOIN runs) remains for S3" "0" "$(psql_db -Atqc "
+  SELECT count(*) FROM arena.metric_trust_observations AS observation
+    JOIN arena.metric_trust_runs AS acquisition ON acquisition.source_run_id = observation.source_run_id
+   WHERE observation.snapshot_id = 3")"
+
 assert_equal "publication rows and evidence digests are untouched" "2|2|2|2" "$(psql_db -Atqc "
   SELECT concat_ws('|',
     (SELECT count(*) FROM arena.leaderboard_rank_publications),
     (SELECT count(*) FROM arena.leaderboard_rank_publication_source_evidence),
     (SELECT count(*) FROM arena.leaderboard_rank_generation_publication_plans),
     (SELECT count(*) FROM arena.leaderboard_rank_generation_publication_plan_sources))")"
-assert_equal "no RAW row was deleted by the purge" "18" "$(psql_db -Atqc "SELECT count(*) FROM arena.raw_objects")"
-assert_equal "audit ledger: one row per purged snapshot" \
-  "1:superseded_success:snapshot,3:superseded_success:snapshot,4:superseded_success:body_only,7:unpublished_failure:snapshot,10:unpublished_failure:snapshot|3" \
+assert_equal "no RAW row was deleted by the purge" "24" "$(psql_db -Atqc "SELECT count(*) FROM arena.raw_objects")"
+assert_equal "audit ledger: one complete row per purge" \
+  "1:snapshot:superseded_success,3:runs_only:superseded_success,4:body_only:superseded_success,7:snapshot:unpublished_failure,10:snapshot:unpublished_failure,17:snapshot:superseded_success,18:snapshot:superseded_success|0" \
   "$(psql_db -Atqc "
-  SELECT (SELECT string_agg(snapshot_id || ':' || reason || ':' || disposition, ',' ORDER BY snapshot_id)
+  SELECT (SELECT string_agg(snapshot_id || ':' || disposition || ':' || reason, ',' ORDER BY snapshot_id)
             FROM arena.trust_evidence_retention_purges)
-      || '|' || (SELECT count(*) FROM arena.trust_evidence_retention_purged_runs)")"
+      || '|' || (SELECT count(*) FROM arena.trust_evidence_retention_purges WHERE state <> 'complete')")"
+assert_equal "S18 audit row adds up across its batches" "1500|1500|1|1500|1" "$(psql_db -Atqc "
+  SELECT concat_ws('|', deleted_observations, deleted_artifacts, deleted_runs, deleted_entries, deleted_snapshot_rows)
+  FROM arena.trust_evidence_retention_purges WHERE snapshot_id = 18")"
+assert_equal "the old publication that still names S1 is recorded as dangling" \
+  "{00000000-0000-4000-8000-0000000000a1}" "$(psql_db -Atqc "
+  SELECT dangling_publication_cohorts FROM arena.trust_evidence_retention_purges WHERE snapshot_id = 1")"
+assert_equal "no transaction stays registered as active" "0" "$(psql_db -Atqc "
+  SELECT count(*) FROM arena.trust_evidence_retention_active_xacts")"
 
-assert_equal "a second run is a no-op (idempotent)" "0|0" "$(psql_db -Atqc "
-  SET statement_timeout = '60s';
-  SELECT concat_ws('|', r->'deleted'->>'snapshots', r->>'eligible_snapshots_total')
+assert_equal "a further run is a no-op (idempotent)" "0|0" "$(psql_db -Atqc "
+  SELECT concat_ws('|', r->'deleted'->>'rows', r->>'eligible_snapshots_total')
   FROM (SELECT arena.retain_trust_evidence(true) AS r) AS x")"
-assert_fails "an authorization does not outlive its transaction" \
+assert_fails "a committed-for-purge run stays undeletable outside the function" \
   "DELETE FROM arena.metric_trust_runs WHERE source_run_id = 'run-2'"
 
 OUT="$(cd "$ROOT_DIR" && PGHOST="$SOCKET_DIR" PGPORT="$PORT" npx --no-install tsx "$DRIVER" | sed -n 's/^RESULT //p' | tail -1)"
-assert_equal "RAW GC: only RAW released by purged snapshots becomes a candidate" \
-  '{"present":true,"rawCandidates":[101,103,201,203,204,301,303,304]}' "$OUT"
+assert_equal "RAW GC: only RAW released by purged evidence becomes a candidate" \
+  '{"present":true,"rawCandidates":[101,117,118,201,203,204,217,218,301,303,304,317,318]}' "$OUT"
 
-# Fail-stop: a batch whose evidence changed underneath aborts as a whole.
+# Fail-stop: a snapshot whose run also feeds another snapshot is refused and
+# the whole batch rolls back.
 psql_db -q <<'SQL'
-INSERT INTO arena.leaderboard_snapshots VALUES (20, 2, 7, now() - interval '30 days', true, NULL),
-  (21, 2, 7, now() - interval '1 day', true, NULL);
+INSERT INTO arena.leaderboard_snapshots VALUES (40, 2, 30, now() - interval '45 days', true, NULL);
 INSERT INTO arena.leaderboard_entries
-SELECT s.scraped_at, s.id, 1000, 1 FROM arena.leaderboard_snapshots s WHERE s.id IN (20, 21);
-INSERT INTO arena.raw_objects VALUES (420, 'raw/420', 'h', false, now()), (520, 'raw/520', 'h', false, now());
-INSERT INTO arena.metric_trust_runs VALUES ('run-20', 20, 420, 520);
--- An observation of run-20 bound to the kept latest board S21: purging run-20
--- would cascade it away, so the batch must refuse.
+SELECT s.scraped_at, s.id, 1000, 1 FROM arena.leaderboard_snapshots s WHERE s.id = 40;
+INSERT INTO arena.raw_objects VALUES (440, 'raw/440', 'h', false, now()), (540, 'raw/540', 'h', false, now());
+INSERT INTO arena.metric_trust_runs VALUES ('run-40', 40, 440, 540);
 INSERT INTO arena.metric_trust_observations
-SELECT 21, 1000, 21, scraped_at, 'run-20' FROM arena.leaderboard_snapshots WHERE id = 21;
+SELECT 400001, 1000, 12, scraped_at, 'run-40' FROM arena.leaderboard_snapshots WHERE id = 12;
 SQL
 COUNTS_BEFORE_ABORT="$(table_counts)"
-assert_fails "a run bound outside the batch aborts the whole batch" \
-  "SET statement_timeout = '60s'; SELECT arena.retain_trust_evidence(true)"
+assert_fails "a run bound outside its snapshot aborts the whole batch" \
+  "SELECT arena.retain_trust_evidence(true)"
 assert_equal "the aborted batch left every row in place" "$COUNTS_BEFORE_ABORT" "$(table_counts)"
 
-assert_equal "service_role may execute; API roles hold no ledger writes" "t|f|f|f" "$(psql_db -Atqc "
+assert_equal "service_role may execute the entry point only; no ledger writes" "t|f|f|f|f" "$(psql_db -Atqc "
   SELECT concat_ws('|',
     has_function_privilege('service_role', 'arena.retain_trust_evidence(boolean,integer,integer,integer,integer)', 'EXECUTE'),
+    has_function_privilege('service_role', 'arena.trust_evidence_retention_step(bigint,text,bigint)', 'EXECUTE'),
     has_function_privilege('anon', 'arena.retain_trust_evidence(boolean,integer,integer,integer,integer)', 'EXECUTE'),
     has_table_privilege('service_role', 'arena.trust_evidence_retention_settings', 'UPDATE'),
     has_table_privilege('service_role', 'arena.trust_evidence_retention_purged_runs', 'INSERT'))")"
