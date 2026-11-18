@@ -1,10 +1,12 @@
 /**
  * GMX pure parsers (spec §7 #32).
  *
- * Inputs are the composite RAW payloads the adapter stores:
- *   leaderboard page: { timeframe, from, reportedTotal, rows } — rows are
- *     PeriodAccountStatObject dicts from the Squids subgraph, already
- *     sorted+truncated fetch-side (hyperliquid pattern)
+ * Inputs are the RAW payloads the adapter stores:
+ *   leaderboard page: the verbatim attempt-bound GraphQL response
+ *     { data: { arenaWindow_{tf}d_{from}_{to}: "Query", periodAccountStats } }
+ *     (whole window, unsorted; sorted here). Legacy RAW written before the
+ *     capture is the composite { timeframe, from, to, reportedTotal, rows },
+ *     sorted+truncated fetch-side; it still re-parses.
  *   profile bundle:   { periodStats, pnlHistory, timeframe, from }
  *   positions:        { positions, markets, tokens } — markets/tokens are
  *     embedded so symbol/decimal resolution stays a pure re-parse (§5.5)
@@ -75,7 +77,7 @@ export function gmxRealizedPnlUsd(row: Dict): number | null {
   return (pnl - fees - swapFees + priceImpact + swapImpact) / E30
 }
 
-interface GmxWindowContract {
+export interface GmxWindowContract {
   timeframe: RankingTimeframe
   from: number
   to: number
@@ -147,16 +149,105 @@ function roiOnMaxCapital(pnlUsd: number | null, row: Dict): number | null {
 
 // ── Leaderboard ──
 
-export function parseGmxLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLeaderboardPage {
-  const payload = (raw ?? {}) as {
-    timeframe?: unknown
-    reportedTotal?: unknown
-    rows?: unknown
-    from?: unknown
-    to?: unknown
+/** Board rows path in the verbatim attempt-bound response. */
+export const GMX_BOARD_ROWS_PATH = 'data.periodAccountStats[]'
+/** Registered field paths (lib/metric-trust.ts gmx contract). ROI is the
+ *  realized-net numerator over maxCapital of the same row. */
+export const GMX_BOARD_PNL_FIELD_PATH = `${GMX_BOARD_ROWS_PATH}.realizedPnl`
+export const GMX_BOARD_ROI_FIELD_PATH = `${GMX_BOARD_ROWS_PATH}.realizedPnl/maxCapital`
+
+/**
+ * GraphQL alias the capture request adds next to periodAccountStats. The
+ * server answers an alias with its own key, so the verbatim response names
+ * the exact window it was asked for and re-parses without the request.
+ */
+const GMX_WINDOW_ECHO = /^arenaWindow_(7|30|90)d_([1-9][0-9]*)_([1-9][0-9]*)$/
+
+export function gmxWindowEchoAlias(timeframe: RankingTimeframe, from: number, to: number): string {
+  return `arenaWindow_${timeframe}d_${from}_${to}`
+}
+
+/** The single window echo of a verbatim response `data` object. */
+export function readGmxWindowEcho(data: Dict): GmxWindowContract {
+  const echoes = Object.keys(data).filter((key) => key.startsWith('arenaWindow_'))
+  if (echoes.length !== 1) {
+    throw new Error('[gmx] leaderboard response must echo exactly one window')
   }
-  const items = Array.isArray(payload.rows) ? (payload.rows as Dict[]) : []
-  const window = readGmxWindowContract(payload)
+  const match = GMX_WINDOW_ECHO.exec(echoes[0])
+  if (!match || data[echoes[0]] !== 'Query') {
+    throw new Error('[gmx] leaderboard response window echo is malformed')
+  }
+  return readGmxWindowContract({
+    timeframe: Number(match[1]),
+    from: Number(match[2]),
+    to: Number(match[3]),
+  })
+}
+
+/** Validate every candidate before sorting. A missing component is an
+ * upstream schema/completeness failure, never a zero-PnL trader. */
+export function sortGmxLeaderboardRows(rows: Dict[]): Dict[] {
+  const ranked = rows.map((row) => {
+    const pnl = gmxRealizedPnlUsd(row)
+    if (pnl === null) throw new Error('[gmx] incomplete realized-net leaderboard components')
+    return { row, pnl }
+  })
+  ranked.sort((a, b) => {
+    if (b.pnl !== a.pnl) return b.pnl - a.pnl
+    return String(a.row.id ?? '').localeCompare(String(b.row.id ?? ''))
+  })
+  return ranked.map(({ row }) => row)
+}
+
+interface GmxBoardInput {
+  items: Dict[]
+  window: GmxWindowContract
+  reportedTotal: number | null
+  /** Verbatim responses carry registered field lineage; legacy composites do not. */
+  verbatim: boolean
+}
+
+/**
+ * Two RAW shapes:
+ *  - verbatim attempt-bound response { data: { arenaWindow_…, periodAccountStats } }:
+ *    the whole window in one unsorted response. The board order (realized-net
+ *    PnL desc, address tie-break) is applied here, so ranks are global.
+ *  - legacy composite { timeframe, from, to, reportedTotal, rows } written by
+ *    the pre-capture stream, already sorted and truncated fetch-side.
+ */
+function gmxBoardInput(raw: unknown): GmxBoardInput {
+  const payload = (raw ?? {}) as Dict
+  if (Object.prototype.hasOwnProperty.call(payload, 'data')) {
+    const errors = payload.errors
+    if (Array.isArray(errors) && errors.length > 0) {
+      throw new Error('[gmx] leaderboard response carries GraphQL errors')
+    }
+    const data = payload.data
+    if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+      throw new Error('[gmx] leaderboard response has no data object')
+    }
+    const window = readGmxWindowEcho(data as Dict)
+    const list = (data as Dict).periodAccountStats
+    if (!Array.isArray(list)) {
+      throw new Error('[gmx] leaderboard response must contain data.periodAccountStats')
+    }
+    return {
+      items: sortGmxLeaderboardRows(list as Dict[]),
+      window,
+      reportedTotal: null,
+      verbatim: true,
+    }
+  }
+  return {
+    items: Array.isArray(payload.rows) ? (payload.rows as Dict[]) : [],
+    window: readGmxWindowContract(payload),
+    reportedTotal: num(payload.reportedTotal),
+    verbatim: false,
+  }
+}
+
+export function parseGmxLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLeaderboardPage {
+  const { items, window, reportedTotal, verbatim } = gmxBoardInput(raw)
 
   const rows: ParsedLeaderboardRow[] = []
   for (const item of items) {
@@ -169,16 +260,25 @@ export function parseGmxLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLea
     if (pnl === null) {
       throw new Error('[gmx] incomplete realized-net leaderboard components')
     }
+    const headlineRoi = roiOnMaxCapital(pnl, item)
     rows.push({
       exchangeTraderId: address,
-      rank: rows.length + 1, // chunk-local; tier-a re-anchors by page_size
+      rank: rows.length + 1, // page-local; tier-a re-anchors (one page when verbatim)
       nickname: null, // on-chain — no names
       avatarUrlOrigin: null,
       walletAddress: address, // spec §1.4 on-chain identity
       traderKind: 'human',
       botStrategy: null,
-      headlineRoi: roiOnMaxCapital(pnl, item),
+      headlineRoi,
       headlinePnl: pnl,
+      ...(verbatim
+        ? {
+            headlineMetricSources: {
+              pnl: { fieldPath: GMX_BOARD_PNL_FIELD_PATH },
+              ...(headlineRoi === null ? {} : { roi: { fieldPath: GMX_BOARD_ROI_FIELD_PATH } }),
+            },
+          }
+        : {}),
       headlineWinRate: winRatePct(item),
       // maxCapital = the trader's peak capital (1e30 fixed-point → usd) = AUM basis;
       // the profile uses the same field. Board-level capture covers profile-less
@@ -190,7 +290,7 @@ export function parseGmxLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLea
     })
   }
 
-  return { rows, reportedTotal: num(payload.reportedTotal) }
+  return { rows, reportedTotal }
 }
 
 // ── Profile ──
