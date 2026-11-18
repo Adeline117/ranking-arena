@@ -39,7 +39,6 @@ import { gateAdapter } from '../adapters/gate'
 import { htxAdapter } from '../adapters/htx'
 import { kucoinAdapter } from '../adapters/kucoin'
 import { lbankAdapter } from '../adapters/lbank'
-import { mexcAdapter } from '../adapters/mexc'
 import { okxWeb3Adapter } from '../adapters/okx-web3'
 import { toobitAdapter } from '../adapters/toobit'
 import { xtAdapter } from '../adapters/xt'
@@ -390,20 +389,6 @@ const CASES: SourceCase[] = [
     ['data'],
     'total',
     { pageCountKey: 'pages' }
-  ),
-  fixtureCase(
-    {
-      slug: 'mexc_futures',
-      adapter: mexcAdapter,
-      adapterSlug: 'mexc',
-      currency: 'USDT',
-      timeframe: 7,
-      pageSize: 100,
-    },
-    fixture('mexc', 'traders-v2-p1.json'),
-    ['data', 'content'],
-    ['data'],
-    'total'
   ),
   fixtureCase(
     {

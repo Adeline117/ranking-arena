@@ -44,6 +44,7 @@ import {
   requireEnvelopeValue,
 } from '../../fetch/replay-capture'
 import { extractCopierCandidateRecords } from '../../copier-candidate-conservation'
+import type { LeaderboardExhaustionDeclaration } from '../../acquisition-exhaustion'
 import {
   parseMexcHistory,
   parseMexcLeaderboardPage,
@@ -101,6 +102,30 @@ const mexcLeaderboardMeta = collectionMeta({
 /** traders/v2 rejects any limit above 100 with code 600 ("invalid limit"). */
 const MAX_PAGE_SIZE = 100
 
+/**
+ * Exhausted-completeness contract for mexc_futures (registered in
+ * arena.leaderboard_exhaustion_contracts). The board is live (~7,100 traders,
+ * 71 pages at the 100-row upstream limit) and re-sorts while it is paged:
+ * four live crawls on 2026-11-18 (16 s to 3 min) each served 1-6 traders on
+ * two pages, so the reported total was never reached by distinct rows, and
+ * parallel page requests are refused (code 510). The capture therefore reads
+ * to the empty page past the end and the proof bounds how far the board
+ * moved: page totals, |last total - distinct rows| and duplicate rows each
+ * within 1% of the last reported total, and never above 71 rows (1% of 7,100).
+ */
+export const MEXC_FUTURES_LEADERBOARD_EXHAUSTION: LeaderboardExhaustionDeclaration = Object.freeze({
+  completeness_mode: 'exhausted' as const,
+  list_path: ['data', 'content'],
+  row_key_path: ['uid'],
+  end_signal: { kind: 'short_page' as const },
+  board_version: {
+    kind: 'reported_total_drift' as const,
+    path: ['data', 'total'],
+    max_drift_bps: 100,
+  },
+  max_duplicate_rows: 71,
+})
+
 const mexcAdapter: SourceAdapter = {
   slug: 'mexc',
   capabilities: {
@@ -114,13 +139,13 @@ const mexcAdapter: SourceAdapter = {
 
   /**
    * 全部交易员 board (native 7d only; the request carries no window). One
-   * attempt-bound crawl of GET traders/v2 in reported-total mode: data.total
-   * is the board population and every exact response is stored as RAW.
+   * attempt-bound crawl of GET traders/v2 to the short or empty final page,
+   * proven complete by MEXC_FUTURES_LEADERBOARD_EXHAUSTION (data.total is
+   * drift evidence, not a population claim); every exact response is RAW.
    *
    * The AI 交易员 tab (traders/aiDetail) is a separate competition roster
-   * from another endpoint with no reported population; appending it would
-   * make the accepted rows exceed data.total, so it is not part of the
-   * Tier-A population snapshot. Rows flagged traderType='AI' on the main
+   * from another endpoint that data.total does not count, so it is not part
+   * of the Tier-A population snapshot. Rows flagged traderType='AI' on the main
    * board are still marked bot/ai by the parser.
    */
   async captureLeaderboard(session, src, timeframe, options) {
@@ -152,6 +177,7 @@ const mexcAdapter: SourceAdapter = {
         publicRequest: { query: ['condition', 'limit', 'orderBy', 'page'] },
         pageBinding: { location: 'query', key: 'page' },
         extractMeta: mexcLeaderboardMeta,
+        exhaustion: MEXC_FUTURES_LEADERBOARD_EXHAUSTION,
         pageSize,
       }
     )

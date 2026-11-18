@@ -4,18 +4,19 @@
  * Live probe 2026-11-18 (headless page, same-origin fetch; a bare curl gets
  * an Akamai 403): limit=100 page 1 reports data.total=7100; page 71 holds
  * orders 7001-7100; page 72 is an empty content array that still reports
- * total 7100; limit=500 answers {"success":false,"code":600}. The board is
- * therefore captured in reported-total mode at the 100-row upstream limit.
+ * total 7100; limit=500 answers {"success":false,"code":600}.
  *
  * The board re-sorts live: four sequential full crawls (16 s to 3 min, sorted
  * COMPREHENSIVE and FOLLOWERS) each served 1-6 traders on two pages, so as
- * many others were never served; parallel page requests answer code 510
- * ("Request frequently too fast!"). Such a crawl must never bind.
+ * many others were never served (the 16 s crawl: 7100 rows, 7098 distinct,
+ * 2 duplicates); parallel page requests answer code 510 ("Request frequently
+ * too fast!"). The capture is therefore exhausted to the empty page and
+ * bound by reported-total drift within 1% (MEXC_FUTURES_LEADERBOARD_EXHAUSTION).
  */
 
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { mexcAdapter } from '..'
+import { MEXC_FUTURES_LEADERBOARD_EXHAUSTION, mexcAdapter } from '..'
 import type { SourceRow } from '../../../core/types'
 import type { FetchSession, ReplayRequestTemplate } from '../../../fetch/types'
 import {
@@ -27,6 +28,9 @@ import { attemptBoundEvidenceForCapture } from '../../../testing/attempt-bound-e
 
 const SERVED = 'https://www.mexc.com/api/platform/futures/copyFutures/api/v1/traders/v2'
 
+type Row = Record<string, unknown>
+type Content = { total: number; content: Row[] }
+
 function fixture(name: string): Record<string, unknown> {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8')) as Record<
     string,
@@ -34,16 +38,23 @@ function fixture(name: string): Record<string, unknown> {
   >
 }
 
-type Content = { total: number; content: Array<Record<string, unknown>> }
+const LIVE = fixture('traders-v2-p1.json') as { data: Content }
+const TEMPLATE = LIVE.data.content[0]
 
-/** Live page 1 (10 rows) split into pages of `pageSize`, reporting `total`. */
-function board(pageSize: number, total: number): (page: number) => Record<string, unknown> {
-  const live = fixture('traders-v2-p1.json') as { data: Content }
-  return (page) => {
-    const copy = JSON.parse(JSON.stringify(live)) as { data: Content }
-    copy.data.content = live.data.content.slice((page - 1) * pageSize, page * pageSize)
-    copy.data.total = total
-    return copy
+/** A board of `count` distinct traders built from the live row shape. */
+function traders(count: number): Row[] {
+  return Array.from({ length: count }, (_, index) => ({
+    ...TEMPLATE,
+    uid: String(10_000_000 + index),
+    order: index + 1,
+  }))
+}
+
+/** One page of `ranking` (the board as it is when that page is read). */
+function servedPage(ranking: Row[], page: number, pageSize: number, total: number): Row {
+  return {
+    ...LIVE,
+    data: { total, content: ranking.slice((page - 1) * pageSize, page * pageSize) },
   }
 }
 
@@ -84,12 +95,12 @@ function source(pageSize: number, meta: Record<string, unknown> = {}): SourceRow
   } as unknown as SourceRow
 }
 
-async function evidence(pageSize: number, total: number) {
+/** Capture with `answer(page)` per request; parse, validate and bind as Tier-A does. */
+async function evidence(pageSize: number, answer: (page: number) => unknown) {
   const src = source(pageSize)
   const requests: ReplayRequestTemplate[] = []
-  const pages = board(pageSize, total)
   const capture = await mexcAdapter.captureLeaderboard!(
-    session(requests, (request) => pages(pageOf(request))),
+    session(requests, (request) => answer(pageOf(request))),
     src,
     7
   )
@@ -109,19 +120,56 @@ async function evidence(pageSize: number, total: number) {
     requests,
     capture,
     rows,
-    evidence: attemptBoundEvidenceForCapture({
+    validated,
+    bound: attemptBoundEvidenceForCapture({
       capture,
       source: src,
       timeframe: 7,
       acceptedPopulation: validated.valid.length,
       rejectedRowCount: validated.rejects.length,
+      registeredExhaustion: MEXC_FUTURES_LEADERBOARD_EXHAUSTION,
     }),
   }
 }
 
+/** The live 7100-row board: 71 full pages, then the empty page 72. */
+const LIVE_TOTAL = 7100
+const LIVE_PAGE = 100
+
+/** Serve a board in which each listed trader is seen again at the top of the next page. */
+function boardWithRepeats(repeatAfterPages: readonly number[]) {
+  const board = traders(LIVE_TOTAL)
+  const pages: Row[][] = []
+  let cursor = 0
+  for (let page = 1; page <= LIVE_TOTAL / LIVE_PAGE; page += 1) {
+    const repeat = repeatAfterPages.includes(page - 1) ? [pages[page - 2].at(-1)!] : []
+    const fresh = board.slice(cursor, cursor + LIVE_PAGE - repeat.length)
+    cursor += fresh.length
+    pages.push([...repeat, ...fresh])
+  }
+  return (page: number) => ({
+    ...LIVE,
+    data: { total: LIVE_TOTAL, content: pages[page - 1] ?? [] },
+  })
+}
+
 describe('mexc captureLeaderboard', () => {
-  it('binds a complete single-page board in reported-total mode', async () => {
-    const { requests, capture, rows, evidence: bound } = await evidence(100, 10)
+  it('declares a live board: short_page end, 1% total drift, at most 71 rows', () => {
+    expect(MEXC_FUTURES_LEADERBOARD_EXHAUSTION).toEqual({
+      completeness_mode: 'exhausted',
+      list_path: ['data', 'content'],
+      row_key_path: ['uid'],
+      end_signal: { kind: 'short_page' },
+      board_version: { kind: 'reported_total_drift', path: ['data', 'total'], max_drift_bps: 100 },
+      max_duplicate_rows: 71,
+    })
+  })
+
+  it('binds a single short page; total is drift evidence, not a population', async () => {
+    const board = traders(10)
+    const { requests, capture, rows, bound } = await evidence(100, (page) =>
+      servedPage(board, page, 100, 10)
+    )
 
     expect(requests).toHaveLength(1)
     const url = new URL(requests[0].url)
@@ -132,75 +180,98 @@ describe('mexc captureLeaderboard', () => {
       orderBy: 'COMPREHENSIVE',
       page: '1',
     })
-    expect(capture.terminationReason).toBe('reported_population_reached')
-    expect(capture.parsePages[0].payload).toEqual(board(100, 10)(1))
+    expect(capture.terminationReason).toBe('short_page')
+    expect(capture.sourcePages[0].sourceReports.population).toEqual({ state: 'not_reported' })
     expect(rows).toHaveLength(10)
     expect(rows[0].headlineMetricSources).toEqual({
       roi: { fieldPath: 'data.content[].roi' },
       pnl: { fieldPath: 'data.content[].pnl' },
     })
-    expect(bound).toMatchObject({ completenessMode: 'reported_total', trustBound: true })
+    expect(bound).toMatchObject({ completenessMode: 'exhausted', trustBound: true })
+    expect(bound.projection).toMatchObject({ populationState: 'unknown', exhaustionVerified: true })
   })
 
-  it('pages until the reported total is reached', async () => {
-    const { requests, capture, evidence: bound } = await evidence(4, 10)
+  it('reads a board ending on a full page through to the empty page', async () => {
+    const board = traders(8)
+    const { requests, capture, bound } = await evidence(4, (page) => servedPage(board, page, 4, 8))
 
     expect(requests.map(pageOf)).toEqual([1, 2, 3])
-    expect(capture.sourcePages.map((page) => page.sourceRowCount)).toEqual([4, 4, 2])
-    expect(capture.terminationReason).toBe('reported_population_reached')
-    expect(bound).toMatchObject({ completenessMode: 'reported_total', trustBound: true })
+    expect(capture.terminationReason).toBe('empty_page')
+    expect(bound).toMatchObject({ completenessMode: 'exhausted', trustBound: true })
   })
 
-  it('a board ending short of its reported total is never trust-bound', async () => {
-    const { capture, evidence: bound } = await evidence(100, 11)
+  it('binds the live shape: 7100 rows served, 7098 distinct, 2 repeated', async () => {
+    // Live 2026-11-18 (16 s crawl): traders at orders 3000 and 5400 were served
+    // again at the top of pages 31 and 55.
+    const { requests, capture, validated, bound } = await evidence(
+      LIVE_PAGE,
+      boardWithRepeats([30, 54])
+    )
 
-    expect(capture.terminationReason).not.toBe('reported_population_reached')
+    expect(requests).toHaveLength(72)
+    expect(capture.terminationReason).toBe('empty_page')
+    expect(capture.completeness?.row_keys).toEqual({ observed: 7100, distinct: 7098, duplicate: 2 })
+    expect(capture.completeness?.board_version).toEqual({
+      kind: 'reported_total_drift',
+      reported_totals: { min: 7100, max: 7100, last: 7100 },
+    })
+    expect(validated.valid).toHaveLength(7098)
+    expect(bound).toMatchObject({ completenessMode: 'exhausted', trustBound: true })
+  })
+
+  it('binds 70 repeated rows, within the 71-row allowance', async () => {
+    const repeats = Array.from({ length: 70 }, (_, index) => index + 1)
+    const { capture, bound } = await evidence(LIVE_PAGE, boardWithRepeats(repeats))
+    expect(capture.completeness?.row_keys).toEqual({
+      observed: 7100,
+      distinct: 7030,
+      duplicate: 70,
+    })
+    expect(bound.trustBound).toBe(true)
+  })
+
+  it('refuses a board whose distinct rows miss the last total by more than 1%', async () => {
+    // 7000 rows served (short final page) while every page reports 7100.
+    const board = traders(7000)
+    const { capture, bound } = await evidence(LIVE_PAGE, (page) =>
+      servedPage(board, page, LIVE_PAGE, LIVE_TOTAL)
+    )
+    expect(capture.terminationReason).toBe('empty_page')
+    expect(capture.completeness?.row_keys.distinct).toBe(7000)
     expect(bound.trustBound).toBe(false)
   })
 
-  it('a crawl that serves a moved trader twice is never trust-bound', async () => {
-    const src = source(5)
-    const live = board(10, 10)(1) as { data: Content }
-    const pages = [live.data.content.slice(0, 5), live.data.content.slice(4, 9)]
-    const requests: ReplayRequestTemplate[] = []
-    const capture = await mexcAdapter.captureLeaderboard!(
-      session(requests, (request) => ({
-        ...live,
-        data: { total: 10, content: pages[pageOf(request) - 1] ?? [] },
-      })),
-      src,
-      7
-    )
-    if (isPartitionedNumericLeaderboardCapture(capture)) throw new Error('identity capture')
-    const rows = capture.parsePages.flatMap(
-      (page) =>
-        mexcAdapter.parseLeaderboard(page.payload, {
-          sourceSlug: src.slug,
-          currency: 'USDT',
-          tfLabelMap: {},
-          scrapedAt: '2026-11-18T00:00:00.000Z',
-          meta: {},
-        }).rows
-    )
-    const validated = validateLeaderboardRows(rows)
-    expect(rows).toHaveLength(10)
-    expect(validated.valid).toHaveLength(9)
-    const bound = attemptBoundEvidenceForCapture({
-      capture,
-      source: src,
-      timeframe: 7,
-      acceptedPopulation: validated.valid.length,
-      rejectedRowCount: validated.rejects.length,
+  it('refuses more repeated rows than the allowance', async () => {
+    // Two traders repeated on each of 36 page boundaries: 72 duplicates > 71.
+    const board = traders(LIVE_TOTAL)
+    const pages: Row[][] = []
+    let cursor = 0
+    for (let page = 1; page <= 71; page += 1) {
+      const repeat = page >= 2 && page <= 37 ? pages[page - 2].slice(-2) : []
+      const fresh = board.slice(cursor, cursor + LIVE_PAGE - repeat.length)
+      cursor += fresh.length
+      pages.push([...repeat, ...fresh])
+    }
+    const { capture, bound } = await evidence(LIVE_PAGE, (page) => ({
+      ...LIVE,
+      data: { total: LIVE_TOTAL, content: pages[page - 1] ?? [] },
+    }))
+    expect(capture.completeness?.row_keys).toEqual({
+      observed: 7100,
+      distinct: 7028,
+      duplicate: 72,
     })
     expect(bound.trustBound).toBe(false)
   })
 
   it('a rate-limited page fails the capture as an upstream error', async () => {
+    const board = traders(10)
     const requests: ReplayRequestTemplate[] = []
-    const pages = board(5, 10)
     const failure = mexcAdapter.captureLeaderboard!(
       session(requests, (request) =>
-        pageOf(request) === 1 ? pages(1) : fixture('traders-v2-rate-limited.json')
+        pageOf(request) === 1
+          ? servedPage(board, 1, 5, 10)
+          : fixture('traders-v2-rate-limited.json')
       ),
       source(5),
       7
@@ -234,7 +305,8 @@ describe('mexc captureLeaderboard', () => {
   })
 
   it('persists no request headers in the RAW request evidence', async () => {
-    const { capture } = await evidence(100, 10)
+    const board = traders(10)
+    const { capture } = await evidence(100, (page) => servedPage(board, page, 100, 10))
     expect(JSON.stringify(capture.sourcePages[0].rawPage)).not.toMatch(
       /accept|user-agent|referer|cookie|authorization/i
     )
