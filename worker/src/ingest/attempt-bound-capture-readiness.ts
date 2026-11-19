@@ -24,8 +24,19 @@ export const TIER_A_EXECUTION_ASSERT_RPC_SHA256 =
   '09dabe40f76d4508e595c6333889a31a1310109ceebcf45522aaaf8309f8e05d' as const
 export const TIER_A_EXECUTION_CLOSE_RPC_SHA256 =
   'd8987ca8991ae35e0c7885b228cd711aeff72a9fade582621eb81cb1d388007e' as const
+// record_tier_a_execution_window_receipt as 20261118161307 installs it: it
+// also receipts an exhausted outcome whose exhaustion proof holds.
 export const TIER_A_EXECUTION_RECORD_RECEIPT_RPC_SHA256 =
+  '8f23cbae0358f200dc7b2a0f4e00c7e218470ba1427968aa9fab0e390e8e1ef3' as const
+// The reviewed 20260729015500 body (complete outcomes only). Still accepted so
+// this release may serve before 20261118161307 is applied, and keeps serving
+// after it: either order of worker deploy and migration passes the gate.
+export const TIER_A_EXECUTION_RECORD_RECEIPT_RPC_PRE_EXHAUSTION_SHA256 =
   'e5bb12bf86a5ac29154c8e6e38d1225d9cb356231d358b464e73bdf1463ba887' as const
+export const TIER_A_EXECUTION_RECORD_RECEIPT_RPC_SHA256S: readonly string[] = [
+  TIER_A_EXECUTION_RECORD_RECEIPT_RPC_PRE_EXHAUSTION_SHA256,
+  TIER_A_EXECUTION_RECORD_RECEIPT_RPC_SHA256,
+]
 export const TIER_A_EXECUTION_GET_RECEIPT_RPC_SHA256 =
   '079f55e3f71298e1509659fda8529c6d1f61f05e3aeaaf39c10418a9e082a4c8' as const
 export const TIER_A_EXECUTION_ENFORCEMENT_MARKER_RPC_SHA256 =
@@ -171,11 +182,20 @@ const RECEIPT_LOOKUP_RPC_CONFIG = `ARRAY[
       'statement_timeout=30s'
     ]::pg_catalog.text[]`
 
-const RPC_SQL = `WITH expected(
+// The accepted body digests of one RPC, as a SQL text[] literal. The digests
+// are module constants of 64 lowercase hex characters, never input.
+function sqlDigestSet(digests: readonly string[]): string {
+  for (const digest of digests) {
+    if (!/^[0-9a-f]{64}$/.test(digest)) throw new Error('invalid pinned RPC digest')
+  }
+  return `ARRAY[${digests.map((digest) => `'${digest}'`).join(', ')}]::pg_catalog.text[]`
+}
+
+export const PARTITIONED_V4_RPC_PROOF_SQL = `WITH expected(
     rpc_name,
     rollout_group,
     signature,
-    expected_sha256,
+    expected_sha256s,
     expected_volatility,
     expected_return_type,
     expected_config
@@ -185,7 +205,7 @@ const RPC_SQL = `WITH expected(
         'legacy_start',
         'legacy',
         '${LEGACY_START_RPC_SIGNATURE}',
-        '${PARTITIONED_V4_START_RPC_SHA256}',
+        ${sqlDigestSet([PARTITIONED_V4_START_RPC_SHA256])},
         'v',
         'arena.leaderboard_acquisition_attempts',
         ${LEGACY_RPC_CONFIG}
@@ -194,7 +214,7 @@ const RPC_SQL = `WITH expected(
         'legacy_finish',
         'legacy',
         '${LEGACY_FINISH_RPC_SIGNATURE}',
-        '${PARTITIONED_V4_FINISH_RPC_SHA256}',
+        ${sqlDigestSet([PARTITIONED_V4_FINISH_RPC_SHA256])},
         'v',
         'arena.leaderboard_acquisition_outcomes',
         ${LEGACY_RPC_CONFIG}
@@ -203,7 +223,7 @@ const RPC_SQL = `WITH expected(
         'claimed_start',
         'claimed',
         '${CLAIMED_START_RPC_SIGNATURE}',
-        '${PARTITIONED_V4_CLAIMED_START_RPC_SHA256}',
+        ${sqlDigestSet([PARTITIONED_V4_CLAIMED_START_RPC_SHA256])},
         'v',
         'arena.leaderboard_acquisition_attempts',
         ${CLAIMED_RPC_CONFIG}
@@ -212,7 +232,7 @@ const RPC_SQL = `WITH expected(
         'claimed_finish',
         'claimed',
         '${CLAIMED_FINISH_RPC_SIGNATURE}',
-        '${PARTITIONED_V4_CLAIMED_FINISH_RPC_SHA256}',
+        ${sqlDigestSet([PARTITIONED_V4_CLAIMED_FINISH_RPC_SHA256])},
         'v',
         'arena.leaderboard_acquisition_outcomes',
         ${CLAIMED_RPC_CONFIG}
@@ -221,7 +241,7 @@ const RPC_SQL = `WITH expected(
         'execution_claim',
         'claimed',
         '${EXECUTION_CLAIM_RPC_SIGNATURE}',
-        '${TIER_A_EXECUTION_CLAIM_RPC_SHA256}',
+        ${sqlDigestSet([TIER_A_EXECUTION_CLAIM_RPC_SHA256])},
         'v',
         'jsonb',
         ${CLAIMED_RPC_CONFIG}
@@ -230,7 +250,7 @@ const RPC_SQL = `WITH expected(
         'execution_heartbeat',
         'claimed',
         '${EXECUTION_HEARTBEAT_RPC_SIGNATURE}',
-        '${TIER_A_EXECUTION_HEARTBEAT_RPC_SHA256}',
+        ${sqlDigestSet([TIER_A_EXECUTION_HEARTBEAT_RPC_SHA256])},
         'v',
         'jsonb',
         ${CLAIMED_RPC_CONFIG}
@@ -239,7 +259,7 @@ const RPC_SQL = `WITH expected(
         'execution_assert',
         'claimed',
         '${EXECUTION_ASSERT_RPC_SIGNATURE}',
-        '${TIER_A_EXECUTION_ASSERT_RPC_SHA256}',
+        ${sqlDigestSet([TIER_A_EXECUTION_ASSERT_RPC_SHA256])},
         'v',
         'jsonb',
         ${CLAIMED_RPC_CONFIG}
@@ -248,7 +268,7 @@ const RPC_SQL = `WITH expected(
         'execution_close',
         'claimed',
         '${EXECUTION_CLOSE_RPC_SIGNATURE}',
-        '${TIER_A_EXECUTION_CLOSE_RPC_SHA256}',
+        ${sqlDigestSet([TIER_A_EXECUTION_CLOSE_RPC_SHA256])},
         'v',
         'jsonb',
         ${CLAIMED_RPC_CONFIG}
@@ -257,7 +277,7 @@ const RPC_SQL = `WITH expected(
         'execution_record_receipt',
         'claimed',
         '${EXECUTION_RECORD_RECEIPT_RPC_SIGNATURE}',
-        '${TIER_A_EXECUTION_RECORD_RECEIPT_RPC_SHA256}',
+        ${sqlDigestSet(TIER_A_EXECUTION_RECORD_RECEIPT_RPC_SHA256S)},
         'v',
         'jsonb',
         ${CLAIMED_RPC_CONFIG}
@@ -266,7 +286,7 @@ const RPC_SQL = `WITH expected(
         'execution_get_receipt',
         'claimed',
         '${EXECUTION_GET_RECEIPT_RPC_SIGNATURE}',
-        '${TIER_A_EXECUTION_GET_RECEIPT_RPC_SHA256}',
+        ${sqlDigestSet([TIER_A_EXECUTION_GET_RECEIPT_RPC_SHA256])},
         's',
         'jsonb',
         ${RECEIPT_LOOKUP_RPC_CONFIG}
@@ -300,7 +320,7 @@ const RPC_SQL = `WITH expected(
         AND pg_catalog.encode(
           pg_catalog.sha256(pg_catalog.convert_to(function_row.prosrc, 'UTF8')),
           'hex'
-        ) = expected.expected_sha256
+        ) = ANY (expected.expected_sha256s)
         AND function_row.proconfig @> expected.expected_config
         AND pg_catalog.cardinality(function_row.proconfig) =
             pg_catalog.cardinality(expected.expected_config)
@@ -1339,8 +1359,10 @@ export function validatePartitionedV4WorkerReadiness(payload: unknown): void {
     payload.rpc.execution_heartbeat_rpc_sha256 !== TIER_A_EXECUTION_HEARTBEAT_RPC_SHA256 ||
     payload.rpc.execution_assert_rpc_sha256 !== TIER_A_EXECUTION_ASSERT_RPC_SHA256 ||
     payload.rpc.execution_close_rpc_sha256 !== TIER_A_EXECUTION_CLOSE_RPC_SHA256 ||
-    payload.rpc.execution_record_receipt_rpc_sha256 !==
-      TIER_A_EXECUTION_RECORD_RECEIPT_RPC_SHA256 ||
+    typeof payload.rpc.execution_record_receipt_rpc_sha256 !== 'string' ||
+    !TIER_A_EXECUTION_RECORD_RECEIPT_RPC_SHA256S.includes(
+      payload.rpc.execution_record_receipt_rpc_sha256
+    ) ||
     payload.rpc.execution_get_receipt_rpc_sha256 !== TIER_A_EXECUTION_GET_RECEIPT_RPC_SHA256 ||
     payload.rpc.legacy_contract_exact !== true ||
     payload.rpc.claimed_runtime_contract_exact !== true ||
@@ -1421,7 +1443,7 @@ export async function loadPartitionedV4WorkerReadiness({
     await client.query('SET LOCAL search_path = pg_catalog, pg_temp')
     const registry = await client.query(REGISTRY_SQL)
     const enforcementProof = await client.query(TIER_A_EXECUTION_ENFORCEMENT_CATALOG_SQL)
-    const rpc = await client.query(RPC_SQL)
+    const rpc = await client.query(PARTITIONED_V4_RPC_PROOF_SQL)
     if (registry.rowCount !== 2 || registry.rows.length !== 2) {
       throw startupGateError('capture registry row cardinality is not exact')
     }
