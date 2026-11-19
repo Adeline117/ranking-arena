@@ -9,7 +9,7 @@
 2026-11-13 起，2026-08-04 之后新增的迁移已全部分类，`scripts/qa/launch-inventory-gap.json` 为空列表。`launch-inventory-gap.test.mjs` 保证以后新增的迁移也必须先分类。分类写在 `scripts/maintenance/apply-launch-migrations.sh` 里：
 
 - **predeploy**（161 个）：部署前，按清单顺序逐文件应用。
-- **postdeploy**（23 个）：目标版本上线后才应用。
+- **postdeploy**（24 个）：目标版本上线后才应用。
 - **ADR-023 单文件**（`ADR023_SINGLE_FILE_MIGRATIONS`，2 个）：已分类，但执行脚本不会输出它们，`render-predeploy-one` 也会拒绝。每个都必须走 ADR-023 单文件通道，在下文规定的位置、各自的操作窗口里单独应用。
 - **superseded**：永不重放。
 
@@ -90,6 +90,7 @@
 - **币安榜单页大小（迁移 `20261118113319`，postdeploy）**：binance_futures 20→30、binance_spot 20→100，只改 `arena.sources.page_size`。依据：20 条/页时合约一个窗口 660 次请求约 35 分钟，期间榜单变动导致每次采集都有重复行、报告总数页间不一致，被采集可信门拒绝。30 / 100 是接口实际返回的上限（2026-11-18 本机真实浏览器只读实测：请求 100/200/500 时合约只返回 30 行、现货只返回 100 行，页间无重叠），配置超过上限会让每页都像短页、采集在第一页后结束。合约仍需约 440 次请求，单靠页大小不够。
 - **能力表刷新改写（迁移 `20261117204557`，postdeploy）**：原每 30 分钟的 pg_cron 刷新每次跑满 600 秒超时，并在整点、半点后的十分钟内持锁，会挡住采集 worker 启动时的建分区（2026-11-18 一次部署因此超过 300 秒交接时限而回滚）。应用本迁移前，采集部署的切换步骤要避开每小时 :00–:10 和 :30–:40；应用本迁移本身也要避开这两个窗口（等视图锁 5 秒，拿不到即整体回滚）。应用后刷新改为每小时 :17，生产只读实测新定义约 43 秒。
 - **期望来源集只含已注册采集契约的来源（迁移 `20261118113759`，postdeploy）**：没有有效 `arena.leaderboard_capture_contracts` 注册的来源（Tier-A 在任何会话前就拒绝它们，永远不会新鲜）不再计入赛季期望集，改列为 unsupported：每次发布写入 `arena.leaderboard_publication_unsupported_sources`，前台经 `public.public_leaderboard_unsupported_sources()` 读取并标"暂不支持"。>50% 新鲜规则作用于缩减后的期望集；"核心来源全挂"规则不变（未注册的核心来源仍算不新鲜）；缩减后少于 8 个来源时以 `expected_set_below_floor` 拒绝发布。必须在带下限与 unsupported 记录的编排器上线之后应用；应用后当前 serving head 的期望集与实时集不再相等，要等下一次发布才重新上榜。
+- **Tier-A 窗口回执接受穷尽完整性（迁移 `20261118161307`，postdeploy）**：`arena.record_tier_a_execution_window_receipt` 原来只接受 `terminal_state = 'complete'`，穷尽模式来源（okx_futures、okx_spot、binance_web3_bsc，以及以后的穷尽/报告总数漂移来源）每次发布成功后记回执都报“evidence is incomplete or mismatched”，worker 把已提交快照和证据的任务记为失败。本迁移只加一条分支：与 `20261115141050` 相同的穷尽结果形状且 `arena.leaderboard_outcome_exhaustion_bound` 成立。worker 启动门同时接受旧、新两个函数体摘要，所以必须先上线带该启动门的 worker 版本，之后任何时候应用本迁移都安全；旧 worker 遇到新函数体会在启动门失败。
 - **币安改由本机采集（2026-11-17 owner 已定）**：binance_futures、binance_spot 的采集区域由 `vps_sg` 改为 `local`（迁移 `20261117204948`，postdeploy），其余字段不变。依据：SG 节点未运行导致两源过期；2026-11-18 从本机用真实浏览器按适配器的预热方式只读探测，合约榜（7/30/90 天，total 13127）、现货榜（total 2469）、合约详情/曲线、现货详情均返回 `000000`。bitmart_futures 仍留在 `vps_sg`（本机被 Turnstile 拦，curl 403）。
 
 ## 上线前要确认的产品问题
