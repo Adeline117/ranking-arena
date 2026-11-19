@@ -415,6 +415,14 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # (16 -> 50), the largest pages those endpoints serve, so a board has less time
 # to move and fewer page boundaries while it is paged. It changes page_size
 # only, depends on no worker release and touches no table 192134 guards.
+# 20261118161307 lets arena.record_tier_a_execution_window_receipt receipt an
+# exhausted outcome whose exhaustion proof holds (the 20261115141050 branch):
+# without it every exhaustion publication (okx_futures, okx_spot,
+# binance_web3_bsc) fails its job after the snapshot committed. The worker
+# pins the receipt body, so the release that accepts both the previous and
+# the new digest must serve first. It requires predeploy 20261115141050,
+# replaces no function 192134 pins and touches no table 192134 guards, so
+# 192134 stays last.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -437,6 +445,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261118113759_expected_sources_require_capture_contract.sql
   20261118141652_toobit_leaderboard_single_page.sql
   20261118150737_public_boards_larger_served_pages.sql
+  20261118161307_tier_a_window_receipt_exhaustion_branch.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
