@@ -349,6 +349,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:expected-sources-capture-contract-pg17
 
+      - name: Prove Tier-A window receipts accept proven exhaustion outcomes
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:tier-a-receipt-exhaustion-pg17
+
       - name: Prove trader-series publication isolation
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
