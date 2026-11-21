@@ -672,16 +672,6 @@ jobs:
           CI: true
         run: npm run test:e2e:hermetic
 
-      # 交易员页服务端摘要的截图（桌面/手机 × 明/暗），供人工看版式。
-      - name: Upload trader summary screenshots
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
-        if: always()
-        with:
-          name: trader-summary-screenshots
-          path: e2e-screenshots/
-          retention-days: 7
-          if-no-files-found: ignore
-
       - name: Bundle size check
         run: |
           echo "## Bundle Size Report" >> $GITHUB_STEP_SUMMARY

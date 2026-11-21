@@ -7,7 +7,8 @@ import { test, expect } from './fixtures'
  * that a crawler, which runs no script and cannot call /api/*, still receives
  * the trader's numbers and links to other traders. These tests read the raw
  * response the way a crawler does, then check the block survives hydration and
- * capture it for visual review (uploaded by CI as `trader-summary-screenshots`).
+ * capture it for visual review when run locally (CI may not upload artifacts
+ * from a pull request, so the screenshots stay on the machine that ran them).
  */
 const PROFILE = '/trader/e2e-shared?platform=binance_futures'
 const GOOGLEBOT = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
