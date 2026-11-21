@@ -34,6 +34,13 @@
  * OKX defaults to SWAP, and many SPOT/SWAP boards share the same uniqueCode,
  * so the response can silently belong to the trader's futures surface.
  *
+ * No Tier-B profile capture contract (lib/ingest/profile-capture): none of
+ * the above reports a maximum drawdown, and the web's own detail endpoints
+ * report none for the requested window either (probe 2026-11-21, pinned by
+ * __tests__/profile-capture-contract.test.ts): spot/trade-data `maxRetreat`
+ * is one value for every latestNum, and public/max-drawdown is day / week /
+ * history per account. The per-window winRatio is already on the board entry.
+ *
  * The web's internal priapi (/priapi/v5/ecotrade/public/follow-rank,
  * ~84 pages) has wider membership but is undocumented — noted in
  * sources.meta as a future expansion, NOT used.

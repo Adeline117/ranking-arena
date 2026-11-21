@@ -231,7 +231,9 @@ export function parseOkxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
       roi: newest?.roi ?? null,
       pnl: newest?.pnl ?? null,
       sharpe: null,
-      mdd: null, // not exposed on the public API
+      // No public OKX surface reports a per-window drawdown (probe 2026-11-21,
+      // docs/UNREACHABLE_FIELDS_LEDGER.md), so it stays NULL and unattested.
+      mdd: null,
       winRate: pct(s?.winRatio),
       winPositions: null, // profitDays/lossDays are DAYS — kept in extras
       totalPositions: null,
