@@ -40,6 +40,7 @@ import {
   parseExactTraderFirstScreenResponse,
   parseExactRankHistory,
   resolveLinkedAccountViewScope,
+  serverSummaryMatchesView,
   resolveTraderHeaderAccountMetrics,
   traderDetailMatchesLinkedAccount,
   traderDetailMatchesRequestedRoute,
@@ -1877,7 +1878,14 @@ export default function TraderProfileClient({
           }
         `}</style>
 
-        {serverSummary}
+        {/* Only while the view still shows the account the server summarized. */}
+        {serverSummaryMatchesView({
+          mode: linkedAccountScope.mode,
+          server: { source: serverData.source, traderKey: serverData.source_trader_id },
+          visible: { source: visibleSource, traderKey: visibleTraderKey },
+        })
+          ? serverSummary
+          : null}
 
         {/* Data disclaimer */}
         <Text
