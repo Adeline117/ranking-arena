@@ -151,7 +151,12 @@ export function parseBitgetLeaderboardPage(
       traderKind: 'human',
       botStrategy: null,
       headlineRoi: cols.profit_rate ?? pct(item, 'roi', ['profitRate', 'returnRate']),
-      headlinePnl: cols.total_income ?? num(item.profit ?? item.totalProfit),
+      // The futures board names the leader's PnL column total_income; the spot
+      // and cfd boards name the same column total_profit (probed 2026-11-21:
+      // their five columns are profit_rate, total_profit, total_follow_profit,
+      // aum, winning_rate under every sortRule). total_follow_profit is the
+      // copiers' profit.
+      headlinePnl: cols.total_income ?? cols.total_profit ?? num(item.profit ?? item.totalProfit),
       headlineMetricSources: {
         ...(uta && cols.profit_rate != null
           ? { roi: { fieldPath: 'data.rows[].itemVoList[profit_rate].comparedValue' } }
@@ -161,6 +166,9 @@ export function parseBitgetLeaderboardPage(
           : {}),
       },
       headlineWinRate: cols.winning_rate ?? pct(item, 'winRate', ['winningRate']),
+      // Only the futures board has a max-drawdown column (already a percent);
+      // spot and cfd never return one, whatever the sort.
+      headlineMdd: cols.max_retracement ?? null,
       raw: item,
     })
   }
