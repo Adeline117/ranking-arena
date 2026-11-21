@@ -8,6 +8,8 @@ import { JsonLd } from '@/app/components/Providers/JsonLd'
 import { generateArticleSchema } from '@/lib/seo/structured-data'
 
 export const revalidate = 3600
+// 文章是代码里的固定集合：未列出的 slug 直接返回真 404，而不是 200 的未找到页。
+export const dynamicParams = false
 
 export function generateStaticParams() {
   return ARTICLES.map((a) => ({ slug: a.slug }))
@@ -20,7 +22,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params
   const article = getArticleBySlug(slug)
-  if (!article) return { title: 'Not Found' }
+  if (!article) return { title: 'Not Found', robots: { index: false, follow: false } }
   const { lang } = await getServerTranslation()
   const title = pickLocalized(article.title, lang)
   const description = pickLocalized(article.excerpt, lang)

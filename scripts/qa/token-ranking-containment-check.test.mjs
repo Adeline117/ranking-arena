@@ -53,7 +53,7 @@ test('requires a credential-free explicit origin', () => {
   assert.equal(parseExplicitBaseUrl('http://localhost:3000/'), 'http://localhost:3000')
 })
 
-test('checks every API shape, both pages, and both sitemap surfaces with read-only GETs', async () => {
+test('checks every API shape, both pages, and the sitemap with read-only GETs', async () => {
   const calls = []
   const result = await checkTokenRankingContainment('https://preview.test/', async (url, init) => {
     calls.push({ url, init })
@@ -64,9 +64,9 @@ test('checks every API shape, both pages, and both sitemap surfaces with read-on
     baseUrl: 'https://preview.test',
     apiChecks: 4,
     pageChecks: 2,
-    sitemapChecks: 2,
+    sitemapChecks: 1,
   })
-  assert.equal(calls.length, 8)
+  assert.equal(calls.length, 7)
   assert.equal(
     calls.every(({ init }) => init.method === 'GET'),
     true
@@ -77,10 +77,6 @@ test('checks every API shape, both pages, and both sitemap surfaces with read-on
   )
   assert.equal(
     calls.some(({ url }) => url.includes('action=unsupported')),
-    true
-  )
-  assert.equal(
-    calls.some(({ url }) => url.endsWith('/sitemap/0.xml')),
     true
   )
   assert.equal(

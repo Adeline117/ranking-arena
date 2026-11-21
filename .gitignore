@@ -190,3 +190,4 @@ e2e/*debug*
 scratchpad/
 /playwright-report-hermetic/
 /test-results-hermetic/
+/e2e-screenshots/

@@ -1,3 +1,4 @@
+import { BASE_URL } from '@/lib/constants/urls'
 import type { Metadata } from 'next'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { ApiPricingSection } from './ApiPricingSection'
@@ -20,6 +21,7 @@ export const metadata: Metadata = {
   title: 'API Documentation — Arena Data API',
   description:
     'Access cross-exchange crypto trader rankings, performance data, and search. Free tier: 100 requests/day.',
+  alternates: { canonical: `${BASE_URL}/api-docs` },
 }
 
 // ---------------------------------------------------------------------------

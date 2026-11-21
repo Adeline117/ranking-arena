@@ -7,7 +7,8 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: '*',
-        allow: ['/', '/api/sitemap-xml'],
+        // /api/og 是各页面 og:image 的分享图，屏蔽后谷歌和社交平台都取不到缩略图。
+        allow: ['/', '/api/sitemap-xml', '/api/og'],
         disallow: [
           '/admin',
           '/api/',
