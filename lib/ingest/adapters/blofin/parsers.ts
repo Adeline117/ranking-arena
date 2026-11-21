@@ -147,14 +147,26 @@ export function parseBlofinLeaderboardPage(
  * — plus per-symbol trading preferences + the roi/pnl chart. Scales match the
  * board (roi/mdd/win_ratio are decimal fractions → pct()×100); sharpe/sortino/
  * calmar are raw ratios blofin computes itself. Every field NULL-collapses.
+ *
+ * blofin_spot (public probe 2026-11-20, /sapi/v1/spot_copy/trader/*): the
+ * indicators response has the same fields minus the volume ones. Its
+ * stat/performance response is an object, not an array:
+ *   data: {performance:{roi,pnl,max_drawdown,win_rate}, roi:[{time,value}],
+ *          pnl:[{time,value}], symbols:[{symbol,trades,ratio,win_ratio}]}
+ * `roi` is the cumulative series of the board chart; `pnl` is one bar per day
+ * (not cumulative), so it is not written as the cumulative pnl series.
+ * `symbols` is the per-symbol table futures serves from symbol_performance.
  */
 export function parseBlofinProfile(rawPayload: unknown, ctx: ParseCtx): ParsedProfile {
   const p = (rawPayload ?? {}) as Dict
   const tf = (num(p.timeframe) ?? 90) as RankingTimeframe
   const ind = ((p.indicators as Dict)?.data ?? null) as Dict | null
   const info = ((p.info as Dict)?.data ?? null) as Dict | null
-  const symbolPerf = ((p.symbolPerf as Dict)?.data as Dict | null)?.symbols
   const perf = (p.performance as Dict)?.data
+  const spotPerf = perf !== null && typeof perf === 'object' && !Array.isArray(perf)
+  const symbolPerf = spotPerf
+    ? (perf as Dict).symbols
+    : ((p.symbolPerf as Dict)?.data as Dict | null)?.symbols
 
   const stats: ParsedStats[] = []
   if (ind) {
@@ -223,6 +235,16 @@ export function parseBlofinProfile(rawPayload: unknown, ctx: ParseCtx): ParsedPr
     pnlPts.sort((a, b) => (a.ts < b.ts ? -1 : 1))
     if (roiPts.length > 0) series.push({ timeframe: tf, metric: 'roi', points: roiPts })
     if (pnlPts.length > 0) series.push({ timeframe: tf, metric: 'pnl', points: pnlPts })
+  } else if (spotPerf && Array.isArray((perf as Dict).roi)) {
+    const roiPts: Array<{ ts: string; value: number }> = []
+    for (const row of (perf as Dict).roi as Dict[]) {
+      const t = num(row.time)
+      const r = pct(row.value)
+      if (t === null || t <= 0 || r === null) continue
+      roiPts.push({ ts: new Date(t).toISOString(), value: r })
+    }
+    roiPts.sort((a, b) => (a.ts < b.ts ? -1 : 1))
+    if (roiPts.length > 0) series.push({ timeframe: tf, metric: 'roi', points: roiPts })
   }
 
   return {
