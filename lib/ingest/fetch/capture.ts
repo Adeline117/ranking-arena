@@ -859,7 +859,10 @@ function exhaustionPageFacts(
   let reportedTotal: number | null = null
   // The empty page past the end of a board carries no rows and no usable total.
   if (declaration.board_version.kind === 'reported_total_drift' && rowCount > 0) {
-    const total = exhaustionPayloadPath(payload, declaration.board_version.path)
+    let total = exhaustionPayloadPath(payload, declaration.board_version.path)
+    // A total reported as a canonical decimal string (bybit totalCount "32614")
+    // is that integer; anything else is not a total.
+    if (typeof total === 'string' && /^(0|[1-9][0-9]{0,8})$/.test(total)) total = Number(total)
     if (typeof total !== 'number' || !Number.isSafeInteger(total) || total < 0) {
       throw new TypeError(
         `[ingest] exhausted capture board total ${declaration.board_version.path.join('.')} must be a non-negative integer`
