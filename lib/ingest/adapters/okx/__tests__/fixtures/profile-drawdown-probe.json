@@ -1,0 +1,1422 @@
+{
+  "capturedAt": "2026-11-21T07:45:11Z",
+  "method": "unauthenticated GET, no cookies; responses verbatim",
+  "swap": {
+    "uniqueCode": "744584888019747661",
+    "responses": {
+      "/api/v5/copytrading/public-stats?instType=SWAP&uniqueCode=744584888019747661&lastDays=1": {
+        "code": "0",
+        "data": [
+          {
+            "avgSubPosNotional": "24037.5905",
+            "ccy": "USDT",
+            "curCopyTraderPnl": "444.2871920858080464",
+            "investAmt": "108519.6477435003866505",
+            "lossDays": "2",
+            "profitDays": "5",
+            "winRatio": "0.7143"
+          }
+        ],
+        "msg": ""
+      },
+      "/api/v5/copytrading/public-stats?instType=SWAP&uniqueCode=744584888019747661&lastDays=2": {
+        "code": "0",
+        "data": [
+          {
+            "avgSubPosNotional": "56512.2454",
+            "ccy": "USDT",
+            "curCopyTraderPnl": "444.2871920858080464",
+            "investAmt": "65656.7635030136599903",
+            "lossDays": "10",
+            "profitDays": "20",
+            "winRatio": "0.6667"
+          }
+        ],
+        "msg": ""
+      },
+      "/api/v5/copytrading/public-stats?instType=SWAP&uniqueCode=744584888019747661&lastDays=3": {
+        "code": "0",
+        "data": [
+          {
+            "avgSubPosNotional": "30050.8903",
+            "ccy": "USDT",
+            "curCopyTraderPnl": "444.2871920858080464",
+            "investAmt": "57483.6867003099087917",
+            "lossDays": "40",
+            "profitDays": "50",
+            "winRatio": "0.5556"
+          }
+        ],
+        "msg": ""
+      },
+      "/priapi/v5/ecotrade/public/trader/trade-data?uniqueName=744584888019747661&latestNum=7&bizType=SWAP": {
+        "code": "0",
+        "data": [
+          {
+            "nonPeriodicPart": [
+              {
+                "desc": "Number of days this trader has been a lead trader for.",
+                "functionId": "initialDay",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Days leading trades",
+                "type": "2",
+                "value": "156"
+              },
+              {
+                "desc": "USDT balance in lead trader’s trading account.",
+                "functionId": "asset",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Lead trade assets (USDT)",
+                "type": "0",
+                "value": "150902.85283666957"
+              },
+              {
+                "desc": "Asset under management. Total funds allocated by copy traders.",
+                "functionId": "aum",
+                "learnMoreUrl": "",
+                "order": 3,
+                "title": "AUM",
+                "type": "0",
+                "value": "54652.9402602778925637"
+              },
+              {
+                "desc": "Total copy trade PnL of all traders currently copying this lead trader.",
+                "functionId": "currentFollowPnl",
+                "learnMoreUrl": "",
+                "order": 4,
+                "title": "Current copy trader PnL (USDT)",
+                "type": "0",
+                "value": "444.2871920858080464"
+              },
+              {
+                "desc": "",
+                "functionId": "followerNum",
+                "learnMoreUrl": "",
+                "order": 5,
+                "title": "Copy traders",
+                "type": "4",
+                "value": "96/300"
+              },
+              {
+                "desc": "The percentage of total copy trading profit that the lead trader will receive.",
+                "functionId": "profitShareRatio",
+                "learnMoreUrl": "",
+                "order": 6,
+                "title": "Profit-sharing ratio",
+                "type": "1",
+                "value": "0.08"
+              }
+            ],
+            "periodicPart": [
+              {
+                "desc": "",
+                "functionId": "profitDays",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Days w/ profit",
+                "type": "2",
+                "value": "5"
+              },
+              {
+                "desc": "",
+                "functionId": "lossDays",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Days w/ loss",
+                "type": "2",
+                "value": "2"
+              },
+              {
+                "desc": "Number of days with profit / Number of days leading trades × 100%",
+                "functionId": "winRatio",
+                "learnMoreUrl": "",
+                "order": 3,
+                "title": "Win rate",
+                "type": "1",
+                "value": "0.7143"
+              },
+              {
+                "desc": "Cumulative profit of lead trader / Cumulative loss of lead trader",
+                "functionId": "pnlProfitLossRatio",
+                "learnMoreUrl": "",
+                "order": 4,
+                "title": "Profit/Loss ratio",
+                "type": "3",
+                "value": "13.26:1"
+              },
+              {
+                "desc": "The average value of each lead trade position this trader has held.",
+                "functionId": "avgPositionValue",
+                "learnMoreUrl": "",
+                "order": 5,
+                "title": "Average position value",
+                "type": "0",
+                "value": "24037.5905"
+              }
+            ]
+          }
+        ],
+        "msg": ""
+      },
+      "/priapi/v5/ecotrade/public/trader/trade-data?uniqueName=744584888019747661&latestNum=30&bizType=SWAP": {
+        "code": "0",
+        "data": [
+          {
+            "nonPeriodicPart": [
+              {
+                "desc": "Number of days this trader has been a lead trader for.",
+                "functionId": "initialDay",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Days leading trades",
+                "type": "2",
+                "value": "156"
+              },
+              {
+                "desc": "USDT balance in lead trader’s trading account.",
+                "functionId": "asset",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Lead trade assets (USDT)",
+                "type": "0",
+                "value": "150902.85283666957"
+              },
+              {
+                "desc": "Asset under management. Total funds allocated by copy traders.",
+                "functionId": "aum",
+                "learnMoreUrl": "",
+                "order": 3,
+                "title": "AUM",
+                "type": "0",
+                "value": "54652.9402602778925637"
+              },
+              {
+                "desc": "Total copy trade PnL of all traders currently copying this lead trader.",
+                "functionId": "currentFollowPnl",
+                "learnMoreUrl": "",
+                "order": 4,
+                "title": "Current copy trader PnL (USDT)",
+                "type": "0",
+                "value": "444.2871920858080464"
+              },
+              {
+                "desc": "",
+                "functionId": "followerNum",
+                "learnMoreUrl": "",
+                "order": 5,
+                "title": "Copy traders",
+                "type": "4",
+                "value": "96/300"
+              },
+              {
+                "desc": "The percentage of total copy trading profit that the lead trader will receive.",
+                "functionId": "profitShareRatio",
+                "learnMoreUrl": "",
+                "order": 6,
+                "title": "Profit-sharing ratio",
+                "type": "1",
+                "value": "0.08"
+              }
+            ],
+            "periodicPart": [
+              {
+                "desc": "",
+                "functionId": "profitDays",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Days w/ profit",
+                "type": "2",
+                "value": "20"
+              },
+              {
+                "desc": "",
+                "functionId": "lossDays",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Days w/ loss",
+                "type": "2",
+                "value": "10"
+              },
+              {
+                "desc": "Number of days with profit / Number of days leading trades × 100%",
+                "functionId": "winRatio",
+                "learnMoreUrl": "",
+                "order": 3,
+                "title": "Win rate",
+                "type": "1",
+                "value": "0.6667"
+              },
+              {
+                "desc": "Cumulative profit of lead trader / Cumulative loss of lead trader",
+                "functionId": "pnlProfitLossRatio",
+                "learnMoreUrl": "",
+                "order": 4,
+                "title": "Profit/Loss ratio",
+                "type": "3",
+                "value": "13.26:1"
+              },
+              {
+                "desc": "The average value of each lead trade position this trader has held.",
+                "functionId": "avgPositionValue",
+                "learnMoreUrl": "",
+                "order": 5,
+                "title": "Average position value",
+                "type": "0",
+                "value": "56512.2454"
+              }
+            ]
+          }
+        ],
+        "msg": ""
+      },
+      "/priapi/v5/ecotrade/public/trader/trade-data?uniqueName=744584888019747661&latestNum=90&bizType=SWAP": {
+        "code": "0",
+        "data": [
+          {
+            "nonPeriodicPart": [
+              {
+                "desc": "Number of days this trader has been a lead trader for.",
+                "functionId": "initialDay",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Days leading trades",
+                "type": "2",
+                "value": "156"
+              },
+              {
+                "desc": "USDT balance in lead trader’s trading account.",
+                "functionId": "asset",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Lead trade assets (USDT)",
+                "type": "0",
+                "value": "150902.85283666957"
+              },
+              {
+                "desc": "Asset under management. Total funds allocated by copy traders.",
+                "functionId": "aum",
+                "learnMoreUrl": "",
+                "order": 3,
+                "title": "AUM",
+                "type": "0",
+                "value": "54652.9402602778925637"
+              },
+              {
+                "desc": "Total copy trade PnL of all traders currently copying this lead trader.",
+                "functionId": "currentFollowPnl",
+                "learnMoreUrl": "",
+                "order": 4,
+                "title": "Current copy trader PnL (USDT)",
+                "type": "0",
+                "value": "444.2871920858080464"
+              },
+              {
+                "desc": "",
+                "functionId": "followerNum",
+                "learnMoreUrl": "",
+                "order": 5,
+                "title": "Copy traders",
+                "type": "4",
+                "value": "96/300"
+              },
+              {
+                "desc": "The percentage of total copy trading profit that the lead trader will receive.",
+                "functionId": "profitShareRatio",
+                "learnMoreUrl": "",
+                "order": 6,
+                "title": "Profit-sharing ratio",
+                "type": "1",
+                "value": "0.08"
+              }
+            ],
+            "periodicPart": [
+              {
+                "desc": "",
+                "functionId": "profitDays",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Days w/ profit",
+                "type": "2",
+                "value": "50"
+              },
+              {
+                "desc": "",
+                "functionId": "lossDays",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Days w/ loss",
+                "type": "2",
+                "value": "40"
+              },
+              {
+                "desc": "Number of days with profit / Number of days leading trades × 100%",
+                "functionId": "winRatio",
+                "learnMoreUrl": "",
+                "order": 3,
+                "title": "Win rate",
+                "type": "1",
+                "value": "0.5556"
+              },
+              {
+                "desc": "Cumulative profit of lead trader / Cumulative loss of lead trader",
+                "functionId": "pnlProfitLossRatio",
+                "learnMoreUrl": "",
+                "order": 4,
+                "title": "Profit/Loss ratio",
+                "type": "3",
+                "value": "13.31:1"
+              },
+              {
+                "desc": "The average value of each lead trade position this trader has held.",
+                "functionId": "avgPositionValue",
+                "learnMoreUrl": "",
+                "order": 5,
+                "title": "Average position value",
+                "type": "0",
+                "value": "30050.8903"
+              }
+            ]
+          }
+        ],
+        "msg": ""
+      },
+      "/priapi/v5/ecotrade/public/trade-data?uniqueName=744584888019747661&latestNum=7": {
+        "code": "0",
+        "data": [
+          {
+            "centers": [
+              {
+                "desc": "",
+                "functionId": "profitDays",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Days w/ profit",
+                "type": "2",
+                "value": "5"
+              },
+              {
+                "desc": "",
+                "functionId": "lossDays",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Days w/ loss",
+                "type": "2",
+                "value": "2"
+              }
+            ],
+            "heads": [
+              {
+                "desc": "Number of days with profit / Number of days leading trades × 100%",
+                "functionId": "winRatio",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Win rate",
+                "type": "1",
+                "value": "0.7143"
+              }
+            ],
+            "symbol": "USDT",
+            "tails": [
+              {
+                "desc": "The total funds in this trader’s trading account that are being used in lead trades, excluding lead trade PnL.",
+                "functionId": "costVal",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Lead trader investment (USDT)",
+                "type": "0",
+                "value": "108519.6477435003866505"
+              },
+              {
+                "desc": "The average value of each lead trade position this trader has held.",
+                "functionId": "avgPositionValue",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Average position value",
+                "type": "0",
+                "value": "24037.5905"
+              },
+              {
+                "desc": "Asset under management. Total funds allocated by copy traders.",
+                "functionId": "aum",
+                "learnMoreUrl": "",
+                "order": 3,
+                "title": "AUM",
+                "type": "0",
+                "value": "54652.9402602778925637"
+              },
+              {
+                "desc": "Total copy trade PnL of all traders currently copying this lead trader.",
+                "functionId": "currentFollowPnl",
+                "learnMoreUrl": "",
+                "order": 4,
+                "title": "Current copy trader PnL (USDT)",
+                "type": "0",
+                "value": "444.2871920858080464"
+              },
+              {
+                "desc": "",
+                "functionId": "followerNum",
+                "learnMoreUrl": "",
+                "order": 5,
+                "title": "Copy traders",
+                "type": "2",
+                "value": "96"
+              },
+              {
+                "desc": "The percentage of total copy trading profit that the lead trader will receive.",
+                "functionId": "profitShareRatio",
+                "learnMoreUrl": "",
+                "order": 6,
+                "title": "Profit-sharing ratio",
+                "type": "1",
+                "value": "0.08"
+              }
+            ]
+          }
+        ],
+        "msg": ""
+      },
+      "/priapi/v5/ecotrade/public/trade-data?uniqueName=744584888019747661&latestNum=30": {
+        "code": "0",
+        "data": [
+          {
+            "centers": [
+              {
+                "desc": "",
+                "functionId": "profitDays",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Days w/ profit",
+                "type": "2",
+                "value": "20"
+              },
+              {
+                "desc": "",
+                "functionId": "lossDays",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Days w/ loss",
+                "type": "2",
+                "value": "10"
+              }
+            ],
+            "heads": [
+              {
+                "desc": "Number of days with profit / Number of days leading trades × 100%",
+                "functionId": "winRatio",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Win rate",
+                "type": "1",
+                "value": "0.6667"
+              }
+            ],
+            "symbol": "USDT",
+            "tails": [
+              {
+                "desc": "The total funds in this trader’s trading account that are being used in lead trades, excluding lead trade PnL.",
+                "functionId": "costVal",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Lead trader investment (USDT)",
+                "type": "0",
+                "value": "65656.7635030136599903"
+              },
+              {
+                "desc": "The average value of each lead trade position this trader has held.",
+                "functionId": "avgPositionValue",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Average position value",
+                "type": "0",
+                "value": "56512.2454"
+              },
+              {
+                "desc": "Asset under management. Total funds allocated by copy traders.",
+                "functionId": "aum",
+                "learnMoreUrl": "",
+                "order": 3,
+                "title": "AUM",
+                "type": "0",
+                "value": "54652.9402602778925637"
+              },
+              {
+                "desc": "Total copy trade PnL of all traders currently copying this lead trader.",
+                "functionId": "currentFollowPnl",
+                "learnMoreUrl": "",
+                "order": 4,
+                "title": "Current copy trader PnL (USDT)",
+                "type": "0",
+                "value": "444.2871920858080464"
+              },
+              {
+                "desc": "",
+                "functionId": "followerNum",
+                "learnMoreUrl": "",
+                "order": 5,
+                "title": "Copy traders",
+                "type": "2",
+                "value": "96"
+              },
+              {
+                "desc": "The percentage of total copy trading profit that the lead trader will receive.",
+                "functionId": "profitShareRatio",
+                "learnMoreUrl": "",
+                "order": 6,
+                "title": "Profit-sharing ratio",
+                "type": "1",
+                "value": "0.08"
+              }
+            ]
+          }
+        ],
+        "msg": ""
+      },
+      "/priapi/v5/ecotrade/public/trade-data?uniqueName=744584888019747661&latestNum=90": {
+        "code": "0",
+        "data": [
+          {
+            "centers": [
+              {
+                "desc": "",
+                "functionId": "profitDays",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Days w/ profit",
+                "type": "2",
+                "value": "50"
+              },
+              {
+                "desc": "",
+                "functionId": "lossDays",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Days w/ loss",
+                "type": "2",
+                "value": "40"
+              }
+            ],
+            "heads": [
+              {
+                "desc": "Number of days with profit / Number of days leading trades × 100%",
+                "functionId": "winRatio",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Win rate",
+                "type": "1",
+                "value": "0.5556"
+              }
+            ],
+            "symbol": "USDT",
+            "tails": [
+              {
+                "desc": "The total funds in this trader’s trading account that are being used in lead trades, excluding lead trade PnL.",
+                "functionId": "costVal",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Lead trader investment (USDT)",
+                "type": "0",
+                "value": "57483.6867003099087917"
+              },
+              {
+                "desc": "The average value of each lead trade position this trader has held.",
+                "functionId": "avgPositionValue",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Average position value",
+                "type": "0",
+                "value": "30050.8903"
+              },
+              {
+                "desc": "Asset under management. Total funds allocated by copy traders.",
+                "functionId": "aum",
+                "learnMoreUrl": "",
+                "order": 3,
+                "title": "AUM",
+                "type": "0",
+                "value": "54652.9402602778925637"
+              },
+              {
+                "desc": "Total copy trade PnL of all traders currently copying this lead trader.",
+                "functionId": "currentFollowPnl",
+                "learnMoreUrl": "",
+                "order": 4,
+                "title": "Current copy trader PnL (USDT)",
+                "type": "0",
+                "value": "444.2871920858080464"
+              },
+              {
+                "desc": "",
+                "functionId": "followerNum",
+                "learnMoreUrl": "",
+                "order": 5,
+                "title": "Copy traders",
+                "type": "2",
+                "value": "96"
+              },
+              {
+                "desc": "The percentage of total copy trading profit that the lead trader will receive.",
+                "functionId": "profitShareRatio",
+                "learnMoreUrl": "",
+                "order": 6,
+                "title": "Profit-sharing ratio",
+                "type": "1",
+                "value": "0.08"
+              }
+            ]
+          }
+        ],
+        "msg": ""
+      },
+      "/priapi/v5/ecotrade/public/max-drawdown?uniqueName=744584888019747661": {
+        "code": "0",
+        "data": [
+          {
+            "dayMaxDrawdown": "-1.0",
+            "historyMaxDrawdown": "-1.0",
+            "weekMaxDrawdown": "-0.3112"
+          }
+        ],
+        "msg": ""
+      }
+    }
+  },
+  "spot": {
+    "uniqueCode": "FBFF3B36683B333F",
+    "responses": {
+      "/api/v5/copytrading/public-stats?instType=SPOT&uniqueCode=FBFF3B36683B333F&lastDays=1": {
+        "code": "0",
+        "data": [
+          {
+            "avgSubPosNotional": "4996.9987",
+            "ccy": "USDT",
+            "curCopyTraderPnl": "-498.8264687409711396",
+            "investAmt": "858100.4903122487735302",
+            "lossDays": "6",
+            "profitDays": "1",
+            "winRatio": "0.1429"
+          }
+        ],
+        "msg": ""
+      },
+      "/api/v5/copytrading/public-stats?instType=SPOT&uniqueCode=FBFF3B36683B333F&lastDays=2": {
+        "code": "0",
+        "data": [
+          {
+            "avgSubPosNotional": "8870.4571",
+            "ccy": "USDT",
+            "curCopyTraderPnl": "-498.8264687409711396",
+            "investAmt": "896646.8496292663860089",
+            "lossDays": "19",
+            "profitDays": "11",
+            "winRatio": "0.3667"
+          }
+        ],
+        "msg": ""
+      },
+      "/api/v5/copytrading/public-stats?instType=SPOT&uniqueCode=FBFF3B36683B333F&lastDays=3": {
+        "code": "0",
+        "data": [
+          {
+            "avgSubPosNotional": "15645.1182",
+            "ccy": "USDT",
+            "curCopyTraderPnl": "-498.8264687409711396",
+            "investAmt": "858100.4903122487735302",
+            "lossDays": "49",
+            "profitDays": "41",
+            "winRatio": "0.4556"
+          }
+        ],
+        "msg": ""
+      },
+      "/priapi/v5/ecotrade/public/trader/trade-data?uniqueName=FBFF3B36683B333F&latestNum=7&bizType=SPOT": {
+        "code": "0",
+        "data": [
+          {
+            "nonPeriodicPart": [
+              {
+                "desc": "Number of days this trader has been a lead trader for.",
+                "functionId": "initialDay",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Days leading trades",
+                "type": "2",
+                "value": "767"
+              },
+              {
+                "desc": "USDT balance in lead trader’s trading account + Assets in lead trades",
+                "functionId": "asset",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Lead trade assets (USDT)",
+                "type": "0",
+                "value": "529971.2920420848955682"
+              },
+              {
+                "desc": "Asset under management. Total funds allocated by copy traders + Lead trader assets",
+                "functionId": "aum",
+                "learnMoreUrl": "",
+                "order": 3,
+                "title": "AUM",
+                "type": "0",
+                "value": "31412.61221350941568"
+              },
+              {
+                "desc": "Total copy trade PnL of all traders currently copying this lead trader.",
+                "functionId": "currentFollowPnl",
+                "learnMoreUrl": "",
+                "order": 4,
+                "title": "Current copy trader PnL (USDT)",
+                "type": "0",
+                "value": "1324.0003705489642346"
+              },
+              {
+                "desc": "",
+                "functionId": "followerNum",
+                "learnMoreUrl": "",
+                "order": 5,
+                "title": "Copy traders",
+                "type": "4",
+                "value": "157/600"
+              },
+              {
+                "desc": "The percentage of total copy trading profit that the lead trader will receive.",
+                "functionId": "profitShareRatio",
+                "learnMoreUrl": "",
+                "order": 6,
+                "title": "Profit-sharing ratio",
+                "type": "1",
+                "value": "0.1"
+              }
+            ],
+            "periodicPart": [
+              {
+                "desc": "",
+                "functionId": "profitDays",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Days w/ profit",
+                "type": "2",
+                "value": "1"
+              },
+              {
+                "desc": "",
+                "functionId": "lossDays",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Days w/ loss",
+                "type": "2",
+                "value": "6"
+              },
+              {
+                "desc": "Number of days with profit / Number of days leading trades × 100%",
+                "functionId": "winRatio",
+                "learnMoreUrl": "",
+                "order": 3,
+                "title": "Win rate",
+                "type": "1",
+                "value": "0.1429"
+              },
+              {
+                "desc": "Cumulative profit of lead trader / Cumulative loss of lead trader",
+                "functionId": "pnlProfitLossRatio",
+                "learnMoreUrl": "",
+                "order": 4,
+                "title": "Profit/Loss ratio",
+                "type": "3",
+                "value": "0.00:1"
+              },
+              {
+                "desc": "The average value of each lead trade order this trader has carried out.",
+                "functionId": "avgPositionValue",
+                "learnMoreUrl": "",
+                "order": 5,
+                "title": "Average order value",
+                "type": "0",
+                "value": "4996.9987"
+              }
+            ]
+          }
+        ],
+        "msg": ""
+      },
+      "/priapi/v5/ecotrade/public/trader/trade-data?uniqueName=FBFF3B36683B333F&latestNum=30&bizType=SPOT": {
+        "code": "0",
+        "data": [
+          {
+            "nonPeriodicPart": [
+              {
+                "desc": "Number of days this trader has been a lead trader for.",
+                "functionId": "initialDay",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Days leading trades",
+                "type": "2",
+                "value": "767"
+              },
+              {
+                "desc": "USDT balance in lead trader’s trading account + Assets in lead trades",
+                "functionId": "asset",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Lead trade assets (USDT)",
+                "type": "0",
+                "value": "529971.2920420848955682"
+              },
+              {
+                "desc": "Asset under management. Total funds allocated by copy traders + Lead trader assets",
+                "functionId": "aum",
+                "learnMoreUrl": "",
+                "order": 3,
+                "title": "AUM",
+                "type": "0",
+                "value": "31412.61221350941568"
+              },
+              {
+                "desc": "Total copy trade PnL of all traders currently copying this lead trader.",
+                "functionId": "currentFollowPnl",
+                "learnMoreUrl": "",
+                "order": 4,
+                "title": "Current copy trader PnL (USDT)",
+                "type": "0",
+                "value": "1324.0003705489642346"
+              },
+              {
+                "desc": "",
+                "functionId": "followerNum",
+                "learnMoreUrl": "",
+                "order": 5,
+                "title": "Copy traders",
+                "type": "4",
+                "value": "157/600"
+              },
+              {
+                "desc": "The percentage of total copy trading profit that the lead trader will receive.",
+                "functionId": "profitShareRatio",
+                "learnMoreUrl": "",
+                "order": 6,
+                "title": "Profit-sharing ratio",
+                "type": "1",
+                "value": "0.1"
+              }
+            ],
+            "periodicPart": [
+              {
+                "desc": "",
+                "functionId": "profitDays",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Days w/ profit",
+                "type": "2",
+                "value": "11"
+              },
+              {
+                "desc": "",
+                "functionId": "lossDays",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Days w/ loss",
+                "type": "2",
+                "value": "19"
+              },
+              {
+                "desc": "Number of days with profit / Number of days leading trades × 100%",
+                "functionId": "winRatio",
+                "learnMoreUrl": "",
+                "order": 3,
+                "title": "Win rate",
+                "type": "1",
+                "value": "0.3667"
+              },
+              {
+                "desc": "Cumulative profit of lead trader / Cumulative loss of lead trader",
+                "functionId": "pnlProfitLossRatio",
+                "learnMoreUrl": "",
+                "order": 4,
+                "title": "Profit/Loss ratio",
+                "type": "3",
+                "value": "0.00:1"
+              },
+              {
+                "desc": "The average value of each lead trade order this trader has carried out.",
+                "functionId": "avgPositionValue",
+                "learnMoreUrl": "",
+                "order": 5,
+                "title": "Average order value",
+                "type": "0",
+                "value": "8870.4571"
+              }
+            ]
+          }
+        ],
+        "msg": ""
+      },
+      "/priapi/v5/ecotrade/public/trader/trade-data?uniqueName=FBFF3B36683B333F&latestNum=90&bizType=SPOT": {
+        "code": "0",
+        "data": [
+          {
+            "nonPeriodicPart": [
+              {
+                "desc": "Number of days this trader has been a lead trader for.",
+                "functionId": "initialDay",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Days leading trades",
+                "type": "2",
+                "value": "767"
+              },
+              {
+                "desc": "USDT balance in lead trader’s trading account + Assets in lead trades",
+                "functionId": "asset",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Lead trade assets (USDT)",
+                "type": "0",
+                "value": "529971.2920420848955682"
+              },
+              {
+                "desc": "Asset under management. Total funds allocated by copy traders + Lead trader assets",
+                "functionId": "aum",
+                "learnMoreUrl": "",
+                "order": 3,
+                "title": "AUM",
+                "type": "0",
+                "value": "31412.61221350941568"
+              },
+              {
+                "desc": "Total copy trade PnL of all traders currently copying this lead trader.",
+                "functionId": "currentFollowPnl",
+                "learnMoreUrl": "",
+                "order": 4,
+                "title": "Current copy trader PnL (USDT)",
+                "type": "0",
+                "value": "1324.0003705489642346"
+              },
+              {
+                "desc": "",
+                "functionId": "followerNum",
+                "learnMoreUrl": "",
+                "order": 5,
+                "title": "Copy traders",
+                "type": "4",
+                "value": "157/600"
+              },
+              {
+                "desc": "The percentage of total copy trading profit that the lead trader will receive.",
+                "functionId": "profitShareRatio",
+                "learnMoreUrl": "",
+                "order": 6,
+                "title": "Profit-sharing ratio",
+                "type": "1",
+                "value": "0.1"
+              }
+            ],
+            "periodicPart": [
+              {
+                "desc": "",
+                "functionId": "profitDays",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Days w/ profit",
+                "type": "2",
+                "value": "41"
+              },
+              {
+                "desc": "",
+                "functionId": "lossDays",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Days w/ loss",
+                "type": "2",
+                "value": "49"
+              },
+              {
+                "desc": "Number of days with profit / Number of days leading trades × 100%",
+                "functionId": "winRatio",
+                "learnMoreUrl": "",
+                "order": 3,
+                "title": "Win rate",
+                "type": "1",
+                "value": "0.4556"
+              },
+              {
+                "desc": "Cumulative profit of lead trader / Cumulative loss of lead trader",
+                "functionId": "pnlProfitLossRatio",
+                "learnMoreUrl": "",
+                "order": 4,
+                "title": "Profit/Loss ratio",
+                "type": "3",
+                "value": "0.33:1"
+              },
+              {
+                "desc": "The average value of each lead trade order this trader has carried out.",
+                "functionId": "avgPositionValue",
+                "learnMoreUrl": "",
+                "order": 5,
+                "title": "Average order value",
+                "type": "0",
+                "value": "15645.1182"
+              }
+            ]
+          }
+        ],
+        "msg": ""
+      },
+      "/priapi/v5/ecotrade/public/spot/trade-data?uniqueName=FBFF3B36683B333F&latestNum=7": {
+        "code": "0",
+        "data": [
+          {
+            "centers": [
+              {
+                "desc": "",
+                "functionId": "profitDays",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Days w/ profit",
+                "type": "2",
+                "value": "1"
+              },
+              {
+                "desc": "",
+                "functionId": "lossDays",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Days w/ loss",
+                "type": "2",
+                "value": "6"
+              }
+            ],
+            "heads": [
+              {
+                "desc": "Number of days with profit / Number of days leading trades × 100%",
+                "functionId": "winRatio",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Win rate",
+                "type": "1",
+                "value": "0.1429"
+              }
+            ],
+            "symbol": "USDT",
+            "tails": [
+              {
+                "desc": "The maximum continuous drop in this lead trader’s PnL from a peak to a trough.",
+                "functionId": "maxRetreat",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Max drawdown",
+                "type": "1",
+                "value": "-0.2809"
+              },
+              {
+                "desc": "The total funds in this trader’s trading account that are being used in lead trades, excluding lead trade PnL.",
+                "functionId": "costVal",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Lead trader investment (USDT)",
+                "type": "0",
+                "value": "858100.4903122487735302"
+              },
+              {
+                "desc": "Lead trader’s investment in their trades / Total investment amount of their copy traders",
+                "functionId": "costAumRatio",
+                "learnMoreUrl": "",
+                "order": 3,
+                "title": "Investment/AUM ratio",
+                "type": "1",
+                "value": "27.3171"
+              },
+              {
+                "desc": "The average value of each lead trade order this trader has carried out.",
+                "functionId": "avgPositionValue",
+                "learnMoreUrl": "",
+                "order": 4,
+                "title": "Average order value",
+                "type": "0",
+                "value": "4996.9987"
+              },
+              {
+                "desc": "Asset under management. Total funds allocated by copy traders + Lead trader assets",
+                "functionId": "aum",
+                "learnMoreUrl": "",
+                "order": 5,
+                "title": "AUM",
+                "type": "0",
+                "value": "31412.61221350941568"
+              },
+              {
+                "desc": "",
+                "functionId": "followPnl",
+                "learnMoreUrl": "",
+                "order": 7,
+                "title": "Copy trader PnL (USDT)",
+                "type": "0",
+                "value": "-498.8264687409711396"
+              },
+              {
+                "desc": "Number of days this trader has been a lead trader for.",
+                "functionId": "initialDay",
+                "learnMoreUrl": "",
+                "order": 8,
+                "title": "Days leading trades",
+                "type": "2",
+                "value": "767"
+              },
+              {
+                "desc": "The percentage of total copy trading profit that the lead trader will receive.",
+                "functionId": "profitShareRatio",
+                "learnMoreUrl": "",
+                "order": 9,
+                "title": "Profit-sharing ratio",
+                "type": "1",
+                "value": "0.1"
+              }
+            ]
+          }
+        ],
+        "msg": ""
+      },
+      "/priapi/v5/ecotrade/public/spot/trade-data?uniqueName=FBFF3B36683B333F&latestNum=30": {
+        "code": "0",
+        "data": [
+          {
+            "centers": [
+              {
+                "desc": "",
+                "functionId": "profitDays",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Days w/ profit",
+                "type": "2",
+                "value": "11"
+              },
+              {
+                "desc": "",
+                "functionId": "lossDays",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Days w/ loss",
+                "type": "2",
+                "value": "19"
+              }
+            ],
+            "heads": [
+              {
+                "desc": "Number of days with profit / Number of days leading trades × 100%",
+                "functionId": "winRatio",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Win rate",
+                "type": "1",
+                "value": "0.3667"
+              }
+            ],
+            "symbol": "USDT",
+            "tails": [
+              {
+                "desc": "The maximum continuous drop in this lead trader’s PnL from a peak to a trough.",
+                "functionId": "maxRetreat",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Max drawdown",
+                "type": "1",
+                "value": "-0.2809"
+              },
+              {
+                "desc": "The total funds in this trader’s trading account that are being used in lead trades, excluding lead trade PnL.",
+                "functionId": "costVal",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Lead trader investment (USDT)",
+                "type": "0",
+                "value": "896646.8496292663860089"
+              },
+              {
+                "desc": "Lead trader’s investment in their trades / Total investment amount of their copy traders",
+                "functionId": "costAumRatio",
+                "learnMoreUrl": "",
+                "order": 3,
+                "title": "Investment/AUM ratio",
+                "type": "1",
+                "value": "28.5442"
+              },
+              {
+                "desc": "The average value of each lead trade order this trader has carried out.",
+                "functionId": "avgPositionValue",
+                "learnMoreUrl": "",
+                "order": 4,
+                "title": "Average order value",
+                "type": "0",
+                "value": "8870.4571"
+              },
+              {
+                "desc": "Asset under management. Total funds allocated by copy traders + Lead trader assets",
+                "functionId": "aum",
+                "learnMoreUrl": "",
+                "order": 5,
+                "title": "AUM",
+                "type": "0",
+                "value": "31412.61221350941568"
+              },
+              {
+                "desc": "",
+                "functionId": "followPnl",
+                "learnMoreUrl": "",
+                "order": 7,
+                "title": "Copy trader PnL (USDT)",
+                "type": "0",
+                "value": "-498.8264687409711396"
+              },
+              {
+                "desc": "Number of days this trader has been a lead trader for.",
+                "functionId": "initialDay",
+                "learnMoreUrl": "",
+                "order": 8,
+                "title": "Days leading trades",
+                "type": "2",
+                "value": "767"
+              },
+              {
+                "desc": "The percentage of total copy trading profit that the lead trader will receive.",
+                "functionId": "profitShareRatio",
+                "learnMoreUrl": "",
+                "order": 9,
+                "title": "Profit-sharing ratio",
+                "type": "1",
+                "value": "0.1"
+              }
+            ]
+          }
+        ],
+        "msg": ""
+      },
+      "/priapi/v5/ecotrade/public/spot/trade-data?uniqueName=FBFF3B36683B333F&latestNum=90": {
+        "code": "0",
+        "data": [
+          {
+            "centers": [
+              {
+                "desc": "",
+                "functionId": "profitDays",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Days w/ profit",
+                "type": "2",
+                "value": "41"
+              },
+              {
+                "desc": "",
+                "functionId": "lossDays",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Days w/ loss",
+                "type": "2",
+                "value": "49"
+              }
+            ],
+            "heads": [
+              {
+                "desc": "Number of days with profit / Number of days leading trades × 100%",
+                "functionId": "winRatio",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Win rate",
+                "type": "1",
+                "value": "0.4556"
+              }
+            ],
+            "symbol": "USDT",
+            "tails": [
+              {
+                "desc": "The maximum continuous drop in this lead trader’s PnL from a peak to a trough.",
+                "functionId": "maxRetreat",
+                "learnMoreUrl": "",
+                "order": 1,
+                "title": "Max drawdown",
+                "type": "1",
+                "value": "-0.2809"
+              },
+              {
+                "desc": "The total funds in this trader’s trading account that are being used in lead trades, excluding lead trade PnL.",
+                "functionId": "costVal",
+                "learnMoreUrl": "",
+                "order": 2,
+                "title": "Lead trader investment (USDT)",
+                "type": "0",
+                "value": "858100.4903122487735302"
+              },
+              {
+                "desc": "Lead trader’s investment in their trades / Total investment amount of their copy traders",
+                "functionId": "costAumRatio",
+                "learnMoreUrl": "",
+                "order": 3,
+                "title": "Investment/AUM ratio",
+                "type": "1",
+                "value": "27.3171"
+              },
+              {
+                "desc": "The average value of each lead trade order this trader has carried out.",
+                "functionId": "avgPositionValue",
+                "learnMoreUrl": "",
+                "order": 4,
+                "title": "Average order value",
+                "type": "0",
+                "value": "15645.1182"
+              },
+              {
+                "desc": "Asset under management. Total funds allocated by copy traders + Lead trader assets",
+                "functionId": "aum",
+                "learnMoreUrl": "",
+                "order": 5,
+                "title": "AUM",
+                "type": "0",
+                "value": "31412.61221350941568"
+              },
+              {
+                "desc": "",
+                "functionId": "followPnl",
+                "learnMoreUrl": "",
+                "order": 7,
+                "title": "Copy trader PnL (USDT)",
+                "type": "0",
+                "value": "-498.8264687409711396"
+              },
+              {
+                "desc": "Number of days this trader has been a lead trader for.",
+                "functionId": "initialDay",
+                "learnMoreUrl": "",
+                "order": 8,
+                "title": "Days leading trades",
+                "type": "2",
+                "value": "767"
+              },
+              {
+                "desc": "The percentage of total copy trading profit that the lead trader will receive.",
+                "functionId": "profitShareRatio",
+                "learnMoreUrl": "",
+                "order": 9,
+                "title": "Profit-sharing ratio",
+                "type": "1",
+                "value": "0.1"
+              }
+            ]
+          }
+        ],
+        "msg": ""
+      },
+      "/priapi/v5/ecotrade/public/max-drawdown?uniqueName=FBFF3B36683B333F": {
+        "code": "0",
+        "data": [
+          {
+            "dayMaxDrawdown": "-0.2023",
+            "historyMaxDrawdown": "-0.7459",
+            "weekMaxDrawdown": "-0.4011"
+          }
+        ],
+        "msg": ""
+      }
+    }
+  }
+}
