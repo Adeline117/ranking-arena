@@ -570,6 +570,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:profile-capture-contract-registration-pg17
 
+      - name: Prove the bitget_cfd profile capture contract registration as a non-superuser
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:bitget-cfd-profile-capture-contract-pg17
+
       - name: Prove binance profile captures publish exactly their contracted metrics
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin

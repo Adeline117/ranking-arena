@@ -132,6 +132,7 @@
     "qa:score-input-evidence-pg17": "bash supabase/migrations/__tests__/publication-score-input-evidence.pg17.sh",
     "qa:profile-acquisition-evidence-pg17": "bash supabase/migrations/__tests__/profile-acquisition-evidence.pg17.sh",
     "qa:profile-capture-contract-registration-pg17": "bash supabase/migrations/__tests__/profile-capture-contract-registration.pg17.sh",
+    "qa:bitget-cfd-profile-capture-contract-pg17": "bash supabase/migrations/__tests__/register-bitget-cfd-profile-capture-contract.pg17.sh",
     "qa:binance-profile-capture-pg17": "bash supabase/migrations/__tests__/binance-profile-capture.pg17.sh",
     "qa:profile-capture-bybit-copytrade-pg17": "bash supabase/migrations/__tests__/profile-capture-bybit-copytrade.pg17.sh",
     "qa:blofin-profile-capture-pg17": "bash supabase/migrations/__tests__/blofin-profile-capture.pg17.sh",

@@ -8,16 +8,20 @@
 #   20261116205144 trader_stats_score_input_evidence_pointer  (#489 step 2a)
 #   20261116215328 profile_acquisition_evidence_ledger
 #   20261117015119 register_profile_capture_contracts
+#   20261121000026 register_bitget_cfd_profile_capture_contract (a source added
+#                  later; its own proof is
+#                  register-bitget-cfd-profile-capture-contract.pg17.sh)
 #
 # Proves:
 #   order    - the registration refuses to run before the ledger;
-#   exact    - the registered rows equal the worker's code registry
+#   exact    - after every registration migration the registered rows equal
+#              the worker's code registry
 #              (PROFILE_CAPTURE_CONTRACTS, read through tsx) field by field:
 #              source, contract name, profileCaptureContractSha256, timeframes
 #              and the sorted metric keys; nothing else is registered;
 #   ledger   - start accepts every registered contract at every registered
 #              timeframe with the code hash, and refuses a drifted hash and the
-#              sources without a contract (blofin_spot, bitget_spot, bitget_cfd);
+#              sources without a contract (blofin_spot, bitget_spot);
 #   refusal  - a replay, an earlier registration with a drifted hash, an
 #              adapter mismatch and a missing source each refuse the whole
 #              migration, and nothing lands.
@@ -30,6 +34,7 @@ PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 STEP2A=20261116205144_trader_stats_score_input_evidence_pointer.sql
 LEDGER=20261116215328_profile_acquisition_evidence_ledger.sql
 REGISTER=20261117015119_register_profile_capture_contracts.sql
+REGISTER_BITGET_CFD=20261121000026_register_bitget_cfd_profile_capture_contract.sql
 
 for executable in initdb pg_ctl psql; do
   if [[ ! -x "$PG_BIN/$executable" ]]; then
@@ -93,7 +98,7 @@ registered_count() {
 
 # ---------------------------------------------------------------------------
 # Fixture: the relations the pointer and ledger migrations read. Every source
-# the registration names, plus the three sources that deliberately have no
+# a registration names, plus the two sources that deliberately have no
 # contract.
 # ---------------------------------------------------------------------------
 psql_in postgres <<'SQL'
@@ -170,6 +175,11 @@ fi
 psql_in template1 -c 'CREATE DATABASE pre_registration TEMPLATE postgres'
 
 psql_in postgres -f "$MIGRATIONS/$REGISTER"
+if [[ "$(registered_count postgres)" != 5 ]]; then
+  echo '20261117015119 must register exactly its five sources' >&2
+  exit 1
+fi
+psql_in postgres -f "$MIGRATIONS/$REGISTER_BITGET_CFD"
 
 # ---------------------------------------------------------------------------
 # exact: the registered rows are the code registry, field by field.
@@ -261,7 +271,7 @@ expect_failure_in postgres 'a drifted contract hash cannot start an attempt' \
   'is not registered for source' \
   "SELECT arena.start_profile_acquisition_attempt(gen_random_uuid(), 1, 100, 90,
      'binance_futures-profile-capture@1', repeat('0', 64), NULL)"
-for unregistered in '6:blofin_spot' '7:bitget_spot' '8:bitget_cfd'; do
+for unregistered in '6:blofin_spot' '7:bitget_spot'; do
   id="${unregistered%%:*}"
   slug="${unregistered#*:}"
   expect_failure_in postgres "$slug has no registered contract" 'is not registered for source' \
