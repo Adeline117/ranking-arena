@@ -44,6 +44,8 @@ import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-tr
 import { findClaimedUserHandleByIdentity } from '@/lib/identity/claimed-trader'
 import {
   fetchPublicProfileRankingRows,
+  isProvenUnrankedProfile,
+  isPublicSourceCohortPublished,
   PUBLIC_PROFILE_RANKING_PERIODS,
 } from '@/lib/data/trader/public-profile-ranking'
 
@@ -351,22 +353,40 @@ async function getCurrentPublicServingScores(platform: string, traderKey: string
 }
 
 // Metadata is rank-bearing, so it deliberately reads the current sealed cohort
-// instead of a cross-request cached payload.
+// instead of a cross-request cached payload. All periods are read in the one
+// query: the title uses the 90D row, and indexability needs to know whether
+// the trader is ranked in ANY period (see isProvenUnrankedProfile).
 async function getCurrentPublicLeaderboardMeta(platform: string, traderKey: string) {
-  const cohort = await fetchPublicProfileRankingRows(getReadReplica(), {
+  const supabase = getReadReplica()
+  const cohort = await fetchPublicProfileRankingRows(supabase, {
     source: platform,
     sourceTraderId: traderKey,
-    periods: ['90D'],
+    periods: PUBLIC_PROFILE_RANKING_PERIODS,
   })
-  const row = cohort.rows[0]
-  return row
-    ? {
-        rank: row.rank,
-        arena_score: finiteOrNull(row.arena_score),
-        roi: finiteOrNull(row.roi),
-        pnl: finiteOrNull(row.pnl),
-      }
-    : null
+  const row = cohort.rows.find((candidate) => candidate.season_id === '90D')
+  // Only a cleanly empty read asks the second question; a ranked trader or a
+  // failed read never pays for it.
+  const provenUnranked =
+    cohort.rankingVisibilityReason === 'public_rank_unavailable' &&
+    isProvenUnrankedProfile(
+      cohort,
+      await isPublicSourceCohortPublished(
+        supabase,
+        platform,
+        AbortSignal.timeout(SSR_QUERY_TIMEOUT_MS)
+      )
+    )
+  return {
+    provenUnranked,
+    row: row
+      ? {
+          rank: row.rank,
+          arena_score: finiteOrNull(row.arena_score),
+          roi: finiteOrNull(row.roi),
+          pnl: finiteOrNull(row.pnl),
+        }
+      : null,
+  }
 }
 
 // Request-deduplicated but never persistently cached: claimed ownership is an
@@ -448,9 +468,12 @@ export async function generateMetadata({
     roi?: number | null
     pnl?: number | null
   } | null = null
+  let provenUnranked = false
   if (account) {
     try {
-      lr = await getCurrentPublicLeaderboardMeta(account.platform, account.traderKey)
+      const meta = await getCurrentPublicLeaderboardMeta(account.platform, account.traderKey)
+      lr = meta.row
+      provenUnranked = meta.provenUnranked
     } catch (err) {
       // Leaderboard fetch failure should NOT prevent title generation.
       // The trader name is already known — produce metadata without stats.
@@ -531,6 +554,10 @@ export async function generateMetadata({
       site: '@arenafi',
     },
     alternates: { canonical: canonicalUrl },
+    // The board for this source is live and this trader is on none of its
+    // periods: the page has no numbers to show. Keep following its links, and
+    // drop the tag automatically once the trader is ranked again.
+    ...(provenUnranked ? { robots: { index: false, follow: true } } : {}),
   }
 }
 
