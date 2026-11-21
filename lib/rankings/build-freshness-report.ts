@@ -217,9 +217,18 @@ export function deriveFreshnessAuthorityMetadata(
     windows.push(window)
     expectedWindowsByBoard.set(window.registry_slug, windows)
   }
+  // A window sealed with zero publishable rows (published_rank_count 0, see
+  // source-freshness.ts) has no visible row and is not missing.
+  const sealedEmptyWindows = new Set(
+    watermarkRows
+      .filter((row) => typeof row.source === 'string' && row.published_rank_count === 0)
+      .map((row) => `${String(row.season_id)}\u0000${row.source as string}`)
+  )
   const visibleSourceBoards = [...expectedWindowsByBoard.values()].filter((windows) =>
-    windows.every((window) =>
-      visibleWindowKeys.has(sourceWindowKey(window.season_id, window.registry_slug))
+    windows.every(
+      (window) =>
+        visibleWindowKeys.has(sourceWindowKey(window.season_id, window.registry_slug)) ||
+        sealedEmptyWindows.has(`${window.season_id}\u0000${window.source}`)
     )
   ).length
   const expected90dSources = new Set(
@@ -251,7 +260,7 @@ export function deriveFreshnessAuthorityMetadata(
       cohortId === null ||
       typeof publishedRankCount !== 'number' ||
       !Number.isSafeInteger(publishedRankCount) ||
-      publishedRankCount <= 0
+      publishedRankCount < 0
     ) {
       invalid = true
       continue
@@ -264,6 +273,8 @@ export function deriveFreshnessAuthorityMetadata(
   const cohortIds = new Set(publicationRows.map((row) => row.cohortId))
   const publicationTimes = new Set(publicationRows.map((row) => row.publishedAt))
   if (cohortIds.size !== 1 || publicationTimes.size !== 1) invalid = true
+  // A source may be sealed with zero rows, but a publication of nothing proves nothing.
+  if (publicationRows.every((row) => row.publishedRankCount === 0)) invalid = true
 
   return {
     coverage: { expectedSourceBoards, visibleSourceBoards },
