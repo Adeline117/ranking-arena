@@ -1,0 +1,60 @@
+{
+  "details": {
+    "code": "200",
+    "data": {
+      "bv": false,
+      "displayName": "Fixture CFD",
+      "focusRelation": false,
+      "headPic": "https://img.bgstatic.com/otc/images/fixture-cfd.png",
+      "introduction": {
+        "remark": "fixture introduction",
+        "remarkId": "1",
+        "remarkModifyStatus": true,
+        "remarkStatus": 3
+      },
+      "privateDetail": null,
+      "publicDetail": {
+        "aum": "1920.52",
+        "curFollowCount": 8,
+        "feeMode": 0,
+        "followProfit30d": "680.44",
+        "isFollow": false,
+        "labels": [
+          {
+            "describe": "超短线策略：该交易专家主要采用超短线交易方式，持仓时间极短、单笔获利点数较小。此类策略胜率通常较高、资金曲线平滑，但对执行价格较为敏感。跟单时建议关注仓位设置，避免因价差成本影响实际收益。",
+            "labelId": "1",
+            "name": "超短线",
+            "sort": 1
+          }
+        ],
+        "maxFollowCount": 100,
+        "portfolioId": "1400000000000000015",
+        "profitSharingCycle": 1,
+        "sharingRatio": "20",
+        "showBalance": true,
+        "tradingDays": 37
+      },
+      "traderAccountId": "b0c00000000000000015"
+    },
+    "params": []
+  },
+  "performance": {
+    "code": "200",
+    "data": {
+      "avgLoss": "-11.50",
+      "avgProfit": "7.80",
+      "bv": false,
+      "followProfit": "-269.80",
+      "lastOrderTime": 1795193848481,
+      "lossTrades": 69,
+      "maxDrawDown": "0.0000",
+      "profit": "256.04",
+      "profitTrades": 134,
+      "roi": "214.99",
+      "totalEquity": "457.200000000",
+      "totalTrades": 203,
+      "winRate": "0.6600"
+    },
+    "params": []
+  }
+}

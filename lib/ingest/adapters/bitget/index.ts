@@ -6,6 +6,8 @@
  *   list (UTA): POST /v1/trigger/public/uta/traderView (futures; spot/cfd below)
  *   profile:    POST /v1/trigger/trace/public/traderDetailPageV2 {traderUid}
  *   charts:     POST /v1/trigger/trace/public/cycleData {triggerUserId, cycleTime}
+ *   CFD profile: POST /v1/trace/mt5/public/{details,performance}
+ *               {portfolioId[, cycleTime]} (./profile-capture-contract.ts)
  * (legacy trader/detail + profitList endpoints are dead — verified 2026-06-11)
  *
  * WORKER-ONLY MODULE (imported via adapters/register in the worker).
@@ -21,7 +23,7 @@ import type {
 } from '../../core/types'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
-import { pageFetcher, replayJson } from '../../fetch/capture'
+import { pageFetcher, replayJson, UpstreamGoneError } from '../../fetch/capture'
 import {
   captureReplayLeaderboard,
   collectionMeta,
@@ -43,6 +45,7 @@ import {
   BITGET_POSITION_HISTORY_URL,
   bitgetPositionHistoryTerminalVerifier,
 } from './history-terminal'
+import { BITGET_CFD_PROFILE_URLS } from './profile-capture-contract'
 
 const BASE = 'https://www.bitget.com/v1/trigger/trace/public'
 const TRACE_BASE = 'https://www.bitget.com/v1/trigger/trace'
@@ -146,6 +149,99 @@ async function cachedDetailV2(
   return value
 }
 
+/** Business code of a portfolio endpoint answering an unknown or closed portfolio. */
+const PORTFOLIO_CLOSED_CODE = 'portfolio_already_closed'
+
+/**
+ * `data` of a portfolio-endpoint envelope. These endpoints answer HTTP 200
+ * for every outcome, so a business failure must fail the fetch here instead
+ * of parsing as an empty profile.
+ */
+function portfolioEnvelopeData(
+  label: string,
+  url: string,
+  envelope: unknown
+): Record<string, unknown> {
+  const code = isRecord(envelope) ? envelope.code : undefined
+  if (code === PORTFOLIO_CLOSED_CODE) throw new UpstreamGoneError(410, url)
+  if (code !== '200' || !isRecord(envelope) || !isRecord(envelope.data)) {
+    throw new Error(`[bitget] ${label} returned a non-success API envelope (code=${String(code)})`)
+  }
+  return envelope.data
+}
+
+/**
+ * CFD portfolio profile (public probe 2026-11-20). The trace family answers
+ * CFD traders 30081, so the CFD board has its own endpoints keyed by the
+ * board row's portfolioId (traders.meta.portfolio_id):
+ *   details {portfolioId}                  identity + 跟单者 block; its
+ *       traderAccountId is the board row's traderUid. An unknown or closed
+ *       portfolio answers code portfolio_already_closed (performance still
+ *       answers 200 with zeros and no maxDrawDown, so details is the gate).
+ *   performance {portfolioId, cycleTime}   the window's 表现 block
+ * One request returns one window: a trader's three windows cost one details
+ * request (memoized per session) plus three performance requests.
+ * cycleChartData {portfolioId, cycleTime} is not fetched: its roiRows/pnlRows
+ * are the since-inception cumulative curve cut to the window (last point =
+ * lifetime value, window value = last - first), not a window series.
+ */
+async function getCfdProfile(
+  session: FetchSession,
+  fetcher: ReturnType<typeof pageFetcher>,
+  exchangeTraderId: string,
+  tf: RankingTimeframe,
+  traderMeta: Record<string, unknown> | null | undefined
+): Promise<RawBundle> {
+  const portfolioId = traderMeta?.portfolio_id ? String(traderMeta.portfolio_id) : null
+  if (portfolioId === null) {
+    throw new Error(`[bitget] CFD trader ${exchangeTraderId} has no portfolio_id in traders.meta`)
+  }
+  const post = (url: string, body: Record<string, unknown>) =>
+    replayJson(session, fetcher, { url, method: 'POST', headers: UTA_HEADERS, body })
+
+  const cfdDetails = await cachedDetailV2(
+    session,
+    `cfd:${portfolioId}:${exchangeTraderId}`,
+    async () => {
+      const envelope = await post(BITGET_CFD_PROFILE_URLS.details, { portfolioId })
+      const data = portfolioEnvelopeData('CFD details', BITGET_CFD_PROFILE_URLS.details, envelope)
+      // The evidence attempt is the trader's; the request is keyed by the
+      // portfolio. Refuse a portfolio that belongs to another trader.
+      if (data.traderAccountId !== exchangeTraderId) {
+        throw new Error(
+          `[bitget] CFD portfolio ${portfolioId} belongs to ${String(data.traderAccountId)}, ` +
+            `not ${exchangeTraderId}`
+        )
+      }
+      return envelope
+    }
+  )
+  const cfdPerformance = await post(BITGET_CFD_PROFILE_URLS.performance, {
+    portfolioId,
+    cycleTime: tf,
+  })
+  portfolioEnvelopeData('CFD performance', BITGET_CFD_PROFILE_URLS.performance, cfdPerformance)
+
+  // The page url is the performance request with the POST body's identity as
+  // the query, so the profile capture manifest binds the portfolio and the
+  // window it was fetched for (./profile-capture-contract.ts).
+  const performanceUrl = new URL(BITGET_CFD_PROFILE_URLS.performance)
+  performanceUrl.searchParams.set('portfolioId', portfolioId)
+  performanceUrl.searchParams.set('cycleTime', String(tf))
+  const fetchedAt = new Date().toISOString()
+  return {
+    pages: [
+      {
+        pageIndex: 1,
+        payload: { cfdDetails, cfdPerformance, timeframe: tf },
+        url: performanceUrl.toString(),
+        fetchedAt,
+      },
+    ],
+    fetchedAt,
+  }
+}
+
 const bitgetAdapter: SourceAdapter = {
   slug: 'bitget',
   capabilities: {
@@ -236,6 +332,10 @@ const bitgetAdapter: SourceAdapter = {
     const fetcher = pageFetcher(session)
     const tf = (timeframe === 0 ? 90 : timeframe) as RankingTimeframe
 
+    if (src.meta.boardKey === 'cfd') {
+      return getCfdProfile(session, fetcher, exchangeTraderId, tf, traderMeta)
+    }
+
     // UTA portfolio traders (type=2): different endpoint family keyed by
     // portfolioId — the trace family rejects their traderUid with 30081.
     const portfolioId =
@@ -277,13 +377,14 @@ const bitgetAdapter: SourceAdapter = {
       }
     }
 
-    // Futures family only. Public probe 2026-11-17: spot and CFD board traders
-    // (type 1, with a portfolioId) get detailV2 code 30081 ("not a futures
-    // expert") and a cycleData success envelope whose statisticsDTO is null,
-    // and uta/performance answers zeros without maxDrawDown for their
-    // portfolioId. Neither board row carries a drawdown, so bitget_spot and
-    // bitget_cfd have no profile capture contract until their own public
-    // profile endpoints are identified.
+    // Futures family only. Public probes 2026-11-17 / 2026-11-20: spot board
+    // traders (type 1, with a portfolioId) get detailV2 code 30081 ("not a
+    // futures expert") and a cycleData success envelope whose statisticsDTO is
+    // null. The spot trader page reads /v1/trace/spot/public/uta/{details,
+    // performance,cycleChartData} instead, but neither that page nor its
+    // performance response carries a drawdown for any window, and the board
+    // row has none either: bitget_spot has no exchange-provided drawdown, so it
+    // has no profile capture contract (./profile-capture-contract.ts).
     const detailUrl = endpoint(src, 'profile', `${BASE}/traderDetailPageV2`)
     const cycleUrl = endpoint(src, 'cycleData', `${BASE}/cycleData`)
 
