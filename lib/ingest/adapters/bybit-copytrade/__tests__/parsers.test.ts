@@ -43,11 +43,32 @@ describe('parseBybitCopytradeLeaderboardPage', () => {
         'https://s1.bycsi.com/fop/copytrade/ad427341-542b-4388-958e-59b36c0e7451.png',
       traderKind: 'human',
       headlineRoi: 11.36, // metricValues[0] "+11.36%"
-      headlinePnl: null, // board has no master-PnL column
+      headlinePnl: null, // this June capture predates the leaderPnlE8 row field
       headlineWinRate: 100, // "+100.00%"
       headlineMdd: 0, // Drawdown column (already percent) → board captures MDD
     })
     expect(page.rows[1].rank).toBe(2)
+  })
+
+  it('reads the leader window PnL from the row, never the copiers profit', () => {
+    const payload = fixture('leaderboard-p1.json') as {
+      result: { leaderDetails: Array<Record<string, unknown>> }
+    }
+    const [first, second, third] = payload.result.leaderDetails
+    // Production rows (2026-11-21): leaderPnlE8 = the leader's own window PnL in USDT × 1e8.
+    first.leaderPnlE8 = '669588757974'
+    second.leaderPnlE8 = '-1250000000'
+    third.leaderPnlE8 = '0'
+    const page = parseBybitCopytradeLeaderboardPage(payload, ctx)
+
+    expect(page.rows.slice(0, 4).map((row) => row.headlinePnl)).toEqual([
+      6695.88757974,
+      -12.5,
+      0,
+      null, // a row without the field stays without a PnL
+    ])
+    // followerYieldE8 (3056462640874 on the first row) is the copiers' profit.
+    expect(page.rows[0].headlinePnl).not.toBe(30564.62640874)
   })
 
   it('maps badge/level/country metadata into traderMeta (spec §11.3)', () => {

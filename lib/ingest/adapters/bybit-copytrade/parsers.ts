@@ -97,7 +97,12 @@ const SORT_KEY_METRIC: Record<string, string> = {
  * base64) is the stable public trader id used by every profile endpoint.
  *
  * Board columns are display strings (see module docs). There is no master
- * PnL column → headlinePnl stays NULL (profile stats provide pnl).
+ * PnL COLUMN, but every row carries the leader's own window PnL as the
+ * numeric field leaderPnlE8 (USDT × 1e8; it changes with dataDuration).
+ * Checked against production on 2026-11-21: present on all 7,054 rows of each
+ * window and equal to the profile's window PnL for the traders compared
+ * (e.g. board 6695.89 vs profile 6695.88757974). followerPnlE8 /
+ * followerYieldE8 are the COPIERS' profit, never the leader's.
  */
 /** Board-row copier PnL / max-slots / P-L ratio → extras (逐图核对). */
 function ctBoardExtras(
@@ -159,6 +164,7 @@ export function parseBybitCopytradeLeaderboardPage(
     if (tags.length > 0) traderMeta.user_tags = tags
 
     const headlineRoi = num(metrics.roi)
+    const headlinePnl = e(item.leaderPnlE8, 8)
     rows.push({
       exchangeTraderId: String(id),
       // Positional in-page rank; re-anchored across pages by the caller.
@@ -169,7 +175,7 @@ export function parseBybitCopytradeLeaderboardPage(
       traderKind: 'human',
       botStrategy: null,
       headlineRoi,
-      headlinePnl: null,
+      headlinePnl,
       headlineMetricSources:
         headlineRoi === null
           ? {}
