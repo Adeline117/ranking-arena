@@ -64,6 +64,29 @@ describe('parseBinanceLeaderboardPage', () => {
     expect(page.rows[5].rank).toBe(6)
   })
 
+  it('lifts the board max drawdown on both boards, zeros included', () => {
+    const futures = parseBinanceLeaderboardPage(fixture('leaderboard-p1.json'), ctx).rows
+    // Already a percent; a 0 is a real zero drawdown, not a placeholder.
+    expect(futures.slice(0, 5).map((row) => row.headlineMdd)).toEqual([
+      0, 0, 0.0116843, 0, 13.556168,
+    ])
+    expect(futures.every((row) => typeof row.headlineMdd === 'number')).toBe(true)
+
+    const spot = parseBinanceLeaderboardPage(fixture('spot-leaderboard-p1.json'), ctx).rows
+    expect(spot.slice(0, 3).map((row) => row.headlineMdd)).toEqual([9.634565, 8.528591, 9.597714])
+  })
+
+  it('leaves the drawdown empty when the row does not report one', () => {
+    const payload = fixture('leaderboard-p1.json') as {
+      data: { list: Array<Record<string, unknown>> }
+    }
+    payload.data.list[0].mdd = null
+    delete payload.data.list[1].mdd
+    const rows = parseBinanceLeaderboardPage(payload, ctx).rows
+    expect(rows[0].headlineMdd).toBeNull()
+    expect(rows[1].headlineMdd).toBeNull()
+  })
+
   it('returns empty rows for malformed payloads', () => {
     expect(parseBinanceLeaderboardPage(null, ctx).rows).toHaveLength(0)
     expect(parseBinanceLeaderboardPage({ data: {} }, ctx).rows).toHaveLength(0)
