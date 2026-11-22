@@ -433,6 +433,11 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # board, instead of being dropped when the row's as_of is frozen by an old
 # column the board never re-sends. It follows 215329, depends on no worker
 # release and touches no table 192134 guards.
+# 20261120190124 registers bybit_mt5 as a live board (reported_total_drift,
+# 0.1% of the board, at most 100 rows) in the append-only exhaustion registry.
+# It needs the declaration 114230 makes valid, so it follows it; it takes
+# effect with the worker release that captures bybit_mt5 in this mode. It
+# touches no table 192134 guards.
 # 20261121000026 registers the bitget_cfd profile capture contract (mdd, pnl,
 # roi, total_positions, win_rate from the CFD performance response) in the
 # registry of predeploy 20261116215328. Like 015119 it is only meaningful to
@@ -465,6 +470,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261118161307_tier_a_window_receipt_exhaustion_branch.sql
   20261118134500_register_binance_live_board_exhaustion_contracts.sql
   20261120233328_publication_score_rows_board_attested_freshness.sql
+  20261120190124_register_bybit_mt5_live_board_exhaustion_contract.sql
   20261121000026_register_bitget_cfd_profile_capture_contract.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
