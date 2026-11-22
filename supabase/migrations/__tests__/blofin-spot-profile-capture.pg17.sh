@@ -25,15 +25,18 @@
 #   positive - board write (exact HEADLINE_STATS_UPSERT_SQL) -> Tier-B write
 #              (exact PROFILE_STATS_UPSERT_SQL) of a complete 30D capture ->
 #              the reader publishes the win rate and trade count the board
-#              lacks, and the drawdown stays evidenced: by the board while the
-#              two values agree, by the profile when the profile wrote a value
-#              the board no longer holds, by the board again after its next
-#              write;
+#              lacks. The contract does not attest drawdown (the detail value is
+#              not reliably a value of the requested window), so drawdown is
+#              board evidence only: evidenced while the profile wrote the
+#              number the board attested, unevidenced (NULL, named) after a
+#              profile write of another number, evidenced again by the next
+#              board write;
 #   zero     - an idle trader's board drawdown "0" is published as 0, not NULL;
 #   leftover - a row still holding the profile-only columns of an old profile
 #              write (as the futures-route crawl left them) is older than the
 #              reader's 48h stats window however fresh the board is, so its
-#              drawdown and win rate publish NULL; one spot capture restores it.
+#              drawdown and win rate publish NULL; one spot capture makes the
+#              row fresh again.
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -524,7 +527,7 @@ expected_field() {
 node -e '
 const e = JSON.parse(process.argv[1])
 const ok = e.winRate === 35.29 && e.trades === 17 && e.mdd === e.boardMdd && e.mdd > 14 && e.mdd < 15 &&
-  JSON.stringify(e.metrics) === JSON.stringify(["mdd", "total_positions", "win_rate"])
+  JSON.stringify(e.metrics) === JSON.stringify(["total_positions", "win_rate"])
 if (!ok) { console.error("driver capture drifted: " + process.argv[1]); process.exit(1) }
 ' "$EXPECTED"
 WIN_RATE="$(expected_field winRate)"
@@ -655,7 +658,8 @@ FROM jsonb_array_elements(arena.publication_score_rows_json('30D', 1000, 48)) AS
 SELECT public.proof_assert((SELECT count(*) FROM score) = 3, 'expected 3 score rows');
 
 -- 401: the profile supplies the win rate and trade count the board lacks; the
--- drawdown the profile wrote equals the board's, so both attest it.
+-- drawdown the profile wrote is the number the board attested, so the board's
+-- attestation of it stands.
 SELECT public.proof_assert(
   count(*) = 1 AND COALESCE(bool_and(
     (score_row->>'win_rate')::numeric = :'win_rate'::numeric
@@ -669,7 +673,7 @@ SELECT public.proof_assert(
 ) FROM score WHERE trader_key = '4187422152';
 SELECT public.proof_assert(
   count(*) = 1 AND COALESCE(bool_and(
-    profile_evidence_metrics = '{mdd,total_positions,win_rate}' AND 'mdd' = ANY (evidence_metrics)
+    profile_evidence_metrics = '{total_positions,win_rate}' AND 'mdd' = ANY (evidence_metrics)
   ), false),
   'trader 401 attestations drifted: '
     || COALESCE(string_agg(profile_evidence_metrics::text || ' / ' || evidence_metrics::text, ' | '), 'no row')
@@ -707,10 +711,11 @@ echo "blofin-spot-profile-capture.pg17: reader ok"
 
 # ---------------------------------------------------------------------------
 # The next attempt-bound board write (RAW 5012, run d...) on which the active
-# drawdown moved: the board re-attests its own value, the profile attestation
-# of the replaced drawdown is dropped, win rate and trade count stay attested.
-# Then trader 403 gets its first spot capture, written AFTER that board: the
-# profile's drawdown replaces the board's, and the profile attests it.
+# drawdown moved: the board attests its own new value, win rate and trade count
+# stay profile-attested. Then trader 403 gets its first spot capture, written
+# AFTER that board: the row is fresh again and gains win rate and trade count,
+# but the profile's drawdown replaced the board's number and nothing attests
+# it, so drawdown is NULL and named until the next board write.
 # ---------------------------------------------------------------------------
 SEQ_HEALED="$(psql_db -At -c "SELECT attempt_seq FROM arena.profile_acquisition_attempts
   WHERE attempt_id = '00000000-0000-4000-8000-0000000004a3'")"
@@ -755,23 +760,25 @@ SELECT public.proof_assert(
   'trader 401 attestations after the moved board drifted: ' || COALESCE(string_agg(profile_evidence_metrics::text, ' | '), 'no row')
 ) FROM arena.trader_stats WHERE trader_id = 401 AND timeframe = 30;
 
--- 403: one spot capture makes the row fresh and complete. Its drawdown is the
--- profile's (the board holds another value), attested by the profile alone:
--- without `mdd` in the contract this drawdown would be unevidenced.
+-- 403: one spot capture makes the row fresh: win rate and trade count are
+-- published. Its stored drawdown is now the profile's number, which neither
+-- the board (it holds another value) nor the contract attests: refused, named.
 SELECT public.proof_assert(
   count(*) = 1 AND COALESCE(bool_and(
     (score_row->>'win_rate')::numeric = :'win_rate'::numeric
     AND (score_row->>'trades_count')::int = :'trades'::int
-    AND (score_row->>'max_drawdown')::numeric = :'profile_mdd'::numeric
+    AND score_row->'max_drawdown' = 'null'::jsonb
+    AND score_row->'unevidenced_metrics' ? 'max_drawdown'
     AND score_row->'roi_pct' <> 'null'::jsonb
     AND score_row->'pnl_usd' <> 'null'::jsonb
-    AND NOT score_row->'unevidenced_metrics' ?| ARRAY['win_rate', 'trades_count', 'max_drawdown']
+    AND NOT score_row->'unevidenced_metrics' ?| ARRAY['win_rate', 'trades_count']
   ), false),
   'profile-after-board blofin_spot row drifted: ' || COALESCE(string_agg(score_row::text, ' | '), 'no row')
 ) FROM score WHERE trader_key = '1003';
 SELECT public.proof_assert(
   count(*) = 1 AND COALESCE(bool_and(
-    profile_evidence_metrics = '{mdd,total_positions,win_rate}'
+    profile_evidence_metrics = '{total_positions,win_rate}'
+    AND mdd = :'profile_mdd'::numeric
     AND NOT ('mdd' = ANY (COALESCE(evidence_metrics, '{}')))
     AND as_of > now() - interval '1 hour'
   ), false),
@@ -785,6 +792,43 @@ SELECT public.proof_assert(
   ), false),
   'idle blofin_spot row drifted: ' || COALESCE(string_agg(score_row::text, ' | '), 'no row')
 ) FROM score WHERE trader_key <> '4187422152' AND trader_key <> '1003';
+SQL
+
+# The board write after that (RAW 5013, run f...) restores and attests the
+# board drawdown: trader 403 now has all four required inputs evidenced.
+psql_db -v board_rows="$BOARD_MOVED_ROWS" >/dev/null <<SQL
+INSERT INTO arena.leaderboard_snapshots VALUES (13, 1, 30, now() - interval '1 minute', 3, true, 5013);
+INSERT INTO arena.leaderboard_acquisition_attempts VALUES (3, 1, 30);
+INSERT INTO arena.leaderboard_acquisition_outcomes VALUES (3, repeat('f', 64), 5013);
+INSERT INTO arena.leaderboard_entries
+  (scraped_at, snapshot_id, trader_id, timeframe, rank, headline_roi, headline_pnl, headline_win_rate)
+SELECT s.scraped_at, 13, e.trader_id, 30, e.rank, e.headline_roi, e.headline_pnl, e.headline_win_rate
+FROM arena.leaderboard_entries AS e CROSS JOIN arena.leaderboard_snapshots AS s
+WHERE e.snapshot_id = 11 AND s.id = 13;
+\\i $TMP_ROOT/out/prepare.sql
+SELECT scraped_at AS board_at FROM arena.leaderboard_snapshots WHERE id = 13 \\gset
+EXECUTE headline(30, :'board_at', 'USDT', :'board_rows', 1, 5013, repeat('f', 64));
+SQL
+
+psql_db -v win_rate="$WIN_RATE" -v trades="$TRADES" -v moved_mdd="$MOVED_MDD" >/dev/null <<'SQL'
+SELECT public.proof_assert(
+  count(*) = 2 AND COALESCE(bool_and(
+    (r->>'win_rate')::numeric = :'win_rate'::numeric
+    AND (r->>'trades_count')::int = :'trades'::int
+    AND (r->>'max_drawdown')::numeric = :'moved_mdd'::numeric
+    AND r->'roi_pct' <> 'null'::jsonb
+    AND r->'pnl_usd' <> 'null'::jsonb
+    AND NOT r->'unevidenced_metrics' ?| ARRAY['win_rate', 'trades_count', 'max_drawdown']
+  ), false),
+  'rows after the next board write drifted: ' || COALESCE(string_agg(r::text, ' | '), 'no row')
+) FROM jsonb_array_elements(arena.publication_score_rows_json('30D', 1000, 48)) AS r
+WHERE r->>'trader_key' IN ('4187422152', '1003');
+SELECT public.proof_assert(
+  count(*) = 2 AND COALESCE(bool_and(
+    profile_evidence_metrics = '{total_positions,win_rate}' AND 'mdd' = ANY (evidence_metrics)
+  ), false),
+  'attestations after the next board write drifted'
+) FROM arena.trader_stats WHERE trader_id IN (401, 403) AND timeframe = 30;
 SQL
 
 echo "blofin-spot-profile-capture.pg17: board/profile ordering ok"

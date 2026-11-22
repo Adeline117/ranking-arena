@@ -8,11 +8,14 @@
 -- blofin_spot unregistered because the adapter then read the futures copy
 -- account for spot traders. The adapter now reads the spot detail endpoints
 -- (/sapi/v1/spot_copy/trader/*), whose stat/indicators response supplies the
--- period win rate, trade count and drawdown. The row mirrors the code contract
--- exactly: capture_contract name, the strict-canonical sha256 of the contract
--- document (profileCaptureContractSha256), its timeframes and the sorted keys
--- of its metrics map:
---   blofin_spot  (lib/ingest/adapters/blofin)  mdd, total_positions, win_rate
+-- period win rate and trade count. Its max_drawdown is NOT registered: an idle
+-- account reports one nonzero value for 7, 30 and 90 days, so it is not
+-- evidence of the requested window; drawdown stays the board's evidence. The
+-- row mirrors the code contract exactly: capture_contract name, the
+-- strict-canonical sha256 of the contract document
+-- (profileCaptureContractSha256), its timeframes and the sorted keys of its
+-- metrics map:
+--   blofin_spot  (lib/ingest/adapters/blofin)  total_positions, win_rate
 --
 -- POSTDEPLOY, after 20261117015119 and before 20261111192134: a registered
 -- contract is only meaningful to the worker release that carries the same
@@ -50,9 +53,9 @@ DECLARE
   c_adapter_slug constant text := 'blofin';
   c_capture_contract constant text := 'blofin_spot-profile-capture@1';
   c_contract_sha256 constant text :=
-    'de5d2067e3e331a874b6dcf65f89cb3f046c6dfae9e32bfe368664e940611ad7';
+    '005b581a9191952c7e28bbdfb121e431954a457e11e1b9cd80dc5e67a94f796a';
   c_timeframes constant smallint[] := '{7,30,90}';
-  c_attestable_metrics constant text[] := '{mdd,total_positions,win_rate}';
+  c_attestable_metrics constant text[] := '{total_positions,win_rate}';
   v_source arena.sources%ROWTYPE;
   v_landed integer;
 BEGIN

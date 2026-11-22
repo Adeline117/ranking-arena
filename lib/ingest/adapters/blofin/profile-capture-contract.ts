@@ -80,22 +80,28 @@ export const BLOFIN_FUTURES_PROFILE_CAPTURE: ProfileCaptureContract = {
  *   - win_rate        indicators.data.win_ratio_all (fraction; the period's
  *                     winning_trades / trades, e.g. D30 6/17 = 0.3529, D90
  *                     14/29 = 0.4827; stat/performance repeats it as
- *                     data.performance.win_rate). The board row has no win
- *                     rate. With zero trades in the period the source reports
- *                     "0"; the parser keeps that undefined rate NULL, so it is
- *                     never attested.
+ *                     data.performance.win_rate). Of the 17 traders whose
+ *                     trade count changes between periods, the rate changes
+ *                     for 15; the other two are 2/2, 3/3, 3/3 and 0/0, 0/0,
+ *                     0/1. The board row has no win rate. With zero trades in
+ *                     the period the source reports "0"; the parser keeps that
+ *                     undefined rate NULL, so it is never attested.
  *   - total_positions indicators.data.trades (period trade count).
- *   - mdd             indicators.data.max_drawdown (fraction). Unlike futures
- *                     this IS the period value: it equalled the board row's
- *                     `mdd` of the same range for all 431 trader-periods
- *                     probed and differs between periods of one trader
- *                     (0.0015 / 0.1480 / 0.2757 for D7 / D30 / D90). The
- *                     profile write replaces the stored drawdown, so without
- *                     this attestation a profile-crawled row would lose the
- *                     board's drawdown evidence whenever the value moved
- *                     between the board and the profile fetch.
- * Not attested: roi / pnl (the board's Tier-A evidence; real_pnl differs from
- * the board's pnl by the fetch lag), sharpe and the other ratios.
+ * Not attested:
+ *   - max_drawdown    not a reliable period value. It differs between periods
+ *                     for 29 traders, but 18 report one nonzero value for D7,
+ *                     D30 and D90, and a flat window (roi 0, real_pnl 0, no
+ *                     trades) still reports a nonzero drawdown in 23 of 39
+ *                     (D7), 28 of 45 (D30) and 24 of 48 (D90) nonzero cases
+ *                     (e.g. 64.3% in all three windows of an idle account,
+ *                     fixture profile-indicators-spot-flat-*.json): a value
+ *                     carried over from outside the window, like the futures
+ *                     endpoint. The spot board row repeats the same number
+ *                     (equal in all 431 trader-periods), so drawdown stays the
+ *                     board's (Tier-A) evidence and is not attested here.
+ *   - roi / pnl       the board's Tier-A evidence (real_pnl differs from the
+ *                     board's pnl by the fetch lag); sharpe and the other
+ *                     ratios.
  *
  * symbol_performance is not requested: the spot route answers it with code 401
  * and stat/performance already carries the per-symbol table.
@@ -117,11 +123,6 @@ export const BLOFIN_SPOT_PROFILE_CAPTURE: ProfileCaptureContract = {
     },
   ],
   metrics: {
-    mdd: {
-      endpoint: 'indicators',
-      path: ['indicators', 'data', 'max_drawdown'],
-      transform: 'fraction_to_percent',
-    },
     total_positions: {
       endpoint: 'indicators',
       path: ['indicators', 'data', 'trades'],

@@ -90,7 +90,7 @@ describe('parseBlofinLeaderboardPage', () => {
     expect(idle.headlineMdd).toBe(0)
   })
 
-  it('blofin_spot: the detail drawdown of a period is the board drawdown of that range', () => {
+  it('blofin_spot: the detail drawdown repeats the board row drawdown of that range', () => {
     const board = parseBlofinLeaderboardPage(fixture('board-spot-30-20261120.json'), ctx).rows[0]
     const recorded = fixture('profile-capture-spot-4187422152.json') as {
       responses: Record<string, unknown>

@@ -31,8 +31,9 @@
  *   answer a spot uid with its FUTURES copy account, the spot account is):
  *     POST /sapi/v1/spot_copy/trader/info              {uid}
  *     POST /sapi/v1/spot_copy/trader/stat/indicators   {uid, stat_period}
- *          → same fields as futures minus the volume ones; max_drawdown is the
- *            PERIOD drawdown (equals the board row's mdd of that range)
+ *          → same fields as futures minus the volume ones; win_ratio_all /
+ *            trades are period values; max_drawdown repeats the board row's
+ *            mdd, which is not always a value of the requested window
  *     POST /sapi/v1/spot_copy/trader/stat/performance  {uid, stat_period, type:"all"}
  *          → {performance:{roi,pnl,max_drawdown,win_rate}, roi[], pnl[], symbols[]}
  *     (stat/symbol_performance answers code 401 on the spot route; the

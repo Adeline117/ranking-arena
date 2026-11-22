@@ -281,7 +281,7 @@ describe('blofin_spot profile capture contract', () => {
     [30, 35.29, 17, 14.7976082140442],
     [90, 48.27, 29, 27.566833876268518],
   ] as const)(
-    '%sd capture attests exactly the period win rate, trade count and drawdown',
+    '%sd capture attests exactly the period win rate and trade count, not the drawdown',
     async (timeframe, winRate, trades, mdd) => {
       const result = expectProfileContractAttests({
         contract: BLOFIN_SPOT_PROFILE_CAPTURE,
@@ -289,11 +289,13 @@ describe('blofin_spot profile capture contract', () => {
         pages: await spotCapturedPages(timeframe),
         parseProfile: parseBlofinProfile,
         exchangeTraderId: spotRecorded.uid,
-        metrics: ['mdd', 'total_positions', 'win_rate'],
+        metrics: ['total_positions', 'win_rate'],
       })
       expect(result.stored?.winRate).toBeCloseTo(winRate, 9)
       expect(result.stored?.totalPositions).toBe(trades)
+      // Parsed and stored, but never attested by this contract.
       expect(result.stored?.mdd).toBeCloseTo(mdd, 9)
+      expect(result.manifest?.metrics).not.toHaveProperty('mdd')
       expect(result.manifest).toMatchObject({
         capture_contract: 'blofin_spot-profile-capture@1',
         capture_contract_sha256: profileCaptureContractSha256(BLOFIN_SPOT_PROFILE_CAPTURE),
@@ -303,24 +305,66 @@ describe('blofin_spot profile capture contract', () => {
         metrics: {
           win_rate: { endpoint: 'indicators', path: ['indicators', 'data', 'win_ratio_all'] },
           total_positions: { endpoint: 'indicators', path: ['indicators', 'data', 'trades'] },
-          mdd: { endpoint: 'indicators', path: ['indicators', 'data', 'max_drawdown'] },
         },
       })
     }
   )
 
-  it('keeps the zero-trade period win rate NULL and still attests drawdown and trade count', async () => {
+  it('keeps the zero-trade period win rate NULL and attests only the trade count', async () => {
     const result = expectProfileContractAttests({
       contract: BLOFIN_SPOT_PROFILE_CAPTURE,
       timeframe: 7,
       pages: await spotCapturedPages(7),
       parseProfile: parseBlofinProfile,
       exchangeTraderId: spotRecorded.uid,
-      metrics: ['mdd', 'total_positions'],
+      metrics: ['total_positions'],
     })
     expect(result.stored?.winRate).toBeNull()
     expect(result.stored?.totalPositions).toBe(0)
-    expect(result.stored?.mdd).toBeCloseTo(0.1497742225083643, 9)
+  })
+
+  it('does not contract the drawdown: a flat window reports one carried-over value', () => {
+    // Public probe 2026-11-21: an idle spot account (roi 0, real_pnl 0, no
+    // trades in any window) reports the same 64.3% drawdown for D7, D30 and
+    // D90. That cannot be a drawdown of the requested window, so the field is
+    // not period evidence and the contract must not attest it.
+    const flat = JSON.parse(
+      readFileSync(
+        join(__dirname, 'fixtures', 'profile-indicators-spot-flat-16199513701.json'),
+        'utf8'
+      )
+    ) as Recorded
+    const blocks = ([7, 30, 90] as const).map((timeframe) => {
+      const profile = parseBlofinProfile(
+        {
+          info: null,
+          indicators: flat.responses[`trader/stat/indicators|D${timeframe}`],
+          symbolPerf: null,
+          performance: null,
+          timeframe,
+        },
+        {
+          sourceSlug: 'blofin_spot',
+          currency: 'USDT',
+          tfLabelMap: {},
+          scrapedAt: '2026-11-21T00:00:00.000Z',
+          meta: {},
+        }
+      )
+      return profile.stats[0]
+    })
+    for (const block of blocks) {
+      expect(block.roi).toBe(0)
+      expect(block.pnl).toBe(0)
+      expect(block.totalPositions).toBe(0)
+      expect(block.winRate).toBeNull()
+    }
+    expect(blocks[0].mdd).toBeGreaterThan(64)
+    expect(new Set(blocks.map((block) => block.mdd)).size).toBe(1)
+    expect(Object.keys(BLOFIN_SPOT_PROFILE_CAPTURE.metrics).sort()).toEqual([
+      'total_positions',
+      'win_rate',
+    ])
   })
 
   it('binds the request projection to the stat period and refuses another timeframe', async () => {
@@ -351,7 +395,7 @@ describe('blofin_spot profile capture contract', () => {
     expect(result.attestedMetrics).toEqual([])
   })
 
-  it('refuses an incomplete capture and a RAW whose drawdown is not the parser value', async () => {
+  it('refuses an incomplete capture and a RAW whose win rate is not the parser value', async () => {
     const failed = spotRun(30, await spotCapturedPages(30, { failing: ['trader/stat/indicators'] }))
     expect(failed.terminalState).toBe('processing_failed')
     expect(failed.reasonCode).toBe('stats_block_missing')
@@ -365,8 +409,8 @@ describe('blofin_spot profile capture contract', () => {
       exchangeTraderId: spotRecorded.uid,
       timeframe: 30,
       pages,
-      parsed: { ...parsed, mdd: 1 },
-      stored: { ...parsed, mdd: 1 },
+      parsed: { ...parsed, winRate: 99 },
+      stored: { ...parsed, winRate: 99 },
     })
     expect(result.terminalState).toBe('processing_failed')
     expect(result.reasonCode).toBe('projection_mismatch')
