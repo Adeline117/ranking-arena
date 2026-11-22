@@ -12,10 +12,16 @@
 --   (recordCount 0, not_visible) and only zero-row sources as fresh; the
 --   homepage exchange list and /api/sources/visible were empty.
 --
--- What changes: the count comes from public.public_ranked_leaderboard, the
---   same sealed, fenced view the rankings read, so "visible" cannot drift from
---   what is served and needs no refresh step. cache_updated_at becomes the
---   source's publication time (leaderboard_source_freshness.recorded_at).
+-- What changes: a source is visible in a season when that season is being
+--   served (arena.public_ranked_leaderboard_serving_seasons, the gate the
+--   public view itself uses) and the source's sealed freshness proof of the
+--   serving cohort records published ranks
+--   (leaderboard_source_freshness.published_rank_count > 0 with the serving
+--   head's score_cohort_id). trader_count is that sealed count, which equals
+--   the public view's per-source count (verified in production for 7D/30D/90D
+--   on 2026-11-22). Reading a dozen proof rows instead of counting the view
+--   keeps the homepage call cheap: counting public_ranked_leaderboard took
+--   863 ms in production. cache_updated_at becomes the proof's recorded_at.
 --   Signature, returned columns, registry filters, ordering, owner, SECURITY
 --   DEFINER and grants are unchanged.
 --
@@ -43,10 +49,20 @@ SECURITY DEFINER
 SET search_path = public, arena, pg_temp
 AS $$
   WITH served AS (
-    SELECT ranked.source, pg_catalog.count(*)::integer AS trader_count
-    FROM public.public_ranked_leaderboard AS ranked
-    WHERE ranked.season_id = p_season_id
-    GROUP BY ranked.source
+    SELECT
+      freshness.source,
+      freshness.published_rank_count AS trader_count,
+      freshness.recorded_at
+    FROM arena.public_ranked_leaderboard_serving_seasons(
+           pg_catalog.statement_timestamp()
+         ) AS serving
+    JOIN arena.public_ranked_leaderboard_serving_heads AS head
+      ON head.season_id = serving.season_id
+    JOIN public.leaderboard_source_freshness AS freshness
+      ON freshness.season_id = head.season_id
+     AND freshness.score_cohort_id = head.score_cohort_id
+    WHERE serving.season_id = p_season_id
+      AND freshness.published_rank_count > 0
   )
   SELECT
     source_row.slug AS registry_slug,
@@ -55,15 +71,12 @@ AS $$
     exchange_row.name AS exchange_name,
     source_row.product_type,
     served.trader_count,
-    freshness.recorded_at AS cache_updated_at
+    served.recorded_at AS cache_updated_at
   FROM arena.sources AS source_row
   JOIN arena.exchanges AS exchange_row ON exchange_row.id = source_row.exchange_id
   JOIN served
     ON served.source =
        COALESCE(NULLIF(source_row.meta->>'legacy_platform', ''), source_row.slug)
-  LEFT JOIN public.leaderboard_source_freshness AS freshness
-    ON freshness.season_id = p_season_id
-   AND freshness.source = served.source
   WHERE p_season_id IN ('7D', '30D', '90D')
     AND source_row.status = 'active'
     AND source_row.serving_mode = 'serving'
@@ -75,6 +88,6 @@ REVOKE ALL ON FUNCTION public.arena_visible_sources(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.arena_visible_sources(text) TO anon, authenticated, service_role;
 
 COMMENT ON FUNCTION public.arena_visible_sources(text) IS
-  'Active serving registry sources with ranks served by public_ranked_leaderboard in the requested 7D/30D/90D season.';
+  'Active serving registry sources with sealed published ranks in the serving cohort of the requested 7D/30D/90D season.';
 
 COMMIT;

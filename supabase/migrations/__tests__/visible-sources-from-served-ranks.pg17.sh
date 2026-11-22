@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 
 # PostgreSQL 17 proof for 20261121201553: public.arena_visible_sources() lists
-# the registry sources that have ranks in the public view, with no dependency
+# the registry sources with published ranks in the serving cohort, with no dependency
 # on public.leaderboard_count_cache.
 #
 #   - before: with an empty count cache the 20260716071500 definition returns
 #     nothing although the public view serves ranks (the production incident)
-#   + after: it returns exactly the served sources with their served counts
-#   - a source with no served rank, a non-serving / inactive registry row and
-#     an unknown season return nothing
+#   + after: it returns exactly the sources with sealed published ranks in the
+#     serving cohort, with the sealed counts
+#   - a source sealed with zero rows, a proof of an older cohort, a season that
+#     is not being served, a non-serving / retired registry row and an unknown
+#     season return nothing
 #   = two registry boards sharing one public alias both appear with the alias
 #     count; signature, owner and grants are unchanged; anon can execute
 # The migration is applied by a non-superuser owner. Isolated cluster on a
@@ -90,11 +92,17 @@ CREATE TABLE public.leaderboard_count_cache (
 );
 CREATE TABLE public.leaderboard_source_freshness (
   season_id text NOT NULL, source text NOT NULL, source_as_of timestamptz NOT NULL,
-  recorded_at timestamptz NOT NULL, PRIMARY KEY (season_id, source)
+  recorded_at timestamptz NOT NULL, score_cohort_id uuid, published_rank_count integer,
+  PRIMARY KEY (season_id, source)
 );
--- Stand-in for the sealed public view: the columns the function reads.
-CREATE TABLE public.served_ranks (season_id text NOT NULL, source text NOT NULL, rank int NOT NULL);
-CREATE VIEW public.public_ranked_leaderboard AS SELECT * FROM public.served_ranks;
+CREATE TABLE arena.public_ranked_leaderboard_serving_heads (
+  season_id text PRIMARY KEY, score_cohort_id uuid NOT NULL
+);
+-- Stand-in for the public view's serving gate: the seasons listed here.
+CREATE TABLE arena.served_seasons (season_id text PRIMARY KEY);
+CREATE FUNCTION arena.public_ranked_leaderboard_serving_seasons(p_observed_at timestamptz)
+RETURNS TABLE (season_id text) LANGUAGE sql STABLE AS
+  $$ SELECT served.season_id FROM arena.served_seasons AS served $$;
 
 INSERT INTO arena.exchanges VALUES (1, 'bybit', 'Bybit'), (2, 'gate', 'Gate'), (3, 'okx', 'OKX');
 INSERT INTO arena.sources VALUES
@@ -104,16 +112,22 @@ INSERT INTO arena.sources VALUES
   (4, 'okx_futures', 3, 'futures', 'active', 'serving', '{}'),
   (5, 'okx_spot', 3, 'spot', 'active', 'shadow', '{}'),
   (6, 'okx_old', 3, 'spot', 'retired', 'serving', '{}');
-INSERT INTO public.served_ranks
-SELECT '90D', 'bybit', n FROM generate_series(1, 998) AS n
-UNION ALL SELECT '90D', 'gateio', n FROM generate_series(1, 44) AS n
-UNION ALL SELECT '7D', 'bybit', n FROM generate_series(1, 5) AS n
-UNION ALL SELECT '90D', 'okx_spot', 1
-UNION ALL SELECT '90D', 'okx_old', 1;
+INSERT INTO arena.served_seasons VALUES ('90D'), ('7D');
+INSERT INTO arena.public_ranked_leaderboard_serving_heads VALUES
+  ('90D', '99999999-9999-4999-8999-999999999999'), ('7D', '77777777-7777-4777-8777-777777777777'), ('30D', '99999999-9999-4999-8999-999999999999');
 INSERT INTO public.leaderboard_source_freshness VALUES
-  ('90D', 'bybit', '2026-11-22 03:00+00', '2026-11-22 04:10+00'),
-  ('90D', 'gateio', '2026-11-22 03:00+00', '2026-11-22 04:10+00'),
-  ('90D', 'okx_futures', '2026-11-22 03:00+00', '2026-11-22 04:10+00');
+  ('90D', 'bybit', '2026-11-22 03:00+00', '2026-11-22 04:10+00', '99999999-9999-4999-8999-999999999999', 998),
+  ('90D', 'gateio', '2026-11-22 03:00+00', '2026-11-22 04:10+00', '99999999-9999-4999-8999-999999999999', 44),
+  -- sealed with zero rows
+  ('90D', 'okx_futures', '2026-11-22 03:00+00', '2026-11-22 04:10+00', '99999999-9999-4999-8999-999999999999', 0),
+  -- registry row is shadow / retired
+  ('90D', 'okx_spot', '2026-11-22 03:00+00', '2026-11-22 04:10+00', '99999999-9999-4999-8999-999999999999', 3),
+  ('90D', 'okx_old', '2026-11-22 03:00+00', '2026-11-22 04:10+00', '99999999-9999-4999-8999-999999999999', 3),
+  ('7D', 'bybit', '2026-11-22 03:00+00', '2026-11-22 04:01+00', '77777777-7777-4777-8777-777777777777', 5),
+  -- a proof left behind by an older cohort is not what is served
+  ('7D', 'gateio', '2026-11-19 03:00+00', '2026-11-19 04:01+00', '11111111-1111-4111-8111-111111111111', 40),
+  -- 30D has a head but is not being served
+  ('30D', 'bybit', '2026-11-22 03:00+00', '2026-11-22 04:05+00', '99999999-9999-4999-8999-999999999999', 9);
 SQL
 
 psql_as postgres -q -f "$OLD_MIGRATION" >/dev/null
@@ -146,7 +160,7 @@ assert_equal "the default season is 90D" "3" \
 assert_equal "each season counts its own ranks" "bybit_copytrade:5" \
   "$(psql_as anon -Atqc "SELECT string_agg(registry_slug || ':' || trader_count, ',')
        FROM public.arena_visible_sources('7D')")"
-assert_equal "a season with no served rank lists nothing" "0" \
+assert_equal "a season that is not being served lists nothing" "0" \
   "$(psql_as anon -Atqc "SELECT count(*) FROM public.arena_visible_sources('30D')")"
 assert_equal "an unknown season lists nothing" "0" \
   "$(psql_as anon -Atqc "SELECT count(*) FROM public.arena_visible_sources('ALL')")"
