@@ -285,14 +285,20 @@ export default async function ExchangeLandingPage({
   // Schema.org `numberOfItems` must be a real total, not the ten-row preview.
   // When the exact public-view count is unavailable, omit this count-bearing
   // schema rather than publishing a synthetic coverage claim.
+  // No ranked row means the source has no published board right now (withdrawn,
+  // empty, or not publicly rankable): the page says so in words instead of
+  // "0 ranked traders" / "Unknown ranked traders", and publishes no
+  // count-bearing schema. Rows with an unknown total keep the "unknown" wording.
+  const boardEmpty = data.topTraders.length === 0
+  const publishedCount = boardEmpty ? null : data.traderCount
   const collectionPageJsonLd =
-    data.traderCount === null
+    publishedCount === null
       ? null
       : generateExchangeCollectionPageSchema({
           name: data.displayName,
           slug: canonicalSlug,
           sourceType: data.sourceType,
-          traderCount: data.traderCount,
+          traderCount: publishedCount,
           topTraders: data.topTraders.map((t) => ({
             handle: t.displayName,
             arenaScore: t.arena_score,
@@ -308,15 +314,21 @@ export default async function ExchangeLandingPage({
   // Localized page chrome (labels/headings/body). Metadata above stays English
   // for stable SEO/OG; visible page content follows the visitor's language.
   const { t } = await getServerTranslation()
-  const traderCountStr =
-    data.traderCount === null ? t('dataUnknown') : data.traderCount.toLocaleString()
-
   const sourceTypeLabel =
     data.sourceType === 'futures'
       ? t('exchangePageTypeFutures')
       : data.sourceType === 'spot'
         ? t('exchangePageTypeSpot')
         : t('exchangePageTypeDefi')
+
+  const fillCopy = (publishedKey: string, emptyKey: string) =>
+    t(boardEmpty ? emptyKey : publishedKey)
+      .replace(
+        '{count}',
+        data.traderCount === null ? t('dataUnknown') : data.traderCount.toLocaleString()
+      )
+      .replace(/\{name\}/g, data.displayName)
+      .replace('{type}', sourceTypeLabel)
 
   return (
     <>
@@ -326,10 +338,7 @@ export default async function ExchangeLandingPage({
         {/* Header */}
         <PageHeader
           title={t('exchangePageTitle').replace('{name}', data.displayName)}
-          subtitle={t('exchangePageSubtitle')
-            .replace('{count}', traderCountStr)
-            .replace(/\{name\}/g, data.displayName)
-            .replace('{type}', sourceTypeLabel)}
+          subtitle={fillCopy('exchangePageSubtitle', 'exchangePageSubtitleEmpty')}
         />
 
         {/* Top traders table */}
@@ -539,10 +548,7 @@ export default async function ExchangeLandingPage({
               margin: 0,
             }}
           >
-            {t('exchangePageAboutBody')
-              .replace('{count}', traderCountStr)
-              .replace(/\{name\}/g, data.displayName)
-              .replace('{type}', sourceTypeLabel)}
+            {fillCopy('exchangePageAboutBody', 'exchangePageAboutBodyEmpty')}
           </p>
         </div>
       </div>

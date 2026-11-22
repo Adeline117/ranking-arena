@@ -2134,6 +2134,8 @@ const ko = {
   exchangePageTitle: '{name} 상위 트레이더 및 랭킹',
   exchangePageSubtitle:
     '{name}({type})의 랭킹 트레이더 {count}명. 리더보드는 2시간마다 다시 계산됩니다.',
+  exchangePageSubtitleEmpty:
+    '{name}({type})에는 현재 공개된 랭킹이 없습니다. 최신 검증 데이터가 준비되면 다시 제공됩니다.',
   exchangePageTop10: 'Arena 점수 기준 상위 10 트레이더',
   exchangePageColRank: '순위',
   exchangePageColTrader: '트레이더',
@@ -2144,6 +2146,8 @@ const ko = {
   exchangePageAboutTitle: '{name} 트레이더 랭킹 소개',
   exchangePageAboutBody:
     'Arena는 {name}의 활성 트레이더 {count}명을 추적하며, ROI·손익·리스크 관리 및 7일·30일·90일 기간의 일관성을 결합한 종합 지표인 Arena 점수로 순위를 매깁니다. {name}은(는) {type} 거래 플랫폼입니다. 원천 데이터는 일반적으로 3~6시간마다 갱신되며, 리더보드는 2시간마다 다시 계산됩니다.',
+  exchangePageAboutBodyEmpty:
+    'Arena는 {name}의 트레이더를 ROI·손익·리스크 관리 및 7일·30일·90일 기간의 일관성을 결합한 종합 지표인 Arena 점수로 순위를 매깁니다. {name}은(는) {type} 거래 플랫폼입니다. 랭킹은 원천 데이터가 최신이고 검증된 경우에만 공개되며, 현재 {name}의 공개된 랭킹은 없습니다.',
   exchangePageTypeFutures: '선물',
   exchangePageTypeSpot: '현물',
   exchangePageTypeDefi: 'DeFi / 온체인',

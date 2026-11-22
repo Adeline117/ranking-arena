@@ -2220,6 +2220,8 @@ const en = {
   exchangePageTitle: '{name} Top Traders & Rankings',
   exchangePageSubtitle:
     '{count} ranked traders on {name} ({type}). Leaderboard recomputed every 2 hours.',
+  exchangePageSubtitleEmpty:
+    '{name} ({type}) has no published ranking right now. It returns once fresh, verified data is available.',
   exchangePageTop10: 'Top 10 Traders by Arena Score',
   exchangePageColRank: 'RANK',
   exchangePageColTrader: 'TRADER',
@@ -2230,6 +2232,8 @@ const en = {
   exchangePageAboutTitle: 'About {name} Trader Rankings',
   exchangePageAboutBody:
     'Arena tracks {count} active traders on {name}, ranking them by Arena Score — a composite metric combining ROI, PnL, risk management, and consistency across 7-day, 30-day, and 90-day periods. {name} is a {type} trading platform. Source data is refreshed every 3–6 hours and the leaderboard is recomputed every 2 hours.',
+  exchangePageAboutBodyEmpty:
+    'Arena ranks {name} traders by Arena Score — a composite metric combining ROI, PnL, risk management, and consistency across 7-day, 30-day, and 90-day periods. {name} is a {type} trading platform. A ranking is published only while its source data is fresh and verified; none is published for {name} right now.',
   exchangePageTypeFutures: 'Futures',
   exchangePageTypeSpot: 'Spot',
   exchangePageTypeDefi: 'DeFi / On-Chain',

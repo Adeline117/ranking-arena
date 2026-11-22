@@ -2217,6 +2217,7 @@ const zh = {
   // 交易所落地页 (/exchange/[slug])
   exchangePageTitle: '{name} 顶级交易员与排行榜',
   exchangePageSubtitle: '{name}（{type}）上 {count} 名已排名交易员。排行榜每 2 小时重新计算一次。',
+  exchangePageSubtitleEmpty: '{name}（{type}）目前没有已发布的排行榜，待数据更新并通过核验后恢复。',
   exchangePageTop10: '按 Arena 评分排名的前 10 位交易员',
   exchangePageColRank: '排名',
   exchangePageColTrader: '交易员',
@@ -2227,6 +2228,8 @@ const zh = {
   exchangePageAboutTitle: '关于 {name} 交易员排行榜',
   exchangePageAboutBody:
     'Arena 追踪 {name} 上 {count} 名活跃交易员，按 Arena 评分对其排名——这是一个综合 ROI、盈亏、风险管理及 7 天、30 天、90 天周期一致性的指标。{name} 是一个 {type} 交易平台。上游来源数据通常每 3–6 小时刷新，排行榜每 2 小时重新计算一次。',
+  exchangePageAboutBodyEmpty:
+    'Arena 按 Arena 评分对 {name} 的交易员排名——这是一个综合 ROI、盈亏、风险管理及 7 天、30 天、90 天周期一致性的指标。{name} 是一个 {type} 交易平台。只有来源数据足够新并通过核验时才会发布排行榜；{name} 目前没有已发布的排行榜。',
   exchangePageTypeFutures: '合约',
   exchangePageTypeSpot: '现货',
   exchangePageTypeDefi: 'DeFi / 链上',
