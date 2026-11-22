@@ -109,7 +109,8 @@ describe('XML trader sitemap public ranking cohort', () => {
       ['source_trader_id', { ascending: true, nullsFirst: false }],
     ])
     expect(rankingQuery.range).toHaveBeenCalledWith(5000, 9999)
-    expect(xml).toContain('https://www.arenafi.org/trader/Top%20Trader?platform=binance_futures')
+    // 'Top Trader' 含空格，不是可读的 ASCII 段：与页面 canonical 一样落到交易所内 id。
+    expect(xml).toContain('https://www.arenafi.org/trader/trader-1?platform=binance_futures')
   })
 
   it('uses the same public cohort for the shard-count authority', async () => {

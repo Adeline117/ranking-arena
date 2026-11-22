@@ -18,7 +18,7 @@ export async function generateMetadata({
 
   try {
     const supabase = createClient(supabaseUrl, supabaseAnonKey)
-    const { data: group } = await supabase
+    const { data: group, error } = await supabase
       .from('groups')
       .select('name, description, member_count')
       .eq('id', id)
@@ -28,6 +28,10 @@ export async function generateMetadata({
       groupName = group.name
       memberCount = group.member_count || 0
       groupDescription = group.description || `${group.name} — ${memberCount} members on Arena`
+    } else if (!error) {
+      // 查询成功但没有这个小组（或匿名不可见）：不让 200 的空壳被收录。
+      // 查询出错时不下结论，沿用默认元数据。
+      return { title: 'Group Not Found', robots: { index: false, follow: false } }
     }
   } catch {
     // Intentionally swallowed: metadata generation failure is non-critical, default metadata used
@@ -60,10 +64,6 @@ export async function generateMetadata({
   }
 }
 
-export default function GroupLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function GroupLayout({ children }: { children: React.ReactNode }) {
   return children
 }

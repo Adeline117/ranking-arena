@@ -461,6 +461,10 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # page ordinals for every observation ever written (15-17s in production
 # against the worker's 10s startup timeout). It follows 112703, depends on no
 # worker release and touches no table 192134 guards.
+# 20261121201553 makes public.arena_visible_sources() count the ranks the
+# public view serves instead of reading leaderboard_count_cache, which the
+# sealed publication path never refreshes (zero visible sources in production
+# while 3,546 ranks were served). Independent of every other entry.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -490,6 +494,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261121185937_metric_trust_readiness_bounded_lineage_count.sql
   20261118135918_trust_evidence_retention.sql
   20261118144144_rank_publication_trust_requires_run.sql
+  20261121201553_visible_sources_from_served_ranks.sql
   20261118134316_raw_retention_backlog_census.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )

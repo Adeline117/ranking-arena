@@ -97,6 +97,20 @@ describe('parseBlofinLeaderboardPage', () => {
     expect(zero.headlineExtras).toBeUndefined()
   })
 
+  it('reads the futures row win rate, and keeps a zero undefined', () => {
+    const parse = (winRate: unknown, sourceSlug = 'blofin_futures') =>
+      parseBlofinLeaderboardPage(
+        { data: { trader_info: [{ uid: '1', roi: '0.1', pnl: '5', win_rate: winRate }] } },
+        { ...ctx, sourceSlug }
+      ).rows[0].headlineWinRate
+    expect(parse('0.9069')).toBeCloseTo(90.69, 2)
+    // zero trades are reported as 0; the row cannot tell that from a real 0%
+    expect(parse('0')).toBeNull()
+    expect(parse(undefined)).toBeNull()
+    // not verified on the spot board
+    expect(parse('0.9069', 'blofin_spot')).toBeNull()
+  })
+
   it('re-anchors rank from page position', () => {
     const page = parseBlofinLeaderboardPage(fixture('board-fut-7.json'), ctx)
     expect(page.rows.map((r) => r.rank)).toEqual([1, 2])

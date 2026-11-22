@@ -4,6 +4,7 @@ import { BASE_URL } from '@/lib/constants/urls'
 export const metadata: Metadata = {
   title: 'System Status',
   description: 'Arena platform system status - database, Redis, and data freshness monitoring.',
+  alternates: { canonical: `${BASE_URL}/status` },
   openGraph: {
     title: 'System Status',
     description: 'Arena platform system status - database, Redis, and data freshness monitoring.',

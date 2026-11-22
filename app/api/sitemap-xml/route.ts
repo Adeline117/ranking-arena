@@ -1,6 +1,10 @@
 /**
  * Sitemap API Route — serves sitemap index + shard XML
  *
+ * This is the ONLY sitemap implementation (robots.txt points here and
+ * /sitemap.xml rewrites here). app/sitemap.ts was deleted: it served a second,
+ * diverging URL set under /sitemap/*.xml with looser audience filters.
+ *
  * Why not app/sitemap.ts? Next.js metadata sitemap routes pre-render at
  * build time and cache the result. At build time, Supabase env vars are
  * placeholders, so all DB queries fail and sitemaps come back empty.
@@ -19,6 +23,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { parseWatermarkRows, watermarkBySource } from '@/lib/rankings/source-watermark'
 import { TOP_EXCHANGE_SLUGS } from '@/lib/constants/exchange-slugs'
+import { traderCanonicalPath } from '@/lib/seo/trader-url'
 import { ARTICLES } from '@/app/(app)/learn/articles'
 import { ARENA_BOT_AUTHOR_ID } from '@/lib/data/arena-bot-publication-policy'
 
@@ -54,7 +59,7 @@ type SitemapProfileState = {
 }
 
 type PublicSitemapTrader = {
-  handle: string
+  sourceTraderId: string
   source: string
 }
 
@@ -67,11 +72,7 @@ function asPublicSitemapTrader(row: unknown): PublicSitemapTrader | null {
   const record = row as Record<string, unknown>
   const rank = record.rank
   const source = record.source
-  const handle = isNonEmptyString(record.handle)
-    ? record.handle
-    : isNonEmptyString(record.source_trader_id)
-      ? record.source_trader_id
-      : null
+  const sourceTraderId = record.source_trader_id
 
   // The view itself enforces full/non-estimated/source-fresh membership. This
   // boundary check is only a fail-closed defense against a malformed response
@@ -81,12 +82,12 @@ function asPublicSitemapTrader(row: unknown): PublicSitemapTrader | null {
     !Number.isSafeInteger(rank) ||
     rank <= 0 ||
     !isNonEmptyString(source) ||
-    !isNonEmptyString(handle)
+    !isNonEmptyString(sourceTraderId)
   ) {
     return null
   }
 
-  return { handle, source }
+  return { sourceTraderId, source }
 }
 
 export function isSitemapProfileActive(profile: SitemapProfileState, now = Date.now()): boolean {
@@ -136,7 +137,6 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
   }
 
   const shardId = Number(shard)
-  const now = new Date().toISOString()
 
   // Shard 0: static pages (no DB)
   if (shardId === 0) {
@@ -148,7 +148,6 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
       { url: '/pricing', priority: 0.7, freq: 'monthly' },
       { url: '/methodology', priority: 0.7, freq: 'monthly' },
       { url: '/learn', priority: 0.75, freq: 'weekly' },
-      { url: '/search', priority: 0.6, freq: 'weekly' },
       { url: '/flash-news', priority: 0.7, freq: 'hourly' },
       { url: '/feed', priority: 0.7, freq: 'hourly' },
       { url: '/compare', priority: 0.6, freq: 'weekly' },
@@ -180,7 +179,8 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
       urlsetXml(
         urls.map((u) => ({
           loc: `${BASE_URL}${u.url}`,
-          lastmod: now,
+          // 不写 lastmod：请求时刻不是这些页面的修改时间，每次都变的 lastmod
+          // 会让搜索引擎不再信任整站的 lastmod（交易员分片用的是真实来源水位）。
           changefreq: u.freq,
           priority: u.priority,
         }))
@@ -283,7 +283,7 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
   // not fetch an arbitrary raw page and attempt to filter it after pagination.
   const { data, error } = (await supabase
     .from(PUBLIC_RANKED_LEADERBOARD as never)
-    .select('handle, source_trader_id, source, rank')
+    .select('source_trader_id, source, rank')
     .eq('season_id', '90D')
     .not('rank', 'is', null)
     .order('rank', { ascending: true, nullsFirst: false })
@@ -336,16 +336,14 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
       if (!trader) return false
       // The platform parameter is part of the canonical trader identity, so
       // same-handle accounts across exchanges must not collapse into one URL.
-      const identity = `${trader.source}:${trader.handle}`
+      const identity = `${trader.source}:${trader.sourceTraderId}`
       if (seen.has(identity)) return false
       seen.add(identity)
       return true
     })
     .map((trader) => ({
-      // 与 trader 页 canonical 对齐(2026-07-11 SEO 审计):带 ?platform= 消除
-      // handle-vs-id 双 URL + 跨源同名歧义。ASCII handle 用 handle 段,否则不确定
-      // 就用它本身(sitemap 只是发现入口,canonical 才是权威,Google 会向其收敛)。
-      loc: `${BASE_URL}/trader/${encodeURIComponent(trader.handle)}?platform=${encodeURIComponent(trader.source)}`,
+      // 与 trader 页 canonical 用同一个函数：站点地图只列规范网址。
+      loc: `${BASE_URL}${traderCanonicalPath(trader)}`,
       // lastmod 只用来源水位;未知则省略,不伪造请求时刻或 computed_at。
       lastmod: watermarks.get(trader.source) ?? undefined,
       changefreq: 'daily',

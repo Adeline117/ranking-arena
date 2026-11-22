@@ -38,20 +38,22 @@ export async function generateMetadata({
     const data = await getPublicPost(id)
 
     if (!data) {
-      return { title: 'Post Not Found' }
+      return { title: 'Post Not Found', robots: { index: false, follow: false } }
     }
 
-    const title = `${data.title} - @${data.author_handle}`
-    const description = data.content?.slice(0, 160) || data.title
+    // 无标题帖用正文开头做标题，否则 <title> 会是「 - @handle」。
+    const headline = data.title?.trim() || data.content?.trim().slice(0, 60) || 'Post'
+    const title = `${headline} - @${data.author_handle}`
+    const description = data.content?.slice(0, 160) || headline
 
-    const ogImage = `${APP_URL}/api/og?title=${encodeURIComponent(data.title.slice(0, 60))}&author=${encodeURIComponent(data.author_handle || '')}`
+    const ogImage = `${APP_URL}/api/og?title=${encodeURIComponent(headline.slice(0, 60))}&author=${encodeURIComponent(data.author_handle || '')}`
 
     return {
       title,
       description,
       alternates: { canonical: `${APP_URL}/post/${id}` },
       openGraph: {
-        title: data.title,
+        title: headline,
         description,
         url: `${APP_URL}/post/${id}`,
         type: 'article',
@@ -62,7 +64,7 @@ export async function generateMetadata({
       },
       twitter: {
         card: 'summary_large_image',
-        title: data.title,
+        title: headline,
         description,
         creator: '@arenafi',
         images: [ogImage],
