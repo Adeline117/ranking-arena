@@ -10,7 +10,8 @@
  * into <body>, which is what caused the "duplicate without canonical" pages.
  */
 import { HTML_LIMITED_BOT_UA_RE } from 'next/dist/shared/lib/router/utils/html-bots'
-import nextConfig from '../../../next.config'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 describe('htmlLimitedBots', () => {
   it('can still import the default bot list from Next', () => {
@@ -19,13 +20,16 @@ describe('htmlLimitedBots', () => {
   })
 
   it('adds Googlebot while keeping the defaults', () => {
-    const bots = nextConfig.htmlLimitedBots
-    expect(bots).toBeInstanceOf(RegExp)
-    const matches = (ua: string) => (bots as RegExp).test(ua)
+    // next.config.ts is read as text: runtime code may not import the config.
+    const config = readFileSync(join(process.cwd(), 'next.config.ts'), 'utf8')
+    expect(config).toContain(
+      "htmlLimitedBots: new RegExp(`Googlebot|${HTML_LIMITED_BOT_UA_RE.source}`, 'i')"
+    )
+    const bots = new RegExp(`Googlebot|${HTML_LIMITED_BOT_UA_RE.source}`, 'i')
     expect(
-      matches('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')
+      bots.test('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')
     ).toBe(true)
-    expect(matches('Twitterbot/1.0')).toBe(true)
-    expect(matches('Mozilla/5.0 (Macintosh) Chrome/120 Safari/537.36')).toBe(false)
+    expect(bots.test('Twitterbot/1.0')).toBe(true)
+    expect(bots.test('Mozilla/5.0 (Macintosh) Chrome/120 Safari/537.36')).toBe(false)
   })
 })
