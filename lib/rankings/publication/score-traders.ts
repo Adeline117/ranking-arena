@@ -68,6 +68,9 @@ export interface ScoredTrader {
   is_outlier?: boolean
 }
 
+/** Smallest positive arena_score the numeric(10,2) column stores. */
+export const MIN_RANKED_ARENA_SCORE = 0.01
+
 export interface ScoreTradersOptions {
   /** Defaults to PUBLIC_RANKING_ROW_ELIGIBILITY; explicit for tests and offline comparison. */
   rowEligibility?: PublicRankingRowEligibility
@@ -262,7 +265,16 @@ export async function scoreTraders(
   )
   scoredFiltered.forEach((t, i) => {
     const r = v4Results[i]
-    t.arena_score = r ? r.totalScore : 0
+    // 'roi_pnl': the lowest composite of a cohort maps to a display score of
+    // 0.00 (percentile 0), which the (0, 100] score domain reads as "not
+    // scored". Floor a computed score at the smallest value numeric(10,2)
+    // stores so the last trader is still ranked, last. The domain and every
+    // `> 0` gate stay as they are; a row without a result keeps 0 and is dropped.
+    t.arena_score = r
+      ? rowEligibility === 'roi_pnl'
+        ? Math.max(MIN_RANKED_ARENA_SCORE, r.totalScore)
+        : r.totalScore
+      : 0
     t.arena_score_v4 = t.arena_score
     t.score_factors = r ? r.factors : null
     // Repopulate the 3 existing breakdown sub-scores from v4 factors so the
