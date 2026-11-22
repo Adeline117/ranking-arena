@@ -26,6 +26,25 @@ export const PUBLIC_RANKING_REDIS_TAG = `rankings:${PUBLIC_RANKING_CACHE_EPOCH}`
  */
 export const PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY = 'public-rankings:write-fence:v1'
 export const PUBLIC_RANKING_MAX_COMPUTED_AGE_MS = 48 * 60 * 60 * 1000
+
+/**
+ * Row-level eligibility the rank publication WRITER applies (owner decision
+ * 2026-11-22, "everyone with ROI and PnL is ranked").
+ *
+ *   'roi_pnl'      ROI and PnL are required. Win rate and max drawdown are
+ *                  shown and range-checked when present and left empty when
+ *                  absent; only null is missing, 0 is an observation.
+ *   'four_metrics' the previous rule: all four required, and the historical
+ *                  v4 scoring semantics (0 read as missing).
+ *
+ * One switch for every writer-side consequence (required evidence metrics,
+ * cohort admission, row classification, score options), so a rollback is this
+ * constant plus a scoring-worker deploy: the next publication replaces the
+ * season with four-metric rows. Readers and the database row policy always
+ * accept the relaxed superset and do not consult it.
+ */
+export type PublicRankingRowEligibility = 'roi_pnl' | 'four_metrics'
+export const PUBLIC_RANKING_ROW_ELIGIBILITY: PublicRankingRowEligibility = 'roi_pnl'
 export const PUBLIC_RANKING_FUTURE_TOLERANCE_MS = 5 * 60 * 1000
 
 export const PUBLIC_RANKING_SOURCE_QUARANTINES = [

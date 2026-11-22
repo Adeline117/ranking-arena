@@ -690,8 +690,10 @@ export function calculateArenaScoreV3Legacy(
 export interface TraderScoreInputV4 {
   roi: number // ROI %（如 25 = 25%）
   pnl: number | null // 已实现 PnL（USD）
-  maxDrawdown: number | null // 最大回撤 %（如 22 = 22%）；V4 将 0/null 视为缺失
-  winRate: number | null // 胜率 %；V4 将 0/null 视为缺失
+  // 最大回撤 %（如 22 = 22%）。null = 缺失。0 是否算缺失由 ArenaScoreV4Options 决定:
+  // 历史 computeArenaScoresV4 把 0 当缺失;榜单发布路径只把 null 当缺失。
+  maxDrawdown: number | null
+  winRate: number | null // 胜率 %;null/0 的语义同上
   sharpeRatio: number | null
   profitFactor: number | null
   tradesCount: number | null // 样本量(置信度)
@@ -772,12 +774,33 @@ export function percentRanks(values: Array<number | null>): Array<number | null>
   return values.map((v) => (v == null ? null : countLess(v) / (n - 1)))
 }
 
+/**
+ * How the v4 batch formula reads the two optional risk inputs (max drawdown,
+ * win rate).
+ *
+ * `zeroRiskMetricsAreKnown`
+ *   false = the historical v4 sentinel: a drawdown or win rate of exactly 0 is
+ *           read as "the exchange sent nothing" and treated like null.
+ *   true  = only null is missing. 0 is an observation and takes its natural
+ *           place in the formula: a 0% drawdown ranks on the best side of the
+ *           drawdown dimension, a 0% win rate on the worst side of consistency.
+ */
+export interface ArenaScoreV4Options {
+  zeroRiskMetricsAreKnown: boolean
+}
+
+/** The signed historical v4 contract (PG17 parity + golden vectors). */
+const ARENA_V4_LEGACY_OPTIONS: ArenaScoreV4Options = {
+  zeroRiskMetricsAreKnown: false,
+}
+
 function computeArenaScoresV4OrV5(
   inputs: TraderScoreInputV4[],
   _period: Period | undefined,
-  zeroRiskMetricsAreKnown: boolean
+  options: ArenaScoreV4Options
 ): ArenaScoreV4Result[] {
   const V = ARENA_V4_CONFIG
+  const { zeroRiskMetricsAreKnown } = options
   const n = inputs.length
   if (n === 0) return []
 
@@ -900,7 +923,7 @@ export function computeArenaScoresV4(
   inputs: TraderScoreInputV4[],
   period?: Period
 ): ArenaScoreV4Result[] {
-  return computeArenaScoresV4OrV5(inputs, period, false)
+  return computeArenaScoresV4OrV5(inputs, period, ARENA_V4_LEGACY_OPTIONS)
 }
 
 /**
@@ -912,5 +935,26 @@ export function computeArenaScoresV5(
   inputs: TraderScoreInputV4[],
   period?: Period
 ): ArenaScoreV4Result[] {
-  return computeArenaScoresV4OrV5(inputs, period, true)
+  return computeArenaScoresV4OrV5(inputs, period, {
+    ...ARENA_V4_LEGACY_OPTIONS,
+    zeroRiskMetricsAreKnown: true,
+  })
+}
+
+/**
+ * Arena Score v4 with explicit input semantics, for the rank publication
+ * scorer (lib/rankings/publication/score-traders.ts). The weights, percentile
+ * construction, confidence and display mapping are the v4 ones; only the
+ * reading of the optional risk inputs follows `options`.
+ *
+ * This is NOT the signed `computeArenaScoresV4` contract: the PG17 twin
+ * (compute_arena_scores_v4_json) and its golden vectors keep the legacy
+ * options and are not on the publication path.
+ */
+export function computeArenaScoresV4WithOptions(
+  inputs: TraderScoreInputV4[],
+  period: Period | undefined,
+  options: ArenaScoreV4Options
+): ArenaScoreV4Result[] {
+  return computeArenaScoresV4OrV5(inputs, period, options)
 }

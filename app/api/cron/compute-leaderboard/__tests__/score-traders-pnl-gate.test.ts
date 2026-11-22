@@ -24,7 +24,8 @@ const mockComputeArenaScoresV4 = jest.fn((inputs: Array<{ pnl: number }>) =>
 
 jest.mock('@/lib/utils/arena-score', () => ({
   calculateArenaScore: (...args: unknown[]) => mockCalculateArenaScore(...args),
-  computeArenaScoresV4: (inputs: Array<{ pnl: number }>) => mockComputeArenaScoresV4(inputs),
+  computeArenaScoresV4WithOptions: (inputs: Array<{ pnl: number }>) =>
+    mockComputeArenaScoresV4(inputs),
 }))
 
 jest.mock('@/lib/rankings/publication/scoring-helpers', () => ({

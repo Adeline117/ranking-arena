@@ -5,8 +5,9 @@
 
 import {
   calculateArenaScore,
-  computeArenaScoresV4,
+  computeArenaScoresV4WithOptions,
   type Period,
+  type ArenaScoreV4Options,
   type ArenaScoreV4Result,
 } from '@/lib/utils/arena-score'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
@@ -16,7 +17,11 @@ import { detectTraderType } from './helpers'
 import { markOutliers, applyArenaFollowers, type ArenaFollowersClient } from './scoring-helpers'
 import type { TraderRow } from './trader-row'
 import { createLogger } from '@/lib/utils/logger'
-import { hasConcretePublicRankingMetrics } from '@/lib/rankings/publication-policy'
+import {
+  hasConcretePublicRankingMetrics,
+  PUBLIC_RANKING_ROW_ELIGIBILITY,
+  type PublicRankingRowEligibility,
+} from '@/lib/rankings/publication-policy'
 import {
   isRankEligiblePnl,
   isRankEligibleRoi,
@@ -63,6 +68,23 @@ export interface ScoredTrader {
   is_outlier?: boolean
 }
 
+export interface ScoreTradersOptions {
+  /** Defaults to PUBLIC_RANKING_ROW_ELIGIBILITY; explicit for tests and offline comparison. */
+  rowEligibility?: PublicRankingRowEligibility
+}
+
+/**
+ * Score semantics per writer eligibility. 'four_metrics' is the exact previous
+ * behavior (legacy v4 options), so the rollback switch restores old scores.
+ */
+export function arenaScoreOptionsForRowEligibility(
+  rowEligibility: PublicRankingRowEligibility
+): ArenaScoreV4Options {
+  return rowEligibility === 'roi_pnl'
+    ? { zeroRiskMetricsAreKnown: true }
+    : { zeroRiskMetricsAreKnown: false }
+}
+
 type RankEligibleTrader = TraderRow & { roi: number; pnl: number }
 
 function hasRankEligibleMetrics(trader: TraderRow, season: Period): trader is RankEligibleTrader {
@@ -78,8 +100,10 @@ export async function scoreTraders(
   handleMap: Map<string, { handle: string | null; avatar_url: string | null }>,
   contractAddresses: Set<string>,
   season: Period,
-  supabase: ArenaFollowersClient
+  supabase: ArenaFollowersClient,
+  options: ScoreTradersOptions = {}
 ): Promise<{ scored: ScoredTrader[]; scoredFiltered: ScoredTrader[] }> {
+  const rowEligibility = options.rowEligibility ?? PUBLIC_RANKING_ROW_ELIGIBILITY
   // Defense in depth: callers other than the arena reader can still construct
   // TraderRows directly. ROI and PnL are both mandatory for ranking, so reject
   // missing, malformed-at-runtime, and non-finite values before either score
@@ -222,7 +246,7 @@ export async function scoreTraders(
   // users actually see). Writes arena_score (served + ranked by the rerank RPC /
   // in-memory sort), arena_score_v4 (= arena_score, labeled), and score_factors
   // (UI breakdown). arena_score_v3 (set above) is the rollback value.
-  const v4Results = computeArenaScoresV4(
+  const v4Results = computeArenaScoresV4WithOptions(
     scoredFiltered.map((t) => ({
       roi: t.roi,
       pnl: t.pnl,
@@ -233,7 +257,8 @@ export async function scoreTraders(
       tradesCount: t.trades_count,
       source: t.source,
     })),
-    season
+    season,
+    arenaScoreOptionsForRowEligibility(rowEligibility)
   )
   scoredFiltered.forEach((t, i) => {
     const r = v4Results[i]
