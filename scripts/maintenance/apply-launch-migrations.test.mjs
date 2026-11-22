@@ -204,6 +204,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20261121185937_metric_trust_readiness_bounded_lineage_count.sql',
     '20261118135918_trust_evidence_retention.sql',
     '20261118144144_rank_publication_trust_requires_run.sql',
+    '20261121201553_visible_sources_from_served_ranks.sql',
     '20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql',
   ])
   // Classified, never emitted: applied one file at a time via ADR-023 at the
@@ -266,7 +267,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20261113151848_sync_user_profile_email_from_auth.sql',
     '20261113151849_auth_user_has_password_rpc.sql',
   ])
-  assert.equal(new Set(all).size, 225)
+  assert.equal(new Set(all).size, 226)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
   assert.deepEqual(predeploy.slice(-120), [
     '20260718120000_leaderboard_source_freshness.sql',

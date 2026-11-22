@@ -625,6 +625,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:readiness-bounded-count-pg17
 
+      - name: Prove visible sources are the sources the public view serves
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:visible-sources-pg17
+
       - name: Prove metric source contract retirement (binance_web3_bsc v2)
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
