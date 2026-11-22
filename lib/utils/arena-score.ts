@@ -784,14 +784,30 @@ export function percentRanks(values: Array<number | null>): Array<number | null>
  *   true  = only null is missing. 0 is an observation and takes its natural
  *           place in the formula: a 0% drawdown ranks on the best side of the
  *           drawdown dimension, a 0% win rate on the worst side of consistency.
+ *
+ * `missingRiskPolicy` — what a missing drawdown or consistency dimension does
+ * to quality = Σ(weight × factor) / Σ(weight):
+ *   'renormalize' = the historical v4 rule: the dimension leaves the
+ *           denominator together with its weight. A trader whose risk factors
+ *           would be below their own earnings factors scores HIGHER by not
+ *           reporting them.
+ *   'zero' = the dimension scores 0 and its weight stays in the denominator.
+ *           For the same ROI, PnL and Sharpe state, a missing drawdown or win
+ *           rate can then never score above a present one: the numerator is
+ *           monotone in the factor and missing takes its minimum, and
+ *           confidence is monotone in the number of present risk inputs.
+ *   Sharpe keeps the renormalizing rule under both policies (unchanged scope).
+ *   `factors` still report a missing dimension as null ("did not take part").
  */
 export interface ArenaScoreV4Options {
   zeroRiskMetricsAreKnown: boolean
+  missingRiskPolicy: 'renormalize' | 'zero'
 }
 
 /** The signed historical v4 contract (PG17 parity + golden vectors). */
 const ARENA_V4_LEGACY_OPTIONS: ArenaScoreV4Options = {
   zeroRiskMetricsAreKnown: false,
+  missingRiskPolicy: 'renormalize',
 }
 
 function computeArenaScoresV4OrV5(
@@ -801,6 +817,7 @@ function computeArenaScoresV4OrV5(
 ): ArenaScoreV4Result[] {
   const V = ARENA_V4_CONFIG
   const { zeroRiskMetricsAreKnown } = options
+  const missingRiskScoresZero = options.missingRiskPolicy === 'zero'
   const n = inputs.length
   if (n === 0) return []
 
@@ -853,7 +870,8 @@ function computeArenaScoresV4OrV5(
       fCon = cd > 0 ? cn / cd : null
     }
 
-    // Quality:PnL(量级) + 其余百分位,按可得维度加权归一
+    // Quality:PnL(量级) + 其余百分位,按可得维度加权归一。
+    // missingRiskPolicy='zero' 时缺失的回撤/一致性按 0 计、权重留在分母(空值不抬分)。
     let num = V.W.pnl * fPnl
     let den = V.W.pnl
     if (pRoi[i] != null) {
@@ -863,6 +881,8 @@ function computeArenaScoresV4OrV5(
     if (pDd[i] != null) {
       num += V.W.dd * pDd[i]!
       den += V.W.dd
+    } else if (missingRiskScoresZero) {
+      den += V.W.dd
     }
     if (pSh[i] != null) {
       num += V.W.sharpe * pSh[i]!
@@ -870,6 +890,8 @@ function computeArenaScoresV4OrV5(
     }
     if (fCon != null) {
       num += V.W.con * fCon
+      den += V.W.con
+    } else if (missingRiskScoresZero) {
       den += V.W.con
     }
     const quality = den > 0 ? clip(num / den, 0, 1) : 0

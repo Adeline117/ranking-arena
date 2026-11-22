@@ -81,8 +81,8 @@ export function arenaScoreOptionsForRowEligibility(
   rowEligibility: PublicRankingRowEligibility
 ): ArenaScoreV4Options {
   return rowEligibility === 'roi_pnl'
-    ? { zeroRiskMetricsAreKnown: true }
-    : { zeroRiskMetricsAreKnown: false }
+    ? { zeroRiskMetricsAreKnown: true, missingRiskPolicy: 'zero' }
+    : { zeroRiskMetricsAreKnown: false, missingRiskPolicy: 'renormalize' }
 }
 
 type RankEligibleTrader = TraderRow & { roi: number; pnl: number }
