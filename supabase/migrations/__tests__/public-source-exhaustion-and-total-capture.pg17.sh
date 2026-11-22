@@ -558,3 +558,121 @@ assert_equal "okx keeps its derived windows and page size" "{7,30}:20|{7,30}:20"
   "$(psql_db act_prod -Atqc "SELECT string_agg(timeframes_derived::text || ':' || page_size, '|' ORDER BY slug) FROM arena.sources WHERE slug IN ('okx_futures','okx_spot')")"
 
 echo "local public source activation PG17 proof passed"
+
+# ── 20261118134500: binance_futures as a live board ──
+#
+#   - before 20261118114230 the declaration is not valid: refused, no write
+#   + after it the source is registered, and the row equals the adapter's own
+#     declaration (BINANCE_FUTURES_LEADERBOARD_EXHAUSTION)
+#   - a replay or a re-adaptered source refuses with no write
+
+LIVE_PROOF="$MIGRATIONS/20261118114230_leaderboard_exhaustion_reported_total_drift.sql"
+LIVE_REGISTRATION="$MIGRATIONS/20261118134500_register_binance_live_board_exhaustion_contracts.sql"
+expect_live_failure() {
+  local db="$1" label="$2" expected="$3"
+  local before
+  before="$(psql_db "$db" -Atqc "SELECT count(*) FROM arena.leaderboard_exhaustion_contracts")"
+  if psql_db "$db" -q -f "$LIVE_REGISTRATION" >"$ERROR_FILE" 2>&1; then
+    echo "FAIL: $label unexpectedly succeeded" >&2
+    exit 1
+  fi
+  if [[ "$(<"$ERROR_FILE")" != *"$expected"* ]]; then
+    echo "FAIL: $label failed for the wrong reason; expected: $expected" >&2
+    cat "$ERROR_FILE" >&2
+    exit 1
+  fi
+  assert_equal "$label writes nothing" "$before" \
+    "$(psql_db "$db" -Atqc "SELECT count(*) FROM arena.leaderboard_exhaustion_contracts")"
+}
+
+"$PG_BIN/createdb" -h "$SOCKET_DIR" -p "$PORT" -T main live_main
+expect_live_failure live_main "live registration before the drift proof" \
+  "requires the reported_total_drift proof (20261118114230)"
+psql_db live_main -q -f "$LIVE_PROOF"
+"$PG_BIN/createdb" -h "$SOCKET_DIR" -p "$PORT" -T live_main live_adapter
+
+psql_db live_main -q -f "$LIVE_REGISTRATION"
+echo "ok: live registration applies"
+LIVE_EXPECTED="$(cd "$ROOT_DIR" && npx --no-install tsx -e '
+import { BINANCE_FUTURES_LEADERBOARD_EXHAUSTION } from "./lib/ingest/adapters/binance"
+console.log(JSON.stringify({ binance_futures: BINANCE_FUTURES_LEADERBOARD_EXHAUSTION }))
+')"
+assert_equal "live registration equals the adapter declaration" "t" "$(
+  psql_db live_main -Atq -v expected="$LIVE_EXPECTED" <<'SQL'
+SELECT pg_catalog.jsonb_object_agg(source_row.slug, contract.declaration) = :'expected'::jsonb
+  FROM arena.leaderboard_exhaustion_contracts AS contract
+  JOIN arena.sources AS source_row ON source_row.id = contract.source_id
+ WHERE source_row.slug LIKE 'binance\_%' AND source_row.adapter_slug = 'binance'
+SQL
+)"
+expect_live_failure live_main "live registration replay" "already exists for: binance_futures"
+
+psql_db live_adapter -q -c "UPDATE arena.sources SET adapter_slug = 'binance_v2' WHERE slug = 'binance_futures'"
+expect_live_failure live_adapter "live registration for a re-adaptered source" \
+  "source drift: binance_futures"
+
+echo "binance live board registration PG17 proof passed"
+
+# ── 20261120190124: bybit_mt5 as a live board ──
+#
+#   + registered after 20261118114230, and the row equals the adapter's own
+#     declaration (BYBIT_MT5_LEADERBOARD_EXHAUSTION)
+#   - before 20261118114230, on a replay, or for a re-adaptered source it
+#     refuses with no write
+
+MT5_REGISTRATION="$MIGRATIONS/20261120190124_register_bybit_mt5_live_board_exhaustion_contract.sql"
+expect_mt5_failure() {
+  local db="$1" label="$2" expected="$3"
+  local before
+  before="$(psql_db "$db" -Atqc "SELECT count(*) FROM arena.leaderboard_exhaustion_contracts")"
+  if psql_db "$db" -q -f "$MT5_REGISTRATION" >"$ERROR_FILE" 2>&1; then
+    echo "FAIL: $label unexpectedly succeeded" >&2
+    exit 1
+  fi
+  if [[ "$(<"$ERROR_FILE")" != *"$expected"* ]]; then
+    echo "FAIL: $label failed for the wrong reason; expected: $expected" >&2
+    cat "$ERROR_FILE" >&2
+    exit 1
+  fi
+  assert_equal "$label writes nothing" "$before" \
+    "$(psql_db "$db" -Atqc "SELECT count(*) FROM arena.leaderboard_exhaustion_contracts")"
+}
+MT5_SOURCE_SQL="INSERT INTO arena.sources (
+    id, slug, adapter_slug, status, serving_mode, currency, product_type,
+    fetch_region, timeframes_native, page_size)
+  VALUES (14, 'bybit_mt5', 'bybit_mt5', 'active', 'serving', 'USDx', 'cfd', 'local', '{7,30,90}', 16)"
+
+"$PG_BIN/createdb" -h "$SOCKET_DIR" -p "$PORT" -T main mt5_before
+psql_db mt5_before -q -c "$MT5_SOURCE_SQL"
+expect_mt5_failure mt5_before "bybit_mt5 registration before the drift proof" \
+  "requires the reported_total_drift proof (20261118114230)"
+
+"$PG_BIN/createdb" -h "$SOCKET_DIR" -p "$PORT" -T live_main mt5_main
+psql_db mt5_main -q -c "$MT5_SOURCE_SQL"
+"$PG_BIN/createdb" -h "$SOCKET_DIR" -p "$PORT" -T mt5_main mt5_adapter
+psql_db mt5_main -q -f "$MT5_REGISTRATION"
+echo "ok: bybit_mt5 registration applies"
+MT5_EXPECTED="$(cd "$ROOT_DIR" && npx --no-install tsx -e '
+import { BYBIT_MT5_LEADERBOARD_EXHAUSTION } from "./lib/ingest/adapters/bybit-mt5"
+console.log(JSON.stringify(BYBIT_MT5_LEADERBOARD_EXHAUSTION))
+')"
+assert_equal "bybit_mt5 registration equals the adapter declaration" "t" "$(
+  psql_db mt5_main -Atq -v expected="$MT5_EXPECTED" <<'SQL'
+SELECT contract.declaration = :'expected'::jsonb
+  FROM arena.leaderboard_exhaustion_contracts AS contract
+  JOIN arena.sources AS source_row ON source_row.id = contract.source_id
+ WHERE source_row.slug = 'bybit_mt5'
+SQL
+)"
+assert_equal "the binance_futures registration is untouched" "200" "$(psql_db mt5_main -Atqc "
+  SELECT contract.declaration->>'max_duplicate_rows'
+    FROM arena.leaderboard_exhaustion_contracts AS contract
+    JOIN arena.sources AS source_row ON source_row.id = contract.source_id
+   WHERE source_row.slug = 'binance_futures'")"
+expect_mt5_failure mt5_main "bybit_mt5 registration replay" "already exists for: bybit_mt5"
+
+psql_db mt5_adapter -q -c "UPDATE arena.sources SET adapter_slug = 'bybit_mt5_v2' WHERE slug = 'bybit_mt5'"
+expect_mt5_failure mt5_adapter "bybit_mt5 registration for a re-adaptered source" \
+  "source drift: bybit_mt5"
+
+echo "bybit_mt5 live board registration PG17 proof passed"

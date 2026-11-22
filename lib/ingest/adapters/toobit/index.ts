@@ -12,9 +12,11 @@
  *     leaders-new?page&size&dataType={7|30|90}&hideFull=0
  *         THE board — native per-TF (dataType echoes on rows), sorted by
  *         window ROI. The page-size parameter is `size`: `pageSize` is
- *         ignored (6 rows/page), `size` is honoured up to at least 1000
- *         (probed 2026-11-15: total "2582" = 3 pages of size=1000, 2582
- *         distinct leaderUserIds, page one re-read identical). Rows carry
+ *         ignored (6 rows/page), `size` is honoured up to at least 5000
+ *         (probed 2026-11-18: size=5000 returns all 2602 traders in one
+ *         page for every dataType). Read it in ONE page: across pages the
+ *         server orders tied traders differently between requests, which
+ *         repeated up to 186 rows over three pages of 1000. Rows carry
  *         ROI/PnL/win-rate/Sharpe/AUM + an embedded daily cumulative-ROI
  *         sparkline (leaderTradeProfit) — kept verbatim in entries.raw.
  *     leader-detail?leaderUserId&dataType        identity + counts + fees

@@ -157,7 +157,7 @@ describe('ingest worker metric-trust startup gate', () => {
     ).resolves.toEqual(readyPayload())
     expect(queries).toEqual([
       'BEGIN TRANSACTION READ ONLY',
-      "SET LOCAL statement_timeout = '10s'",
+      "SET LOCAL statement_timeout = '25s'",
       'SELECT public.arena_metric_trust_release_readiness() AS readiness',
       'COMMIT',
     ])
@@ -291,7 +291,13 @@ describe('ingest worker metric-trust startup gate', () => {
     expect(main).toContain('console.log(`${NATIVE_AUTHORITY_READY_TOKEN} region=${region}`)')
     expect(main).toContain('return processCoordinator.requestShutdown(')
     expect(source).not.toContain('startFailoverManager')
-    expect(source).not.toMatch(/\bprocess\.exit\s*\(/)
+    // Shutdown goes through the coordinator, which only sets the exit code.
+    // The one direct exit is the fatal guard's deadline: after the incident of
+    // 2026-11-21 (authority lost, cleanup reported fatal, process stayed
+    // online for seven hours) a fatal shutdown must end the process.
+    expect(source.match(/\bprocess\.exit\s*\(/g)).toHaveLength(1)
+    expect(source).toContain('exit: (code) => process.exit(code)')
+    expect(source).toContain('fatalExitGuard.arm(code)')
     expect(source).toContain('process.exitCode = code')
   })
 })

@@ -344,6 +344,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:arena-bot-legacy-publication-isolation-pg17
 
+      - name: Prove expected sources require a capture contract registration
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:expected-sources-capture-contract-pg17
+
       - name: Prove trader-series publication isolation
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
@@ -604,6 +609,16 @@ jobs:
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:exhaustion-completeness-pg17
+
+      - name: Prove Tier-A window receipts accept proven exhaustion outcomes
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:tier-a-receipt-exhaustion-pg17
+
+      - name: Prove the readiness lineage count is per run and bounded to rankable observations
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:readiness-bounded-count-pg17
 
       - name: Prove metric source contract retirement (binance_web3_bsc v2)
         env:
