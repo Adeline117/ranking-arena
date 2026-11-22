@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  ALIAS_TRADER,
   STALE_AGE_MS,
   TEST_USER,
   buildFixtures,
+  callRpc,
   queryRelation,
   startFakeSupabase,
 } from './fake-supabase.mjs'
@@ -31,7 +33,8 @@ test('filters by period, so each period has its own traders', () => {
 test('honours the source exclusion and allowlist the leaderboard reader sends', () => {
   const excluded = query('season_id=eq.90D&source=not.in.(hyperliquid)')
   assert.ok(excluded.length > 0)
-  assert.ok(excluded.every((row) => row.source === 'binance_futures'))
+  assert.ok(excluded.every((row) => row.source !== 'hyperliquid'))
+  assert.ok(excluded.some((row) => row.source === 'binance_futures'))
   const allowed = query('season_id=eq.90D&source=in.(hyperliquid)')
   assert.ok(allowed.length > 0)
   assert.ok(allowed.every((row) => row.source === 'hyperliquid'))
@@ -41,7 +44,7 @@ test('orders and pages like PostgREST range requests', () => {
   const page = query('season_id=eq.90D&order=rank.desc&offset=2&limit=2')
   assert.deepEqual(
     page.map((row) => row.rank),
-    [30, 29]
+    [31, 30]
   )
 })
 
@@ -165,4 +168,25 @@ test('has a ranked trader whose source published no optional metrics', () => {
   for (const column of ['trades_count', 'followers', 'copiers', 'sharpe_ratio']) {
     assert.equal(nulls[0][column], null, column)
   }
+})
+
+test('an alias-source trader: ranked under the alias, resolved to the slug by either name', () => {
+  const ranked = query('season_id=eq.90D&source_trader_id=eq.e2e-alias')
+  assert.deepEqual(
+    ranked.map((row) => row.source),
+    [ALIAS_TRADER.publicSource]
+  )
+  for (const p_source of [ALIAS_TRADER.publicSource, ALIAS_TRADER.servingSource, null]) {
+    const resolved = callRpc('arena_resolve_trader', { p_handle: 'e2e-alias', p_source })
+    assert.equal(resolved.source, ALIAS_TRADER.servingSource)
+    // Like the deployed resolver today: no public name in the answer.
+    assert.equal(resolved.publicSource, undefined)
+  }
+  assert.equal(callRpc('arena_resolve_trader', { p_handle: 'e2e-alias', p_source: 'okx' }), null)
+  assert.equal(callRpc('arena_resolve_trader', { p_handle: 'e2e-shared', p_source: null }), null)
+  assert.equal(
+    callRpc('arena_first_screen', { p_source: ALIAS_TRADER.publicSource, p_trader: 'e2e-alias' }),
+    null
+  )
+  assert.deepEqual(callRpc('some_other_rpc', {}), [])
 })
