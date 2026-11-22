@@ -18,11 +18,19 @@
  *     12 of 12, which ties the response to the requested window. An
  *     unsupported cycleTime (15) is answered with the 30-day block; only
  *     7/30/90 are requested.
- *     It is the exchange's own per-window figure, not a nested peak-to-trough
- *     series: a longer window can report a smaller value (54 days old: 30D
- *     0.5582, 90D 0.2930) and a value can exceed 1 (1.3254). It is stored per
- *     window as reported; staging nulls a drawdown above 100 %, which is then
- *     not attested.
+ *     METHODOLOGY (the contract document has no methodology field; this is
+ *     the reviewed statement of what the attested mdd means):
+ *     1. It is Bitget CFD's self-reported per-window figure, NOT a nested
+ *        peak-to-trough drawdown: a longer window can report a smaller value
+ *        than a shorter one (54 days old: 30D 0.5582, 90D 0.2930), and a
+ *        value can exceed 1 (1.3254). Bitget publishes no formula.
+ *     2. The 7-day window reports "0.0000" for most portfolios (17 of 26
+ *        sampled), many of which closed losing trades in that window. The
+ *        page shows the same number. The value is stored exactly as the
+ *        exchange reports it; nothing is corrected or derived.
+ *     Staging stores a drawdown above 100 % as NULL; it is then not attested,
+ *     and Tier-B counts it and records `metric_out_of_range:mdd` in
+ *     arena.staging_rejects.
  *   - winRate: decimal fraction (0.6702 = the board's winning_rate 67.02).
  *   - roi (already percent) and profit equal the board's profit_rate and
  *     total_profit of the same window.

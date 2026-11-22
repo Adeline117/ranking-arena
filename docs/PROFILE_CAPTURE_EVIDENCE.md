@@ -187,8 +187,14 @@ bitget_cfd（`bitget_cfd-profile-capture@1`，周期 7/30/90，sha256
 `POST /v1/trace/mt5/public/performance {portfolioId, cycleTime}`，一个请求只返回一个周期。认证
 `mdd`（`maxDrawDown`，小数，`0.2456` = 页面上的 24.56 %）、`roi`、`pnl`（`profit`）、`win_rate`（`winRate`，小数）、
 `total_positions`（`totalTrades`）。ROI / PnL / 胜率也认证，理由同 bybit_copytrade：profile 发布会覆盖板写入的值。
-回撤是交易所自己的分周期数字：换 `cycleTime` 值会变（组合比短周期老时），但不是嵌套的峰谷回撤——长周期的值可以比短周期小，
-也可以超过 100 %（staging 把超过 100 % 的回撤置空，不认证）。没有交易的周期交易所返回胜率 0，解析器保持 NULL。
+回撤口径（契约文档没有 methodology 字段，以这里和契约文件头注释为准）：
+
+1. 这是 Bitget CFD 的自报分周期数字，换 `cycleTime` 值会变（组合比短周期老时），但**不是嵌套的峰谷回撤**：长周期的值可能小于短周期
+   （54 天的组合：30 天 0.5582，90 天 0.2930），也可能超过 100 %。Bitget 没有公布公式。
+2. 7 天窗口大量是 `0.0000`（抽样 26 个里 17 个），其中不少账户在窗口内有亏损单，页面显示的也是这个数。值照交易所原样保存，不修正、不推算。
+
+超过 100 % 的回撤被 staging 置空、不认证；Tier-B 会逐条打日志、计入 `nulledMetrics`，并在 `arena.staging_rejects` 写一条
+`metric_out_of_range:mdd`（挂在该次采集的 RAW 上），不会悄悄丢掉。没有交易的周期交易所返回胜率 0，解析器保持 NULL。
 不抓 `cycleChartData`：它是自建仓以来的累计曲线截到窗口，不是窗口序列。
 PG17 证明：`npm run qa:bitget-cfd-profile-capture-contract-pg17`（非超级用户执行迁移）。
 
