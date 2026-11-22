@@ -438,6 +438,12 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # It needs the declaration 114230 makes valid, so it follows it; it takes
 # effect with the worker release that captures bybit_mt5 in this mode. It
 # touches no table 192134 guards.
+# 20261121185937 replaces public.arena_metric_trust_release_readiness() (the
+# 112703 body): its lineage count is evaluated once per run and only over
+# observations that can still be ranked, instead of re-parsing every run's
+# page ordinals for every observation ever written (15-17s in production
+# against the worker's 10s startup timeout). It follows 112703, depends on no
+# worker release and touches no table 192134 guards.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -464,6 +470,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261118134500_register_binance_live_board_exhaustion_contracts.sql
   20261120233328_publication_score_rows_board_attested_freshness.sql
   20261120190124_register_bybit_mt5_live_board_exhaustion_contract.sql
+  20261121185937_metric_trust_readiness_bounded_lineage_count.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
