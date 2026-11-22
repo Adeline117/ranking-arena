@@ -595,6 +595,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:trust-evidence-retention-pg17
 
+      - name: Prove publication trust requires the board's own run
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:trust-requires-run-pg17
+
       - name: Prove public-source capture and metric contract registration
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
