@@ -17,10 +17,32 @@
  *                     the parser keeps that undefined rate NULL, so it is
  *                     never attested.
  *   - total_positions indicators.data.trades (period trade count).
- * Not attested: max_drawdown / max_drawdown_all / pnl_all are identical for
- * D7, D30 and D90 (all-time values, e.g. a 91.8% drawdown in a 7D window with
- * zero trades), so they are not period evidence; ROI/PnL/drawdown are the
- * board's (Tier-A) evidence.
+ * Not attested:
+ *   - max_drawdown    (max_drawdown_all is the same number). Measured on the
+ *                     whole futures board, 576 traders x D7/D30/D90,
+ *                     2026-11-21. It is neither constant nor an all-time
+ *                     value (an earlier version of this comment said both,
+ *                     from one trader's probe):
+ *                     - with activity it follows the period: D7 <= D30 <= D90
+ *                       for 575 of 576, and of the 94 traders active in all
+ *                       three periods 57 report three different values;
+ *                     - a window without activity keeps an old value: about
+ *                       half of the idle windows still report a nonzero
+ *                       drawdown (D7 255 of 482, D30 215 of 422, D90 189 of
+ *                       347), e.g. 91.8% in a 7D window with zero trades;
+ *                     - it agrees within 1% with the drawdown of the
+ *                       exchange's own daily cumulative-ROI series in only
+ *                       1.7% (D7), 6.5% (D30) and 16.1% (D90) of the rows
+ *                       that have any drawdown.
+ *                     The board row's `mdd` is this very number for the same
+ *                     period (equal for 528 of the 528 traders not updated
+ *                     between the two fetches), so the board is not
+ *                     independent evidence of it either. Decided handling: a
+ *                     row with zero trades in the period does not use the
+ *                     drawdown as a period metric. That rule is implemented
+ *                     in another change, not by this contract.
+ *   - pnl_all         not a period value. ROI / PnL are the board's (Tier-A)
+ *                     evidence.
  *
  * blofin_spot has its own detail endpoints and its own contract below: the
  * /uapi/v1/copy endpoints above describe the trader's FUTURES copy account,
@@ -94,11 +116,15 @@ export const BLOFIN_FUTURES_PROFILE_CAPTURE: ProfileCaptureContract = {
  *                     trades) still reports a nonzero drawdown in 23 of 39
  *                     (D7), 28 of 45 (D30) and 24 of 48 (D90) nonzero cases
  *                     (e.g. 64.3% in all three windows of an idle account,
- *                     fixture profile-indicators-spot-flat-*.json): a value
- *                     carried over from outside the window, like the futures
- *                     endpoint. The spot board row repeats the same number
- *                     (equal in all 431 trader-periods), so drawdown stays the
- *                     board's (Tier-A) evidence and is not attested here.
+ *                     fixture profile-indicators-spot-flat-*.json): an idle
+ *                     window keeps an old value, as on the futures endpoint.
+ *                     The spot board row repeats the same number (equal in
+ *                     all 431 trader-periods), so the board is not
+ *                     independent evidence of it; it is merely the only
+ *                     writer whose drawdown publication accepts today. Not
+ *                     attested here. Decided handling (implemented in another
+ *                     change): a row with zero trades in the period does not
+ *                     use the drawdown as a period metric.
  *   - roi / pnl       the board's Tier-A evidence (real_pnl differs from the
  *                     board's pnl by the fetch lag); sharpe and the other
  *                     ratios.
