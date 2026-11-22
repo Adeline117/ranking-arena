@@ -1,4 +1,6 @@
 import type { NextConfig } from 'next'
+// Internal Next.js path (not a public API): it can move in a Next upgrade. If it
+// does, lib/seo/__tests__/html-limited-bots.test.ts fails first and says what to do.
 import { HTML_LIMITED_BOT_UA_RE } from 'next/dist/shared/lib/router/utils/html-bots'
 // withSentryConfig REMOVED — it injects ~194KB Sentry SDK into every page's
 // initial bundle, blocking LCP. Sentry is now loaded entirely via
