@@ -15,6 +15,7 @@ PR #489 规定：`arena.trader_stats` 里的值只有被 attempt-bound 证据认
 | 数据库     | 迁移 `20261116215328`（predeploy）                                         | 契约注册表、只追加账本、`trader_stats` 的 profile 指针和守卫触发器          |
 | 发布读取   | 迁移 `20261116215329`（postdeploy）                                        | `publication_score_rows_json@3`：板认证或 profile 认证都可采用              |
 | 契约注册   | 迁移 `20261117015119`（postdeploy）                                        | 把代码注册表里的全部契约逐字段写进 `arena.profile_capture_contracts`        |
+| 契约注册   | 迁移 `20261121000026`（postdeploy）                                        | 之后新增的来源各自一个迁移：`bitget_cfd`                                    |
 | 测试工具   | `lib/ingest/profile-capture/test-helper.ts`                                | 用录制的页面和真实解析器跑一遍 worker 的同一流程                            |
 
 ## 契约格式
@@ -179,3 +180,18 @@ bybit_copytrade：板没有 PnL 列，PnL 取 leader-income 的 `{seven|thirty|n
 `totalPositions` 是 `WinCount + LossCount` 的和，与交易所自己的 `cumTradeCount` 不相等）；跟单人数（不分周期，
 且解析器在 info 和 income 之间回退，声明单一路径会让回退变成 projection_mismatch）。
 PG17 证明：`npm run qa:profile-capture-bybit-copytrade-pg17`（真实 getProfile、解析器、契约哈希、写入 SQL 和 @3 读取器）。
+
+bitget_cfd（`bitget_cfd-profile-capture@1`，周期 7/30/90，sha256
+`7ddc65e64c24019f5f6c29074f1a5495865f2b66fa884c6123fdf824adebff18`，注册迁移 `20261121000026`）：板行只有
+收益率、收益、跟单者收益、资产管理规模、胜率五列，没有回撤。详情页的"表现"区读
+`POST /v1/trace/mt5/public/performance {portfolioId, cycleTime}`，一个请求只返回一个周期。认证
+`mdd`（`maxDrawDown`，小数，`0.2456` = 页面上的 24.56 %）、`roi`、`pnl`（`profit`）、`win_rate`（`winRate`，小数）、
+`total_positions`（`totalTrades`）。ROI / PnL / 胜率也认证，理由同 bybit_copytrade：profile 发布会覆盖板写入的值。
+回撤是交易所自己的分周期数字：换 `cycleTime` 值会变（组合比短周期老时），但不是嵌套的峰谷回撤——长周期的值可以比短周期小，
+也可以超过 100 %（staging 把超过 100 % 的回撤置空，不认证）。没有交易的周期交易所返回胜率 0，解析器保持 NULL。
+不抓 `cycleChartData`：它是自建仓以来的累计曲线截到窗口，不是窗口序列。
+PG17 证明：`npm run qa:bitget-cfd-profile-capture-contract-pg17`（非超级用户执行迁移）。
+
+bitget_spot 没有契约：现货详情页的"表现"区不显示最大回撤，`POST /v1/trace/spot/public/uta/performance`
+在 7/30/90 任一周期都没有回撤字段（2026-11-20 实测，样例 `spot-profile-capture-30.json`），板行也没有。
+交易所不提供的值不自己推算，所以 bitget_spot 的回撤保持无证据。
