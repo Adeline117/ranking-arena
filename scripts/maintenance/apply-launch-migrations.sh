@@ -379,6 +379,13 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # bodies and is inert until a source registers such a declaration; it follows
 # 112703 (which makes exhausted outcomes publishable) and touches no table
 # 192134 guards.
+# 20261118135918 (trust evidence retention) adds a count-first purge function
+# with an owner-only delete switch (off), its audit ledger, two lookup indexes
+# (non-concurrent: metric_trust_observations(source_run_id) and the Tier-A
+# receipt snapshot index) and lets reject_direct_metric_trust_mutation accept
+# a run DELETE the same transaction authorized. The worker release that calls
+# it treats a missing function as not_installed, so it follows that release;
+# it touches no table 192134 guards.
 # 040440 forward replacement. V1_EXECUTION_STATUS requires the RAW-only
 # bridge SHA to be deployed and legacy callers drained before the legacy
 # position-history relations are frozen. Current main never reads or writes
@@ -471,6 +478,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261120233328_publication_score_rows_board_attested_freshness.sql
   20261120190124_register_bybit_mt5_live_board_exhaustion_contract.sql
   20261121185937_metric_trust_readiness_bounded_lineage_count.sql
+  20261118135918_trust_evidence_retention.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS

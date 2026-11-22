@@ -590,6 +590,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:retention-trust-evidence-pg17
 
+      - name: Prove trust evidence retention keeps pinned evidence and is switch-gated
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:trust-evidence-retention-pg17
+
       - name: Prove public-source capture and metric contract registration
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
