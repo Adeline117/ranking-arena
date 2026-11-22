@@ -16,6 +16,7 @@ type Scenario =
   | 'leaderboard-error'
   | 'leaderboard-stale-source'
   | 'leaderboard-stale-computed'
+  | 'cache-unavailable'
 
 async function useScenario(request: APIRequestContext, name: Scenario) {
   const response = await request.post(`${FAKE_SUPABASE}/__e2e/scenario`, { data: { name } })
@@ -134,5 +135,29 @@ test.describe('degraded data', () => {
     await expect(sharpe).toHaveCount(1)
     await expect(sharpe).toContainText('--')
     await expect(sharpe).not.toContainText(/\d/)
+  })
+
+  // Production has run with the cache down. The crawler-facing paths read the
+  // database directly and must keep answering with real content, not a 500.
+  test('with the cache unavailable, a trader page and the sitemap still serve', async ({
+    request,
+    isMobile,
+  }) => {
+    test.skip(isMobile, 'raw requests do not depend on the viewport')
+    await useScenario(request, 'cache-unavailable')
+
+    const profile = await request.get('/trader/e2e-shared?platform=binance_futures')
+    expect(profile.status()).toBe(200)
+    const html = await profile.text()
+    expect(html).toContain('/trader/e2e-shared?platform=binance_futures"')
+    expect(html).toContain('aria-labelledby="trader-summary-heading"')
+    expect(html).not.toMatch(/<meta[^>]*name="robots"[^>]*noindex/)
+
+    const index = await request.get('/sitemap.xml')
+    expect(index.status()).toBe(200)
+    expect(await index.text()).toContain('shard=1')
+    const shard = await request.get('/api/sitemap-xml?shard=1')
+    expect(shard.status()).toBe(200)
+    expect(await shard.text()).toContain('/trader/e2e-shared?platform=binance_futures')
   })
 })
