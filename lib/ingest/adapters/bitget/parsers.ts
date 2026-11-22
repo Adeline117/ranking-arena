@@ -206,8 +206,11 @@ export function parseBitgetProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
     utaDetails?: Dict
     utaPerformance?: Dict
     utaChart?: Dict
+    cfdDetails?: Dict
+    cfdPerformance?: Dict
     timeframe?: number
   }
+  if (bundle.cfdPerformance || bundle.cfdDetails) return parseBitgetCfdProfile(bundle, ctx)
   if (bundle.utaPerformance || bundle.utaDetails) return parseBitgetUtaProfile(bundle, ctx)
   const tf = (bundle.timeframe ?? 90) as Timeframe
   const info = ((bundle.detailV2 as Dict)?.data ?? null) as Dict | null
@@ -553,6 +556,83 @@ function parseBitgetUtaProfile(
   return {
     stats,
     series,
+    nickname: det ? ((det.displayName as string) ?? null) : null,
+    avatarUrlOrigin: det ? ((det.headPic as string) ?? null) : null,
+  }
+}
+
+/**
+ * CFD portfolio profile (bitget_cfd; public probe 2026-11-20). Endpoints keyed
+ * by portfolio_id (traders.meta), see index.ts getCfdProfile:
+ *   mt5/public/details {portfolioId}                → identity + 跟单者 block
+ *   mt5/public/performance {portfolioId, cycleTime} → the window's 表现 block
+ * No series: mt5/public/cycleChartData is the since-inception cumulative curve
+ * cut to the window, not a window series, and is not fetched.
+ * Units as in the UTA family: roi is already percent, winRate/maxDrawDown are
+ * DECIMALS ("0.2456" is the page's 最大回撤 24.56 %). Every value is the
+ * exchange's own figure for the requested window; nothing is derived.
+ * ./profile-capture-contract.ts declares which of them are profile evidence.
+ */
+function parseBitgetCfdProfile(
+  bundle: { cfdDetails?: Dict; cfdPerformance?: Dict; timeframe?: number },
+  ctx: ParseCtx
+): ParsedProfile {
+  const tf = (bundle.timeframe ?? 90) as Timeframe
+  const det = ((bundle.cfdDetails as Dict)?.data ?? null) as Dict | null
+  const inner = (det?.publicDetail ?? null) as Dict | null
+  const perf = ((bundle.cfdPerformance as Dict)?.data ?? null) as Dict | null
+
+  const stats: ParsedStats[] = []
+  if (perf) {
+    const winRateDec = num(perf.winRate)
+    const mddDec = num(perf.maxDrawDown)
+    const totalTrades = int(perf.totalTrades)
+    const extras: Record<string, unknown> = {}
+    if (inner?.tradingDays !== undefined) extras.trading_days = int(inner.tradingDays)
+    const lastOrderTime = iso(perf.lastOrderTime)
+    if (lastOrderTime !== null) extras.last_order_time = lastOrderTime
+    if (inner?.curFollowCount !== undefined) extras.copier_count_current = int(inner.curFollowCount)
+    if (inner?.maxFollowCount !== undefined) extras.copier_count_max = int(inner.maxFollowCount)
+    // Masked to "****" unless the trader shows the balance — num() gives null then.
+    const totalEquity = num(perf.totalEquity)
+    if (totalEquity !== null) extras.total_equity = totalEquity
+    if (inner?.followProfit30d !== undefined) extras.copier_pnl_30d = num(inner.followProfit30d)
+    if (perf.lossTrades !== undefined) extras.loss_trades = int(perf.lossTrades)
+    const avgProfit = num(perf.avgProfit)
+    if (avgProfit !== null) extras.avg_profit = avgProfit
+    const avgLoss = num(perf.avgLoss)
+    if (avgLoss !== null) extras.avg_loss = avgLoss
+    if (Array.isArray(inner?.labels)) {
+      extras.style_labels = (inner.labels as Dict[])
+        .map((label) => label.name)
+        .filter((name): name is string => typeof name === 'string')
+    }
+
+    stats.push({
+      timeframe: tf,
+      asOf: ctx.scrapedAt,
+      roi: num(perf.roi), // already percent
+      pnl: num(perf.profit),
+      sharpe: null,
+      mdd: mddDec === null ? null : mddDec * 100, // decimal → percent
+      // A window without trades reports winRate 0: an undefined rate, kept NULL.
+      winRate: winRateDec === null || totalTrades === 0 ? null : winRateDec * 100,
+      winPositions: int(perf.profitTrades),
+      totalPositions: totalTrades,
+      copierPnl: num(perf.followProfit),
+      copierCount: int(inner?.curFollowCount),
+      aum: num(inner?.aum),
+      volume: null,
+      profitShareRate: num(inner?.sharingRatio),
+      holdingDurationAvgHours: null,
+      tradingPreferences: null,
+      extras,
+    })
+  }
+
+  return {
+    stats,
+    series: [],
     nickname: det ? ((det.displayName as string) ?? null) : null,
     avatarUrlOrigin: det ? ((det.headPic as string) ?? null) : null,
   }

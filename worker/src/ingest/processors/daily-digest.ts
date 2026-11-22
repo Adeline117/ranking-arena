@@ -9,33 +9,98 @@ import { getConnection } from '../../connection'
 import { alert, flushDigest } from '@/lib/ingest/alerting'
 import { getIngestPool } from '@/lib/ingest/db'
 
+/** Whole-row rejects per source in 24h at which the digest reports quality drift. */
+export const REJECT_DRIFT_THRESHOLD = 20
+
+/**
+ * staging_rejects reason prefix of a kept row whose metric was stored empty
+ * because the source value was outside its range (Tier-B
+ * recordNulledStatMetrics). Not a rejected row: some exchanges report such
+ * values by their own definition (a max drawdown above 100 %).
+ */
+export const METRIC_OUT_OF_RANGE_REASON_PREFIX = 'metric_out_of_range:'
+
+export interface RejectReasonCount {
+  slug: string
+  phase: number
+  reason: string
+  count: number
+}
+
+export interface RejectDigestLine {
+  sourceSlug: string
+  phase: number
+  message: string
+}
+
+/**
+ * Digest lines for one day of arena.staging_rejects, per source:
+ * - whole-row rejects: the quality-drift line, only at REJECT_DRIFT_THRESHOLD
+ *   or more. Out-of-range metric records never count toward it.
+ * - out-of-range metric records: their own count line whenever there is one.
+ */
+export function rejectDigestLines(rows: readonly RejectReasonCount[]): RejectDigestLine[] {
+  const bySource = new Map<
+    string,
+    { phase: number; rejects: RejectReasonCount[]; outOfRange: RejectReasonCount[] }
+  >()
+  for (const row of rows) {
+    let source = bySource.get(row.slug)
+    if (!source) {
+      source = { phase: row.phase, rejects: [], outOfRange: [] }
+      bySource.set(row.slug, source)
+    }
+    const bucket = row.reason.startsWith(METRIC_OUT_OF_RANGE_REASON_PREFIX)
+      ? source.outOfRange
+      : source.rejects
+    bucket.push(row)
+  }
+  const total = (counts: readonly RejectReasonCount[]) =>
+    counts.reduce((sum, row) => sum + row.count, 0)
+  const top = (counts: readonly RejectReasonCount[]) =>
+    [...counts].sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason))[0].reason
+
+  const lines: RejectDigestLine[] = []
+  for (const [sourceSlug, source] of bySource) {
+    const rejects = total(source.rejects)
+    if (rejects >= REJECT_DRIFT_THRESHOLD) {
+      lines.push({
+        sourceSlug,
+        phase: source.phase,
+        message: `${rejects} staging rejects in 24h (top: ${top(source.rejects)})`,
+      })
+    }
+    const outOfRange = total(source.outOfRange)
+    if (outOfRange > 0) {
+      lines.push({
+        sourceSlug,
+        phase: source.phase,
+        message:
+          `${outOfRange} metric value(s) out of range in 24h, stored empty ` +
+          `(top: ${top(source.outOfRange)}); rows kept, not counted as rejects`,
+      })
+    }
+  }
+  return lines
+}
+
 /** Reject-rate watchdog: the quarantine table is only useful if someone
  *  reads it — fold per-source 24h reject counts into the digest. */
 async function queueRejectSummary(): Promise<void> {
   const redis = getConnection()
-  const { rows } = await getIngestPool().query<{
-    slug: string
-    phase: number
-    rejects: number
-    top_reason: string
-  }>(
-    `SELECT s.slug, s.phase, count(*)::int AS rejects,
-            (SELECT r2.reason FROM arena.staging_rejects r2
-              WHERE r2.source_id = r.source_id
-                AND r2.created_at > now() - interval '24 hours'
-              GROUP BY r2.reason ORDER BY count(*) DESC LIMIT 1) AS top_reason
+  const { rows } = await getIngestPool().query<RejectReasonCount>(
+    `SELECT s.slug, s.phase, r.reason, count(*)::int AS count
        FROM arena.staging_rejects r
        JOIN arena.sources s ON s.id = r.source_id
       WHERE r.created_at > now() - interval '24 hours'
-      GROUP BY s.slug, s.phase, r.source_id
-     HAVING count(*) >= 20`
+      GROUP BY s.slug, s.phase, r.reason`
   )
-  for (const r of rows) {
+  for (const line of rejectDigestLines(rows)) {
     await alert(redis, {
-      sourceSlug: r.slug,
-      phase: r.phase,
+      sourceSlug: line.sourceSlug,
+      phase: line.phase,
       tier: 'maint', // digest-only — quality drift, not an outage
-      message: `${r.rejects} staging rejects in 24h (top: ${r.top_reason})`,
+      message: line.message,
     })
   }
 }

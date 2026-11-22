@@ -438,6 +438,13 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # It needs the declaration 114230 makes valid, so it follows it; it takes
 # effect with the worker release that captures bybit_mt5 in this mode. It
 # touches no table 192134 guards.
+# 20261121000026 registers the bitget_cfd profile capture contract (mdd, pnl,
+# roi, total_positions, win_rate from the CFD performance response) in the
+# registry of predeploy 20261116215328. Like 015119 it is only meaningful to
+# the worker release that carries the same contract document, so it follows
+# that release; it is independent of 015119's rows, refuses a replay, an
+# earlier registration for bitget_cfd and a missing or re-adaptered source,
+# and touches no table 192134 guards, so 192134 stays last.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -464,6 +471,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261118134500_register_binance_live_board_exhaustion_contracts.sql
   20261120233328_publication_score_rows_board_attested_freshness.sql
   20261120190124_register_bybit_mt5_live_board_exhaustion_contract.sql
+  20261121000026_register_bitget_cfd_profile_capture_contract.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS

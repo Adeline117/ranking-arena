@@ -414,7 +414,11 @@ describe('Tier-B profile coverage accounting', () => {
     })
     mockRecordStagingRejects.mockResolvedValue(undefined)
     mockValidateProfile.mockReturnValue([])
-    mockValidateStats.mockImplementation((stats: unknown[]) => ({ valid: stats, rejects: [] }))
+    mockValidateStats.mockImplementation((stats: unknown[]) => ({
+      valid: stats,
+      rejects: [],
+      nulledMetrics: [],
+    }))
     mockRoiCrossCheckOk.mockReturnValue(null)
     mockPublishProfile.mockResolvedValue(undefined)
     mockQueueAdd.mockResolvedValue(undefined)
@@ -478,6 +482,7 @@ describe('Tier-B profile coverage accounting', () => {
       rejects: 0,
       errors: 0,
       crossCheckFails: 0,
+      nulledMetrics: 0,
       remaining: 0,
     })
 
