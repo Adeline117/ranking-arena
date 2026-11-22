@@ -62,4 +62,16 @@ test.describe('trader profile server summary', () => {
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, `${name}-viewport.png`) })
     })
   }
+
+  test.describe('for a Chinese-language browser', () => {
+    test.use({ locale: 'zh-CN' })
+
+    // The server picks the summary language from Accept-Language while the rest
+    // of the page switches after hydration; both must land on the same language.
+    test('the summary and the hydrated page end up in the same language', async ({ page }) => {
+      await page.goto(PROFILE)
+      await expect(page.getByRole('tab', { name: '概览' })).toBeVisible()
+      await expect(page.getByRole('region', { name: '概览' })).toBeVisible()
+    })
+  })
 })
