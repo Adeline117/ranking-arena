@@ -195,7 +195,14 @@ describe('validateLeaderboardRows — zod + 必填 + 去重', () => {
 
 describe('validateStats', () => {
   it('roi clamp + mdd/winRate bound', () => {
-    const { valid } = validateStats([stats({ roi: 5e9, mdd: 200, winRate: 150 })])
+    const { valid, nulledMetrics } = validateStats([stats({ roi: 5e9, mdd: 200, winRate: 150 })])
+    // The nulled values are reported, not dropped unseen.
+    expect(nulledMetrics).toEqual([
+      { timeframe: valid[0].timeframe, metric: 'mdd', value: 200 },
+      { timeframe: valid[0].timeframe, metric: 'win_rate', value: 150 },
+    ])
+    expect(validateStats([stats({ mdd: 100, winRate: 0 })]).nulledMetrics).toEqual([])
+    expect(validateStats([stats({ mdd: null, winRate: null })]).nulledMetrics).toEqual([])
     expect(valid[0].roi).toBe(10000)
     expect(valid[0].mdd).toBeNull()
     expect(valid[0].winRate).toBeNull()

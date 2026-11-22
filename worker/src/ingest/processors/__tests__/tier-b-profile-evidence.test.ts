@@ -46,7 +46,10 @@ jest.mock('@/lib/ingest/serving/publish', () => ({
   publishHistoryRows: jest.fn(),
   publishProfile: (...args: unknown[]) => mockPublishProfile(...args),
 }))
-jest.mock('@/lib/ingest/staging/rejects', () => ({ recordStagingRejects: jest.fn() }))
+const mockRecordStagingRejects = jest.fn()
+jest.mock('@/lib/ingest/staging/rejects', () => ({
+  recordStagingRejects: (...args: unknown[]) => mockRecordStagingRejects(...args),
+}))
 jest.mock('@/lib/ingest/field-inventory', () => ({
   recordFieldInventory: jest.fn(async () => undefined),
 }))
@@ -211,6 +214,83 @@ describe('Tier-B attempt-bound profile evidence', () => {
       fullSeries: true,
       evidence: { attemptSeq: 77, timeframe: 90, metrics: ['mdd', 'win_rate'] },
     })
+  })
+
+  it('counts and records a contracted drawdown above 100 % that staging stores NULL', async () => {
+    // The source reports a 132.54 % drawdown: the capture is complete, the
+    // block is published with mdd NULL, and only the win rate is attested.
+    mockGetProfile.mockImplementation(async () => ({
+      pages: [
+        {
+          pageIndex: 0,
+          payload: { code: 0, data: { mdd: -1.3254, win: 55 } },
+          url: 'https://api.alpha.example/v1/detail?uid=T1&range=90&ts=1',
+          fetchedAt: '2026-07-15T12:00:00.000Z',
+        },
+      ],
+      fetchedAt: '2026-07-15T12:00:00.000Z',
+    }))
+    mockParseProfile.mockReturnValue(profileOf(block(90, 132.54)))
+
+    const result = await processTierB(job)
+
+    expect(result).toMatchObject({ nulledMetrics: 1, rejects: 0, errors: 0, surfacesFetched: 1 })
+    const [finish] = finishCalls()
+    expect((finish[1] as unknown[])[2]).toBe('complete')
+    expect(mockPublishProfile).toHaveBeenCalledTimes(1)
+    expect(mockPublishProfile.mock.calls[0][2].stats[0].mdd).toBeNull()
+    expect(mockPublishProfile.mock.calls[0][3].evidence).toEqual({
+      attemptSeq: 77,
+      timeframe: 90,
+      metrics: ['win_rate'],
+    })
+    expect(mockRecordStagingRejects).toHaveBeenCalledTimes(1)
+    expect(mockRecordStagingRejects).toHaveBeenCalledWith(7, 5_001, [
+      {
+        reason: 'metric_out_of_range:mdd',
+        payload: {
+          source_slug: 'alpha_futures',
+          trader_id: 42,
+          exchange_trader_id: 'T1',
+          timeframe: 90,
+          metric: 'mdd',
+          source_value: 132.54,
+          action: 'stored_null_not_attested',
+        },
+      },
+    ])
+  })
+
+  it('still publishes when the out-of-range audit write fails', async () => {
+    mockParseProfile.mockReturnValue(profileOf(block(90, 132.54)))
+    mockGetProfile.mockImplementation(async () => ({
+      pages: [
+        {
+          pageIndex: 0,
+          payload: { code: 0, data: { mdd: -1.3254, win: 55 } },
+          url: 'https://api.alpha.example/v1/detail?uid=T1&range=90&ts=1',
+          fetchedAt: '2026-07-15T12:00:00.000Z',
+        },
+      ],
+      fetchedAt: '2026-07-15T12:00:00.000Z',
+    }))
+    mockRecordStagingRejects.mockRejectedValueOnce(new Error('staging audit unavailable'))
+
+    const result = await processTierB(job)
+
+    expect(result).toMatchObject({ nulledMetrics: 1, errors: 0 })
+    expect(mockPublishProfile).toHaveBeenCalledTimes(1)
+  })
+
+  it('counts an out-of-range metric the contract does not declare without a staging record', async () => {
+    mockContract.mockReturnValue(null)
+    mockParseProfile.mockReturnValue(profileOf(block(90, 132.54)))
+
+    const result = await processTierB(job)
+
+    expect(result).toMatchObject({ nulledMetrics: 1, errors: 0 })
+    expect(mockRecordStagingRejects).not.toHaveBeenCalled()
+    expect(mockPublishProfile.mock.calls[0][2].stats[0].mdd).toBeNull()
   })
 
   it('records a mismatch as processing_failed and publishes unattested', async () => {

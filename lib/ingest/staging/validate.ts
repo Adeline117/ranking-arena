@@ -18,6 +18,23 @@ export interface ValidationResult<T> {
 }
 
 /**
+ * One stats metric a kept block lost to the range bound below: the source
+ * reported a value outside [0, 100] and the stored value is NULL. Returned so
+ * the caller can count and record it instead of dropping it unseen.
+ */
+export interface NulledStatMetric {
+  timeframe: ParsedStats['timeframe']
+  /** Score-input metric name (arena.profile_attestable_metrics vocabulary). */
+  metric: 'mdd' | 'win_rate'
+  /** The value the source reported. */
+  value: number
+}
+
+export interface StatsValidationResult extends ValidationResult<ParsedStats> {
+  nulledMetrics: NulledStatMetric[]
+}
+
+/**
  * Normalize physically-impossible metric values so source garbage never persists
  * in the serving layer (arena.trader_stats / leaderboard_entries). This is NOT
  * the "silent NULL" the header warns against — whole rows are still kept and the
@@ -106,9 +123,10 @@ export function validateLeaderboardRows(
 export function validateStats(
   stats: ParsedStats[],
   requiredFields: Array<keyof ParsedStats> = []
-): ValidationResult<ParsedStats> {
+): StatsValidationResult {
   const valid: ParsedStats[] = []
   const rejects: RejectedRow[] = []
+  const nulledMetrics: NulledStatMetric[] = []
 
   for (const block of stats) {
     const parsed = parsedStatsSchema.safeParse(block)
@@ -131,15 +149,23 @@ export function validateStats(
       block.winPositions > block.totalPositions
         ? null
         : block.winPositions
+    const mdd = boundPct(block.mdd)
+    const winRate = boundPct(block.winRate)
+    if (block.mdd != null && mdd === null) {
+      nulledMetrics.push({ timeframe: block.timeframe, metric: 'mdd', value: block.mdd })
+    }
+    if (block.winRate != null && winRate === null) {
+      nulledMetrics.push({ timeframe: block.timeframe, metric: 'win_rate', value: block.winRate })
+    }
     valid.push({
       ...block,
       roi: clampRoi(block.roi),
-      mdd: boundPct(block.mdd),
-      winRate: boundPct(block.winRate),
+      mdd,
+      winRate,
       winPositions,
     })
   }
-  return { valid, rejects }
+  return { valid, rejects, nulledMetrics }
 }
 
 /**

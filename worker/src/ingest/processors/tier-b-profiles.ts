@@ -45,7 +45,11 @@ import {
 } from '@/lib/ingest/raw'
 import { buildCopierSnapshotArtifact } from '@/lib/ingest/copier-snapshot-artifact'
 import { recordStagingRejects } from '@/lib/ingest/staging/rejects'
-import { roiCrossCheckOk, validateStats } from '@/lib/ingest/staging/validate'
+import {
+  roiCrossCheckOk,
+  validateStats,
+  type NulledStatMetric,
+} from '@/lib/ingest/staging/validate'
 import { getHistoryCursor, publishHistoryRows, publishProfile } from '@/lib/ingest/serving/publish'
 import { publishCopierSnapshotInTransaction } from '@/lib/ingest/serving/copier-snapshot-publish'
 import { recordFieldInventory } from '@/lib/ingest/field-inventory'
@@ -209,6 +213,11 @@ export interface TierBResult {
   rejects: number
   errors: number
   crossCheckFails: number
+  /**
+   * Stats metrics stored NULL because the source value was outside [0, 100]
+   * (e.g. a reported max drawdown above 100 %). The block is still published.
+   */
+  nulledMetrics: number
   /** Traders still stale when the deadline hit (0 = pass completed). */
   remaining: number
 }
@@ -617,6 +626,62 @@ async function settleProfileEvidence(
   }
 }
 
+/**
+ * Leaves a trace of every stats metric staging stored NULL because the source
+ * value was outside [0, 100]: each one is logged and counted, and one the
+ * source's profile capture contract declares (so its evidence is dropped with
+ * it) is also written to arena.staging_rejects against the attempt's RAW
+ * object, as `metric_out_of_range:<metric>`. The block itself is still
+ * published; an audit-write failure is logged and never blocks it.
+ */
+async function recordNulledStatMetrics(
+  src: SourceRow,
+  trader: NativeCohortTrader,
+  rawObjectId: number,
+  nulledMetrics: readonly NulledStatMetric[],
+  contract: ProfileCaptureContract | null
+): Promise<number> {
+  if (nulledMetrics.length === 0) return 0
+  for (const nulled of nulledMetrics) {
+    logger.warn(
+      `[tier-b] ${src.slug} ${trader.exchange_trader_id} ${nulled.timeframe}d ` +
+        `${nulled.metric}=${nulled.value} is outside [0, 100]: stored NULL, not attested`
+    )
+  }
+  const contracted = nulledMetrics.filter(
+    (nulled) =>
+      contract !== null &&
+      contractTimeframe(contract, nulled.timeframe) !== null &&
+      contract.metrics[nulled.metric] !== undefined
+  )
+  if (contracted.length > 0) {
+    try {
+      await recordStagingRejects(
+        src.id,
+        rawObjectId,
+        contracted.map((nulled) => ({
+          reason: `metric_out_of_range:${nulled.metric}`,
+          payload: {
+            source_slug: src.slug,
+            trader_id: trader.id,
+            exchange_trader_id: trader.exchange_trader_id,
+            timeframe: nulled.timeframe,
+            metric: nulled.metric,
+            source_value: nulled.value,
+            action: 'stored_null_not_attested',
+          },
+        }))
+      )
+    } catch (err) {
+      logger.error(
+        `[tier-b] ${src.slug} out-of-range metric audit not recorded:`,
+        err instanceof Error ? err.message : err
+      )
+    }
+  }
+  return nulledMetrics.length
+}
+
 export async function processTierB(
   job: Job<TierJobData>,
   context: ConsumedRegionContext
@@ -628,6 +693,7 @@ export async function processTierB(
     rejects: 0,
     errors: 0,
     crossCheckFails: 0,
+    nulledMetrics: 0,
     remaining: 0,
   }
   const src = await getSourceBySlug(job.data.sourceSlug)
@@ -852,8 +918,15 @@ export async function processTierB(
               await publishProfile(src, trader.id, profile, { fullSeries: true })
               throw new IncompleteProfileWindowError(incomplete.timeframe, incomplete.reason)
             }
-            const { valid, rejects } = validateStats(profile.stats, requiredFields)
+            const { valid, rejects, nulledMetrics } = validateStats(profile.stats, requiredFields)
             result.rejects += rejects.length
+            result.nulledMetrics += await recordNulledStatMetrics(
+              src,
+              trader,
+              rawObjectId,
+              nulledMetrics,
+              profileContract
+            )
 
             // Cross-check (spec §5.3): board headline ROI must match the
             // profile ROI for the same TF within tolerance — catches stale
@@ -1022,7 +1095,8 @@ export async function processTierB(
     `[tier-b] ${src.slug}: ${result.tradersCrawled}/${attempted} attempted ok ` +
       `(${result.remaining} stale remaining${result.remaining > 0 ? `, continuation depth ${contDepth + 1}` : ''}), ` +
       `${result.surfacesFetched} surfaces, ${result.historyRowsWritten} history rows, ` +
-      `${result.rejects} rejects, ${result.crossCheckFails} xcheck-fails, ${result.errors} errors`
+      `${result.rejects} rejects, ${result.nulledMetrics} out-of-range metrics nulled, ` +
+      `${result.crossCheckFails} xcheck-fails, ${result.errors} errors`
   )
   return result
 }
