@@ -78,6 +78,22 @@ function pct(v: unknown): number | null {
   return n === null ? null : n * 100
 }
 
+/**
+ * A window in which nothing moved: zero ROI, zero PnL and a cumulative-ROI
+ * chart whose every point is zero. Blofin still returns a non-zero `mdd` for
+ * such rows — the last active window's value, carried over (full sweep
+ * 2026-11-22, 576 futures traders: 255/482 flat 7D rows, 215/422 30D, 189/347
+ * 90D, e.g. a 147.9% drawdown on an account with no trade in any period). A
+ * window with no movement has no drawdown of its own, so that value is not a
+ * period metric. The sweep found no flat row with a trade in the period.
+ */
+function isFlatWindow(item: Dict): boolean {
+  if (num(item.roi) !== 0 || num(item.pnl) !== 0) return false
+  const points = (item.chart_data as Dict | undefined)?.roi
+  if (!Array.isArray(points) || points.length === 0) return false
+  return (points as Dict[]).every((point) => num(point?.data) === 0)
+}
+
 function traderInfo(payload: unknown): Dict[] {
   const data = (payload as Dict)?.data as Dict | undefined
   const list = data?.trader_info
@@ -101,6 +117,10 @@ export function parseBlofinLeaderboardPage(
     if (id === null || id === undefined) continue
     const headlineRoi = pct(item.roi)
     const headlinePnl = num(item.pnl)
+    const boardMdd = pct(item.mdd)
+    // A flat window's mdd is carried over, not this period's (isFlatWindow):
+    // keep it out of the metric and on record under extras.
+    const carriedMdd = boardMdd !== null && boardMdd !== 0 && isFlatWindow(item)
     rows.push({
       exchangeTraderId: String(id),
       rank: i + 1, // sorted list; re-anchored across pages by the caller
@@ -122,7 +142,8 @@ export function parseBlofinLeaderboardPage(
       // substrate (spec §0): carry mdd/sharpe/aum/copier_count straight into
       // trader_stats via the publish headline upsert. mdd is a decimal
       // fraction (×100); followers = current copier count.
-      headlineMdd: pct(item.mdd),
+      headlineMdd: carriedMdd ? null : boardMdd,
+      ...(carriedMdd ? { headlineExtras: { carried_mdd: boardMdd } } : {}),
       headlineSharpe: num(item.sharpe_ratio),
       headlineAum: num(item.aum),
       headlineCopierCount: int(item.followers),
@@ -168,6 +189,12 @@ export function parseBlofinProfile(rawPayload: unknown, ctx: ParseCtx): ParsedPr
     put('down_risk', num(ind.down_risk))
     put('annualized_roi', pct(ind.annualized_roi))
     put('copier_pnl', num(ind.copier_volume))
+    // With zero trades in the period the reported max_drawdown is the last
+    // active window's value carried over (same sweep as isFlatWindow: 287/515
+    // zero-trade 7D rows carry a non-zero one). Not a period metric.
+    const periodMdd = pct(ind.max_drawdown)
+    const mddIsCarried = int(ind.trades) === 0 && periodMdd !== null && periodMdd !== 0
+    if (mddIsCarried) put('carried_mdd', periodMdd)
 
     // Per-symbol trading preferences (AssetPreference reads .assets[{asset,volume}]).
     let tradingPreferences: Record<string, unknown> | null = null
@@ -189,7 +216,7 @@ export function parseBlofinProfile(rawPayload: unknown, ctx: ParseCtx): ParsedPr
       roi: pct(ind.roi),
       pnl: num(ind.real_pnl ?? ind.pnl_all),
       sharpe: num(ind.sharpe_ratio),
-      mdd: pct(ind.max_drawdown),
+      mdd: mddIsCarried ? null : periodMdd,
       // win_ratio_all is the period's winning_trades / trades. With zero
       // trades the source reports "0", which is no win rate at all.
       winRate: int(ind.trades) === 0 ? null : pct(ind.win_ratio_all),
