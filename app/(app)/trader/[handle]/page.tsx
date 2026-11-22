@@ -263,7 +263,7 @@ function toSummarySimilar(traders: unknown): TraderSummarySimilar[] {
     return [
       {
         name: handle ?? id,
-        href: traderCanonicalPath({ handle, sourceTraderId: id, source }),
+        href: traderCanonicalPath({ sourceTraderId: id, source }),
         roi: num(trader.roi_90d),
         arenaScore: num(trader.arena_score),
       },
@@ -516,16 +516,12 @@ export async function generateMetadata({
   if (account) ogParams.set('source', account.platform)
   const ogImageUrl = `${BASE}/api/og/trader?${ogParams.toString()}`
 
-  // Single canonical per trader (2026-07-11 SEO 审计:此前 canonical=原始请求段,
-  // 同一交易员经 /trader/{id} vs /trader/{handle} 各自 self-canonical → 重复内容)。
-  // ASCII handles remain the readable canonical path; non-ASCII handles use
-  // the stable exchange-local ID because Vercel has historically rejected some
-  // encoded multi-byte paths. **必须带 ?platform=**:同 handle/id 跨
-  // okx_futures/okx_spot 等多账号,裸形式会合并不同交易员。页面不在
-  // server 中重定向；canonical 由 metadata 表达，认领账户的 /u/ 跳转则在客户端核对复合身份后执行。
+  // One canonical per trader, whatever segment the request used: the id form
+  // plus ?platform= (see traderCanonicalPath for why the id and not the
+  // handle). The page does not redirect on the server; a claimed account's
+  // /u/ redirect happens client-side after the composite identity is checked.
   const canonicalPath = account
     ? traderCanonicalPath({
-        handle: account.handle,
         sourceTraderId: account.traderKey,
         source: account.platform,
       })
@@ -734,9 +730,8 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
     }))
 
     const servingCanonicalUrl = `${BASE_URL}${traderCanonicalPath({
-      // Same inputs as generateMetadata's canonical (resolver nickname, not the
-      // display fallback) so the JSON-LD url and the canonical tag never differ.
-      handle: servingResolved.nickname,
+      // Same inputs as generateMetadata's canonical, so the JSON-LD url and the
+      // canonical tag never differ.
       sourceTraderId: servingResolved.exchangeTraderId,
       source: servingResolved.source,
     })}`
@@ -898,7 +893,6 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
 
   // JSON-LD structured data — use centralized schema generator
   const legacyCanonicalUrl = `${BASE_URL}${traderCanonicalPath({
-    handle: resolved.handle,
     sourceTraderId: resolved.traderKey,
     source: resolved.platform,
   })}`

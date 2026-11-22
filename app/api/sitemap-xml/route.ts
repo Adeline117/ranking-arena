@@ -59,7 +59,6 @@ type SitemapProfileState = {
 }
 
 type PublicSitemapTrader = {
-  handle: string | null
   sourceTraderId: string
   source: string
 }
@@ -73,7 +72,6 @@ function asPublicSitemapTrader(row: unknown): PublicSitemapTrader | null {
   const record = row as Record<string, unknown>
   const rank = record.rank
   const source = record.source
-  const handle = isNonEmptyString(record.handle) ? record.handle : null
   const sourceTraderId = record.source_trader_id
 
   // The view itself enforces full/non-estimated/source-fresh membership. This
@@ -89,7 +87,7 @@ function asPublicSitemapTrader(row: unknown): PublicSitemapTrader | null {
     return null
   }
 
-  return { handle, sourceTraderId, source }
+  return { sourceTraderId, source }
 }
 
 export function isSitemapProfileActive(profile: SitemapProfileState, now = Date.now()): boolean {
@@ -285,7 +283,7 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
   // not fetch an arbitrary raw page and attempt to filter it after pagination.
   const { data, error } = (await supabase
     .from(PUBLIC_RANKED_LEADERBOARD as never)
-    .select('handle, source_trader_id, source, rank')
+    .select('source_trader_id, source, rank')
     .eq('season_id', '90D')
     .not('rank', 'is', null)
     .order('rank', { ascending: true, nullsFirst: false })
