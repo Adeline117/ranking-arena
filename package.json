@@ -129,6 +129,7 @@
     "qa:public-ranking-season-publication-pg17": "bash supabase/migrations/__tests__/public-ranking-season-publication.pg17.sh",
     "qa:expected-sources-capture-contract-pg17": "bash supabase/migrations/__tests__/expected-sources-require-capture-contract.pg17.sh",
     "qa:tier-a-receipt-exhaustion-pg17": "bash supabase/migrations/__tests__/tier-a-window-receipt-exhaustion-branch.pg17.sh",
+    "qa:readiness-bounded-count-pg17": "bash supabase/migrations/__tests__/metric-trust-readiness-bounded-count.pg17.sh",
     "qa:score-input-evidence-pg17": "bash supabase/migrations/__tests__/publication-score-input-evidence.pg17.sh",
     "qa:profile-acquisition-evidence-pg17": "bash supabase/migrations/__tests__/profile-acquisition-evidence.pg17.sh",
     "qa:profile-capture-contract-registration-pg17": "bash supabase/migrations/__tests__/profile-capture-contract-registration.pg17.sh",

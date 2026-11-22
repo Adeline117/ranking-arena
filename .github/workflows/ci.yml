@@ -610,6 +610,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:tier-a-receipt-exhaustion-pg17
 
+      - name: Prove the readiness lineage count is per run and bounded to rankable observations
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:readiness-bounded-count-pg17
+
       - name: Prove metric source contract retirement (binance_web3_bsc v2)
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
