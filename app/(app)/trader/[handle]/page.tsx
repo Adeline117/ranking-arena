@@ -232,12 +232,19 @@ const cachedServingResolveOutcome = cache(
 // live in ./profile-identity and are unit-tested there; this only injects the
 // request-cached lookups. cache() dedupes the call shared by generateMetadata
 // and the page.
+// One answer per source per request. resolveProfileIdentity asks this for each
+// candidate account, and without the memo every call re-tried the cache layer
+// (and waited for it to fail) when the cache is down.
+const isServingSourceOnce = cache(
+  async (source: string) => (await getDataMode(source)) === 'serving'
+)
+
 const resolveIdentity = cache((decoded: string, platform: string | undefined) =>
   resolveProfileIdentity<ServingResolved>(
     {
       resolveLegacy: cachedResolveTrader,
       resolveServing: cachedServingResolveOutcome,
-      isServingSource: async (source) => (await getDataMode(source)) === 'serving',
+      isServingSource: isServingSourceOnce,
       isRetiredSource,
     },
     decoded,
