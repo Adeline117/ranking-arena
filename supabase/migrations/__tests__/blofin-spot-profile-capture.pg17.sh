@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # PostgreSQL 17 proof for 20261120235710_register_blofin_spot_profile_capture_contract
 # and for the blofin_spot detail capture it registers, end to end through the
-# production writers and the @3 reader. Owns an isolated cluster on a private
+# production writers and the @4 reader (20261120233328). Owns an isolated cluster on a private
 # socket; never connects to application data.
 #
 # Like Supabase, the cluster superuser is supabase_admin and every fixture
@@ -33,10 +33,11 @@
 #              board write;
 #   zero     - an idle trader's board drawdown "0" is published as 0, not NULL;
 #   leftover - a row still holding the profile-only columns of an old profile
-#              write (as the futures-route crawl left them) is older than the
-#              reader's 48h stats window however fresh the board is, so its
-#              drawdown and win rate publish NULL; one spot capture makes the
-#              row fresh again.
+#              write (as the futures-route crawl left them) keeps an as_of
+#              older than 48h however fresh the board is. The @4 reader still
+#              publishes the drawdown the board just attested (the @3 reader
+#              dropped the whole row: drawdown and win rate both NULL); its
+#              win rate stays NULL until one spot capture supplies it.
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -47,6 +48,7 @@ STEP2A=20261116205144_trader_stats_score_input_evidence_pointer.sql
 STEP2B=20261116210122_publication_score_rows_require_stats_evidence.sql
 LEDGER=20261116215328_profile_acquisition_evidence_ledger.sql
 READER=20261116215329_publication_score_rows_profile_attested.sql
+READER4=20261120233328_publication_score_rows_board_attested_freshness.sql
 REGISTER=20261120235710_register_blofin_spot_profile_capture_contract.sql
 CHAIN=(
   20260721175746_arena_score_inputs_publish_bundle.sql
@@ -307,6 +309,7 @@ expect_failure_in postgres 'the registration refuses to run before the ledger' \
 
 psql_db -f "$MIGRATIONS/$LEDGER"
 psql_db -f "$MIGRATIONS/$READER"
+psql_db -f "$MIGRATIONS/$READER4"
 if [[ "$(registered_count postgres)" != 0 ]]; then
   echo 'the ledger must start with an empty registry' >&2
   exit 1
@@ -691,8 +694,9 @@ SELECT public.proof_assert(
 ) FROM score WHERE trader_key <> '4187422152' AND trader_key <> '1003';
 
 -- 403: the board just wrote and attested its drawdown, but the row keeps the
--- old profile-only columns, so its as_of stays three days old and the reader
--- ignores the whole stats row: drawdown and win rate are both NULL.
+-- old profile-only columns, so its as_of stays three days old. The @4 reader
+-- publishes that board-attested drawdown regardless (under @3 the whole stats
+-- row was ignored); there is still no win rate.
 SELECT public.proof_assert(
   count(*) = 1 AND COALESCE(bool_and(
     mdd IS NOT NULL AND 'mdd' = ANY (evidence_metrics) AND as_of < now() - interval '48 hours'
@@ -701,9 +705,11 @@ SELECT public.proof_assert(
 ) FROM arena.trader_stats WHERE trader_id = 403 AND timeframe = 30;
 SELECT public.proof_assert(
   count(*) = 1 AND COALESCE(bool_and(
-    score_row->'max_drawdown' = 'null'::jsonb AND score_row->'win_rate' = 'null'::jsonb
+    (score_row->>'max_drawdown')::numeric = :'profile_mdd'::numeric
+    AND score_row->'win_rate' = 'null'::jsonb
+    AND score_row->'trades_count' = 'null'::jsonb
   ), false),
-  'a stats row older than 48h was published: ' || COALESCE(string_agg(score_row::text, ' | '), 'no row')
+  'the row left by an old profile write drifted: ' || COALESCE(string_agg(score_row::text, ' | '), 'no row')
 ) FROM score WHERE trader_key = '1003';
 SQL
 
