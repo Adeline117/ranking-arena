@@ -121,7 +121,8 @@ complete 时一个指标被认证，当且仅当：解析器值非空、等于 R
 4. 用 `scripts/new-migration.sh register_<source>_profile_capture_contract` 生成注册迁移（首批五个来源
    binance_futures、binance_spot、bybit_copytrade、blofin_futures、toobit_futures 已由 `20261117015119`
    一次注册，PG17 证明 `profile-capture-contract-registration.pg17.sh` 校验行与代码注册表逐字段相等；
-   之后新增的来源各写一个迁移，并把它加进该证明）：
+   之后新增的来源各写一个迁移，并把它加进该证明；blofin_spot 由 `20261120235710` 注册，
+   自带以非超级用户执行的 PG17 证明 `blofin-spot-profile-capture.pg17.sh`）：
    ```sql
    INSERT INTO arena.profile_capture_contracts
      (source_id, capture_contract, contract_sha256, timeframes, attestable_metrics)
@@ -179,3 +180,13 @@ bybit_copytrade：板没有 PnL 列，PnL 取 leader-income 的 `{seven|thirty|n
 `totalPositions` 是 `WinCount + LossCount` 的和，与交易所自己的 `cumTradeCount` 不相等）；跟单人数（不分周期，
 且解析器在 info 和 income 之间回退，声明单一路径会让回退变成 projection_mismatch）。
 PG17 证明：`npm run qa:profile-capture-bybit-copytrade-pg17`（真实 getProfile、解析器、契约哈希、写入 SQL 和 @3 读取器）。
+
+blofin_spot（`blofin_spot-profile-capture@1`，周期 7/30/90，认证 `total_positions` `win_rate`，
+sha256 `005b581a9191952c7e28bbdfb121e431954a457e11e1b9cd80dc5e67a94f796a`）：现货详情页走
+`/sapi/v1/spot_copy/trader/{info,stat/indicators,stat/performance}`（`/uapi/v1/copy` 那组接口对现货 uid
+返回的是同一个人的合约带单账户，不能写进现货行）。胜率取 `indicators.data.win_ratio_all`，交易次数取
+`indicators.data.trades`，都随周期变化；周期内零成交时交易所返回 "0"，解析器留空，不认证。
+回撤 `max_drawdown` 不认证：2026-11-20 对全榜逐人逐周期实测，29 人三个周期各不相同，但 18 人三个周期是同一个
+非零值，而且窗口内收益、盈亏、成交全为零的账户仍返回非零回撤（7D 39 个非零值里有 23 个），不是所选窗口的值。
+榜单行的 `mdd` 与它逐一相等（431/431），回撤仍只由榜单行认证；profile 写入若改动了回撤数值，
+该值在下一次榜单写入前无证据。PG17 证明：`npm run qa:blofin-spot-profile-capture-pg17`。

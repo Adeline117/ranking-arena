@@ -438,6 +438,14 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # It needs the declaration 114230 makes valid, so it follows it; it takes
 # effect with the worker release that captures bybit_mt5 in this mode. It
 # touches no table 192134 guards.
+# 20261120235710 registers the blofin_spot profile capture contract
+# (win_rate, total_positions from the spot detail endpoints) in the registry of
+# predeploy 20261116215328. It is only meaningful to the worker release that
+# carries the same contract document and crawls the spot detail route, so it
+# follows that release; an older worker opens no blofin_spot profile attempt.
+# It is independent of 015119 (which leaves blofin_spot unregistered), refuses
+# a replay or an earlier blofin_spot registration, and touches no table 192134
+# guards.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -464,6 +472,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261118134500_register_binance_live_board_exhaustion_contracts.sql
   20261120233328_publication_score_rows_board_attested_freshness.sql
   20261120190124_register_bybit_mt5_live_board_exhaustion_contract.sql
+  20261120235710_register_blofin_spot_profile_capture_contract.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
