@@ -9,7 +9,7 @@ import type { Job } from 'bullmq'
 import { getConnection } from '../../connection'
 import { getIngestPool } from '@/lib/ingest/db'
 import { alert } from '@/lib/ingest/alerting'
-import { alertUncoveredRegions } from '../region-coverage'
+import { alertScoringSilence, alertUncoveredRegions } from '../region-coverage'
 import {
   DEEP_CRAWL_PROGRESS_KEYS,
   findStalledDeepCrawls,
@@ -33,6 +33,7 @@ export async function processFreshness(_job: Job): Promise<{
   const redis = getConnection()
   // Before the DB query: region coverage must not depend on it.
   const uncoveredRegions = await alertUncoveredRegions(redis)
+  await alertScoringSilence(redis)
   const { rows } = await getIngestPool().query<StaleSurface>(
     `WITH expected AS (
        SELECT s.id, s.slug, s.phase,

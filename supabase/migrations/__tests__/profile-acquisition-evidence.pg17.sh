@@ -12,6 +12,7 @@
 #   20261116210122 publication_score_rows_require_stats_evidence  (#489 step 2b)
 #   20261116215328 profile_acquisition_evidence_ledger
 #   20261116215329 publication_score_rows_profile_attested
+#   20261120233328 publication_score_rows_board_attested_freshness
 #
 # Proves, with positive and negative cases:
 #   ledger   - RPC-owned and append-only; start refuses an unregistered or
@@ -703,6 +704,105 @@ $proof$;
 SQL
 
 echo "profile-acquisition-evidence.pg17: reader ok"
+
+# ---------------------------------------------------------------------------
+# Reader @4 (20261120233328): a board-attested value is as fresh as its board.
+#
+# 'full' was profile-crawled long ago and still holds a column the board never
+# re-sends, so the board write keeps its as_of frozen at that old crawl. The
+# board has just written and attested its drawdown and Sharpe.
+#   - @3 drops both (the row is joined only when as_of is inside 48 hours)
+#   + @4 publishes both, aged by the board
+#   - an old value nobody attested, a value attested by another board's RAW or
+#     run, and every row of a board that is itself too old stay unpublished
+# ---------------------------------------------------------------------------
+READER_V4=20261120233328_publication_score_rows_board_attested_freshness.sql
+psql_db <<'SQL'
+SET session_replication_role = replica;
+UPDATE arena.trader_stats
+   SET as_of = now() - interval '100 days', evidence_metrics = ARRAY['sharpe', 'mdd']
+ WHERE trader_id = 101 AND timeframe = 90;
+-- 'no-pnl': an old row nobody attested.
+UPDATE arena.trader_stats SET as_of = now() - interval '100 days'
+ WHERE trader_id = 102 AND timeframe = 90;
+-- 'stale': attested, but by another board's RAW; 'wrong-tf': by another run.
+UPDATE arena.trader_stats
+   SET as_of = now() - interval '100 days', evidence_raw_object_id = 9999,
+       evidence_source_run_id = repeat('c', 64), evidence_metrics = ARRAY['mdd']
+ WHERE trader_id = 103 AND timeframe = 90;
+UPDATE arena.trader_stats
+   SET as_of = now() - interval '100 days', evidence_raw_object_id = 5011,
+       evidence_source_run_id = repeat('d', 64), evidence_metrics = ARRAY['mdd']
+ WHERE trader_id = 104 AND timeframe = 90;
+SET session_replication_role = origin;
+
+DO $proof$
+DECLARE
+  v_row jsonb;
+BEGIN
+  SELECT r INTO STRICT v_row
+    FROM jsonb_array_elements(arena.publication_score_rows_json('90D', 1000, 48)) AS r
+   WHERE r->>'trader_key' = 'full';
+  IF v_row->'max_drawdown' <> 'null'::jsonb OR v_row->'sharpe_ratio' <> 'null'::jsonb THEN
+    RAISE EXCEPTION '@3 was expected to drop the frozen row: %', v_row;
+  END IF;
+END
+$proof$;
+SQL
+
+psql_db -f "$MIGRATIONS/$READER_V4"
+psql_db -f "$MIGRATIONS/$READER_V4"
+
+psql_db <<'SQL'
+DO $proof$
+DECLARE
+  v_rows jsonb := arena.publication_score_rows_json('90D', 1000, 48);
+  v_board timestamptz := (SELECT scraped_at FROM arena.leaderboard_snapshots WHERE id = 11);
+  v_row jsonb;
+BEGIN
+  IF v_rows IS DISTINCT FROM public.arena_score_inputs_publish_bundle_json('90D', 1000, 48)->'scoreRows'
+     OR jsonb_array_length(v_rows) <> 7 THEN
+    RAISE EXCEPTION '@4 bundle rows drifted: %', v_rows;
+  END IF;
+
+  SELECT r INTO STRICT v_row FROM jsonb_array_elements(v_rows) AS r WHERE r->>'trader_key' = 'full';
+  IF (v_row->>'max_drawdown')::numeric <> 12 OR (v_row->>'sharpe_ratio')::numeric <> 1.5
+     OR (v_row->>'as_of')::timestamptz <> v_board
+     -- Its trade count was never attested: still refused, and named.
+     OR v_row->'trades_count' <> 'null'::jsonb
+     OR v_row->'unevidenced_metrics' <> '["trades_count"]'::jsonb THEN
+    RAISE EXCEPTION 'a board-attested value on a frozen row was not published: %', v_row;
+  END IF;
+
+  FOR v_row IN
+    SELECT r FROM jsonb_array_elements(v_rows) AS r
+    WHERE r->>'trader_key' IN ('no-pnl', 'stale', 'wrong-tf')
+  LOOP
+    IF v_row->'max_drawdown' <> 'null'::jsonb OR v_row->'pnl_usd' <> 'null'::jsonb
+       OR NOT (v_row->'unevidenced_metrics' @> '["pnl_usd", "max_drawdown"]'::jsonb)
+       OR (v_row->>'as_of')::timestamptz <> v_board THEN
+      RAISE EXCEPTION 'an unattested or foreign-attested value was published: %', v_row;
+    END IF;
+  END LOOP;
+
+  -- The board itself must still be inside the freshness window.
+  IF arena.publication_score_rows_json('90D', 1000, 0) <> '[]'::jsonb THEN
+    RAISE EXCEPTION 'rows of a board older than the freshness window were returned';
+  END IF;
+END
+$proof$;
+
+-- Back to fresh rows without the test attestations for the sections below.
+SET session_replication_role = replica;
+UPDATE arena.trader_stats SET as_of = now() - interval '1 hour';
+UPDATE arena.trader_stats SET evidence_metrics = ARRAY['sharpe'] WHERE trader_id = 101 AND timeframe = 90;
+UPDATE arena.trader_stats
+   SET evidence_raw_object_id = NULL, evidence_source_run_id = NULL, evidence_metrics = NULL
+ WHERE trader_id IN (103, 104) AND timeframe = 90;
+SET session_replication_role = origin;
+SQL
+
+echo "profile-acquisition-evidence.pg17: reader @4 ok"
 
 # ---------------------------------------------------------------------------
 # Writer: the exact publishProfile statement.

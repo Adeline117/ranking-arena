@@ -282,6 +282,40 @@ describe('registry-closed source-window freshness', () => {
     expect(result[0]?.issues.filter((issue) => issue.reason === 'not_visible')).toHaveLength(3)
   })
 
+  it('treats a window sealed with zero rows as published, not as missing', () => {
+    // The 90D window was sealed but none of its rows is publishable.
+    const sealed = watermarks().map((row) =>
+      row.season_id === '90D' ? { ...row, published_rank_count: 0 } : row
+    )
+    const result = buildRegistrySourceFreshnessStatuses(
+      expectedWindows,
+      visibleWindows.slice(0, 2),
+      sealed,
+      NOW
+    )
+
+    expect(result[0]).toMatchObject({ source: 'binance_futures', record_count: 190, issues: [] })
+    // The oldest watermark (90D, three hours ago) is still what the source reports.
+    expect(result[0]?.updated_at).toBe(new Date(NOW - 3 * 60 * 60 * 1000).toISOString())
+  })
+
+  it('still reports a non-visible window whose seal recorded rows', () => {
+    const sealed = watermarks().map((row) =>
+      row.season_id === '90D' ? { ...row, published_rank_count: 80 } : row
+    )
+    const result = buildRegistrySourceFreshnessStatuses(
+      expectedWindows,
+      visibleWindows.slice(0, 2),
+      sealed,
+      NOW
+    )
+
+    expect(result[0]?.issues).toEqual([
+      { season_id: '90D', reason: 'not_visible', registry_slug: 'binance_futures' },
+    ])
+    expect(result[0]?.updated_at).toBeNull()
+  })
+
   it('rejects empty, conflicting, extra, duplicate, or inconsistent authorities', () => {
     expect(() => buildRegistrySourceFreshnessStatuses([], [], [], NOW)).toThrow(
       'returned no windows'

@@ -1,0 +1,60 @@
+{
+  "code": 200,
+  "data": {
+    "totalNum": 515,
+    "itemList": [
+      {
+        "no": 1,
+        "userSign": "NDMxMjY2NDQ",
+        "uid": 431266449,
+        "nickName": "358****@qq.com",
+        "imgUrl": "https://download.hbfile.net/hbg/img/202507111806/c3f9ae8e380948c79e95f87e9f9ea64e/4614a1a930c4026f3b7d0775cc667e2e.png",
+        "copyUserNum": 0,
+        "fullUserNum": 100,
+        "full": 0,
+        "copyProfit": "0.00",
+        "winRate": "1.0000",
+        "profitList": ["0.5280", "0.5280", "0.5280", "0.5280", "0.5280"],
+        "profitRate90": "79.0212",
+        "profit90": "42.58",
+        "aum": "17.88",
+        "mdd": "0.0529"
+      },
+      {
+        "no": 2,
+        "userSign": "NDQ4MjUwNjY",
+        "uid": 448250669,
+        "nickName": "神仙姐姐141319",
+        "imgUrl": "https://d1x7dwosqaosdj.cloudfront.net/images/2024-12/5f3e0464629446ecb182201d46140551.jpeg",
+        "copyUserNum": 203,
+        "fullUserNum": 1000,
+        "full": 0,
+        "copyProfit": "9099.16",
+        "winRate": "0.7439",
+        "profitList": ["4.1706", "4.1508", "4.1445", "4.1426", "4.1402"],
+        "profitRate90": "39.5420",
+        "profit90": "1028.43",
+        "aum": "1826.99",
+        "mdd": "0.6630"
+      },
+      {
+        "no": 3,
+        "userSign": "NTUyMDUyOTE",
+        "uid": 552052916,
+        "nickName": "20000U来玩复利",
+        "imgUrl": "https://d1x7dwosqaosdj.cloudfront.net/images/2026-11-07/24eda91e-6582-4cac-ae02-c48cfe34fced.jpeg",
+        "copyUserNum": 206,
+        "fullUserNum": 1000,
+        "full": 0,
+        "copyProfit": "16653.21",
+        "winRate": "0.9322",
+        "profitList": ["2.3693", "2.1729", "2.1306", "2.0934", "2.0441"],
+        "profitRate90": "13.6359",
+        "profit90": "25279.77",
+        "aum": "15429.63",
+        "mdd": "0.4830"
+      }
+    ]
+  },
+  "success": true
+}

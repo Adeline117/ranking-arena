@@ -18,7 +18,9 @@ import {
   TIER_A_EXECUTION_ENFORCEMENT_MARKER_RPC_SHA256,
   TIER_A_EXECUTION_GET_RECEIPT_RPC_SHA256,
   TIER_A_EXECUTION_HEARTBEAT_RPC_SHA256,
+  TIER_A_EXECUTION_RECORD_RECEIPT_RPC_PRE_EXHAUSTION_SHA256,
   TIER_A_EXECUTION_RECORD_RECEIPT_RPC_SHA256,
+  TIER_A_EXECUTION_RECORD_RECEIPT_RPC_SHA256S,
   TIER_A_EXECUTION_TRIGGER_CATALOG_SHA256,
   TIER_A_ONE_PHASE_COMMIT_HELPER_SHA256,
   assertPartitionedV4WorkerReadiness,
@@ -234,6 +236,26 @@ describe('partitioned V4 worker startup readiness', () => {
       ).toThrow('acquisition RPC contract is not exact')
     }
 
+    // Either receipt body passes (worker deploy and 20261118161307 may come in
+    // either order); nothing else does.
+    for (const digest of [
+      TIER_A_EXECUTION_RECORD_RECEIPT_RPC_PRE_EXHAUSTION_SHA256,
+      TIER_A_EXECUTION_RECORD_RECEIPT_RPC_SHA256,
+    ]) {
+      expect(() =>
+        validatePartitionedV4WorkerReadiness(
+          readyPayload({ rpc: { ...rpcRow(), execution_record_receipt_rpc_sha256: digest } })
+        )
+      ).not.toThrow()
+    }
+    for (const digest of [null, 42, TIER_A_EXECUTION_GET_RECEIPT_RPC_SHA256.toUpperCase()]) {
+      expect(() =>
+        validatePartitionedV4WorkerReadiness(
+          readyPayload({ rpc: { ...rpcRow(), execution_record_receipt_rpc_sha256: digest } })
+        )
+      ).toThrow('acquisition RPC contract is not exact')
+    }
+
     for (const rpc of [
       { ...rpcRow(), claimed_start_rpc_sha256: null },
       { ...rpcRow(), claimed_runtime_contract_exact: false },
@@ -382,7 +404,10 @@ describe('partitioned V4 worker startup readiness', () => {
     expect(queries[5]).toContain("'anon', function_row.oid")
     expect(queries[5]).toContain("'authenticated', function_row.oid")
     expect(queries[5]).toContain(PARTITIONED_V4_CLAIMED_START_RPC_SHA256)
-    expect(queries[5]).toContain(TIER_A_EXECUTION_RECORD_RECEIPT_RPC_SHA256)
+    expect(queries[5]).toContain(
+      `ARRAY['${TIER_A_EXECUTION_RECORD_RECEIPT_RPC_PRE_EXHAUSTION_SHA256}', '${TIER_A_EXECUTION_RECORD_RECEIPT_RPC_SHA256}']::pg_catalog.text[]`
+    )
+    expect(queries[5]).toContain('= ANY (expected.expected_sha256s)')
     expect(queries).not.toContain(
       'SELECT arena.tier_a_execution_claim_enforcement_state() AS enforcement_state'
     )
@@ -547,6 +572,13 @@ describe('partitioned V4 worker startup readiness', () => {
       ),
       'utf8'
     )
+    const receiptExhaustionMigration = readFileSync(
+      join(
+        process.cwd(),
+        'supabase/migrations/20261118161307_tier_a_window_receipt_exhaustion_branch.sql'
+      ),
+      'utf8'
+    )
     const onePhaseMigration = readFileSync(
       join(process.cwd(), 'supabase/migrations/20260729071500_tier_a_one_phase_commit_guard.sql'),
       'utf8'
@@ -603,7 +635,14 @@ describe('partitioned V4 worker startup readiness', () => {
     )
     expect(
       sha256(directBody(executionClaimMigration, 'record_tier_a_execution_window_receipt'))
+    ).toBe(TIER_A_EXECUTION_RECORD_RECEIPT_RPC_PRE_EXHAUSTION_SHA256)
+    expect(
+      sha256(directBody(receiptExhaustionMigration, 'record_tier_a_execution_window_receipt'))
     ).toBe(TIER_A_EXECUTION_RECORD_RECEIPT_RPC_SHA256)
+    expect(TIER_A_EXECUTION_RECORD_RECEIPT_RPC_SHA256S).toEqual([
+      TIER_A_EXECUTION_RECORD_RECEIPT_RPC_PRE_EXHAUSTION_SHA256,
+      TIER_A_EXECUTION_RECORD_RECEIPT_RPC_SHA256,
+    ])
     expect(sha256(directBody(executionClaimMigration, 'get_tier_a_execution_window_receipt'))).toBe(
       TIER_A_EXECUTION_GET_RECEIPT_RPC_SHA256
     )

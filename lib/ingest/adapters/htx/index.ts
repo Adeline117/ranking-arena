@@ -3,11 +3,13 @@
  * ONE adapter serves both arena.sources rows via src.meta.boardKey
  * ('futures' | 'spot') — endpoint paths and payload shapes are identical.
  *
- * Board URLs: futures.htx.com/en-us/copytrading/{futures|spot}
+ * Board URLs: www.htx.com/en-us/copytrading/{futures|spot}
+ *   (futures.htx.com/en-us/copytrading/* 301-redirects there as of 2026-11)
  * Profile URL: /en-us/copytrading/{board}/trader/{userSign}
  *
  * Endpoints (verified by live capture 2026-06-11; overridable per-source via
- * src.meta.endpoints), base futures.htx.com/-/x/hbg/v1/{board}/copytrading:
+ * src.meta.endpoints), base {origin}/-/x/hbg/v1/{board}/copytrading where
+ * {origin} is the origin the board page actually landed on (see warmSession):
  *   list:      GET rank?rankType=1&pageNo=N&pageSize≤50  (totalNum reported;
  *              rankType 1 = PnL(%) sort = FULL population; the "All Traders"
  *              default chip rankType=0 is a curated subset)
@@ -57,8 +59,11 @@ function boardKey(src: SourceRow): string {
   return typeof src.meta.boardKey === 'string' ? src.meta.boardKey : 'futures'
 }
 
-function apiBase(src: SourceRow): string {
-  return `https://futures.htx.com/-/x/hbg/v1/${boardKey(src)}/copytrading`
+/** Served copy-trading origin (2026-11-18 live probe). */
+const DEFAULT_ORIGIN = 'https://www.htx.com'
+
+function apiBase(src: SourceRow, origin: string): string {
+  return `${origin}/-/x/hbg/v1/${boardKey(src)}/copytrading`
 }
 
 function endpoint(src: SourceRow, key: string, fallback: string): string {
@@ -73,19 +78,44 @@ function userSign(exchangeTraderId: string, traderMeta?: Record<string, unknown>
   return typeof sign === 'string' && sign.length > 0 ? sign : exchangeTraderId
 }
 
-const warmedSessions = new WeakSet<FetchSession>()
+/** Session → origin its parked page landed on (warm-once guard). */
+const warmedSessions = new WeakMap<FetchSession, string>()
 
-/** One page load establishes cookies; everything after is same-origin JSON
- *  replay (spec §2.2). Bundled Chromium headless accepted (verified). */
-async function warmSession(session: FetchSession, src: SourceRow): Promise<void> {
-  if (warmedSessions.has(session)) return
+/** HTX host the page settled on, or the served default when the page is
+ *  off-site (about:blank, an interstitial on another domain, …). */
+export function htxLandedOrigin(landedUrl: string): string {
+  try {
+    const url = new URL(landedUrl)
+    if (url.protocol === 'https:' && /(^|\.)htx\.com$/.test(url.hostname)) return url.origin
+  } catch {
+    // unparseable URL — fall through to the served default
+  }
+  return DEFAULT_ORIGIN
+}
+
+/**
+ * One page load establishes cookies; everything after is same-origin JSON
+ * replay (spec §2.2). Bundled Chromium headless accepted (verified).
+ *
+ * The replay origin MUST be the origin the page landed on, not the one we
+ * asked for: futures.htx.com/en-us/copytrading/* now 301s to www.htx.com,
+ * and futures.htx.com's API answers a www.htx.com Origin with two
+ * Access-Control-Allow-Origin values ("https://www.htx.com" and "*"), which
+ * Chromium rejects — every in-page fetch threw "TypeError: Failed to fetch"
+ * and Tier-A captured 0 pages (2026-11-18). Both hosts serve the same API.
+ */
+async function warmSession(session: FetchSession, src: SourceRow): Promise<string> {
+  const warmed = warmedSessions.get(session)
+  if (warmed) return warmed
   const page = await session.page()
-  const url = src.leaderboard_url ?? `https://futures.htx.com/en-us/copytrading/${boardKey(src)}`
+  const url = src.leaderboard_url ?? `${DEFAULT_ORIGIN}/en-us/copytrading/${boardKey(src)}`
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 })
   await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {
     // networkidle is best-effort — a busy page still yields valid cookies
   })
-  warmedSessions.add(session)
+  const origin = htxLandedOrigin(page.url())
+  warmedSessions.set(session, origin)
+  return origin
 }
 
 /** Upstream page meta: rows counted before parser validation; board population as reported. */
@@ -111,10 +141,10 @@ const htxAdapter: SourceAdapter = {
    *  only labels the snapshot — the rank endpoint has no TF param. */
   async captureLeaderboard(session, src, timeframe, options) {
     options?.signal?.throwIfAborted()
-    await warmSession(session, src)
+    const origin = await warmSession(session, src)
     const fetcher = pageFetcher(session)
     options?.signal?.throwIfAborted()
-    const listUrl = endpoint(src, 'list', `${apiBase(src)}/rank`)
+    const listUrl = endpoint(src, 'list', `${apiBase(src, origin)}/rank`)
     const pageSize = src.page_size ?? 50 // server cap: 50 (100 → HTTP 500)
     const rankType = Number(src.meta.list_rank_type) || 1
     return captureReplayLeaderboard(
@@ -153,12 +183,12 @@ const htxAdapter: SourceAdapter = {
     timeframe: Timeframe,
     traderMeta?: Record<string, unknown> | null
   ): Promise<RawBundle> {
-    await warmSession(session, src)
+    const origin = await warmSession(session, src)
     const fetcher = pageFetcher(session)
     const tf = (timeframe === 0 ? 90 : timeframe) as RankingTimeframe
     const period = PERIOD[tf]
     const sign = encodeURIComponent(userSign(exchangeTraderId, traderMeta))
-    const base = `${apiBase(src)}/trader-info`
+    const base = `${apiBase(src, origin)}/trader-info`
     const get = (url: string) =>
       replayJson(session, fetcher, { url, method: 'GET', headers: HEADERS })
 
@@ -195,8 +225,8 @@ const htxAdapter: SourceAdapter = {
     exchangeTraderId: string,
     traderMeta?: Record<string, unknown> | null
   ): Promise<RawBundle> {
-    await warmSession(session, src)
-    const url = endpoint(src, 'positions', `${apiBase(src)}/trader-info/current-positions`)
+    const origin = await warmSession(session, src)
+    const url = endpoint(src, 'positions', `${apiBase(src, origin)}/trader-info/current-positions`)
     const payload = await replayJson(session, pageFetcher(session), {
       url: `${url}?userSign=${encodeURIComponent(userSign(exchangeTraderId, traderMeta))}`,
       method: 'GET',
@@ -222,11 +252,15 @@ const htxAdapter: SourceAdapter = {
     if (kind !== 'position_history') {
       throw new Error(`[htx] history surface ${kind} not supported`)
     }
-    await warmSession(session, src)
+    const origin = await warmSession(session, src)
     const fetcher = pageFetcher(session)
     const ctx = dummyCtx(src)
     const sign = encodeURIComponent(userSign(exchangeTraderId, traderMeta))
-    const url = endpoint(src, 'positionHistory', `${apiBase(src)}/trader-info/history-positions`)
+    const url = endpoint(
+      src,
+      'positionHistory',
+      `${apiBase(src, origin)}/trader-info/history-positions`
+    )
     const limit = 10
     const maxPages = Number(src.meta.history_max_pages) || 20
 

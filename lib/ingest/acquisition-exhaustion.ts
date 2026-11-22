@@ -17,7 +17,10 @@
  *    above the declared allowance, and distinct keys = accepted population with
  *    zero rejected rows;
  *  - board stability: every page carries the same version token, or page one
- *    re-read after the last page yields identical row keys.
+ *    re-read after the last page yields identical row keys; or, for a live
+ *    board that keeps moving while it is paged, bounded drift: the total each
+ *    page reports, the distinct rows against the last reported total, and the
+ *    duplicate rows each stay within the declared share of the board.
  *
  * The declaration is the per-source capture contract. The database holds the
  * reviewed copy (arena.leaderboard_exhaustion_contracts) and re-checks the same
@@ -32,6 +35,9 @@ export const LEADERBOARD_EXHAUSTION_COMPLETENESS_CONTRACT =
   'arena.ingest.leaderboard-exhaustion-completeness@1' as const
 
 const SHA256 = /^[0-9a-f]{64}$/
+
+/** A live-board contract may tolerate at most 1% of the board moving. */
+export const MAX_REPORTED_TOTAL_DRIFT_BPS = 100
 
 const sha256Schema = z
   .string()
@@ -82,6 +88,33 @@ export const leaderboardExhaustionBoardVersionSchema = z.discriminatedUnion('kin
   z.object({ kind: z.literal('token'), path: payloadPathSchema }).strict(),
   /** No token: page one is re-read after the last page and must yield identical row keys. */
   z.object({ kind: z.literal('first_page_reread') }).strict(),
+  /**
+   * A live board: members and ranks change while it is paged, so no snapshot
+   * can be frozen. Every page reports the board total at `path`; the proof
+   * bounds how far the board moved during the capture instead of denying it.
+   */
+  z
+    .object({
+      kind: z.literal('reported_total_drift'),
+      path: payloadPathSchema,
+      /**
+       * The allowance in basis points of the last reported total (100 = 1%,
+       * the most a contract may declare). Relative, because a registered
+       * declaration is immutable while the board keeps growing; the
+       * declaration's max_duplicate_rows caps it in absolute rows.
+       */
+      max_drift_bps: z
+        .number()
+        .refine(
+          (value) =>
+            Number.isSafeInteger(value) &&
+            !Object.is(value, -0) &&
+            value >= 0 &&
+            value <= MAX_REPORTED_TOTAL_DRIFT_BPS,
+          'must be an integer between 0 and 100 basis points'
+        ),
+    })
+    .strict(),
 ])
 
 /** The per-source capture contract for exhausted completeness (reviewed, DB-registered). */
@@ -148,6 +181,19 @@ export const leaderboardExhaustionCompletenessSchema = z
           kind: z.literal('first_page_reread'),
           /** null when the re-read request failed: stability is then unproven. */
           reread: rereadSchema.nullable(),
+        })
+        .strict(),
+      z
+        .object({
+          kind: z.literal('reported_total_drift'),
+          /** The board total each page reported: smallest, largest, and the last page's. */
+          reported_totals: z
+            .object({
+              min: safeNonNegativeIntegerSchema,
+              max: safeNonNegativeIntegerSchema,
+              last: safeNonNegativeIntegerSchema,
+            })
+            .strict(),
         })
         .strict(),
     ]),
@@ -270,6 +316,22 @@ function boardVersionHolds(completeness: LeaderboardExhaustionCompleteness): boo
   if (completeness.board_version.kind === 'token') {
     const token = pages[0].version_token_sha256
     return token !== null && pages.every((page) => page.version_token_sha256 === token)
+  }
+  if (completeness.board_version.kind === 'reported_total_drift') {
+    const declared = completeness.declaration.board_version
+    if (declared.kind !== 'reported_total_drift') return false
+    const totals = completeness.board_version.reported_totals
+    const allowance = Math.min(
+      Math.floor((totals.last * declared.max_drift_bps) / 10_000),
+      completeness.declaration.max_duplicate_rows
+    )
+    return (
+      totals.min <= totals.last &&
+      totals.last <= totals.max &&
+      totals.max - totals.min <= allowance &&
+      Math.abs(totals.last - completeness.row_keys.distinct) <= allowance &&
+      completeness.row_keys.duplicate <= allowance
+    )
   }
   const reread = completeness.board_version.reread
   return (
