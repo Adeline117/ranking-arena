@@ -25,6 +25,13 @@ export interface ServingResolved {
   nickname: string | null
   avatarMirrorUrl: string | null
   avatarOriginUrl: string | null
+  /**
+   * The source's name in the public ranking: COALESCE(meta.legacy_platform,
+   * slug), as reported by the resolver itself. Null while the deployed resolver
+   * does not yet return it — callers then fall back to the name the request
+   * used (which the resolver accepted as slug or alias).
+   */
+  publicSource: string | null
 }
 
 /**
@@ -84,6 +91,7 @@ export async function resolveServingTraderOutcome(
       nickname: typeof d.nickname === 'string' ? d.nickname : null,
       avatarMirrorUrl: typeof d.avatarMirrorUrl === 'string' ? d.avatarMirrorUrl : null,
       avatarOriginUrl: typeof d.avatarOriginUrl === 'string' ? d.avatarOriginUrl : null,
+      publicSource: typeof d.publicSource === 'string' && d.publicSource ? d.publicSource : null,
     }
   }
   logger.error('[resolveServingTrader] all attempts errored (NOT treated as not-found):', {

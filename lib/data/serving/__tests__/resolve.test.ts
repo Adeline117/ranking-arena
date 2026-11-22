@@ -29,7 +29,26 @@ describe('resolveServingTrader fetch region contract', () => {
     ).resolves.toEqual({
       ...base,
       fetchRegion: 'vps_sg',
+      publicSource: null,
     })
+  })
+
+  it('passes through the public source name when the resolver reports one', async () => {
+    const resolved = await resolveServingTrader(
+      client({ ...base, source: 'blofin_futures', fetchRegion: 'vps_sg', publicSource: 'blofin' }),
+      { handle: 'trader-42', source: 'blofin_futures' }
+    )
+    expect(resolved).toMatchObject({ source: 'blofin_futures', publicSource: 'blofin' })
+  })
+
+  it('treats a missing or malformed public source name as unknown', async () => {
+    for (const publicSource of [undefined, '', 7, null]) {
+      const resolved = await resolveServingTrader(
+        client({ ...base, fetchRegion: 'vps_sg', publicSource }),
+        { handle: 'trader-42' }
+      )
+      expect(resolved?.publicSource).toBeNull()
+    }
   })
 
   it('preserves warm identity but disables Tier-C routing for an invalid region', async () => {
@@ -40,6 +59,7 @@ describe('resolveServingTrader fetch region contract', () => {
     ).resolves.toEqual({
       ...base,
       fetchRegion: null,
+      publicSource: null,
     })
   })
 })

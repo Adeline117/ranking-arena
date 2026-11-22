@@ -36,6 +36,8 @@ export interface LegacyIdentity {
 export interface ServingIdentity {
   source: string
   exchangeTraderId: string
+  /** The resolver's own answer for the public name, when it reports one. */
+  publicSource?: string | null
 }
 
 export interface ProfileIdentityDeps<Serving extends ServingIdentity> {
@@ -115,7 +117,10 @@ export async function resolveProfileIdentity<Serving extends ServingIdentity>(
   let publicSource: string | null = null
   if (serving) {
     publicSource = serving.source
-    if (matchedHint && matchedHint !== serving.source) {
+    if (serving.publicSource) {
+      // The resolver reports the public name directly: nothing to infer.
+      publicSource = serving.publicSource
+    } else if (matchedHint && matchedHint !== serving.source) {
       publicSource = matchedHint
     } else if (
       // Matched by the slug itself (?platform=<slug>): ask the resolver whether

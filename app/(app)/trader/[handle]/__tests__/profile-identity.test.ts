@@ -7,7 +7,7 @@ import {
   type Unavailable,
 } from '../profile-identity'
 
-type Serving = { source: string; exchangeTraderId: string }
+type Serving = { source: string; exchangeTraderId: string; publicSource?: string | null }
 type LegacyAnswer = LegacyIdentity | null | Unavailable
 type ServingAnswer = Serving | null | Unavailable
 
@@ -185,6 +185,14 @@ describe('publicSource (the name the public ranking uses)', () => {
     )
     const identity = await resolveProfileIdentity(d, '585', 'blofin_futures')
     expect(identity.publicSource).toBe('blofin_futures')
+  })
+
+  it('takes the resolver-reported public name over any inference', async () => {
+    // Requested by slug, no legacy row at all: only the resolver knows the alias.
+    const d = deps({}, { blofin_futures: { ...blofin, publicSource: 'blofin' } })
+    const identity = await resolveProfileIdentity(d, '585', 'blofin_futures')
+    expect(identity.publicSource).toBe('blofin')
+    expect(d.servingCalls).toEqual(['blofin_futures'])
   })
 
   it('is the slug for a source with no alias', async () => {
