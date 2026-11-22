@@ -6,11 +6,23 @@
  * (/copy-trading/cfd-trader/{portfolioId}, 表现 block with a 7/30/90/180-day
  * selector) reads POST /v1/trace/mt5/public/performance {portfolioId,
  * cycleTime}: one request returns one window, so three windows are three
- * requests. Public probe 2026-11-20 (30+ traders, 7/30/90):
+ * requests. Public probes 2026-11-20/21 (40+ traders, 7/30/90):
  *   - maxDrawDown: decimal fraction text with four places; "0.2456" is the
- *     24.56 % the page shows as 最大回撤. It is the exchange's own per-window
- *     figure and is not nested across windows (a 37-day-old portfolio reports
- *     7D 0, 30D 0.2456, 90D 0.0507), so it is stored per window as reported.
+ *     24.56 % the page shows as 最大回撤 for the selected window.
+ *     Window check (12 portfolios x 7/30/90, with details.tradingDays): the
+ *     value changes with cycleTime whenever the portfolio is older than the
+ *     shorter window (40 days old: 0.0284 / 0.1986 / 0.6325); 30D equals 90D
+ *     only for portfolios younger than 30 days, where every other field of
+ *     the two responses is identical too. The response does not echo the
+ *     window; the 30D response's roi and profit equal the 30D board row in
+ *     12 of 12, which ties the response to the requested window. An
+ *     unsupported cycleTime (15) is answered with the 30-day block; only
+ *     7/30/90 are requested.
+ *     It is the exchange's own per-window figure, not a nested peak-to-trough
+ *     series: a longer window can report a smaller value (54 days old: 30D
+ *     0.5582, 90D 0.2930) and a value can exceed 1 (1.3254). It is stored per
+ *     window as reported; staging nulls a drawdown above 100 %, which is then
+ *     not attested.
  *   - winRate: decimal fraction (0.6702 = the board's winning_rate 67.02).
  *   - roi (already percent) and profit equal the board's profit_rate and
  *     total_profit of the same window.

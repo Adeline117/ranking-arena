@@ -279,6 +279,21 @@ describe('bitget_cfd profile capture contract', () => {
     expect(result.attestedMetrics).toEqual(['mdd', 'pnl', 'roi', 'total_positions'])
   })
 
+  it('does not attest a drawdown above 100 % (staging nulls it)', async () => {
+    // Recorded 2026-11-21: a 90D response reported maxDrawDown "1.3254".
+    const served = cfd(90)
+    const data = (served.performance as { data: Json }).data
+    const { pages } = await capture(90, {
+      ...served,
+      performance: { ...served.performance, data: { ...data, maxDrawDown: '1.3254' } },
+    })
+    const result = run(pages, 90)
+    expect(result.terminalState).toBe('complete')
+    expect(result.parsed?.mdd).toBeCloseTo(132.54, 9)
+    expect(result.stored?.mdd).toBeNull()
+    expect(result.attestedMetrics).toEqual(['pnl', 'roi', 'total_positions', 'win_rate'])
+  })
+
   it('an incomplete capture attests nothing', () => {
     expect([run([]).terminalState, run([]).reasonCode]).toEqual(['partial', 'endpoint_missing'])
   })
