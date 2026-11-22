@@ -253,6 +253,152 @@ describe('exhausted completeness capture', () => {
     })
   })
 
+  describe('reported_total_drift (a live board that moves while it is paged)', () => {
+    // 1% of the last reported total, never more than 3 rows.
+    const live: LeaderboardExhaustionDeclaration = {
+      ...flagDeclaration,
+      end_signal: { kind: 'short_page' },
+      board_version: { kind: 'reported_total_drift', path: ['data', 'total'], max_drift_bps: 100 },
+      max_duplicate_rows: 3,
+    }
+    /** A board of `total` rows read two per page; `at(page)` overrides one page. */
+    const board = (
+      total: number,
+      at: (pageNumber: number) => PageSpec | null = () => null
+    ): Answer[] =>
+      Array.from({ length: Math.ceil((total + 1) / PAGE_SIZE) }, (_, index) => {
+        const uids = [index * 2 + 1, index * 2 + 2].filter((uid) => uid <= total)
+        return ok(at(index + 1) ?? { uids, total })
+      })
+
+    it('binds a quiet capture and records the totals it saw', async () => {
+      const { capture, requests } = await run(board(201), live)
+      // No re-read, and the total is drift evidence, not a population claim.
+      expect(requests).toHaveLength(101)
+      expect(capture.terminationReason).toBe('short_page')
+      expect(capture.sourcePages[0].sourceReports.population).toEqual({ state: 'not_reported' })
+      expect(capture.completeness?.board_version).toEqual({
+        kind: 'reported_total_drift',
+        reported_totals: { min: 201, max: 201, last: 201 },
+      })
+      expect(evidence(capture, live).trustBound).toBe(true)
+    })
+
+    it('binds a trader crossing the cursor: one duplicate, one missing, inside 1%', async () => {
+      // Row 2 moved down past the cursor: seen again on page 2 while row 3 slid up unseen.
+      const { capture } = await run(
+        board(201, (pageNumber) => (pageNumber === 2 ? { uids: [2, 4], total: 201 } : null)),
+        live
+      )
+      expect(capture.completeness?.row_keys).toEqual({ observed: 201, distinct: 200, duplicate: 1 })
+      expect(evidence(capture, live).trustBound).toBe(true)
+    })
+
+    it('reads past the first reported total to the real end of the board', async () => {
+      // The board had 199 rows when page 1 was read; a total-mode capture would stop there.
+      const { capture, requests } = await run(
+        board(201, (pageNumber) => (pageNumber === 1 ? { uids: [1, 2], total: 199 } : null)),
+        live
+      )
+      expect(requests).toHaveLength(101)
+      expect(capture.completeness?.board_version).toEqual({
+        kind: 'reported_total_drift',
+        reported_totals: { min: 199, max: 201, last: 201 },
+      })
+      expect(evidence(capture, live).trustBound).toBe(true)
+    })
+
+    it('ends on the empty page when the board is a whole number of pages', async () => {
+      const { capture } = await run(
+        board(200, (pageNumber) => (pageNumber === 101 ? { uids: [], total: 0 } : null)),
+        live
+      )
+      expect(capture.terminationReason).toBe('empty_page')
+      // The empty page's total is not evidence about the board.
+      expect(capture.completeness?.board_version).toEqual({
+        kind: 'reported_total_drift',
+        reported_totals: { min: 200, max: 200, last: 200 },
+      })
+      expect(evidence(capture, live).trustBound).toBe(true)
+    })
+
+    it.each([
+      [
+        'more duplicates than 1% of the board',
+        board(201, (pageNumber) =>
+          pageNumber === 2 || pageNumber === 3 ? { uids: [1, 2], total: 201 } : null
+        ),
+      ],
+      [
+        'the reported total moving by more than 1%',
+        board(201, (pageNumber) => (pageNumber === 1 ? { uids: [1, 2], total: 198 } : null)),
+      ],
+      [
+        'more rows missing against the last total than 1%',
+        board(201, (pageNumber) => (pageNumber === 101 ? { uids: [201], total: 204 } : null)),
+      ],
+      [
+        'any duplicate on a board too small for 1% to be a row',
+        [
+          ok({ uids: ['a', 'b'], total: 5 }),
+          ok({ uids: ['b', 'd'], total: 5 }),
+          ok({ uids: ['e'], total: 5 }),
+        ],
+      ],
+    ])('does not verify %s', async (_label, answers) => {
+      const { capture } = await run(answers, live)
+      expect(capture.terminationReason).toBe('short_page')
+      expect(evidence(capture, live).trustBound).toBe(false)
+    })
+
+    it('caps the allowance at max_duplicate_rows however large the board is', async () => {
+      // 1% of 801 is 8 rows, but the contract never tolerates more than 3.
+      const moved = (pageNumber: number) =>
+        pageNumber >= 2 && pageNumber <= 3 ? { uids: [1, 2], total: 801 } : null
+      const { capture } = await run(board(801, moved), live)
+      expect(capture.completeness?.row_keys.duplicate).toBe(4)
+      expect(evidence(capture, live).trustBound).toBe(false)
+      const roomier = { ...live, max_duplicate_rows: 8 }
+      expect(evidence((await run(board(801, moved), roomier)).capture, roomier).trustBound).toBe(
+        true
+      )
+    })
+
+    it('reads a total reported as a canonical decimal string', async () => {
+      const asString = (answer: Answer): Answer => {
+        const json = answer.json as { data: { total: number | string } }
+        return {
+          ...answer,
+          json: { ...json, data: { ...json.data, total: String(json.data.total) } },
+        }
+      }
+      const { capture } = await run(board(201).map(asString), live)
+      expect(capture.completeness?.board_version).toEqual({
+        kind: 'reported_total_drift',
+        reported_totals: { min: 201, max: 201, last: 201 },
+      })
+      expect(evidence(capture, live).trustBound).toBe(true)
+
+      const padded = board(201).map(asString)
+      ;(padded[0].json as { data: { total: string } }).data.total = '0201'
+      await expect(run(padded, live)).rejects.toBeInstanceOf(LeaderboardCaptureUpstreamError)
+    })
+
+    it('fails the page when a page with rows reports no total', async () => {
+      await expect(run([ok({ uids: ['a', 'b'] })], live)).rejects.toBeInstanceOf(
+        LeaderboardCaptureUpstreamError
+      )
+    })
+
+    it('refuses a contract that declares more than 1%', async () => {
+      const greedy = {
+        ...live,
+        board_version: { ...live.board_version, max_drift_bps: 101 },
+      } as LeaderboardExhaustionDeclaration
+      await expect(run(board(201), greedy)).rejects.toThrow('basis points')
+    })
+  })
+
   it('binds a page-count board that stops exactly at the reported page count', async () => {
     const pageCount: LeaderboardExhaustionDeclaration = {
       ...flagDeclaration,

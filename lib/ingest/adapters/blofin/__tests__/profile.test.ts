@@ -50,6 +50,29 @@ describe('parseBlofinProfile', () => {
     expect(s.pnl).toBeGreaterThan(100000) // real_pnl money, not scaled
   })
 
+  it("does not take a zero-trade period's carried-over drawdown as the period drawdown", () => {
+    const withIndicators = (over: Record<string, unknown>) => {
+      const base = payload as { indicators: { data: Record<string, unknown> } }
+      return {
+        ...base,
+        indicators: { ...base.indicators, data: { ...base.indicators.data, ...over } },
+      }
+    }
+    const idle = parseBlofinProfile(withIndicators({ trades: 0, winning_trades: 0 }), ctx).stats[0]
+    expect(idle.mdd).toBeNull()
+    expect(idle.extras.carried_mdd).toBeCloseTo(69.08, 1)
+
+    const idleZero = parseBlofinProfile(
+      withIndicators({ trades: 0, winning_trades: 0, max_drawdown: '0' }),
+      ctx
+    ).stats[0]
+    expect(idleZero.mdd).toBe(0)
+    expect(idleZero.extras.carried_mdd).toBeUndefined()
+
+    // A period with trades keeps its drawdown (asserted above: 69.08).
+    expect(parseBlofinProfile(payload, ctx).stats[0].extras.carried_mdd).toBeUndefined()
+  })
+
   it('maps per-symbol performance into trading preferences', () => {
     const s = parseBlofinProfile(payload, ctx).stats[0]
     const prefs = s.tradingPreferences as { assets?: Array<Record<string, unknown>> } | null

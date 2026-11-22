@@ -43,6 +43,9 @@ try {
       }
     }),
     scoreCohort: createDefaultCohortScorer(),
+    // The fixture declares three sources; the production floor
+    // (RANK_PUBLICATION_MIN_EXPECTED_SOURCES) has its own unit tests.
+    minExpectedSources: 1,
   })
   process.stdout.write(`RESULT ${JSON.stringify({ ok: true, result, alerts })}\n`)
 } catch (error) {

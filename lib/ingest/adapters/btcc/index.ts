@@ -9,10 +9,19 @@
  * APIRequestContext JSON replay (spec §2.2).
  *
  * Endpoints (base www.btcc.com/documentary):
- *   list:      POST trader/page {nickName:'',sortType:1,pageNum,pageSize}
+ *   list:      POST trader/page {nickName:'',sortType:2,pageNum,pageSize}
  *              → {total, rows}. NATIVE 30d ONLY (rateProfit == the 30d
  *              profile window ROI; verified live). The 7/90 boards are
  *              SYNTHESIZED from profile stats (derive-boards, spec §1.1-C).
+ *              sortType 1 and 2 are the same board (totalNetProfit
+ *              descending; the 614 traders with a non-zero result come back
+ *              in the identical order), but 1 orders the traders tied at
+ *              zero differently on every request, so about 350 of 1,893 rows
+ *              repeated across pages and as many were never returned. 2
+ *              breaks those ties in a fixed order (probed 2026-11-18: three
+ *              full reads, 1,893 distinct rows each, identical sequences).
+ *              The server serves at most 20 rows per page whatever pageSize
+ *              asks for.
  *   profile:   GET  traderHomePage/info / profitInfo (identity + all-time)
  *              POST traderHomePage/gain / profit / tradeAmount / symbolRate
  *              {reportType: 7|30|90, traderId}  (UI labels 7D/1M/3M)
@@ -66,6 +75,9 @@ async function btccFetcher(session: FetchSession): Promise<JsonFetcher> {
   return apiFetcher(await session.api())
 }
 
+/** The board order with a fixed tie order (see the list endpoint note above). */
+const BTCC_BOARD_SORT_TYPE = 2
+
 /** Upstream page meta: rows counted before parser validation; board population as reported. */
 const btccLeaderboardMeta = collectionMeta({
   label: 'btcc',
@@ -105,7 +117,7 @@ const btccAdapter: SourceAdapter = {
           url: listUrl,
           method: 'POST',
           headers: HEADERS,
-          body: { nickName: '', sortType: 1, pageNum: pageIndex, pageSize },
+          body: { nickName: '', sortType: BTCC_BOARD_SORT_TYPE, pageNum: pageIndex, pageSize },
         }),
         publicRequest: { body: ['nickName', 'sortType', 'pageNum', 'pageSize'] },
         pageBinding: { location: 'body', path: ['pageNum'] },

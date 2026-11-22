@@ -137,16 +137,25 @@ export function parseBinanceLeaderboardPage(
         ...(headlinePnl === null ? {} : { pnl: { fieldPath: 'data.list[].pnl' } }),
         ...(headlineWinRate === null ? {} : { win_rate: { fieldPath: 'data.list[].winRate' } }),
       },
+      // The board row's mdd is the window's max drawdown, already a percent
+      // (31.457009 = 31.46%), on both boards. It is a real value, zeros
+      // included, not a placeholder: checked against production on 2026-11-21,
+      // a spot board mdd matched the profile within 0.01 for 374 of 487 traders
+      // (the rest drift with the time between the two reads), and every one of
+      // the 161 traders with a board mdd of 0 had 0 on the profile too.
+      // Staging nulls a value above 100 (futures reports up to ~320); the raw
+      // row keeps it.
+      headlineMdd: num(item.mdd),
       // The board carries aum as an absolute USD amount on every row — extract it
-      // (was raw-only, so AUM came only from the deep-profile tier). MDD/sharpe on
-      // the board are 0/null sentinels (real values are profile-only), so not lifted.
+      // (was raw-only, so AUM came only from the deep-profile tier). sharpRatio is
+      // null on the futures board and stays in raw.
       headlineAum: num(item.aum),
       // copierPnl is a REAL value on every board row (verified — fixture 2972.33),
       // was captured only for deep-crawled profiles (~17% fill). Lift it so all
       // binance traders get copier PnL (audit 2026-07-03).
       headlineCopierPnl: num(item.copierPnl),
-      // Board card extras (sharpRatio, mdd, sparkline chartItems,
-      // badge, aiSummary...) ride along verbatim in raw.
+      // Board card extras (sharpRatio, sparkline chartItems, badge,
+      // aiSummary...) ride along verbatim in raw.
       raw: item,
     })
   }

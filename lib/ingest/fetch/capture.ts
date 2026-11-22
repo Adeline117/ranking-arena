@@ -803,6 +803,8 @@ interface ExhaustionPageFacts {
   rowKeysSha256: string
   endSignalValue: string | number | boolean | null
   versionTokenSha256: string | null
+  /** The board total a page with rows reports; null unless board_version is reported_total_drift. */
+  reportedTotal: number | null
 }
 
 /** Read the declared exhaustion facts of one success page; any absence fails the page. */
@@ -854,11 +856,26 @@ function exhaustionPageFacts(
     }
     versionTokenSha256 = strictCanonicalSha256(token)
   }
+  let reportedTotal: number | null = null
+  // The empty page past the end of a board carries no rows and no usable total.
+  if (declaration.board_version.kind === 'reported_total_drift' && rowCount > 0) {
+    let total = exhaustionPayloadPath(payload, declaration.board_version.path)
+    // A total reported as a canonical decimal string (bybit totalCount "32614")
+    // is that integer; anything else is not a total.
+    if (typeof total === 'string' && /^(0|[1-9][0-9]{0,8})$/.test(total)) total = Number(total)
+    if (typeof total !== 'number' || !Number.isSafeInteger(total) || total < 0) {
+      throw new TypeError(
+        `[ingest] exhausted capture board total ${declaration.board_version.path.join('.')} must be a non-negative integer`
+      )
+    }
+    reportedTotal = total
+  }
   return {
     rowKeys,
     rowKeysSha256: strictCanonicalSha256(rowKeys),
     endSignalValue,
     versionTokenSha256,
+    reportedTotal,
   }
 }
 
@@ -911,6 +928,14 @@ export async function captureNumericLeaderboard(
       { kind: 'first_page_reread' }
     >['reread']
   > | null = null
+  const reportedTotals = () => {
+    // Every page with rows of a reported_total_drift capture carries a total.
+    const totals = exhaustionPages.flatMap((page) =>
+      page.reportedTotal === null ? [] : [page.reportedTotal]
+    )
+    if (totals.length === 0) return { min: 0, max: 0, last: 0 }
+    return { min: Math.min(...totals), max: Math.max(...totals), last: totals[totals.length - 1] }
+  }
   const completenessEvidence = (): LeaderboardExhaustionCompleteness | null => {
     if (exhaustion === null || exhaustionPages.length !== sourcePages.length) return null
     const keys = exhaustionPages.flatMap((page) => page.rowKeys)
@@ -931,7 +956,9 @@ export async function captureNumericLeaderboard(
       board_version:
         exhaustion.board_version.kind === 'token'
           ? { kind: 'token' }
-          : { kind: 'first_page_reread', reread },
+          : exhaustion.board_version.kind === 'first_page_reread'
+            ? { kind: 'first_page_reread', reread }
+            : { kind: 'reported_total_drift', reported_totals: reportedTotals() },
     }
   }
   const finish = (
@@ -1121,6 +1148,11 @@ export async function captureNumericLeaderboard(
       assertOptionalReport(meta.reportedCurrentPage, 'reported current page')
       assertOptionalReport(meta.reportedPageSize, 'reported page size')
       if (exhaustion !== null) {
+        // A live board's total is drift evidence (read at the declared path),
+        // never a population claim: the board is proven complete by exhaustion.
+        if (exhaustion.board_version.kind === 'reported_total_drift') {
+          meta.reportedPopulation = null
+        }
         if (meta.reportedPopulation !== null) {
           throw new TypeError(
             '[ingest] an exhausted capture must not report a population; use the total mode'

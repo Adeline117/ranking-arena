@@ -1590,12 +1590,15 @@ mv "$STAGING_DIR/.WORKER_RELEASE_ID.tmp" "$STAGING_DIR/WORKER_RELEASE_ID"
 mv "$STAGING_DIR/.ARENA_LOCAL_RELEASE.tmp" "$STAGING_DIR/.ARENA_LOCAL_RELEASE"
 
 echo '2/8 installing release-owned dependencies with Node 22'
-read -r FREE_KB DISK_USED_PCT <<<"$(df -Pk "$RELEASE_ROOT" | awk 'END {gsub(/%/, "", $5); print $4, $5}')"
-[[ "$FREE_KB" =~ ^[0-9]+$ ]] && [[ "$DISK_USED_PCT" =~ ^[0-9]+$ ]] || \
-  fail 'unable to determine release storage pressure'
-[ "$DISK_USED_PCT" -le 85 ] || \
-  fail "local deploy refuses a ${DISK_USED_PCT}% full data volume; reduce it to at most 85%"
-[ "$FREE_KB" -ge 5242880 ] || fail 'local deploy requires at least 5 GiB free before install'
+# Storage gate in absolute free space, not percent used: a candidate needs about
+# 2.5 GiB (dependencies + browsers), and what protects the host is the room
+# left after it. A percentage means something different on every disk size;
+# on this 228 GiB volume "85% used" still left 30 GiB free and blocked routine
+# deploys while unrelated files (OS update snapshots) held the space.
+read -r FREE_KB <<<"$(df -Pk "$RELEASE_ROOT" | awk 'END {print $4}')"
+[[ "$FREE_KB" =~ ^[0-9]+$ ]] || fail 'unable to determine release storage pressure'
+[ "$FREE_KB" -ge 10485760 ] || \
+  fail "local deploy requires at least 10 GiB free before install (have $((FREE_KB / 1048576)) GiB)"
 INSTALL_HOME="$STAGING_DIR/.install-home"
 mkdir "$INSTALL_HOME"
 (cd "$STAGING_DIR" && env -i \
@@ -1644,10 +1647,9 @@ echo '5/8 proving browser and production database readiness before PM2 stop'
   PATH="$(dirname "$NODE_BIN"):/usr/bin:/bin" PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_DIR" \
   ARENA_EXPECTED_WORKER_NODE_ID="$OLD_NODE_ID" \
   "$NODE_BIN" node_modules/tsx/dist/cli.mjs worker/preflight-local-release.ts)
-read -r FREE_KB DISK_USED_PCT <<<"$(df -Pk "$RELEASE_ROOT" | awk 'END {gsub(/%/, "", $5); print $4, $5}')"
-[[ "$FREE_KB" =~ ^[0-9]+$ ]] && [[ "$DISK_USED_PCT" =~ ^[0-9]+$ ]] && \
-  [ "$DISK_USED_PCT" -le 87 ] && [ "$FREE_KB" -ge 2097152 ] || \
-  fail 'local deploy requires at most 87% disk use and 2 GiB free after candidate preparation'
+read -r FREE_KB <<<"$(df -Pk "$RELEASE_ROOT" | awk 'END {print $4}')"
+[[ "$FREE_KB" =~ ^[0-9]+$ ]] && [ "$FREE_KB" -ge 5242880 ] || \
+  fail 'local deploy requires at least 5 GiB free after candidate preparation'
 
 echo '6/8 rechecking PM2 baseline, lock, and exact main'
 assert_local_lock

@@ -70,6 +70,7 @@ import {
   BINANCE_HISTORY_PAGE_ENVELOPE_CONTRACT,
   BINANCE_POSITION_HISTORY_URL,
 } from './history-contract'
+import type { LeaderboardExhaustionDeclaration } from '../../acquisition-exhaustion'
 import { binancePositionHistoryTerminalVerifier } from './history-terminal'
 import { BINANCE_PROFILE_PERFORMANCE_URLS } from './profile-capture-contract'
 
@@ -116,6 +117,34 @@ function isRecord(value: unknown): value is Dict {
 function terminalClaim(observations: HistoryTerminalClaim['observations']): HistoryTerminalClaim {
   return { contract: HISTORY_TERMINAL_CLAIM_CONTRACT, observations }
 }
+
+/**
+ * Exhausted-completeness contract for binance_futures (registered in
+ * arena.leaderboard_exhaustion_contracts). The board is live and large
+ * (~13,000 traders, hundreds of pages): ranks and membership change while it
+ * is paged, so a trader crossing the cursor is seen twice, another slides
+ * past unseen, and data.total moves between pages. It therefore ends at its
+ * short (or empty) final page, and the proof bounds how far it moved instead
+ * of demanding a frozen snapshot: at most 1% of the last reported total, and
+ * never more than 200 rows (1% of a 20,000-trader board).
+ *
+ * binance_spot stays in the total mode: at 100 rows per page it is read in
+ * about 25 requests and its reported total is reached exactly on most
+ * attempts, so it needs no allowance.
+ */
+export const BINANCE_FUTURES_LEADERBOARD_EXHAUSTION: LeaderboardExhaustionDeclaration =
+  Object.freeze({
+    completeness_mode: 'exhausted' as const,
+    list_path: ['data', 'list'],
+    row_key_path: ['leadPortfolioId'],
+    end_signal: { kind: 'short_page' as const },
+    board_version: {
+      kind: 'reported_total_drift' as const,
+      path: ['data', 'total'],
+      max_drift_bps: 100,
+    },
+    max_duplicate_rows: 200,
+  })
 
 function boardKeyOf(src: SourceRow): string {
   return (src.meta.boardKey as string) ?? 'futures'
@@ -282,6 +311,7 @@ const binanceAdapter: SourceAdapter = {
       pageSize,
       callerPageCap,
       signal: options?.signal,
+      exhaustion: boardKeyOf(src) === 'futures' ? BINANCE_FUTURES_LEADERBOARD_EXHAUSTION : null,
     })
   },
 

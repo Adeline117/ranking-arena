@@ -94,7 +94,7 @@ export function dedupeHash(...fields: unknown[]): string {
 }
 
 /**
- * 30d board (POST /documentary/trader/page {nickName,sortType:1,pageNum,
+ * 30d board (POST /documentary/trader/page {nickName,sortType:2,pageNum,
  * pageSize}, verified 2026-06-11): {total, rows}. All rows are human lead
  * traders (no bot surface on BTCC).
  */

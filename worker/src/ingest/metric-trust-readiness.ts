@@ -152,7 +152,13 @@ export async function loadMetricTrustWorkerReadiness({
   try {
     await client.query('BEGIN TRANSACTION READ ONLY')
     inTransaction = true
-    await client.query("SET LOCAL statement_timeout = '10s'")
+    // The readiness RPC scans every complete/verified observation to prove
+    // none predates the lineage contract. Once the public boards resumed that
+    // table passed 1.5M rows and the call took ~15s in production
+    // (2026-11-22), so a 10s budget failed every worker start and deploy
+    // preflight closed. 25s here, 30s for the caller's race; the RPC itself
+    // must be made cheap again (bounded scan) before the table doubles.
+    await client.query("SET LOCAL statement_timeout = '25s'")
     const result = await client.query(
       'SELECT public.arena_metric_trust_release_readiness() AS readiness'
     )
@@ -174,7 +180,7 @@ export async function loadMetricTrustWorkerReadiness({
 
 export async function assertMetricTrustWorkerReadiness({
   load = loadMetricTrustWorkerReadiness,
-  timeoutMs = 15_000,
+  timeoutMs = 30_000,
 }: {
   load?: LoadReadiness
   timeoutMs?: number

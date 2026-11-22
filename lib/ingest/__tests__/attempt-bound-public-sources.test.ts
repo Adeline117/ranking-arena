@@ -33,7 +33,6 @@ import { bitunixAdapter } from '../adapters/bitunix'
 import { blofinAdapter } from '../adapters/blofin'
 import { btccAdapter } from '../adapters/btcc'
 import { bybitCopytradeAdapter } from '../adapters/bybit-copytrade'
-import { bybitMt5Adapter } from '../adapters/bybit-mt5'
 import { coinexAdapter } from '../adapters/coinex'
 import { gateAdapter } from '../adapters/gate'
 import { htxAdapter } from '../adapters/htx'
@@ -284,21 +283,6 @@ const CASES: SourceCase[] = [
     ['result'],
     'totalCount',
     { asString: true, pageCountKey: 'totalPageCount' }
-  ),
-  fixtureCase(
-    {
-      slug: 'bybit_mt5',
-      adapter: bybitMt5Adapter,
-      adapterSlug: 'bybit_mt5',
-      currency: 'USDx',
-      timeframe: 30,
-      pageSize: 16,
-    },
-    fixture('bybit-mt5', 'leaderboard-p1.json'),
-    ['result', 'providerDetailsList'],
-    ['result'],
-    'totalCount',
-    { asString: true }
   ),
   ...(
     [

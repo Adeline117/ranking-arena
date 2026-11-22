@@ -36,6 +36,25 @@ describe('parseBitgetLeaderboardPage', () => {
     })
   })
 
+  it('reads the leader PnL under either column code, never the copiers profit', () => {
+    const futures = parseBitgetLeaderboardPage(fixture('uta-board-futures-7d-p1.json'), ctx).rows
+    // Futures names the column total_income (total_follow_profit there is 2538.76).
+    expect(futures[0].headlinePnl).toBe(285.61)
+
+    const cfd = parseBitgetLeaderboardPage(fixture('uta-board-cfd-30d-tail.json'), ctx).rows
+    // Spot and cfd name the same column total_profit (total_follow_profit there is 0).
+    expect(cfd[0].headlinePnl).toBe(6.71)
+    expect(cfd.every((row) => typeof row.headlinePnl === 'number')).toBe(true)
+  })
+
+  it('lifts the max drawdown the futures board carries; spot and cfd have none', () => {
+    const futures = parseBitgetLeaderboardPage(fixture('uta-board-futures-7d-p1.json'), ctx).rows
+    expect(futures.map((row) => row.headlineMdd)).toEqual([0, 0, 71.02])
+
+    const cfd = parseBitgetLeaderboardPage(fixture('uta-board-cfd-30d-tail.json'), ctx).rows
+    expect(cfd.map((row) => row.headlineMdd)).toEqual([null, null, null])
+  })
+
   it('parses the currentTrader/list shape (percent values)', () => {
     const payload = {
       data: {
