@@ -1140,16 +1140,19 @@ test_disk_module_and_database_failures_precede_pm2_stop() {
       fail "$gate gate must leave the old exact cwd active"
     case "$gate" in
       disk_free)
-        assert_matches "$output" 'at least 5 GiB|free.*storage' \
+        assert_matches "$output" 'at least 10 GiB free' \
           'free-space failure must state the capacity gate'
         assert_not_contains "$events" 'npm cwd=' \
           'disk capacity must be proven before npm ci'
         ;;
       disk_pressure)
-        assert_matches "$output" 'full data volume|at most 85%' \
-          'disk pressure must fail even while more than 5 GiB remains free'
+        # 6 GiB free: more than one candidate needs, less than the 10 GiB of
+        # headroom the gate demands. The gate is absolute free space; the
+        # percentage in the fake df line (96%) is deliberately not what fails.
+        assert_matches "$output" 'at least 10 GiB free' \
+          'insufficient headroom must fail even while more than 5 GiB remains free'
         assert_not_contains "$events" 'npm cwd=' \
-          'disk percentage must be proven before npm ci'
+          'disk headroom must be proven before npm ci'
         ;;
       module)
         assert_contains "$events" 'npm cwd=' 'module failure must occur after isolated npm ci'
