@@ -16,6 +16,10 @@
  * - A serving-mode match wins over the legacy one: legacy tables still hold
  *   stale rows keyed by the same id/handle as a live serving trader.
  * - A lookup that timed out or failed is UNAVAILABLE, never "missing".
+ * - The public ranking names some sources by an alias, not by the arena slug
+ *   the serving resolver returns (public `blofin` vs serving `blofin_futures`).
+ *   `publicSource` is the name to use for every public-ranking read and for the
+ *   canonical URL; using the slug there finds no rank at all.
  */
 
 /** A lookup that timed out or errored — it has no answer. */
@@ -29,7 +33,12 @@ export interface LegacyIdentity {
   avatarUrl: string | null
 }
 
-export interface ProfileIdentityDeps<Serving extends { source: string }> {
+export interface ServingIdentity {
+  source: string
+  exchangeTraderId: string
+}
+
+export interface ProfileIdentityDeps<Serving extends ServingIdentity> {
   resolveLegacy: (handle: string, platform?: string) => Promise<LegacyIdentity | null | Unavailable>
   resolveServing: (handle: string, source?: string) => Promise<Serving | null | Unavailable>
   isServingSource: (source: string) => Promise<boolean>
@@ -39,6 +48,12 @@ export interface ProfileIdentityDeps<Serving extends { source: string }> {
 export interface ProfileIdentity<Serving> {
   legacy: LegacyIdentity | null | Unavailable
   serving: Serving | null
+  /**
+   * The account's source as the public ranking names it (see the header note),
+   * or null when there is no public account. Equals `serving.source` for
+   * sources that have no alias.
+   */
+  publicSource: string | null
   /** No public profile: render the not-found view and mark the page noindex. */
   missing: boolean
 }
@@ -53,7 +68,7 @@ export function requestedPlatform(raw: string | string[] | undefined): string | 
   return value && /^[a-z0-9_]{1,48}$/.test(value) ? value : undefined
 }
 
-export async function resolveProfileIdentity<Serving extends { source: string }>(
+export async function resolveProfileIdentity<Serving extends ServingIdentity>(
   deps: ProfileIdentityDeps<Serving>,
   handle: string,
   platform: string | undefined
@@ -71,17 +86,55 @@ export async function resolveProfileIdentity<Serving extends { source: string }>
     return outcome && (await deps.isServingSource(outcome.source)) ? outcome : null
   }
 
-  let serving =
-    platform && (await deps.isServingSource(platform)) ? await servingMatch(platform) : null
+  // The hint that produced the serving match is a name the serving set accepts
+  // for that account; when it differs from the slug it is the public alias.
+  let matchedHint: string | undefined
+  let serving: Serving | null = null
+  if (platform && (await deps.isServingSource(platform))) {
+    serving = await servingMatch(platform)
+    if (serving) matchedHint = platform
+  }
+  const legacyIdentity = legacy && legacy !== LOOKUP_UNAVAILABLE ? legacy : null
+  const legacyIsServing = legacyIdentity
+    ? await deps.isServingSource(legacyIdentity.platform)
+    : false
   if (!serving) {
     // Only pass the legacy platform as a source hint when it is ITSELF a serving
     // source. The serving resolver returns NOTHING for a stale non-serving hint
     // (e.g. "xt"/"bybit_spot") even though the handle resolves cleanly with no
     // hint — so a stale legacy hint would hide the live serving trader.
-    const legacyPlatform = legacy && legacy !== LOOKUP_UNAVAILABLE ? legacy.platform : undefined
-    const hint =
-      legacyPlatform && (await deps.isServingSource(legacyPlatform)) ? legacyPlatform : undefined
+    const hint = legacyIdentity && legacyIsServing ? legacyIdentity.platform : undefined
     serving = await servingMatch(hint)
+    if (serving) matchedHint = hint
+  }
+
+  // The alias ↔ slug mapping has ONE source: arena.sources.meta.legacy_platform,
+  // which arena_resolve_trader applies when it matches `p_source`. No table is
+  // kept here — a name is the public alias only if the resolver itself returns
+  // this same account for it.
+  let publicSource: string | null = null
+  if (serving) {
+    publicSource = serving.source
+    if (matchedHint && matchedHint !== serving.source) {
+      publicSource = matchedHint
+    } else if (
+      // Matched by the slug itself (?platform=<slug>): ask the resolver whether
+      // the legacy row's platform names the same account.
+      legacyIdentity &&
+      legacyIsServing &&
+      legacyIdentity.platform !== serving.source
+    ) {
+      const viaLegacyName = await servingMatch(legacyIdentity.platform)
+      if (
+        viaLegacyName &&
+        viaLegacyName.source === serving.source &&
+        viaLegacyName.exchangeTraderId === serving.exchangeTraderId
+      ) {
+        publicSource = legacyIdentity.platform
+      }
+    }
+  } else if (legacyIdentity && !deps.isRetiredSource(legacyIdentity.platform)) {
+    publicSource = legacyIdentity.platform
   }
 
   // Unknown to both resolvers, or known only under a retired source with no
@@ -92,5 +145,5 @@ export async function resolveProfileIdentity<Serving extends { source: string }>
     legacy !== LOOKUP_UNAVAILABLE &&
     (!legacy || deps.isRetiredSource(legacy.platform))
 
-  return { legacy, serving, missing }
+  return { legacy, serving, publicSource, missing }
 }

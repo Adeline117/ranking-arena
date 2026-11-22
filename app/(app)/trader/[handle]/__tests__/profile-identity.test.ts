@@ -11,7 +11,15 @@ type Serving = { source: string; exchangeTraderId: string }
 type LegacyAnswer = LegacyIdentity | null | Unavailable
 type ServingAnswer = Serving | null | Unavailable
 
-const SERVING_SOURCES = new Set(['okx_futures', 'okx_spot', 'gate_futures'])
+// The serving set exposes both arena slugs and public aliases (blofin, gateio).
+const SERVING_SOURCES = new Set([
+  'okx_futures',
+  'okx_spot',
+  'gate_futures',
+  'gateio',
+  'blofin_futures',
+  'blofin',
+])
 const RETIRED = new Set(['bybit_spot'])
 
 function legacyRow(platform: string, traderKey = '3355'): LegacyIdentity {
@@ -117,7 +125,7 @@ describe('resolveProfileIdentity', () => {
 
   it('marks a handle unknown to both resolvers as missing', async () => {
     const identity = await resolveProfileIdentity(deps({}, {}), 'nobody', 'okx_spot')
-    expect(identity).toEqual({ legacy: null, serving: null, missing: true })
+    expect(identity).toEqual({ legacy: null, serving: null, publicSource: null, missing: true })
   })
 
   it('marks a trader known only under a retired source as missing', async () => {
@@ -144,5 +152,62 @@ describe('resolveProfileIdentity', () => {
     )
     expect(legacyDown.missing).toBe(false)
     expect(legacyDown.legacy).toBe(LOOKUP_UNAVAILABLE)
+  })
+})
+
+describe('publicSource (the name the public ranking uses)', () => {
+  const blofin = { source: 'blofin_futures', exchangeTraderId: '585' }
+
+  it('is the alias when the request names the account by its public alias', async () => {
+    const d = deps({ blofin: legacyRow('blofin', '585') }, { blofin })
+    const identity = await resolveProfileIdentity(d, '585', 'blofin')
+    expect(identity.serving).toEqual(blofin)
+    expect(identity.publicSource).toBe('blofin')
+  })
+
+  it('is the alias when a handle-only request is matched through the legacy platform', async () => {
+    const d = deps({ '': legacyRow('blofin', '585') }, { blofin })
+    const identity = await resolveProfileIdentity(d, '585', undefined)
+    expect(identity.publicSource).toBe('blofin')
+  })
+
+  it('is the alias when the request uses the slug and the resolver confirms the legacy name', async () => {
+    const d = deps({ '': legacyRow('blofin', '585') }, { blofin_futures: blofin, blofin })
+    const identity = await resolveProfileIdentity(d, '585', 'blofin_futures')
+    expect(identity.serving).toEqual(blofin)
+    expect(identity.publicSource).toBe('blofin')
+  })
+
+  it('stays the slug when the legacy name resolves to a different account', async () => {
+    const d = deps(
+      { '': legacyRow('gateio', '585') },
+      { blofin_futures: blofin, gateio: { source: 'gate_futures', exchangeTraderId: '585' } }
+    )
+    const identity = await resolveProfileIdentity(d, '585', 'blofin_futures')
+    expect(identity.publicSource).toBe('blofin_futures')
+  })
+
+  it('is the slug for a source with no alias', async () => {
+    const okx = { source: 'okx_futures', exchangeTraderId: '3355' }
+    const d = deps({}, { okx_futures: okx })
+    const identity = await resolveProfileIdentity(d, '3355', 'okx_futures')
+    expect(identity.publicSource).toBe('okx_futures')
+  })
+
+  it('is the legacy platform for a legacy-only account and null when there is none', async () => {
+    const legacyOnly = await resolveProfileIdentity(
+      deps({ '': legacyRow('mexc') }, {}),
+      'Alice',
+      undefined
+    )
+    expect(legacyOnly.publicSource).toBe('mexc')
+    const missing = await resolveProfileIdentity(deps({}, {}), 'nobody', undefined)
+    expect(missing.publicSource).toBeNull()
+    const retired = await resolveProfileIdentity(
+      deps({ '': legacyRow('bybit_spot') }, {}),
+      'Alice',
+      undefined
+    )
+    expect(retired.publicSource).toBeNull()
   })
 })
