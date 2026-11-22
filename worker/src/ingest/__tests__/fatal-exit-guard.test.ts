@@ -1,3 +1,6 @@
+/**
+ * @jest-environment node
+ */
 import { createFatalExitGuard, FATAL_EXIT_DEADLINE_MS } from '../fatal-exit-guard'
 
 function harness() {
