@@ -19,6 +19,7 @@ jest.mock('@/lib/i18n/server', () => ({
           dataUnknown: 'Unknown',
           exchangePageSubtitle: '{count} ranked traders on {name} ({type}).',
           exchangePageAboutBody: 'Arena tracks {count} active traders on {name}.',
+          exchangePageSubtitleEmpty: '{name} ({type}) has no published ranking right now.',
         }) as Record<string, string>
       )[key] ?? key,
   }),
@@ -148,6 +149,19 @@ describe('exchange landing page public rank authority', () => {
 
     expect((header?.props as ElementProps | undefined)?.subtitle).toContain('Unknown')
     expect((header?.props as ElementProps | undefined)?.subtitle).not.toContain('1 ranked')
+  })
+
+  it('says the board is unpublished instead of "0 ranked traders" when it is empty', async () => {
+    mockFrom
+      .mockReturnValueOnce(makeQuery({ data: [], error: null }))
+      .mockReturnValueOnce(makeQuery({ count: 0, error: null }))
+
+    const page = await ExchangeLandingPage({ params: Promise.resolve({ slug: 'binance' }) })
+    const subtitle = (findElementByType(page, 'page-header')?.props as ElementProps | undefined)
+      ?.subtitle
+
+    expect(subtitle).toContain('no published ranking')
+    expect(subtitle).not.toMatch(/\b0 ranked/)
   })
 
   it('does not render a top-trader metadata claim after a malformed cohort row', async () => {

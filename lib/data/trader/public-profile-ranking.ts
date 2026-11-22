@@ -210,3 +210,64 @@ export async function fetchPublicProfileRankingRows(
     }
   }
 }
+
+/**
+ * Whether the source currently has any published ranking row.
+ *
+ * The public view withdraws a whole source when its data is stale or its
+ * publication proof is missing, so "this trader has no rank" has two very
+ * different causes: the trader is not on a live board, or there is no live
+ * board at all. `null` means the read failed and the answer is unknown.
+ */
+export async function isPublicSourceCohortPublished(
+  supabase: TypedSupabaseClient,
+  source: string,
+  signal?: AbortSignal
+): Promise<boolean | null> {
+  if (!isPublicRankingSourceAllowed(source)) return false
+  try {
+    let query = supabase
+      .from('public_ranked_leaderboard')
+      .select('source_trader_id')
+      .eq('source', source)
+      .not('rank', 'is', null)
+      .limit(1)
+    if (signal) query = query.abortSignal(signal)
+    const { data, error } = await query
+    if (error) {
+      logger.warn('[public-profile-ranking] source cohort presence read failed', {
+        source,
+        message: error.message,
+      })
+      return null
+    }
+    return Array.isArray(data) && data.length > 0
+  } catch (err) {
+    logger.warn('[public-profile-ranking] source cohort presence read threw', {
+      source,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    return null
+  }
+}
+
+/**
+ * A profile is kept out of the index only when it is PROVEN to have nothing to
+ * rank on a board that is live: the trader's own read came back cleanly empty
+ * and the same source is publishing other traders right now.
+ *
+ * Every other case stays indexable. In particular a withdrawn or empty board
+ * (stale data, a paused pipeline) must not de-index every profile of that
+ * source at once — those pages return as soon as the board does, and a mass
+ * noindex would take weeks to undo.
+ */
+export function isProvenUnrankedProfile(
+  ranking: Pick<PublicProfileRankingResult, 'rows' | 'rankingVisibilityReason'>,
+  sourceCohortPublished: boolean | null
+): boolean {
+  return (
+    ranking.rows.length === 0 &&
+    ranking.rankingVisibilityReason === 'public_rank_unavailable' &&
+    sourceCohortPublished === true
+  )
+}

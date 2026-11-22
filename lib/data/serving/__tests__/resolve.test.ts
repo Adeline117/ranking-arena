@@ -1,5 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { resolveServingTrader } from '../resolve'
+import {
+  resolveServingTrader,
+  resolveServingTraderOutcome,
+  SERVING_RESOLVE_ERRORED,
+} from '../resolve'
 
 function client(data: Record<string, unknown>) {
   return {
@@ -37,5 +41,25 @@ describe('resolveServingTrader fetch region contract', () => {
       ...base,
       fetchRegion: null,
     })
+  })
+})
+
+describe('resolveServingTraderOutcome', () => {
+  it('reports a genuine not-found as null', async () => {
+    const supabase = {
+      rpc: jest.fn(async () => ({ data: null, error: null })),
+    } as unknown as SupabaseClient
+    await expect(resolveServingTraderOutcome(supabase, { handle: 'nobody' })).resolves.toBeNull()
+  })
+
+  it('keeps "every attempt errored" distinct from not-found', async () => {
+    const rpc = jest.fn(async () => ({ data: null, error: { message: 'fetch failed' } }))
+    const supabase = { rpc } as unknown as SupabaseClient
+    await expect(resolveServingTraderOutcome(supabase, { handle: 'someone' })).resolves.toBe(
+      SERVING_RESOLVE_ERRORED
+    )
+    expect(rpc).toHaveBeenCalledTimes(3)
+    // The plain resolver keeps its null contract for callers that only need the row.
+    await expect(resolveServingTrader(supabase, { handle: 'someone' })).resolves.toBeNull()
   })
 })

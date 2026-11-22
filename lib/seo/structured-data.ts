@@ -5,6 +5,7 @@
  * @see https://developers.google.com/search/docs/appearance/structured-data
  */
 
+import { platformLabel } from '@/lib/constants/platform-labels'
 import { BASE_URL } from '@/lib/constants/urls'
 const SITE_NAME = 'Arena'
 // English-first description — site is primarily indexed in English. Using the
@@ -193,6 +194,8 @@ export function generateOrganizationSchema(): OrganizationSchema {
 
 /** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderSchemaInput {
+  /** Canonical profile URL (traderCanonicalPath). Must match the page's canonical tag. */
+  url?: string
   handle: string
   id: string
   bio?: string
@@ -229,12 +232,11 @@ export function generateTraderPersonSchema(trader: TraderSchemaInput): PersonSch
     descParts.push(`90-day ROI: ${trader.roi90d >= 0 ? '+' : ''}${trader.roi90d.toFixed(2)}%`)
   }
   if (trader.winRate != null) descParts.push(`Win rate: ${trader.winRate.toFixed(1)}%`)
-  if (trader.source)
-    descParts.push(`Trading on ${trader.source.charAt(0).toUpperCase() + trader.source.slice(1)}`)
+  if (trader.source) descParts.push(`Trading on ${platformLabel(trader.source)}`)
   personSchema.description =
     descParts.length > 0 ? descParts.join(' · ') : `Crypto trader on ${SITE_NAME}`
 
-  personSchema.url = `${BASE_URL}/trader/${encodeURIComponent(trader.handle)}`
+  personSchema.url = trader.url ?? `${BASE_URL}/trader/${encodeURIComponent(trader.handle)}`
 
   // 添加交易所 profile 链接
   if (trader.profileUrl) {
@@ -271,7 +273,7 @@ export function generateTraderProfilePageSchema(
     '@type': 'ProfilePage',
     mainEntity: generateTraderPersonSchema(trader),
     name: `${trader.handle} - Crypto Trader Profile`,
-    url: `${BASE_URL}/trader/${encodeURIComponent(trader.handle)}`,
+    url: trader.url ?? `${BASE_URL}/trader/${encodeURIComponent(trader.handle)}`,
     description,
     // Only a real data time may be claimed. The render/request time is not
     // when this trader's data changed, so an unknown time omits the field.

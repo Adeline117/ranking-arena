@@ -79,20 +79,9 @@ export const metadata: Metadata = {
   },
   appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Arena' },
   formatDetection: { telephone: false },
-  alternates: {
-    canonical: BASE_URL,
-    // Language preference is client-side (localStorage), so URLs are the same
-    // across languages. Declare each locale variant so Google can discover them
-    // and x-default so the English version is the fallback for unlisted locales.
-    // See: https://developers.google.com/search/docs/specialty/international/localized-versions
-    languages: {
-      en: BASE_URL,
-      'zh-CN': BASE_URL,
-      ja: BASE_URL,
-      ko: BASE_URL,
-      'x-default': BASE_URL,
-    },
-  },
+  // 这里刻意不写 alternates：根布局的 canonical 会被所有没自己声明的页面继承，
+  // 等于让它们全都声明「我的规范网址是首页」。各页面自己声明 canonical（首页在
+  // app/page.tsx）。语言是客户端偏好、没有独立网址，所以也不输出 hreflang。
   openGraph: {
     type: 'website',
     title: 'Arena ranks everything in crypto',

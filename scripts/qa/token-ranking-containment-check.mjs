@@ -10,7 +10,7 @@ const API_PATHS = [
   '/api/rankings/by-token?action=unsupported&token=%3Cscript%3E&limit=-1',
 ]
 const PAGE_PATHS = ['/rankings/tokens', '/rankings/tokens/BTC']
-const SITEMAP_PATHS = ['/sitemap/0.xml', '/api/sitemap-xml?shard=0']
+const SITEMAP_PATHS = ['/api/sitemap-xml?shard=0']
 const REQUEST_TIMEOUT_MS = 15_000
 
 export function parseExplicitBaseUrl(raw) {

@@ -35,7 +35,10 @@ describe('/feed/[id] public activity publication boundary', () => {
 
     await expect(
       generateMetadata({ params: Promise.resolve({ id: 'legacy-ranking-activity' }) })
-    ).resolves.toEqual({ title: 'Activity Not Found' })
+    ).resolves.toEqual({
+      title: 'Activity Not Found',
+      robots: { index: false, follow: false },
+    })
     expect(mockFrom).not.toHaveBeenCalled()
   })
 
@@ -52,7 +55,10 @@ describe('/feed/[id] public activity publication boundary', () => {
 
     await expect(
       generateMetadata({ params: Promise.resolve({ id: 'safe-streak-activity' }) })
-    ).resolves.toEqual({ title: 'Activity Not Found' })
+    ).resolves.toEqual({
+      title: 'Activity Not Found',
+      robots: { index: false, follow: false },
+    })
     expect(mockFrom).not.toHaveBeenCalled()
     expect(dynamic).toBe('force-dynamic')
     expect(revalidate).toBe(0)
