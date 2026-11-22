@@ -15,6 +15,8 @@
 #     terminal; an exhaustion run without its proof; an unknown manifest
 #     contract; a batch with one bad row; a statement spanning two runs
 #   - a refused statement keeps none of its rows
+#   + the readiness RPC's pins follow: they hold after the migration, not
+#     before, and break when the statement trigger is disabled
 #   + the exhaustion proof is evaluated once per run per statement instead of
 #     once per row, and a 20,000-row / 433-page batch is at least 10x faster
 # Isolated cluster on a private socket; never touches application data.
@@ -234,6 +236,26 @@ BEGIN
 END $$;
 SQL
 
+# The readiness RPC exactly as 20261121185937 defines it. Its body references
+# the whole metric-trust schema and is not called here; the migration checks
+# its text before re-creating it.
+READINESS_MIGRATION="$MIGRATIONS/20261121185937_metric_trust_readiness_bounded_lineage_count.sql"
+awk '/^CREATE OR REPLACE FUNCTION public.arena_metric_trust_release_readiness\(\)/ { on = 1 }
+     on { print }
+     on && /^\$function\$;/ { exit }' "$READINESS_MIGRATION" >"$TMP_ROOT/old-readiness.sql"
+psql_db -q -c "SET check_function_bodies = off" -f "$TMP_ROOT/old-readiness.sql"
+
+# The section of the new readiness RPC that pins the two triggers and their
+# functions, lifted out of the migration as one boolean.
+{
+  echo "SELECT EXISTS ("
+  awk '/-- lineage-trigger-contract:begin/ { on = 1; next }
+       /-- lineage-trigger-contract:end/ { on = 0 }
+       on { print }' "$NEW_MIGRATION" | sed "s/v_postgres/pg_catalog.to_regrole('postgres')/g"
+  echo ");"
+} >"$TMP_ROOT/readiness-contract.sql"
+grep -q "tgnewtable = 'inserted_observations'" "$TMP_ROOT/readiness-contract.sql"
+
 psql_db -q -f "$OLD_FUNCTION"
 psql_db -q <<'SQL'
 ALTER FUNCTION arena.validate_metric_trust_source_page_lineage() OWNER TO postgres;
@@ -294,7 +316,30 @@ fi
 grep -qF $'null ordinal is downgraded\tkept null/unknown/unknown/[{"code": "source_page_lineage_missing", "state": "unknown"}] 2/complete/verified/[]' <<<"$BEFORE"
 echo "ok: baseline (per-row trigger) accepts 6 of 28 cases and refuses the rest"
 
+if [[ "$(psql_db -Atq -f "$TMP_ROOT/readiness-contract.sql")" != "f" ]]; then
+  echo "the new readiness contract must not hold before the migration" >&2
+  exit 1
+fi
+
 psql_db -q -f "$NEW_MIGRATION" >/dev/null
+
+if [[ "$(psql_db -Atq -f "$TMP_ROOT/readiness-contract.sql")" != "t" ]]; then
+  echo "the readiness RPC's trigger contract does not hold after the migration" >&2
+  exit 1
+fi
+echo "ok: the readiness RPC's pins on both triggers and functions hold after the migration (not before)"
+# Disabling or dropping the statement trigger must fail the startup gate.
+psql_db -q -c "ALTER TABLE arena.metric_trust_observations DISABLE TRIGGER metric_trust_observations_source_page_lineage_after_statement"
+if [[ "$(psql_db -Atq -f "$TMP_ROOT/readiness-contract.sql")" != "f" ]]; then
+  echo "a disabled statement trigger still satisfies the readiness contract" >&2
+  exit 1
+fi
+psql_db -q -c "ALTER TABLE arena.metric_trust_observations ENABLE TRIGGER metric_trust_observations_source_page_lineage_after_statement"
+echo "ok: disabling the statement trigger breaks the readiness contract"
+if [[ "$(psql_db -Atq -c "SELECT pg_catalog.strpos(prosrc, 'v_actual_ordinal = NEW.source_page_ordinal') FROM pg_proc WHERE oid = 'public.arena_metric_trust_release_readiness()'::regprocedure")" != "0" ]]; then
+  echo "the readiness RPC still pins the per-row membership text" >&2
+  exit 1
+fi
 
 AFTER="$(outcomes)"
 if [[ "$BEFORE" != "$AFTER" ]]; then
