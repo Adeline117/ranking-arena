@@ -256,7 +256,9 @@ describe('GET /api/traders/[handle]/first-screen boundary contract', () => {
     expect(mockGetPublicFirstScreen).toHaveBeenCalledWith(
       mockSupabase,
       'bitunix_futures',
-      'canonical-account-id'
+      'canonical-account-id',
+      // The public cohort is keyed by the alias the request named.
+      'bitunix'
     )
   })
 })
