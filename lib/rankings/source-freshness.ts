@@ -36,6 +36,18 @@ export interface SourceWindowFreshnessRow {
   season_id: unknown
   source: unknown
   source_as_of: unknown
+  /** Rows the source's sealed window publishes; exactly 0 marks a sealed, empty window. */
+  published_rank_count?: unknown
+}
+
+/**
+ * A source may be sealed into a season with zero publishable rows (every row
+ * failed the public eligibility policy). The seal records its watermark with
+ * published_rank_count 0, and no row of it can be visible: that window is
+ * published, not missing.
+ */
+function isSealedEmptyWindow(row: SourceWindowFreshnessRow): boolean {
+  return row.published_rank_count === 0
 }
 
 export type SourceWindowFreshnessIssueReason =
@@ -252,11 +264,24 @@ export function buildRegistrySourceFreshnessStatuses(
     visibleCounts.set(aliasKey, window.record_count)
   }
 
+  const sealedEmptyWindows = new Set<string>()
+  for (const row of watermarkRows) {
+    if (
+      (row.season_id === '7D' || row.season_id === '30D' || row.season_id === '90D') &&
+      typeof row.source === 'string' &&
+      isSealedEmptyWindow(row)
+    ) {
+      sealedEmptyWindows.add(sourceWindowKey(row.season_id, row.source))
+    }
+  }
+
   const visibilityIssues = new Map<string, SourceWindowFreshnessIssue[]>()
   for (const window of expectedPhysicalWindows.values()) {
     const physicalKey = physicalWindowKey(window.season_id, window.registry_slug)
     if (visiblePhysicalWindows.has(physicalKey)) continue
     const aliasKey = sourceWindowKey(window.season_id, window.source)
+    // Sealed with zero rows: nothing to see, and nothing is missing.
+    if (sealedEmptyWindows.has(aliasKey)) continue
     const issues = visibilityIssues.get(aliasKey) ?? []
     issues.push({
       season_id: window.season_id,

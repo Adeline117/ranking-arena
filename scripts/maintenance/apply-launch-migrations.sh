@@ -409,6 +409,53 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # live board has less time to move while it is paged. It requires the
 # page_size 20 pre-state that 204948 also requires, so it follows 204948; it
 # changes page_size only and touches no table 192134 guards.
+# 20261118113759 makes the season expected-source set (the publication
+# denominator in public.arena_freshness_expected_sources) require a valid
+# attempt-bound capture contract registration and lists the rest as
+# unsupported. The orchestrator release that records unsupported sources and
+# refuses below the expected-set floor must serve first: the previous one would
+# publish the reduced set without either. It pins the body 20261113011058
+# leaves (prosrc sha256) and touches no table 192134 guards, so 192134 stays
+# last.
+# 20261118141652 raises the leaderboard page size of toobit_futures (1000 -> 5000)
+# so the whole board is one request: the server orders tied traders differently
+# between requests, which repeated rows across its three pages. It changes
+# page_size only, depends on no worker release and touches no table 192134
+# guards.
+# 20261118150737 raises the leaderboard page size of xt_futures (1000 -> 5000,
+# one request), bitget_cfd and bitget_spot (30 -> 50) and bybit_copytrade
+# (16 -> 50), the largest pages those endpoints serve, so a board has less time
+# to move and fewer page boundaries while it is paged. It changes page_size
+# only, depends on no worker release and touches no table 192134 guards.
+# 20261118161307 lets arena.record_tier_a_execution_window_receipt receipt an
+# exhausted outcome whose exhaustion proof holds (the 20261115141050 branch):
+# without it every exhaustion publication (okx_futures, okx_spot,
+# binance_web3_bsc) fails its job after the snapshot committed. The worker
+# pins the receipt body, so the release that accepts both the previous and
+# the new digest must serve first. It requires predeploy 20261115141050,
+# replaces no function 192134 pins and touches no table 192134 guards, so
+# 192134 stays last.
+# 20261118134500 registers binance_futures as a live board
+# (reported_total_drift, 1% of the board) in the append-only exhaustion
+# registry. It needs the declaration 114230 makes valid, so it follows it; the
+# worker release that captures binance in this mode is deployed after it. It
+# touches no table 192134 guards.
+# 20261120233328 replaces arena.publication_score_rows_json (@3 of 215329)
+# with @4: a trader_stats value the selected board attested is as fresh as that
+# board, instead of being dropped when the row's as_of is frozen by an old
+# column the board never re-sends. It follows 215329, depends on no worker
+# release and touches no table 192134 guards.
+# 20261120190124 registers bybit_mt5 as a live board (reported_total_drift,
+# 0.1% of the board, at most 100 rows) in the append-only exhaustion registry.
+# It needs the declaration 114230 makes valid, so it follows it; it takes
+# effect with the worker release that captures bybit_mt5 in this mode. It
+# touches no table 192134 guards.
+# 20261121185937 replaces public.arena_metric_trust_release_readiness() (the
+# 112703 body): its lineage count is evaluated once per run and only over
+# observations that can still be ranked, instead of re-parsing every run's
+# page ordinals for every observation ever written (15-17s in production
+# against the worker's 10s startup timeout). It follows 112703, depends on no
+# worker release and touches no table 192134 guards.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -428,6 +475,14 @@ POSTDEPLOY_MIGRATIONS=(
   20261118112703_metric_trust_exhaustion_observation_authority.sql
   20261118113319_binance_leaderboard_page_size_served_caps.sql
   20261118114230_leaderboard_exhaustion_reported_total_drift.sql
+  20261118113759_expected_sources_require_capture_contract.sql
+  20261118141652_toobit_leaderboard_single_page.sql
+  20261118150737_public_boards_larger_served_pages.sql
+  20261118161307_tier_a_window_receipt_exhaustion_branch.sql
+  20261118134500_register_binance_live_board_exhaustion_contracts.sql
+  20261120233328_publication_score_rows_board_attested_freshness.sql
+  20261120190124_register_bybit_mt5_live_board_exhaustion_contract.sql
+  20261121185937_metric_trust_readiness_bounded_lineage_count.sql
   20261118135918_trust_evidence_retention.sql
   20261118144144_rank_publication_trust_requires_run.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql

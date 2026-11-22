@@ -66,4 +66,61 @@ describe('freshness authority public metadata', () => {
     expect(metadata.coverage).toEqual({ expectedSourceBoards: 2, visibleSourceBoards: 1 })
     expect(metadata.latestSuccessfulPublication).toBeNull()
   })
+
+  describe('a source sealed with zero publishable rows', () => {
+    const sealedEmpty = (source: string, season = '90D') => ({
+      ...publication(source),
+      season_id: season,
+      published_rank_count: 0,
+    })
+    // bybit is sealed into both of its windows but none of its rows is publishable.
+    const windows = [...expectedWindows, expected('7D', 'bybit_futures', 'bybit')]
+    const binanceVisible = windows.filter((window) => window.source === 'binance').map(visible)
+
+    it('is published and visible: the board counts and the 90D proof holds', () => {
+      expect(
+        deriveFreshnessAuthorityMetadata(
+          windows,
+          binanceVisible,
+          [publication('binance'), sealedEmpty('bybit'), sealedEmpty('bybit', '7D')],
+          NOW
+        )
+      ).toEqual({
+        coverage: { expectedSourceBoards: 2, visibleSourceBoards: 2 },
+        latestSuccessfulPublication: { season: '90D', publishedAt: PUBLISHED_AT },
+      })
+    })
+
+    it('still misses the board when one of its windows was never sealed', () => {
+      const metadata = deriveFreshnessAuthorityMetadata(
+        windows,
+        binanceVisible,
+        [publication('binance'), sealedEmpty('bybit')],
+        NOW
+      )
+      expect(metadata.coverage).toEqual({ expectedSourceBoards: 2, visibleSourceBoards: 1 })
+    })
+
+    it('proves nothing when every source is empty', () => {
+      const metadata = deriveFreshnessAuthorityMetadata(
+        windows,
+        [],
+        [sealedEmpty('binance'), sealedEmpty('bybit')],
+        NOW
+      )
+      expect(metadata.latestSuccessfulPublication).toBeNull()
+    })
+
+    it('rejects a negative or non-integer row count', () => {
+      for (const bad of [-1, 1.5, '0', null]) {
+        const metadata = deriveFreshnessAuthorityMetadata(
+          windows,
+          binanceVisible,
+          [publication('binance'), { ...sealedEmpty('bybit'), published_rank_count: bad }],
+          NOW
+        )
+        expect(metadata.latestSuccessfulPublication).toBeNull()
+      }
+    })
+  })
 })

@@ -4,7 +4,10 @@
  * Database protocol (see docs/RANK_PUBLICATION_PROTOCOL.md for line numbers):
  *
  *   0. clear the season's source-isolation rows (20261113011058)
- *   1. read the score-input publish bundle + the season's expected sources
+ *   1. read the score-input publish bundle + the season's expected sources;
+ *      sources without a valid capture contract registration are not
+ *      expected but listed as unsupported (20261118113759); refuse below
+ *      RANK_PUBLICATION_MIN_EXPECTED_SOURCES expected sources
  *   2. isolate every expected source without fresh (<48h) PASSED evidence, or
  *      whose PASSED boards lack attempt-bound trust evidence
  *      (public.rank_publication_trust_evidence, 20261114193017), from this
@@ -77,6 +80,7 @@ const MAX_ROWS_PER_GENERATION = 64_000
 
 export type RankPublicationErrorCode =
   | 'season_authority_empty'
+  | 'expected_set_below_floor'
   | 'expected_source_not_fresh'
   | 'no_publishable_rows'
   | 'too_many_rows'
@@ -193,6 +197,18 @@ export const RANK_PUBLICATION_CORE_SOURCES: readonly string[] = [
  */
 export const RANK_PUBLICATION_MAX_ISOLATED_RATIO = 0.5
 
+/**
+ * Floor on a season's expected set after sources without a valid capture
+ * contract registration are left out (20261118113759). Below it the season is
+ * refused, so an accidentally emptied or truncated contract registry can never
+ * pass the ratio gate as 0/0. The checked-in registrations give every season
+ * well over twice this many registered serving sources.
+ */
+export const RANK_PUBLICATION_MIN_EXPECTED_SOURCES = 8
+
+/** Marker of the capture-contract predicate in the freshness authority. */
+export const CAPTURE_CONTRACT_REGISTRATION_MARKER = 'leaderboard-capture-contract-registration@1'
+
 export interface IsolatedSourceSummary {
   source: string
   reasons: string[]
@@ -210,6 +226,8 @@ export interface PublishLeaderboardSeasonDependencies {
   alert?: RankPublicationAlertSink
   /** Override RANK_PUBLICATION_CORE_SOURCES (tests). */
   coreSources?: readonly string[]
+  /** Override RANK_PUBLICATION_MIN_EXPECTED_SOURCES (tests). */
+  minExpectedSources?: number
 }
 
 /** Why a scored trader did not become a published row. */
@@ -275,6 +293,12 @@ export interface PublishLeaderboardSeasonResult {
   isolatedSources: IsolatedSourceSummary[]
   /** Previously isolated sources that rejoined with this cohort. */
   restoredSources: string[]
+  /**
+   * Declared season sources left out of the expected set because no valid
+   * attempt-bound capture contract is registered ("not yet supported").
+   * Recorded with the cohort when 20261118113759 is installed.
+   */
+  unsupportedSources: string[]
   /**
    * Evidence level per published source, bound immutably to the sealed cohort
    * (20261113110430 / 20261114193017). Every published source is
@@ -634,6 +658,45 @@ async function readExpectedSources(
   return authority.rows.map((row) => row.source).sort(compareText)
 }
 
+/**
+ * The capture-contract gate (20261118113759): the freshness authority carries
+ * the registration predicate, the unsupported reader exists, and so does the
+ * per-cohort record. Before it is installed nothing is left out of the
+ * expected set and nothing is recorded.
+ */
+async function probeCaptureContractGate(tx: RankPublicationSqlExecutor): Promise<boolean> {
+  const probe = await tx.query<{ supported: boolean }>(
+    `SELECT pg_catalog.to_regclass('arena.leaderboard_publication_unsupported_sources') IS NOT NULL
+        AND pg_catalog.to_regprocedure('public.arena_publication_unsupported_sources()') IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM pg_catalog.pg_proc AS function_row
+           WHERE function_row.oid =
+                 pg_catalog.to_regprocedure('public.arena_freshness_expected_sources()')
+             AND pg_catalog.strpos(function_row.prosrc, $1) > 0
+        ) AS supported`,
+    [CAPTURE_CONTRACT_REGISTRATION_MARKER]
+  )
+  return probe.rows[0]?.supported === true
+}
+
+/**
+ * Declared season sources the freshness authority leaves out for lack of a
+ * valid capture contract registration. Same function, same predicate: the
+ * reader evaluates arena_freshness_expected_sources() with the predicate off.
+ */
+async function readUnsupportedSources(
+  tx: RankPublicationSqlExecutor,
+  season: PublicationWindow
+): Promise<string[]> {
+  const unsupported = await tx.query<{ source: string }>(
+    `SELECT DISTINCT unsupported.filter_source AS source
+       FROM public.arena_publication_unsupported_sources() AS unsupported
+      WHERE unsupported.season_id = $1`,
+    [season]
+  )
+  return unsupported.rows.map((row) => row.source).sort(compareText)
+}
+
 /** Isolation needs both the table and the rewritten freshness authority. */
 async function probeSourceIsolation(tx: RankPublicationSqlExecutor): Promise<boolean> {
   const probe = await tx.query<{ supported: boolean }>(
@@ -750,12 +813,31 @@ async function publishInTransaction(
       for (const row of cleared.rows) previouslyIsolated.set(row.filter_source, row)
     }
 
-    // 1. Season authority and score-input evidence.
+    // 1. Season authority and score-input evidence. Sources without a valid
+    // capture contract registration are not in the expected set (they can
+    // never carry attempt-bound evidence); they are listed, never dropped.
+    const captureContractGate = await probeCaptureContractGate(tx)
+    const unsupportedSources = captureContractGate ? await readUnsupportedSources(tx, season) : []
     const allExpectedSources = await readExpectedSources(tx, season)
-    if (allExpectedSources.length === 0) {
+    if (unsupportedSources.length > 0) {
+      log(
+        `[${season}] unsupported (no capture contract registered, not in the expected set): ${unsupportedSources.join(', ')}`
+      )
+    }
+    if (allExpectedSources.length === 0 && unsupportedSources.length === 0) {
       throw new RankPublicationError(
         'season_authority_empty',
         `[${season}] no active serving source declares this season`
+      )
+    }
+    const minExpectedSources = deps.minExpectedSources ?? RANK_PUBLICATION_MIN_EXPECTED_SOURCES
+    if (allExpectedSources.length < minExpectedSources) {
+      throw new RankPublicationError(
+        'expected_set_below_floor',
+        `[${season}] expected set has ${allExpectedSources.length} source(s), below the floor of ${minExpectedSources} (unsupported: ${
+          unsupportedSources.join(', ') || 'none'
+        })`,
+        { expectedSources: allExpectedSources, unsupportedSources, floor: minExpectedSources }
       )
     }
     const bundle = await readSourcePublicationBundle(rpc, season, { now: new Date(computedAt) })
@@ -785,24 +867,36 @@ async function publishInTransaction(
     const describeNotFresh = () =>
       notFresh.map((entry) => `${entry.source}(${entry.reasons.join('+')})`).join(', ')
     const isolatedSources: IsolatedSourceSummary[] = []
-    if (notFresh.length > 0) {
-      const notFreshSet = new Set(notFresh.map((entry) => entry.source))
-      const coreSources = new Set(deps.coreSources ?? RANK_PUBLICATION_CORE_SOURCES)
-      const coreExpected = allExpectedSources.filter((source) => coreSources.has(source))
-      const allCoreDown =
-        coreExpected.length > 0 && coreExpected.every((source) => notFreshSet.has(source))
+    // Every-core-source-down rule, unchanged by the capture-contract gate: an
+    // unsupported core source still counts as declared and is never fresh
+    // core evidence, even if stale legacy boards of it pass.
+    const unsupportedSet = new Set(unsupportedSources)
+    const notFreshSet = new Set(notFresh.map((entry) => entry.source))
+    const coreSources = new Set(deps.coreSources ?? RANK_PUBLICATION_CORE_SOURCES)
+    const coreDeclared = [...new Set([...allExpectedSources, ...unsupportedSources])]
+      .filter((source) => coreSources.has(source))
+      .sort(compareText)
+    const allCoreDown =
+      coreDeclared.length > 0 &&
+      coreDeclared.every((source) => notFreshSet.has(source) || unsupportedSet.has(source))
+    if (notFresh.length > 0 || allCoreDown) {
       const tooMany =
         notFresh.length > allExpectedSources.length * RANK_PUBLICATION_MAX_ISOLATED_RATIO
-      if (!isolationSupported || tooMany || allCoreDown) {
-        const why = !isolationSupported
-          ? 'source isolation is not installed'
-          : tooMany
-            ? `more than ${RANK_PUBLICATION_MAX_ISOLATED_RATIO * 100}% of expected sources`
-            : `every core source (${coreExpected.join(', ')})`
+      if ((notFresh.length > 0 && (!isolationSupported || tooMany)) || allCoreDown) {
+        const why =
+          notFresh.length > 0 && !isolationSupported
+            ? 'source isolation is not installed'
+            : tooMany
+              ? `more than ${RANK_PUBLICATION_MAX_ISOLATED_RATIO * 100}% of expected sources`
+              : `every core source (${coreDeclared
+                  .map((source) => (unsupportedSet.has(source) ? `${source}(unsupported)` : source))
+                  .join(', ')})`
         throw new RankPublicationError(
           'expected_source_not_fresh',
-          `[${season}] ${notFresh.length}/${allExpectedSources.length} expected source(s) lack fresh evidence (${why}): ${describeNotFresh()}`,
-          { notFresh, tooMany, allCoreDown, isolationSupported }
+          `[${season}] ${notFresh.length}/${allExpectedSources.length} expected source(s) lack fresh evidence (${why}): ${describeNotFresh()}${
+            unsupportedSources.length > 0 ? `; unsupported: ${unsupportedSources.join(', ')}` : ''
+          }`,
+          { notFresh, tooMany, allCoreDown, isolationSupported, unsupportedSources }
         )
       }
       for (const entry of notFresh) {
@@ -857,6 +951,17 @@ async function publishInTransaction(
           ]),
           scoreCohortId,
         ]
+      )
+    }
+
+    // Every cohort records which declared sources it excluded as unsupported
+    // (an empty list too); a refused publication rolls the row back.
+    if (captureContractGate) {
+      await tx.query(
+        `INSERT INTO arena.leaderboard_publication_unsupported_sources (
+           season_id, score_cohort_id, filter_sources
+         ) VALUES ($1, $2::uuid, $3::text[])`,
+        [season, scoreCohortId, unsupportedSources]
       )
     }
 
@@ -1123,7 +1228,7 @@ async function publishInTransaction(
             (entry) => `${entry.source}(${entry.reasons.join('+')}, since ${entry.firstIsolatedAt})`
           )
           .join(', ')}`,
-        details: { isolatedSources },
+        details: { isolatedSources, unsupportedSources },
         sources: isolatedSources.map((entry) => entry.source),
       })
     }
@@ -1175,6 +1280,7 @@ async function publishInTransaction(
       leaseReleased,
       isolatedSources,
       restoredSources,
+      unsupportedSources,
       evidenceGrades,
       scoreInputSha256,
       scoreInputSha256Recorded: trustEvidence.storesDigest,

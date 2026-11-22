@@ -33,6 +33,7 @@ import type {
   Timeframe,
 } from '../../core/types'
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
+import type { LeaderboardExhaustionDeclaration } from '../../acquisition-exhaustion'
 import type { FetchSession } from '../../fetch/types'
 import { pageFetcher, replayJson } from '../../fetch/capture'
 import {
@@ -48,6 +49,29 @@ import {
 } from './parsers'
 
 const BASE = 'https://www.bybit.com/x-api/fapi/copymt5/public/v1'
+
+/**
+ * Exhausted-completeness contract for bybit_mt5 (registered in
+ * arena.leaderboard_exhaustion_contracts). The board is ~32,600 traders in
+ * fixed pages of 16 (the server ignores pageSize), about 2,040 requests and
+ * 107 minutes per window, so members join and leave while it is paged. It
+ * therefore ends at its short (or empty) final page, and the proof bounds how
+ * far it moved instead of demanding a frozen snapshot. Measured drift is one
+ * to five rows per window; the allowance is 0.1% of the last reported total
+ * (about 32 rows), and never more than 100 rows.
+ */
+export const BYBIT_MT5_LEADERBOARD_EXHAUSTION: LeaderboardExhaustionDeclaration = Object.freeze({
+  completeness_mode: 'exhausted' as const,
+  list_path: ['result', 'providerDetailsList'],
+  row_key_path: ['providerMark'],
+  end_signal: { kind: 'short_page' as const },
+  board_version: {
+    kind: 'reported_total_drift' as const,
+    path: ['result', 'totalCount'],
+    max_drift_bps: 10,
+  },
+  max_duplicate_rows: 100,
+})
 
 const TF_DURATION: Record<RankingTimeframe, string> = {
   7: 'DATA_DURATION_SEVEN_DAY',
@@ -152,6 +176,7 @@ const bybitMt5Adapter: SourceAdapter = {
         pageBinding: { location: 'query', key: 'pageNo' },
         extractMeta: bybit_mt5LeaderboardMeta,
         pageSize,
+        exhaustion: BYBIT_MT5_LEADERBOARD_EXHAUSTION,
       }
     )
   },

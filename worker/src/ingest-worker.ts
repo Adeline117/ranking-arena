@@ -126,6 +126,7 @@ async function initializeRuntime(): Promise<void> {
     consumerRuntime,
     coordinator,
     healthWatchdog,
+    fatalExit,
   ] = await Promise.all([
     import('bullmq'),
     import('./connection'),
@@ -145,6 +146,7 @@ async function initializeRuntime(): Promise<void> {
     import('./ingest/region-consumer-runtime'),
     import('./ingest/native-process-coordinator'),
     import('./ingest/attempt-health-watchdog'),
+    import('./ingest/fatal-exit-guard'),
   ])
 
   Worker = bullmq.Worker
@@ -177,6 +179,10 @@ async function initializeRuntime(): Promise<void> {
   createNativeProcessCoordinator = coordinator.createNativeProcessCoordinator
   startBitgetBotAttemptHealthWatchdog = healthWatchdog.startBitgetBotAttemptHealthWatchdog
 
+  const fatalExitGuard = fatalExit.createFatalExitGuard({
+    exit: (code) => process.exit(code),
+    log: (message) => console.error(message),
+  })
   processCoordinator = createNativeProcessCoordinator({
     closeDatabase: async () => {
       const { closeIngestPool } = await import('@/lib/ingest/db')
@@ -185,6 +191,8 @@ async function initializeRuntime(): Promise<void> {
     closeRedis: closeConnection,
     markFatal: (code) => {
       console.error(`[ingest-worker] native process shutdown failed (${code})`)
+      // The coordinator only sets the exit code; make sure the process ends.
+      fatalExitGuard.arm(code)
     },
     setExitCode: (code) => {
       process.exitCode = code
