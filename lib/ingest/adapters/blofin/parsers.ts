@@ -105,10 +105,7 @@ function traderInfo(payload: unknown): Dict[] {
  * followers, verified, chart_data) is preserved in raw (spec §3) — it is the
  * per-TF profile-stats substrate since no per-uid profile endpoint exists.
  */
-export function parseBlofinLeaderboardPage(
-  payload: unknown,
-  _ctx: ParseCtx
-): ParsedLeaderboardPage {
+export function parseBlofinLeaderboardPage(payload: unknown, ctx: ParseCtx): ParsedLeaderboardPage {
   const rows: ParsedLeaderboardRow[] = []
   const list = traderInfo(payload)
   for (let i = 0; i < list.length; i++) {
@@ -117,6 +114,20 @@ export function parseBlofinLeaderboardPage(
     if (id === null || id === undefined) continue
     const headlineRoi = pct(item.roi)
     const headlinePnl = num(item.pnl)
+    // The row's win_rate is the period's winning_trades / trades (sweep
+    // 2026-11-22, 576 futures traders x 3 periods: equal to the profile's
+    // period win_ratio_all on 574/576 rows per period, and to wins/trades on
+    // 59/61, 133/134, 213/214 traded rows; truncated to 4 decimals, e.g.
+    // 28/60 = 0.4666). With zero trades the source
+    // reports 0 (1,319 of 1,319 zero-trade rows), which is no win rate at
+    // all; the row has no trade count to tell that from a real 0%, so a zero
+    // stays NULL and the profile crawl supplies it.
+    const boardWinRate = pct(item.win_rate)
+    // Verified on the futures board only; the spot row is left unread.
+    const headlineWinRate =
+      ctx.sourceSlug !== 'blofin_futures' || boardWinRate === null || boardWinRate === 0
+        ? null
+        : boardWinRate
     const boardMdd = pct(item.mdd)
     // A flat window's mdd is carried over, not this period's (isFlatWindow):
     // keep it out of the metric and on record under extras.
@@ -133,7 +144,7 @@ export function parseBlofinLeaderboardPage(
       botStrategy: null,
       headlineRoi,
       headlinePnl,
-      headlineWinRate: null, // not exposed on the board row
+      headlineWinRate,
       headlineMetricSources: {
         ...(headlineRoi === null ? {} : { roi: { fieldPath: 'data.trader_info[].roi' } }),
         ...(headlinePnl === null ? {} : { pnl: { fieldPath: 'data.trader_info[].pnl' } }),
