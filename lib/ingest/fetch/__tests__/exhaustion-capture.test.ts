@@ -364,6 +364,26 @@ describe('exhausted completeness capture', () => {
       )
     })
 
+    it('reads a total reported as a canonical decimal string', async () => {
+      const asString = (answer: Answer): Answer => {
+        const json = answer.json as { data: { total: number | string } }
+        return {
+          ...answer,
+          json: { ...json, data: { ...json.data, total: String(json.data.total) } },
+        }
+      }
+      const { capture } = await run(board(201).map(asString), live)
+      expect(capture.completeness?.board_version).toEqual({
+        kind: 'reported_total_drift',
+        reported_totals: { min: 201, max: 201, last: 201 },
+      })
+      expect(evidence(capture, live).trustBound).toBe(true)
+
+      const padded = board(201).map(asString)
+      ;(padded[0].json as { data: { total: string } }).data.total = '0201'
+      await expect(run(padded, live)).rejects.toBeInstanceOf(LeaderboardCaptureUpstreamError)
+    })
+
     it('fails the page when a page with rows reports no total', async () => {
       await expect(run([ok({ uids: ['a', 'b'] })], live)).rejects.toBeInstanceOf(
         LeaderboardCaptureUpstreamError

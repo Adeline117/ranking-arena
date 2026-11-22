@@ -428,6 +428,16 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # registry. It needs the declaration 114230 makes valid, so it follows it; the
 # worker release that captures binance in this mode is deployed after it. It
 # touches no table 192134 guards.
+# 20261120233328 replaces arena.publication_score_rows_json (@3 of 215329)
+# with @4: a trader_stats value the selected board attested is as fresh as that
+# board, instead of being dropped when the row's as_of is frozen by an old
+# column the board never re-sends. It follows 215329, depends on no worker
+# release and touches no table 192134 guards.
+# 20261120190124 registers bybit_mt5 as a live board (reported_total_drift,
+# 0.1% of the board, at most 100 rows) in the append-only exhaustion registry.
+# It needs the declaration 114230 makes valid, so it follows it; it takes
+# effect with the worker release that captures bybit_mt5 in this mode. It
+# touches no table 192134 guards.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -452,6 +462,8 @@ POSTDEPLOY_MIGRATIONS=(
   20261118150737_public_boards_larger_served_pages.sql
   20261118161307_tier_a_window_receipt_exhaustion_branch.sql
   20261118134500_register_binance_live_board_exhaustion_contracts.sql
+  20261120233328_publication_score_rows_board_attested_freshness.sql
+  20261120190124_register_bybit_mt5_live_board_exhaustion_contract.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
