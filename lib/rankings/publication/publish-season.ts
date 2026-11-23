@@ -662,6 +662,33 @@ ON CONFLICT (season_id, source, source_trader_id) DO UPDATE SET
   rank_publication_id = EXCLUDED.rank_publication_id
 `
 
+/**
+ * Order in which rows are sent to the database.
+ *
+ * The rerank assigns rank by `arena_score DESC NULLS LAST, id`, and the display
+ * score has two decimals, so rows that share a score are ordered by id. A row
+ * inserted for the first time takes the next id, i.e. insertion order. Sending
+ * rows by score, then ROI, then PnL, then identity therefore makes ties among
+ * newly ranked rows fall in that order: a zero-return account never gets an id
+ * (and so a rank) ahead of a profitable trader with the same displayed score.
+ * Rows already in the table keep their id (ON CONFLICT ... DO UPDATE), so ranks
+ * inside a tie are stable from one publication to the next.
+ *
+ * The write set is unchanged: writeSetSha256 canonicalizes by identity.
+ */
+export function orderRowsForWrite<
+  Row extends Pick<PublishableRow, 'arena_score' | 'roi' | 'pnl' | 'source' | 'source_trader_id'>,
+>(rows: readonly Row[]): Row[] {
+  return [...rows].sort(
+    (left, right) =>
+      right.arena_score - left.arena_score ||
+      right.roi - left.roi ||
+      right.pnl - left.pnl ||
+      compareText(left.source, right.source) ||
+      compareText(left.source_trader_id, right.source_trader_id)
+  )
+}
+
 function writeSetSha256(season: PublicationWindow, rows: readonly PublishableRow[]): string {
   const canonical = [...rows]
     .sort(
@@ -1186,8 +1213,9 @@ async function publishInTransaction(
 
     // 5. Write every row with the cohort token.
     let written = 0
+    const rowsInWriteOrder = orderRowsForWrite(rows)
     for (let offset = 0; offset < rows.length; offset += RANK_PUBLICATION_WRITE_CHUNK) {
-      const chunk = rows.slice(offset, offset + RANK_PUBLICATION_WRITE_CHUNK)
+      const chunk = rowsInWriteOrder.slice(offset, offset + RANK_PUBLICATION_WRITE_CHUNK)
       const result = await tx.query(WRITE_SQL, [
         JSON.stringify(chunk),
         season,

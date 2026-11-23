@@ -20,6 +20,7 @@ jest.mock('@/lib/utils/logger', () => ({
 }))
 
 import { MIN_RANKED_ARENA_SCORE, scoreTraders, type ScoredTrader } from '../score-traders'
+import { classifyPublishableRow, orderRowsForWrite } from '../publish-season'
 import type { TraderRow } from '../trader-row'
 import type { PublicRankingRowEligibility } from '@/lib/rankings/publication-policy'
 
@@ -336,5 +337,156 @@ describe('a missing risk metric never lifts a trader through the publication sco
     expect(rows.get('neither')!.arena_score!).toBeLessThanOrEqual(
       rows.get('no-win-rate')!.arena_score!
     )
+  })
+})
+
+describe('zero-return accounts rank at the bottom, in a stable order', () => {
+  // The shape production has after the relaxation: most new rows are idle
+  // accounts with ROI 0, PnL 0 and no risk metrics.
+  const zeroRows = () =>
+    Array.from({ length: 60 }, (_, i) =>
+      traderRow(`zero-${String(i).padStart(2, '0')}`, {
+        source: 'xt',
+        roi: 0,
+        pnl: 0,
+        win_rate: null,
+        max_drawdown: null,
+      })
+    )
+  const profitable = () => [
+    traderRow('profit-full-1', { roi: 85, pnl: 240_000, win_rate: 66, max_drawdown: 9 }),
+    traderRow('profit-full-2', { roi: 31, pnl: 18_000, win_rate: 58, max_drawdown: 14 }),
+    traderRow('profit-full-3', { roi: 4, pnl: 600, win_rate: 51, max_drawdown: 22 }),
+    traderRow('profit-partial', { roi: 12, pnl: 2_500, win_rate: null, max_drawdown: 18 }),
+    // The weakest profitable rows: tiny gains and no risk metrics at all.
+    traderRow('profit-minimal-1', { roi: 0.4, pnl: 3, win_rate: null, max_drawdown: null }),
+    traderRow('profit-minimal-2', { roi: 0.01, pnl: 0.5, win_rate: null, max_drawdown: null }),
+  ]
+  const losing = () => [
+    traderRow('loss-full-1', { roi: -8, pnl: -900, win_rate: 45, max_drawdown: 28 }),
+    traderRow('loss-full-2', { roi: -55, pnl: -40_000, win_rate: 22, max_drawdown: 71 }),
+    traderRow('loss-minimal-1', { roi: -3, pnl: -20, win_rate: null, max_drawdown: null }),
+    traderRow('loss-minimal-2', { roi: -70, pnl: -5_000, win_rate: null, max_drawdown: null }),
+  ]
+
+  /**
+   * What the database does with the written rows: a first-time row takes the
+   * next id in arrival order; rank = ROW_NUMBER() OVER (ORDER BY arena_score
+   * DESC NULLS LAST, id) (rerank_leaderboard_publication).
+   */
+  function rerank(
+    written: Array<{ source_trader_id: string; arena_score: number }>,
+    existingIds: Map<string, number> = new Map()
+  ): { order: string[]; ids: Map<string, number> } {
+    const ids = new Map(existingIds)
+    let nextId = Math.max(0, ...ids.values()) + 1
+    for (const row of written) {
+      if (!ids.has(row.source_trader_id)) ids.set(row.source_trader_id, nextId++)
+    }
+    const order = [...written]
+      .sort(
+        (left, right) =>
+          right.arena_score - left.arena_score ||
+          ids.get(left.source_trader_id)! - ids.get(right.source_trader_id)!
+      )
+      .map((row) => row.source_trader_id)
+    return { order, ids }
+  }
+
+  async function publish(input: TraderRow[]) {
+    const scored = await publishedCohort(input, 'roi_pnl')
+    const rows = scored.map((trader) => {
+      const verdict = classifyPublishableRow(trader, 'roi_pnl')
+      if (!('row' in verdict)) throw new Error(`unexpected exclusion of ${trader.source_trader_id}`)
+      return verdict.row
+    })
+    return orderRowsForWrite(rows)
+  }
+
+  it('every profitable trader ranks above every zero-return account', async () => {
+    const written = await publish([...zeroRows(), ...losing(), ...profitable()])
+    const { order } = rerank(written)
+
+    expect(order).toHaveLength(70)
+    const position = new Map(order.map((id, index) => [id, index]))
+    const lastProfitable = Math.max(
+      ...profitable().map((row) => position.get(row.source_trader_id)!)
+    )
+    const firstZero = Math.min(...zeroRows().map((row) => position.get(row.source_trader_id)!))
+    expect(lastProfitable).toBeLessThan(firstZero)
+
+    // The zero-return accounts are one contiguous block: nothing else is
+    // interleaved by the id tie-break.
+    const zeroPositions = zeroRows()
+      .map((row) => position.get(row.source_trader_id)!)
+      .sort((a, b) => a - b)
+    expect(zeroPositions[zeroPositions.length - 1] - zeroPositions[0]).toBe(59)
+    // ...and inside the block the order is the identity order, not arrival order.
+    expect(order.slice(zeroPositions[0], zeroPositions[0] + 60)).toEqual(
+      zeroRows().map((row) => row.source_trader_id)
+    )
+
+    // All of them share one score, at or above the display floor.
+    const zeroScores = new Set(
+      written
+        .filter((row) => row.source_trader_id.startsWith('zero-'))
+        .map((row) => row.arena_score)
+    )
+    expect(zeroScores.size).toBe(1)
+    expect([...zeroScores][0]).toBeGreaterThanOrEqual(MIN_RANKED_ARENA_SCORE)
+  })
+
+  it('places losing traders by the formula, with no extra rule', async () => {
+    const written = await publish([...zeroRows(), ...losing(), ...profitable()])
+    const { order } = rerank(written)
+    const position = new Map(order.map((id, index) => [id, index]))
+    const firstZero = position.get('zero-00')!
+    const lastZero = position.get('zero-59')!
+
+    // A losing trader whose drawdown and win rate earn percentile credit ranks
+    // above the idle block: those two dimensions outweigh a slightly lower ROI
+    // percentile.
+    expect(position.get('loss-full-1')!).toBeLessThan(firstZero)
+    // Having the metrics is not credit by itself: this one has the worst
+    // drawdown and the worst win rate of the cohort (both factors 0) and a
+    // lower ROI percentile than a zero-return account, so it ranks below it.
+    expect(position.get('loss-full-2')!).toBeGreaterThan(lastZero)
+    // A losing trader with nothing but ROI and PnL has a lower ROI percentile
+    // than a zero-return account and no other credit: below the block too.
+    expect(position.get('loss-minimal-1')!).toBeGreaterThan(lastZero)
+    expect(position.get('loss-minimal-2')!).toBeGreaterThan(lastZero)
+    // The worst loss is last, at the floor.
+    expect(order[order.length - 1]).toBe('loss-minimal-2')
+    expect(written.find((row) => row.source_trader_id === 'loss-minimal-2')!.arena_score).toBe(
+      MIN_RANKED_ARENA_SCORE
+    )
+  })
+
+  it('gives the same ranks whatever order the rows arrive in, and on republication', async () => {
+    const forward = [...zeroRows(), ...losing(), ...profitable()]
+    const first = rerank(await publish(forward))
+    const reversed = rerank(await publish([...forward].reverse()))
+    expect(reversed.order).toEqual(first.order)
+
+    // Next publication: the rows exist, ids are kept (ON CONFLICT DO UPDATE).
+    const second = rerank(await publish([...forward].reverse()), first.ids)
+    expect(second.order).toEqual(first.order)
+    // Ranks are a dense 1..n with no duplicates however many rows tie.
+    expect(new Set(second.order).size).toBe(second.order.length)
+  })
+
+  it('when the idle block is the whole bottom of the cohort it sits on the 0.01 floor together', async () => {
+    const written = await publish([...zeroRows(), ...profitable()])
+    const zeroScores = written
+      .filter((row) => row.source_trader_id.startsWith('zero-'))
+      .map((row) => row.arena_score)
+    expect(new Set(zeroScores)).toEqual(new Set([MIN_RANKED_ARENA_SCORE]))
+    const { order } = rerank(written)
+    expect(order.slice(0, 6).sort()).toEqual(
+      profitable()
+        .map((row) => row.source_trader_id)
+        .sort()
+    )
+    expect(order.slice(6)).toEqual(zeroRows().map((row) => row.source_trader_id))
   })
 })
