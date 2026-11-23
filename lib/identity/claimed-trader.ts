@@ -56,6 +56,25 @@ export interface ClaimedTraderRedirectInput {
 }
 
 /**
+ * Is the URL's `?platform=` the account the SERVER already resolved and rendered?
+ *
+ * True only for the server account's own source or a name in `source_aliases`.
+ * That list is produced on the server, and a name gets into it only after
+ * arena_resolve_trader returned this same account for it — so a forged or
+ * mistyped platform is never in it and still goes through client validation.
+ */
+export function urlPlatformIsServerAccount(
+  urlPlatform: string | null | undefined,
+  serverAccount: { source: string; source_aliases?: readonly string[] }
+): boolean {
+  if (!urlPlatform) return false
+  return (
+    urlPlatform === serverAccount.source ||
+    (serverAccount.source_aliases ?? []).includes(urlPlatform)
+  )
+}
+
+/**
  * Decide whether the browser can safely canonicalize /trader/... to /u/....
  *
  * The ISR server component cannot observe ?platform= because one cached HTML

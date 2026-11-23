@@ -124,6 +124,82 @@ function buildNullMetricsRow(period, nowIso) {
   }
 }
 
+// One trader on a source the public ranking publishes under an ALIAS. The
+// ranking row says `bybit`; the serving resolver (arena_resolve_trader) knows
+// the same account as the arena slug `bybit_copytrade` and accepts either name
+// — exactly the production shape for bybit / bitunix / blofin / xt. Pages must
+// read the public ranking by the alias and link to the alias URL.
+export const ALIAS_TRADER = {
+  publicSource: 'bybit',
+  servingSource: 'bybit_copytrade',
+  id: 'e2e-alias',
+  handle: 'E2E Alias Trader',
+}
+
+function buildAliasRow(period, nowIso) {
+  return {
+    ...buildRow(period, TRADERS_PER_PERIOD + 2, nowIso),
+    source: ALIAS_TRADER.publicSource,
+    source_type: 'futures',
+    source_trader_id: ALIAS_TRADER.id,
+    handle: ALIAS_TRADER.handle,
+  }
+}
+
+// The arena.* RPCs the serving read path calls. Anything else answers `[]`,
+// which every caller treats as "no data".
+export function callRpc(name, args, now = new Date()) {
+  const isAliasSource =
+    args?.p_source == null ||
+    args.p_source === ALIAS_TRADER.publicSource ||
+    args.p_source === ALIAS_TRADER.servingSource
+  if (name === 'arena_serving_sources') {
+    return [ALIAS_TRADER.servingSource, ALIAS_TRADER.publicSource]
+  }
+  if (name === 'arena_resolve_trader') {
+    const matches =
+      isAliasSource &&
+      (args?.p_handle === ALIAS_TRADER.id || args?.p_handle === ALIAS_TRADER.handle)
+    return matches
+      ? {
+          source: ALIAS_TRADER.servingSource,
+          fetchRegion: 'vps_sg',
+          exchangeTraderId: ALIAS_TRADER.id,
+          nickname: ALIAS_TRADER.handle,
+          avatarMirrorUrl: null,
+          avatarOriginUrl: null,
+        }
+      : null
+  }
+  if (name === 'arena_first_screen') {
+    if (args?.p_source !== ALIAS_TRADER.servingSource || args?.p_trader !== ALIAS_TRADER.id) {
+      return null
+    }
+    return {
+      source: ALIAS_TRADER.servingSource,
+      exchangeTraderId: ALIAS_TRADER.id,
+      nickname: ALIAS_TRADER.handle,
+      avatarMirrorUrl: null,
+      avatarOriginUrl: null,
+      walletAddress: null,
+      traderKind: 'human',
+      botStrategy: null,
+      currency: 'USDT',
+      entries: [7, 30, 90].map((timeframe) => ({
+        timeframe,
+        rank: 1,
+        headlineRoi: 1,
+        headlinePnl: null,
+        headlineWinRate: 55,
+        currency: 'USDT',
+        extras: {},
+        asOf: now.toISOString(),
+      })),
+    }
+  }
+  return []
+}
+
 /**
  * Degraded states a test can switch the fake into (see POST /__e2e/scenario).
  * Each only changes the ranking relations; auth, profiles and writes stay as
@@ -167,9 +243,10 @@ export function buildFixtures(now = new Date(), scenario = 'normal') {
           ),
           buildSharedRow(period, computedIso),
           buildNullMetricsRow(period, computedIso),
+          buildAliasRow(period, computedIso),
         ])
   const freshness = PERIODS.flatMap((season_id) =>
-    ['binance_futures', 'hyperliquid'].map((source) => ({
+    ['binance_futures', 'hyperliquid', ALIAS_TRADER.publicSource].map((source) => ({
       season_id,
       source,
       source_as_of: capturedIso,
@@ -334,6 +411,9 @@ export function startFakeSupabase({ port = 54399, log } = {}) {
         send(200, { name })
       })
     }
+
+    const rpc = url.pathname.match(/^\/rest\/v1\/rpc\/([^/]+)$/)
+    if (rpc) return readBody((body) => send(200, callRpc(rpc[1], body)))
 
     const rest = url.pathname.match(/^\/rest\/v1\/([^/]+)$/)
     if (rest && scenario === 'leaderboard-error' && LEADERBOARD_RELATIONS.has(rest[1])) {
