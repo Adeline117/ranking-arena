@@ -50,7 +50,10 @@ export function TradingSection({
   }, [delay])
 
   // 判断trading数据是否全部为空
-  const hasTradingData = trading && (trading.totalTrades12M > 0 || trading.profitableTradesPct > 0)
+  // `?? 0` only decides whether the block is worth showing; the values below
+  // are rendered through their own null checks.
+  const hasTradingData =
+    trading && ((trading.totalTrades12M ?? 0) > 0 || (trading.profitableTradesPct ?? 0) > 0)
   const hasAdditionalData =
     additionalStats &&
     (additionalStats.avgHoldingTime ||
