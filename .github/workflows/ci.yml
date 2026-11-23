@@ -600,6 +600,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:trust-requires-run-pg17
 
+      - name: Prove RAW retention census is count-only and switch-gated
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:raw-retention-census-pg17
+
       - name: Prove public-source capture and metric contract registration
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin

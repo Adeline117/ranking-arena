@@ -11,6 +11,8 @@
  *   8. trust evidence retention (20261118135918): superseded/failed snapshot
  *      evidence counted per table; deleted only with BOTH
  *      INGEST_TRUST_EVIDENCE_RETENTION_DELETE=1 and the owner DB switch
+ *   9. RAW retention backlog (20261118134316): census + orphan walk, count
+ *      only unless INGEST_RAW_RETENTION_DELETE=1 AND the DB switch is on
  * Runs every 6h; each step is independent — one failure doesn't block the
  * rest, and failures land in the daily digest. A partitions failure also
  * pages: without the month's child partition every write to that table fails
@@ -22,6 +24,7 @@ import type { Job } from 'bullmq'
 import { getConnection } from '../../connection'
 import { getIngestPool } from '@/lib/ingest/db'
 import { cleanupRawObjects } from '@/lib/ingest/raw'
+import { runRawRetention } from '@/lib/ingest/raw-retention'
 import {
   downsampleOldSeries,
   downsampleSnapshotEntries,
@@ -84,6 +87,7 @@ export async function processMaintenance(_job: Job): Promise<Record<string, unkn
   const steps: Array<[string, () => Promise<unknown>]> = [
     ['partitions', () => ensurePartitions()],
     ['raw_cleanup', () => cleanupRawObjects(30)],
+    ['raw_retention', () => runRawRetention()],
     ['series_downsample', () => downsampleOldSeries(90)],
     ['entries_downsample', () => downsampleSnapshotEntries(7)],
     ['snapshot_retention', () => pruneLeaderboardSnapshots(180)],

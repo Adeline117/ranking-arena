@@ -391,6 +391,11 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # It reads the 20261118135918 audit table, so it follows it. A source whose
 # boards carry outcomes but no metric-trust run becomes untrusted (isolated)
 # at the next publication; it touches no table 192134 guards.
+# 20261118134316 (RAW retention backlog census) adds a switch table (off),
+# an orphan GC queue and count-only census/scan functions; the worker release
+# that calls them treats a missing function as not_installed, so it follows
+# that release. It reads storage.objects, deletes nothing, and touches no
+# table 192134 guards.
 # 040440 forward replacement. V1_EXECUTION_STATUS requires the RAW-only
 # bridge SHA to be deployed and legacy callers drained before the legacy
 # position-history relations are frozen. Current main never reads or writes
@@ -501,6 +506,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261121201553_visible_sources_from_served_ranks.sql
   20261122152622_metric_trust_observation_lineage_per_statement.sql
   20261122154211_score_bundle_index_only_entry_counts.sql
+  20261118134316_raw_retention_backlog_census.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
