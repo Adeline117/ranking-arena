@@ -114,9 +114,9 @@ describe('scoreTraders ROI and PnL eligibility boundary', () => {
     expect(mockCalculateArenaScore.mock.calls.map(([input]) => input.pnl)).toEqual([0, -100, 100])
     expect(mockCalculateArenaScore.mock.calls.map(([input]) => input.roi)).toEqual([0, -10, 10])
     expect(mockComputeArenaScoresV4).toHaveBeenCalledTimes(1)
-    expect(mockComputeArenaScoresV4.mock.calls[0][0].map((input) => input.pnl)).toEqual([
-      0, -100, 100,
-    ])
+    // The idle-window row (ROI 0 and PnL 0) is ranked but not scored on any
+    // dimension: it never reaches the percentile cohort.
+    expect(mockComputeArenaScoresV4.mock.calls[0][0].map((input) => input.pnl)).toEqual([-100, 100])
     expect(result.scored.map((row) => row.source_trader_id)).toEqual(['zero', 'loss', 'profit'])
     expect(result.scored.map((row) => row.roi)).toEqual([0, -10, 10])
     expect(result.scoredFiltered.map((row) => row.source_trader_id)).toEqual([
@@ -124,6 +124,15 @@ describe('scoreTraders ROI and PnL eligibility boundary', () => {
       'loss',
       'profit',
     ])
+    expect(result.scoredFiltered[0]).toMatchObject({
+      arena_score: 0.01,
+      arena_score_v4: 0.01,
+      score_factors: { idle_window: true, roi: 0, pnl: 0, drawdown: null, consistency: null },
+      // Its own metrics are kept as they are.
+      win_rate: 60,
+      max_drawdown: 10,
+    })
+    expect(result.scoredFiltered[1].score_factors).not.toHaveProperty('idle_window')
   })
 
   it('keeps legitimate zero scores and negative ROI/PnL in the v4 ranking cohort', async () => {
@@ -144,7 +153,7 @@ describe('scoreTraders ROI and PnL eligibility boundary', () => {
 
     expect(mockCalculateArenaScore).toHaveBeenCalledTimes(2)
     expect(result.scored.map((row) => row.arena_score_v3)).toEqual([0, 0])
-    expect(mockComputeArenaScoresV4.mock.calls[0][0].map((input) => input.pnl)).toEqual([0, -100])
+    expect(mockComputeArenaScoresV4.mock.calls[0][0].map((input) => input.pnl)).toEqual([-100])
     expect(result.scoredFiltered.map((row) => row.source_trader_id)).toEqual([
       'zero-score',
       'loss-score',
@@ -209,7 +218,7 @@ describe('scoreTraders ROI and PnL eligibility boundary', () => {
   })
 
   it('empties malformed risk metrics and still ranks the row, instead of coercing them', async () => {
-    const validZero = trader('valid-zero', 0, 0)
+    const validZero = trader('valid-zero', 5, 1)
     validZero.win_rate = 0
     validZero.max_drawdown = 0
     const validDecimal = trader('valid-decimal', 100)

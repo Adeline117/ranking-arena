@@ -42,7 +42,7 @@ export interface ScoredTrader {
   arena_score: number | null // NOW the v4 score (served + ranked); filled by the batch pass
   arena_score_v3: number | null // rollback: pre-v4 (ROI+PnL) score; also the serving-population gate
   arena_score_v4: number | null // = arena_score (labeled shadow, kept for continuity)
-  score_factors: ArenaScoreV4Result['factors'] | null // v4 breakdown for the score UI
+  score_factors: RankScoreFactors | null // v4 breakdown for the score UI
   roi: number
   pnl: number | null
   win_rate: number | null
@@ -68,8 +68,48 @@ export interface ScoredTrader {
   is_outlier?: boolean
 }
 
-/** Smallest positive arena_score the numeric(10,2) column stores. */
+/**
+ * Smallest positive arena_score the numeric(10,2) column stores. Under
+ * 'roi_pnl' it is the score of every idle-window row (see isIdleWindowRow).
+ */
 export const MIN_RANKED_ARENA_SCORE = 0.01
+
+/**
+ * Display-score floor of a row that HAS performance in the window ('roi_pnl').
+ * One step above the idle score, so the lowest scored trader never shares a
+ * score with the idle rows: the rerank breaks score ties by row id, and rows
+ * already in the table keep their id, so a shared score could put an idle
+ * account ahead of a trader who traded.
+ */
+export const MIN_ACTIVE_ARENA_SCORE = 0.02
+
+/**
+ * score_factors as written to leaderboard_ranks.score_factors (jsonb).
+ * `idle_window: true` marks a row that was not scored on any dimension because
+ * the account shows no performance in the window; the UI can say "no trading
+ * in this period". Absent on every scored row.
+ */
+export type RankScoreFactors = ArenaScoreV4Result['factors'] & { idle_window?: true }
+
+/**
+ * Idle window ('roi_pnl' only): ROI is exactly 0 and PnL is exactly 0. There
+ * is no performance to rank, so the row takes no part in any dimension of the
+ * score (it is not in the percentile cohort either) and gets the floor score.
+ * This is not "0 read as missing": its win rate and drawdown are kept and
+ * shown as they are, 0 included.
+ */
+export function isIdleWindowRow(row: { roi: number; pnl: number | null }): boolean {
+  return row.roi === 0 && row.pnl === 0
+}
+
+const IDLE_WINDOW_SCORE_FACTORS: RankScoreFactors = Object.freeze({
+  roi: 0,
+  pnl: 0,
+  drawdown: null,
+  sharpe: null,
+  consistency: null,
+  idle_window: true,
+})
 
 export interface ScoreTradersOptions {
   /** Defaults to PUBLIC_RANKING_ROW_ELIGIBILITY; explicit for tests and offline comparison. */
@@ -186,7 +226,7 @@ export async function scoreTraders(
       arena_score: null as number | null, // v4 — filled by the batch pass below (SERVED + RANKED)
       arena_score_v3: finalScore, // rollback + serving-population gate (real ROI/PnL present)
       arena_score_v4: null as number | null, // = arena_score, filled below
-      score_factors: null as ArenaScoreV4Result['factors'] | null,
+      score_factors: null as RankScoreFactors | null,
       roi: t.roi,
       pnl: t.pnl,
       win_rate: normalizedWinRate,
@@ -272,8 +312,15 @@ export async function scoreTraders(
   // users actually see). Writes arena_score (served + ranked by the rerank RPC /
   // in-memory sort), arena_score_v4 (= arena_score, labeled), and score_factors
   // (UI breakdown). arena_score_v3 (set above) is the rollback value.
+  // 'roi_pnl': idle-window rows are set aside before the batch pass. They do
+  // not shape anyone's percentile and are not scored on any dimension.
+  const idleRows =
+    rowEligibility === 'roi_pnl' ? scoredFiltered.filter((trader) => isIdleWindowRow(trader)) : []
+  const idleSet = new Set(idleRows)
+  const scoredRows =
+    idleSet.size > 0 ? scoredFiltered.filter((t) => !idleSet.has(t)) : scoredFiltered
   const v4Results = computeArenaScoresV4WithOptions(
-    scoredFiltered.map((t) => ({
+    scoredRows.map((t) => ({
       roi: t.roi,
       pnl: t.pnl,
       maxDrawdown: t.max_drawdown,
@@ -286,16 +333,16 @@ export async function scoreTraders(
     season,
     arenaScoreOptionsForRowEligibility(rowEligibility)
   )
-  scoredFiltered.forEach((t, i) => {
+  scoredRows.forEach((t, i) => {
     const r = v4Results[i]
     // 'roi_pnl': the lowest composite of a cohort maps to a display score of
     // 0.00 (percentile 0), which the (0, 100] score domain reads as "not
-    // scored". Floor a computed score at the smallest value numeric(10,2)
-    // stores so the last trader is still ranked, last. The domain and every
+    // scored". Floor a computed score so the last trader is still ranked, and
+    // ranked above the idle rows (MIN_ACTIVE_ARENA_SCORE). The domain and every
     // `> 0` gate stay as they are; a row without a result keeps 0 and is dropped.
     t.arena_score = r
       ? rowEligibility === 'roi_pnl'
-        ? Math.max(MIN_RANKED_ARENA_SCORE, r.totalScore)
+        ? Math.max(MIN_ACTIVE_ARENA_SCORE, r.totalScore)
         : r.totalScore
       : 0
     t.arena_score_v4 = t.arena_score
@@ -314,6 +361,19 @@ export async function scoreTraders(
       t.execution_score = f.consistency != null ? Math.round(100 * f.consistency) : null
     }
   })
+  for (const t of idleRows) {
+    t.arena_score = MIN_RANKED_ARENA_SCORE
+    t.arena_score_v4 = MIN_RANKED_ARENA_SCORE
+    t.score_factors = { ...IDLE_WINDOW_SCORE_FACTORS }
+    t.profitability_score = 0
+    t.risk_control_score = 0
+    t.execution_score = null
+  }
+  if (rowEligibility === 'roi_pnl') {
+    logger.info(
+      `[${season}] Idle-window rows (ROI 0 and PnL 0, not scored, score ${MIN_RANKED_ARENA_SCORE}): ${idleRows.length} of ${scoredFiltered.length}`
+    )
+  }
 
   const publishedCohort = scoredFiltered.filter(
     (trader) =>

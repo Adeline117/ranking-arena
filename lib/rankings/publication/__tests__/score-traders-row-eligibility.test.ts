@@ -19,7 +19,12 @@ jest.mock('@/lib/utils/logger', () => ({
   }),
 }))
 
-import { MIN_RANKED_ARENA_SCORE, scoreTraders, type ScoredTrader } from '../score-traders'
+import {
+  MIN_ACTIVE_ARENA_SCORE,
+  MIN_RANKED_ARENA_SCORE,
+  scoreTraders,
+  type ScoredTrader,
+} from '../score-traders'
 import { classifyPublishableRow, orderRowsForWrite } from '../publish-season'
 import type { TraderRow } from '../trader-row'
 import type { PublicRankingRowEligibility } from '@/lib/rankings/publication-policy'
@@ -83,26 +88,29 @@ describe('display score floor', () => {
     traderRow('worst', { roi: -40, pnl: -9_000, win_rate: 10, max_drawdown: 80 }),
   ]
 
-  it("'roi_pnl' keeps the lowest-scoring trader at the 0.01 floor, ranked last", async () => {
+  it("'roi_pnl' keeps the lowest-scoring trader at the active floor, ranked last", async () => {
     const scored = await publishedCohort(cohort(), 'roi_pnl')
     const rows = byId(scored)
 
     expect(scored).toHaveLength(4)
-    expect(rows.get('worst')?.arena_score).toBe(MIN_RANKED_ARENA_SCORE)
-    expect(rows.get('worst')?.arena_score_v4).toBe(MIN_RANKED_ARENA_SCORE)
+    // One step above the idle-window score, so a trader with a result never
+    // shares a score with the idle rows.
+    expect(MIN_ACTIVE_ARENA_SCORE).toBe(0.02)
+    expect(rows.get('worst')?.arena_score).toBe(MIN_ACTIVE_ARENA_SCORE)
+    expect(rows.get('worst')?.arena_score_v4).toBe(MIN_ACTIVE_ARENA_SCORE)
     const order = [...scored]
       .sort((left, right) => right.arena_score! - left.arena_score!)
       .map((row) => row.source_trader_id)
     expect(order).toEqual(['best', 'middle', 'loser', 'worst'])
     for (const row of scored) {
-      expect(row.arena_score).toBeGreaterThanOrEqual(MIN_RANKED_ARENA_SCORE)
+      expect(row.arena_score).toBeGreaterThanOrEqual(MIN_ACTIVE_ARENA_SCORE)
       expect(row.arena_score).toBeLessThanOrEqual(100)
     }
   })
 
   it('gives losing traders a positive score below every profitable trader here', async () => {
     const rows = byId(await publishedCohort(cohort(), 'roi_pnl'))
-    expect(rows.get('loser')!.arena_score!).toBeGreaterThan(MIN_RANKED_ARENA_SCORE)
+    expect(rows.get('loser')!.arena_score!).toBeGreaterThan(MIN_ACTIVE_ARENA_SCORE)
     expect(rows.get('loser')!.arena_score!).toBeLessThan(rows.get('middle')!.arena_score!)
   })
 
@@ -340,19 +348,40 @@ describe('a missing risk metric never lifts a trader through the publication sco
   })
 })
 
-describe('zero-return accounts rank at the bottom, in a stable order', () => {
-  // The shape production has after the relaxation: most new rows are idle
-  // accounts with ROI 0, PnL 0 and no risk metrics.
-  const zeroRows = () =>
-    Array.from({ length: 60 }, (_, i) =>
-      traderRow(`zero-${String(i).padStart(2, '0')}`, {
+describe('idle-window rows (ROI 0 and PnL 0) are ranked last and not scored', () => {
+  // The shape production has after the relaxation: about half of the rows are
+  // idle accounts. Some carry no risk metrics, some report a 0% drawdown and a
+  // 0% win rate, some carry ordinary values.
+  const idleRows = () => [
+    ...Array.from({ length: 20 }, (_, i) =>
+      traderRow(`idle-none-${String(i).padStart(2, '0')}`, {
         source: 'xt',
         roi: 0,
         pnl: 0,
         win_rate: null,
         max_drawdown: null,
       })
-    )
+    ),
+    ...Array.from({ length: 20 }, (_, i) =>
+      traderRow(`idle-zero-dd-${String(i).padStart(2, '0')}`, {
+        source: 'bybit',
+        roi: 0,
+        pnl: 0,
+        win_rate: 0,
+        max_drawdown: 0,
+      })
+    ),
+    ...Array.from({ length: 20 }, (_, i) =>
+      traderRow(`idle-with-risk-${String(i).padStart(2, '0')}`, {
+        source: 'bitunix',
+        roi: 0,
+        pnl: 0,
+        win_rate: 62,
+        max_drawdown: 4,
+        trades_count: 300,
+      })
+    ),
+  ]
   const profitable = () => [
     traderRow('profit-full-1', { roi: 85, pnl: 240_000, win_rate: 66, max_drawdown: 9 }),
     traderRow('profit-full-2', { roi: 31, pnl: 18_000, win_rate: 58, max_drawdown: 14 }),
@@ -366,8 +395,16 @@ describe('zero-return accounts rank at the bottom, in a stable order', () => {
     traderRow('loss-full-1', { roi: -8, pnl: -900, win_rate: 45, max_drawdown: 28 }),
     traderRow('loss-full-2', { roi: -55, pnl: -40_000, win_rate: 22, max_drawdown: 71 }),
     traderRow('loss-minimal-1', { roi: -3, pnl: -20, win_rate: null, max_drawdown: null }),
+    // The single worst row of the cohort: percentile 0 on everything.
     traderRow('loss-minimal-2', { roi: -70, pnl: -5_000, win_rate: null, max_drawdown: null }),
   ]
+  // Rows with a result in only one of the two: they have performance.
+  const oneSided = () => [
+    traderRow('roi-zero-pnl-positive', { roi: 0, pnl: 12, win_rate: null, max_drawdown: null }),
+    traderRow('roi-positive-pnl-zero', { roi: 1.5, pnl: 0, win_rate: null, max_drawdown: null }),
+  ]
+  const everyone = () => [...idleRows(), ...losing(), ...profitable(), ...oneSided()]
+  const isIdleId = (id: string) => id.startsWith('idle-')
 
   /**
    * What the database does with the written rows: a first-time row takes the
@@ -403,144 +440,159 @@ describe('zero-return accounts rank at the bottom, in a stable order', () => {
     return orderRowsForWrite(rows)
   }
 
-  it('every profitable trader ranks above every zero-return account', async () => {
-    const written = await publish([...zeroRows(), ...losing(), ...profitable()])
-    const { order } = rerank(written)
+  it('gives every idle row the floor score, marks it, and keeps its own metrics', async () => {
+    const rows = byId(await publishedCohort(everyone(), 'roi_pnl'))
 
-    expect(order).toHaveLength(70)
-    const position = new Map(order.map((id, index) => [id, index]))
-    const lastProfitable = Math.max(
-      ...profitable().map((row) => position.get(row.source_trader_id)!)
-    )
-    const firstZero = Math.min(...zeroRows().map((row) => position.get(row.source_trader_id)!))
-    expect(lastProfitable).toBeLessThan(firstZero)
+    for (const trader of idleRows()) {
+      const row = rows.get(trader.source_trader_id)!
+      expect(row.arena_score).toBe(MIN_RANKED_ARENA_SCORE)
+      expect(row.arena_score_v4).toBe(MIN_RANKED_ARENA_SCORE)
+      expect(row.score_factors).toEqual({
+        roi: 0,
+        pnl: 0,
+        drawdown: null,
+        sharpe: null,
+        consistency: null,
+        idle_window: true,
+      })
+      // Not "0 read as missing": the metrics stay exactly as reported.
+      expect(row.win_rate).toBe(trader.win_rate)
+      expect(row.max_drawdown).toBe(trader.max_drawdown)
+      expect(row.profitability_score).toBe(0)
+      expect(row.risk_control_score).toBe(0)
+      expect(row.execution_score).toBeNull()
+    }
+    expect(rows.get('idle-zero-dd-00')).toMatchObject({
+      win_rate: 0,
+      max_drawdown: 0,
+      score_completeness: 'full',
+    })
+    expect(rows.get('idle-none-00')).toMatchObject({ score_completeness: 'minimal' })
 
-    // The zero-return accounts are one contiguous block: nothing else is
-    // interleaved by the id tie-break.
-    const zeroPositions = zeroRows()
-      .map((row) => position.get(row.source_trader_id)!)
-      .sort((a, b) => a - b)
-    expect(zeroPositions[zeroPositions.length - 1] - zeroPositions[0]).toBe(59)
-    // ...and inside the block the order is the identity order, not arrival order.
-    expect(order.slice(zeroPositions[0], zeroPositions[0] + 60)).toEqual(
-      zeroRows().map((row) => row.source_trader_id)
+    // Every row with performance is scored, has no marker, and is above the floor.
+    for (const trader of [...profitable(), ...losing(), ...oneSided()]) {
+      const row = rows.get(trader.source_trader_id)!
+      expect(row.score_factors).not.toHaveProperty('idle_window')
+      expect(row.arena_score!).toBeGreaterThanOrEqual(MIN_ACTIVE_ARENA_SCORE)
+    }
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      '[30D] Idle-window rows (ROI 0 and PnL 0, not scored, score 0.01): 60 of 72'
     )
-
-    // All of them share one score, at or above the display floor.
-    const zeroScores = new Set(
-      written
-        .filter((row) => row.source_trader_id.startsWith('zero-'))
-        .map((row) => row.arena_score)
-    )
-    expect(zeroScores.size).toBe(1)
-    expect([...zeroScores][0]).toBeGreaterThanOrEqual(MIN_RANKED_ARENA_SCORE)
   })
 
-  it('places losing traders by the formula, with no extra rule', async () => {
-    const written = await publish([...zeroRows(), ...losing(), ...profitable()])
+  it('ranks every idle row after every row with a profit or a loss, whatever its drawdown', async () => {
+    const written = await publish(everyone())
+    const { order } = rerank(written)
+
+    expect(order).toHaveLength(72)
+    const firstIdle = order.findIndex(isIdleId)
+    expect(firstIdle).toBe(12)
+    // Nothing with performance below the first idle row, and nothing idle above it.
+    expect(order.slice(0, firstIdle).some(isIdleId)).toBe(false)
+    expect(order.slice(firstIdle).every(isIdleId)).toBe(true)
+    // The idle rows that report a 0% drawdown are in the block like the others.
+    expect(order.slice(firstIdle).filter((id) => id.startsWith('idle-zero-dd-'))).toHaveLength(20)
+  })
+
+  it('ranks losing traders above the idle rows: a loss is performance', async () => {
+    const written = await publish(everyone())
     const { order } = rerank(written)
     const position = new Map(order.map((id, index) => [id, index]))
-    const firstZero = position.get('zero-00')!
-    const lastZero = position.get('zero-59')!
+    const firstIdle = order.findIndex(isIdleId)
 
-    // A losing trader whose drawdown and win rate earn percentile credit ranks
-    // above the idle block: those two dimensions outweigh a slightly lower ROI
-    // percentile.
-    expect(position.get('loss-full-1')!).toBeLessThan(firstZero)
-    // Having the metrics is not credit by itself: this one has the worst
-    // drawdown and the worst win rate of the cohort (both factors 0) and a
-    // lower ROI percentile than a zero-return account, so it ranks below it.
-    expect(position.get('loss-full-2')!).toBeGreaterThan(lastZero)
-    // A losing trader with nothing but ROI and PnL has a lower ROI percentile
-    // than a zero-return account and no other credit: below the block too.
-    expect(position.get('loss-minimal-1')!).toBeGreaterThan(lastZero)
-    expect(position.get('loss-minimal-2')!).toBeGreaterThan(lastZero)
-    // The worst loss is last, at the floor.
-    expect(order[order.length - 1]).toBe('loss-minimal-2')
+    for (const trader of losing()) {
+      expect(position.get(trader.source_trader_id)!).toBeLessThan(firstIdle)
+    }
+    // The worst scored row sits on the active floor, one step above the idle score.
+    expect(order[firstIdle - 1]).toBe('loss-minimal-2')
     expect(written.find((row) => row.source_trader_id === 'loss-minimal-2')!.arena_score).toBe(
-      MIN_RANKED_ARENA_SCORE
+      MIN_ACTIVE_ARENA_SCORE
     )
+  })
+
+  it('orders the idle rows among themselves by source, then trader id', async () => {
+    const written = await publish(everyone())
+    const { order } = rerank(written)
+    const idleBlock = order.filter(isIdleId)
+    const expected = idleRows()
+      .map((row) => [row.source, row.source_trader_id] as const)
+      .sort(
+        (left, right) =>
+          (left[0] < right[0] ? -1 : left[0] > right[0] ? 1 : 0) ||
+          (left[1] < right[1] ? -1 : left[1] > right[1] ? 1 : 0)
+      )
+      .map(([, id]) => id)
+    expect(idleBlock).toEqual(expected)
+    // They are written last, so their ids are one run after every other row's.
+    expect(written.slice(-60).map((row) => row.source_trader_id)).toEqual(expected)
+    expect(written.slice(0, 12).some((row) => isIdleId(row.source_trader_id))).toBe(false)
   })
 
   it('gives the same ranks whatever order the rows arrive in, and on republication', async () => {
-    const forward = [...zeroRows(), ...losing(), ...profitable()]
-    const first = rerank(await publish(forward))
-    const reversed = rerank(await publish([...forward].reverse()))
+    const first = rerank(await publish(everyone()))
+    const reversed = rerank(await publish([...everyone()].reverse()))
     expect(reversed.order).toEqual(first.order)
 
     // Next publication: the rows exist, ids are kept (ON CONFLICT DO UPDATE).
-    const second = rerank(await publish([...forward].reverse()), first.ids)
+    const second = rerank(await publish([...everyone()].reverse()), first.ids)
     expect(second.order).toEqual(first.order)
-    // Ranks are a dense 1..n with no duplicates however many rows tie.
     expect(new Set(second.order).size).toBe(second.order.length)
   })
 
-  it('when the idle block is the whole bottom of the cohort it sits on the 0.01 floor together', async () => {
-    const written = await publish([...zeroRows(), ...profitable()])
-    const zeroScores = written
-      .filter((row) => row.source_trader_id.startsWith('zero-'))
-      .map((row) => row.arena_score)
-    expect(new Set(zeroScores)).toEqual(new Set([MIN_RANKED_ARENA_SCORE]))
-    const { order } = rerank(written)
-    expect(order.slice(0, 6).sort()).toEqual(
-      profitable()
-        .map((row) => row.source_trader_id)
-        .sort()
-    )
-    expect(order.slice(6)).toEqual(zeroRows().map((row) => row.source_trader_id))
+  it('keeps idle rows last even when they already hold the smallest ids in the table', async () => {
+    // Today's board already ranks idle accounts (e.g. bybit rows with a 0%
+    // drawdown). They keep their old, small ids; rows ranked for the first
+    // time get larger ones. A shared score would put the old idle rows first.
+    const existingIds = new Map(idleRows().map((row, index) => [row.source_trader_id, index + 1]))
+    const { order } = rerank(await publish(everyone()), existingIds)
+    const firstIdle = order.findIndex(isIdleId)
+    expect(firstIdle).toBe(12)
+    expect(order.slice(firstIdle).every(isIdleId)).toBe(true)
   })
-})
 
-describe('known consequence of "0 is a value": an idle account that reports 0% drawdown', () => {
-  // Not a rule added here: it is what the formula does once 0 is no longer
-  // read as missing. Whether an adapter should send 0 or null for an account
-  // with no activity in the window is a collection-layer question (xt, toobit).
-  it('gets the best drawdown factor and outranks a profitable trader with no risk metrics', async () => {
-    const rows = byId(
-      await publishedCohort(
-        [
-          traderRow('p1', { roi: 80, pnl: 500_000, win_rate: 70, max_drawdown: 5 }),
-          traderRow('p2', { roi: 20, pnl: 20_000, win_rate: 55, max_drawdown: 15 }),
-          traderRow('p3', { roi: 6, pnl: 900, win_rate: 48, max_drawdown: 35 }),
-          traderRow('small-profit-no-risk', {
-            roi: 2,
-            pnl: 40,
-            win_rate: null,
-            max_drawdown: null,
-          }),
-          traderRow('idle-no-risk', { roi: 0, pnl: 0, win_rate: null, max_drawdown: null }),
-          traderRow('idle-zero-risk', { roi: 0, pnl: 0, win_rate: 0, max_drawdown: 0 }),
-          traderRow('l1', { roi: -9, pnl: -300, win_rate: 41, max_drawdown: 44 }),
-        ],
-        'roi_pnl'
+  it('idle rows do not shape the percentiles of the rows that are scored', async () => {
+    const withIdle = byId(await publishedCohort(everyone(), 'roi_pnl'))
+    const withoutIdle = byId(
+      await publishedCohort([...losing(), ...profitable(), ...oneSided()], 'roi_pnl')
+    )
+    for (const [id, row] of withoutIdle) {
+      expect(withIdle.get(id)!.arena_score).toBe(row.arena_score)
+      expect(withIdle.get(id)!.score_factors).toEqual(row.score_factors)
+    }
+  })
+
+  it('a row with a result in only one of ROI and PnL is scored, not idle', async () => {
+    const rows = byId(await publishedCohort(everyone(), 'roi_pnl'))
+    for (const id of ['roi-zero-pnl-positive', 'roi-positive-pnl-zero']) {
+      expect(rows.get(id)!.score_factors).not.toHaveProperty('idle_window')
+      expect(rows.get(id)!.arena_score!).toBeGreaterThan(MIN_RANKED_ARENA_SCORE)
+    }
+  })
+
+  it("'four_metrics' has no idle rule: the rows are scored as before", async () => {
+    const rows = byId(await publishedCohort(everyone(), 'four_metrics'))
+    // Only complete rows are ranked, and an idle one is scored like any other.
+    const idle = rows.get('idle-with-risk-00')!
+    expect(idle.score_factors).not.toHaveProperty('idle_window')
+    expect(idle.arena_score!).toBeGreaterThan(MIN_ACTIVE_ARENA_SCORE)
+    expect(rows.has('idle-none-00')).toBe(false)
+  })
+
+  it('the written idle row satisfies the database row policy shape', async () => {
+    const written = await publish(everyone())
+    for (const row of written.filter((entry) => isIdleId(entry.source_trader_id))) {
+      // 0 < arena_score <= 100, label matches the columns, ROI and PnL present.
+      expect(row.arena_score).toBe(0.01)
+      expect(row.roi).toBe(0)
+      expect(row.pnl).toBe(0)
+      expect(row.score_completeness).toBe(
+        row.win_rate !== null && row.max_drawdown !== null
+          ? 'full'
+          : row.win_rate !== null || row.max_drawdown !== null
+            ? 'partial'
+            : 'minimal'
       )
-    )
-
-    expect(rows.get('idle-zero-risk')!.score_factors).toMatchObject({ drawdown: 1, consistency: 0 })
-    expect(rows.get('idle-zero-risk')!.arena_score!).toBeGreaterThan(
-      rows.get('small-profit-no-risk')!.arena_score!
-    )
-    // The idle account that reports nothing stays below the profitable one.
-    expect(rows.get('idle-no-risk')!.arena_score!).toBeLessThan(
-      rows.get('small-profit-no-risk')!.arena_score!
-    )
-
-    // Under the previous rule the reported zeros were read as missing.
-    const rollback = byId(
-      await publishedCohort(
-        [
-          traderRow('p1', { roi: 80, pnl: 500_000, win_rate: 70, max_drawdown: 5 }),
-          traderRow('p2', { roi: 20, pnl: 20_000, win_rate: 55, max_drawdown: 15 }),
-          traderRow('idle-zero-risk', { roi: 0, pnl: 0, win_rate: 0, max_drawdown: 0 }),
-          // Keeps the idle row off the 0.00 bottom, which the previous rule drops.
-          traderRow('l1', { roi: -9, pnl: -300, win_rate: 41, max_drawdown: 44 }),
-        ],
-        'four_metrics'
-      )
-    )
-    expect(rollback.get('idle-zero-risk')!.score_factors).toMatchObject({
-      drawdown: null,
-      consistency: null,
-    })
+      expect(row.score_factors).toMatchObject({ idle_window: true })
+    }
   })
 })
