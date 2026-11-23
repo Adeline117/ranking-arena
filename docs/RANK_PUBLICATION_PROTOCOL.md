@@ -104,6 +104,10 @@ fence / claim / seal 相关 RPC 只对 owner 和 `service_role` 开放。
 - 矛盾回撤（`'roi_pnl'` 下，`hasContradictoryDrawdown`）：ROI < 0 且回撤为 0（都按入库精度）的行，回撤按不可信处理：
   该维按缺失计分，`max_drawdown` 写空，`score_factors` 带 `mdd_contradiction: true`，发布日志计数。窗口内亏损必然有回撤，
   0 是占位值或口径不同的迹象。这是拒收自相矛盾的值，和越界值置空留痕同一类，不推算替代值。空窗行不适用。
+- 公开视图的标记列（`20261123021904`）：`public.public_ranked_leaderboard.idle_window`、`.mdd_contradiction`，布尔、不为空，
+  取自 `score_factors` 里同名的键。界面只读这两列，不自己复算规则。空窗行在视图里 `arena_score` 是 0.01、`rank` 连续排在榜尾，
+  `score_completeness` 按它自己的胜率、回撤是否有值取 `full` / `partial` / `minimal`，与是否空窗无关；`mdd_contradiction` 的行
+  `max_drawdown` 为 NULL。
 - 写入顺序（仅 `roi_pnl`）：按显示分、ROI、PnL、来源、交易员编号降序写入（`orderRowsForWrite`）。重排按
   `arena_score DESC NULLS LAST, id`，新行按到达顺序取 id，所以同分的新行按这个顺序排名；已有行保留 id。
 - 分阶段耗时：每季发布输出六行 `[季] stage=<read|score|write|cleanup|rerank|seal> rows=<行数> ms=<毫秒>`。
