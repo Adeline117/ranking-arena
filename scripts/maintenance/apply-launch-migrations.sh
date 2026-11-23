@@ -465,6 +465,11 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # public view serves instead of reading leaderboard_count_cache, which the
 # sealed publication path never refreshes (zero visible sources in production
 # while 3,546 ranks were served). Independent of every other entry.
+# 20261122152622 validates an observation batch's source-page lineage once per
+# acquisition run (AFTER INSERT ... FOR EACH STATEMENT) instead of once per
+# row; the per-row trigger re-verified the run's exhaustion proof for every
+# observation (63.5 ms x 12,900 rows for binance_futures against a 300 s
+# query timeout). It replaces the 112703 trigger function, so it follows it.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -495,6 +500,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261118135918_trust_evidence_retention.sql
   20261118144144_rank_publication_trust_requires_run.sql
   20261121201553_visible_sources_from_served_ranks.sql
+  20261122152622_metric_trust_observation_lineage_per_statement.sql
   20261118134316_raw_retention_backlog_census.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
