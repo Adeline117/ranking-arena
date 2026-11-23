@@ -335,7 +335,120 @@ describe('public ranking publication policy', () => {
     )
   })
 
-  it('requires complete, concrete, fresh metrics for row-level rank eligibility', () => {
+  it('accepts a ranked row without win rate or drawdown and keeps the page complete', () => {
+    const nowMs = Date.parse('2026-07-24T12:00:00.000Z')
+    const computed_at = '2026-07-24T11:00:00.000Z'
+    const rows = [
+      eligibleRow({ computed_at }),
+      eligibleRow({
+        source_trader_id: 'no-win-rate',
+        win_rate: null,
+        score_completeness: 'partial',
+        computed_at,
+      }),
+      eligibleRow({
+        source_trader_id: 'no-drawdown',
+        max_drawdown: null,
+        score_completeness: 'partial',
+        computed_at,
+      }),
+      eligibleRow({
+        source_trader_id: 'roi-pnl-only',
+        win_rate: null,
+        max_drawdown: null,
+        score_completeness: 'minimal',
+        computed_at,
+      }),
+      // A losing trader at the display floor.
+      eligibleRow({
+        source_trader_id: 'loser',
+        roi: -42,
+        pnl: -900,
+        arena_score: 0.01,
+        win_rate: null,
+        max_drawdown: null,
+        score_completeness: 'minimal',
+        computed_at,
+      }),
+      // 0 is a value: this row is complete.
+      eligibleRow({ source_trader_id: 'zeros', win_rate: 0, max_drawdown: 0, computed_at }),
+      // Camel-case API shape with the optional keys absent.
+      {
+        platform: 'binance_futures',
+        traderKey: 'api-shape',
+        period: '90D',
+        arenaScore: 12,
+        roi: 3,
+        pnl: 40,
+        scoreConfidence: 'minimal',
+        metricsEstimated: false,
+        lastUpdated: computed_at,
+      },
+    ]
+    for (const row of rows) {
+      expect(isPublicRankingRowEligible(row, { expectedPeriod: '90D', nowMs })).toBe(true)
+    }
+
+    const payload = { period: '90D', traders: rows, totalCount: 9000, hasMore: true }
+    const sanitized = sanitizePublicRankingPayload(payload, { nowMs })
+    // Nothing is removed, so totals and pagination are not downgraded.
+    expect(sanitized.traders).toHaveLength(rows.length)
+    expect(sanitized).toEqual(expect.objectContaining({ totalCount: 9000, hasMore: true }))
+    expect(sanitized).not.toHaveProperty('ranking_visibility')
+  })
+
+  it('rejects a completeness label that disagrees with the metrics the row carries', () => {
+    const nowMs = Date.parse('2026-07-24T12:00:00.000Z')
+    const computed_at = '2026-07-24T11:00:00.000Z'
+    for (const ineligible of [
+      eligibleRow({ win_rate: null, computed_at }), // says full
+      eligibleRow({ max_drawdown: null, computed_at }), // says full
+      eligibleRow({ score_completeness: 'minimal', computed_at }), // has both
+      eligibleRow({ win_rate: 0, max_drawdown: null, score_completeness: 'minimal', computed_at }),
+      eligibleRow({
+        win_rate: null,
+        max_drawdown: null,
+        score_completeness: 'partial',
+        computed_at,
+      }),
+      eligibleRow({ score_completeness: 'weird', computed_at }),
+      eligibleRow({ score_completeness: null, computed_at }),
+      // ROI and PnL stay mandatory whatever the label says.
+      eligibleRow({
+        roi: null,
+        win_rate: null,
+        max_drawdown: null,
+        score_completeness: 'minimal',
+        computed_at,
+      }),
+      eligibleRow({
+        pnl: null,
+        win_rate: null,
+        max_drawdown: null,
+        score_completeness: 'minimal',
+        computed_at,
+      }),
+      // Estimated and outlier rows stay out.
+      eligibleRow({
+        metrics_estimated: true,
+        win_rate: null,
+        score_completeness: 'partial',
+        computed_at,
+      }),
+      eligibleRow({ is_outlier: true, win_rate: null, score_completeness: 'partial', computed_at }),
+      // A present optional metric must still be a real in-range number.
+      eligibleRow({ win_rate: '60', computed_at }),
+      eligibleRow({ win_rate: -0.01, computed_at }),
+      eligibleRow({ max_drawdown: -1, computed_at }),
+      eligibleRow({ max_drawdown: 100, computed_at }),
+      // Score domain is (0, 100]: 0 still means "not scored".
+      eligibleRow({ arena_score: 0, win_rate: null, score_completeness: 'partial', computed_at }),
+    ]) {
+      expect(isPublicRankingRowEligible(ineligible, { expectedPeriod: '90D', nowMs })).toBe(false)
+    }
+  })
+
+  it('requires concrete, consistent, fresh metrics for row-level rank eligibility', () => {
     const nowMs = Date.parse('2026-07-24T12:00:00.000Z')
     const full = eligibleRow({ computed_at: '2026-07-24T11:00:00.000Z' })
     expect(isPublicRankingRowEligible(full, { expectedPeriod: '90D', nowMs })).toBe(true)
@@ -447,7 +560,7 @@ describe('public ranking publication policy', () => {
     expect(sanitizePublicRankingPayload(safe)).toBe(safe)
   })
 
-  it('removes partial or unknown rows even when their source is otherwise allowed', () => {
+  it('removes mislabeled or unknown rows even when their source is otherwise allowed', () => {
     const safeTrader = eligibleRow({ source: 'hyperliquid', source_trader_id: 'full' })
     const sanitized = sanitizePublicRankingPayload({
       period: '90D',
