@@ -157,6 +157,18 @@ describe('SSRRankingTable responsive layout', () => {
     expect(mddCells[2]).not.toHaveTextContent('▼')
   })
 
+  it('server-renders an idle-window row with the no-trading label and no score', async () => {
+    const view = await SSRRankingTable({
+      traders: [
+        { ...traders[0], id: 'idle', handle: 'Idle Trader', idle_window: true, arena_score: 0.01 },
+      ],
+    })
+    const { container } = render(view)
+
+    expect(container.querySelector('[data-testid="idle-window-label"]')).not.toBeNull()
+    expect(container.querySelector('.ssr-score-badge')).toHaveTextContent('—')
+  })
+
   it('keeps unknown source metrics unknown without a fabricated zero bar or aria value', async () => {
     const view = await SSRRankingTable({
       traders: [

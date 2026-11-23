@@ -2186,6 +2186,7 @@ const ko = {
   comingSoon: '곧 출시 예정',
   drawdownNotAvailable: '이 거래소에서 낙폭 데이터를 제공하지 않습니다',
   winRateNotAvailable: '이 거래소에서 승률을 제공하지 않습니다',
+  noTradingThisPeriod: '이 기간 거래 없음',
   holderBadge: '홀더',
   holderTooltip: '이 기간 내 청산 거래 없음 — 수익은 보유 포지션에서 발생',
   positionStatsNotAvailable: '이 거래소에서 포지션 통계를 제공하지 않습니다',

@@ -54,6 +54,24 @@ describe('Mobile compact ranking rows (owner 2026-11-13)', () => {
     expect(link.querySelector('.glass-card, .trader-card-contained')).toBeNull()
   })
 
+  it('an idle-window row shows the no-trading label instead of a score', () => {
+    render(
+      <TraderMobileRow
+        trader={{ ...trader, idle_window: true, arena_score: 0.01, roi: 0, pnl: 0 }}
+        rank={4261}
+        language="en"
+        parseSourceInfo={parseSourceInfo}
+      />
+    )
+    const link = screen.getByRole('link')
+    expect(link).toHaveAccessibleName('#4261 Mobile Trader, noTradingThisPeriod, roiValueAria')
+    expect(link.querySelector('.mrow-tag')).toHaveTextContent('noTradingThisPeriod')
+    expect(link.querySelector('.mrow-score')).toHaveTextContent('—')
+    expect(link.querySelector('.mrow-score')).not.toHaveTextContent('0')
+    // Its own win rate and drawdown are still shown when present.
+    expect(link.querySelector('.mrow-m-win')).toHaveTextContent('61.2%')
+  })
+
   it('keeps gain/loss color on ROI/PnL only — Win% and MDD are neutral, MDD has no arrow', () => {
     render(
       <TraderMobileRow trader={trader} rank={9} language="en" parseSourceInfo={parseSourceInfo} />

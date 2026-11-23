@@ -391,6 +391,7 @@ const zhCore = {
   arenaScoreAria: 'Arena 评分：{score}',
   arenaScoreOfHundredAria: 'Arena 评分 {score}（满分 100）',
   roiValueAria: 'ROI {value}',
+  noTradingThisPeriod: '本周期无交易',
   arenaScoreUnknownAria: 'Arena 评分未知',
   copyTraderIdAria: '复制交易员 ID',
   rankingEntryAria: '第 {rank} 名：{name}。{score}，{roi}',

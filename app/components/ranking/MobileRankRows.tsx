@@ -203,7 +203,9 @@ export const TraderMobileRow = memo(
     const sourceInfo = parseSourceInfo(traderSource)
     const compareAccount: CompareAccountRef = { id: trader.id, source: traderSource }
 
-    const score = normalizeFiniteScore(trader.arena_score)
+    // Idle-window rows were not scored: no score, and the label says why.
+    const isIdleWindow = trader.idle_window === true
+    const score = isIdleWindow ? null : normalizeFiniteScore(trader.arena_score)
     const roi = normalizeFiniteScore(trader.roi)
     const pnl = normalizeFiniteScore(trader.pnl)
     const winRate = normalizeFiniteScore(trader.win_rate)
@@ -238,8 +240,9 @@ export const TraderMobileRow = memo(
       roi != null
         ? t('roiValueAria').replace('{value}', `${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%`)
         : t('roiUnknown')
-    const scoreAria =
-      score != null
+    const scoreAria = isIdleWindow
+      ? t('noTradingThisPeriod')
+      : score != null
         ? t('arenaScoreAria').replace('{score}', score.toFixed(0))
         : t('arenaScoreUnknownAria')
 
@@ -273,6 +276,12 @@ export const TraderMobileRow = memo(
               </span>
               <span className="mrow-tag">
                 {sourceInfo.type}
+                {isIdleWindow && (
+                  <span className="rank-idle-window" data-testid="idle-window-label">
+                    {' · '}
+                    {t('noTradingThisPeriod')}
+                  </span>
+                )}
                 {rankingPeriod === '90D' && isAllTime90dSource(traderSource) && (
                   <>
                     {' '}

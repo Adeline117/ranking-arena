@@ -457,6 +457,7 @@ const enCore = {
   arenaScoreAria: 'Arena Score: {score}',
   arenaScoreOfHundredAria: 'Arena Score {score} of 100',
   roiValueAria: 'ROI {value}',
+  noTradingThisPeriod: 'No trading this period',
   arenaScoreUnknownAria: 'Arena Score unknown',
   copyTraderIdAria: 'Copy trader ID',
   rankingEntryAria: 'Rank {rank}: {name}. {score}, {roi}',

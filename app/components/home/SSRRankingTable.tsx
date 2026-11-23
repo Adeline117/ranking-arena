@@ -93,8 +93,12 @@ export default async function SSRRankingTable({ traders }: Props) {
         {traders.map((trader) => {
           const rank = trader.rank
           const roi = trader.roi != null && Number.isFinite(trader.roi) ? trader.roi : null
+          // Idle-window rows were not scored: no score, and the label says why.
+          const isIdleWindow = trader.idle_window === true
           const score =
-            trader.arena_score != null && Number.isFinite(Number(trader.arena_score))
+            !isIdleWindow &&
+            trader.arena_score != null &&
+            Number.isFinite(Number(trader.arena_score))
               ? Number(trader.arena_score)
               : null
           const scoreColor = score != null ? getScoreColor(score) : null
@@ -154,6 +158,12 @@ export default async function SSRRankingTable({ traders }: Props) {
                   <span className="ssr-trader-name mrow-name">{trader.handle}</span>
                   <span className="ssr-source-tag mrow-tag">
                     {getSourceTypeLabel(trader.source_type)}
+                    {isIdleWindow && (
+                      <span className="rank-idle-window" data-testid="idle-window-label">
+                        {' · '}
+                        {t('noTradingThisPeriod')}
+                      </span>
+                    )}
                   </span>
                 </span>
               </div>
