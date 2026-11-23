@@ -43,41 +43,43 @@ SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '30s';
 SET LOCAL search_path = pg_catalog, pg_temp;
 
--- 1. Preflight: exact identity of the object being replaced, snapshotted so
---    the postflight can prove nothing but the body moved.
-CREATE TEMPORARY TABLE row_eligibility_roi_pnl_only_before ON COMMIT DROP AS
-SELECT
-  procedure_row.oid,
-  procedure_row.proowner,
-  procedure_row.prolang,
-  procedure_row.prokind,
-  procedure_row.prosecdef,
-  procedure_row.proleakproof,
-  procedure_row.proisstrict,
-  procedure_row.proretset,
-  procedure_row.provolatile,
-  procedure_row.proparallel,
-  procedure_row.prorettype,
-  procedure_row.proargtypes::pg_catalog.text AS proargtypes,
-  procedure_row.proconfig,
-  procedure_row.proacl::pg_catalog.text AS proacl,
-  pg_catalog.obj_description(procedure_row.oid, 'pg_proc') AS description,
-  pg_catalog.encode(
-    pg_catalog.sha256(pg_catalog.convert_to(procedure_row.prosrc, 'UTF8')),
-    'hex'
-  ) AS body_sha256
-FROM pg_catalog.pg_proc AS procedure_row
-WHERE procedure_row.oid = pg_catalog.to_regprocedure(
-  'arena.leaderboard_rank_row_is_public_eligible(public.leaderboard_ranks,timestamp with time zone)'
-);
-
-DO $preflight$
+-- One block, so the state read before the replace is still in hand after it:
+--   1. preflight  - exact identity of the object being replaced
+--   2. replace    - CREATE OR REPLACE with the reviewed body
+--   3. postflight - the body is the reviewed one and nothing else moved
+DO $migration$
 DECLARE
   v_before record;
+  v_after record;
   v_owner pg_catalog.name;
   v_language pg_catalog.name;
 BEGIN
-  SELECT * INTO v_before FROM pg_temp.row_eligibility_roi_pnl_only_before;
+  -- 1. Preflight.
+  SELECT
+    procedure_row.oid,
+    procedure_row.proowner,
+    procedure_row.prolang,
+    procedure_row.prokind,
+    procedure_row.prosecdef,
+    procedure_row.proleakproof,
+    procedure_row.proisstrict,
+    procedure_row.proretset,
+    procedure_row.provolatile,
+    procedure_row.proparallel,
+    procedure_row.prorettype,
+    procedure_row.proargtypes::pg_catalog.text AS proargtypes,
+    procedure_row.proconfig,
+    procedure_row.proacl::pg_catalog.text AS proacl,
+    pg_catalog.obj_description(procedure_row.oid, 'pg_proc') AS description,
+    pg_catalog.encode(
+      pg_catalog.sha256(pg_catalog.convert_to(procedure_row.prosrc, 'UTF8')),
+      'hex'
+    ) AS body_sha256
+  INTO v_before
+  FROM pg_catalog.pg_proc AS procedure_row
+  WHERE procedure_row.oid = pg_catalog.to_regprocedure(
+    'arena.leaderboard_rank_row_is_public_eligible(public.leaderboard_ranks,timestamp with time zone)'
+  );
   IF NOT FOUND THEN
     RAISE EXCEPTION
       'row_eligibility_roi_pnl_only: arena.leaderboard_rank_row_is_public_eligible(public.leaderboard_ranks, timestamptz) does not exist';
@@ -134,11 +136,10 @@ BEGIN
       'row_eligibility_roi_pnl_only: arena.leaderboard_rank_row_is_public_eligible is executable by a role other than its owner (acl %)',
       v_before.proacl;
   END IF;
-END
-$preflight$;
 
--- 2. Replace the body. Everything outside AS $function$ ... $function$ is the
---    existing declaration, restated because CREATE OR REPLACE requires it.
+  -- 2. Replace the body. Everything outside AS $function$ ... $function$ is
+  --    the existing declaration, restated because CREATE OR REPLACE needs it.
+  EXECUTE $ddl$
 CREATE OR REPLACE FUNCTION arena.leaderboard_rank_row_is_public_eligible(
   p_rank public.leaderboard_ranks,
   p_observed_at timestamptz
@@ -188,15 +189,9 @@ AS $function$
     false
   );
 $function$;
+$ddl$;
 
--- 3. Postflight: the body is exactly the reviewed one and nothing else moved.
-DO $postflight$
-DECLARE
-  v_before record;
-  v_after record;
-BEGIN
-  SELECT * INTO STRICT v_before FROM pg_temp.row_eligibility_roi_pnl_only_before;
-
+  -- 3. Postflight.
   SELECT
     procedure_row.oid,
     procedure_row.proowner,
@@ -248,6 +243,6 @@ BEGIN
       'row_eligibility_roi_pnl_only: an attribute other than the body changed (owner, security, volatility, config, ACL or comment)';
   END IF;
 END
-$postflight$;
+$migration$;
 
 COMMIT;

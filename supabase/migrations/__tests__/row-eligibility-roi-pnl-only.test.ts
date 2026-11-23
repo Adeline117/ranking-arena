@@ -142,11 +142,15 @@ describe('row eligibility: ROI and PnL only (20261122201611)', () => {
     // One object: no other function, table, view, index, grant or owner change.
     expect(migration.match(/CREATE OR REPLACE FUNCTION/g)).toHaveLength(1)
     const statements = migration.replace(/--.*$/gm, '')
-    expect(statements).toContain('ON COMMIT DROP')
-    expect(statements.replace('ON COMMIT DROP', '')).not.toMatch(
-      /\b(?:ALTER|DROP|GRANT|REVOKE|COMMENT ON|CREATE (?:OR REPLACE )?VIEW|CREATE (?:UNIQUE )?INDEX)\b/
+    expect(statements).not.toMatch(
+      /\b(?:ALTER|DROP|GRANT|REVOKE|COMMENT ON|TRUNCATE|CREATE (?:OR REPLACE )?VIEW|CREATE (?:UNIQUE )?INDEX|CREATE (?:TEMP(?:ORARY)? )?TABLE)\b/
     )
-    expect(statements.match(/CREATE (?:TEMPORARY )?TABLE/g)).toEqual(['CREATE TEMPORARY TABLE'])
+    // Preflight, replace and postflight share one block and one transaction,
+    // so a refusal at any step leaves the function untouched.
+    expect(statements.match(/^DO \$migration\$/gm)).toHaveLength(1)
+    expect(statements.match(/\bEXECUTE\b/g)).toHaveLength(1)
+    expect(statements.indexOf('BEGIN;')).toBeLessThan(statements.indexOf('DO $migration$'))
+    expect(statements.trimEnd().endsWith('COMMIT;')).toBe(true)
     expect(statements).not.toContain('encode_leaderboard_rank_row')
   })
 
