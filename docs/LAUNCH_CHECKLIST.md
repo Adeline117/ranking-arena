@@ -9,7 +9,7 @@
 2026-11-13 起，2026-08-04 之后新增的迁移已全部分类，`scripts/qa/launch-inventory-gap.json` 为空列表。`launch-inventory-gap.test.mjs` 保证以后新增的迁移也必须先分类。分类写在 `scripts/maintenance/apply-launch-migrations.sh` 里：
 
 - **predeploy**（161 个）：部署前，按清单顺序逐文件应用。
-- **postdeploy**（33 个）：目标版本上线后才应用。
+- **postdeploy**（34 个）：目标版本上线后才应用。
 - **ADR-023 单文件**（`ADR023_SINGLE_FILE_MIGRATIONS`，2 个）：已分类，但执行脚本不会输出它们，`render-predeploy-one` 也会拒绝。每个都必须走 ADR-023 单文件通道，在下文规定的位置、各自的操作窗口里单独应用。
 - **superseded**：永不重放。
 
@@ -92,6 +92,7 @@
 - **期望来源集只含已注册采集契约的来源（迁移 `20261118113759`，postdeploy）**：没有有效 `arena.leaderboard_capture_contracts` 注册的来源（Tier-A 在任何会话前就拒绝它们，永远不会新鲜）不再计入赛季期望集，改列为 unsupported：每次发布写入 `arena.leaderboard_publication_unsupported_sources`，前台经 `public.public_leaderboard_unsupported_sources()` 读取并标"暂不支持"。>50% 新鲜规则作用于缩减后的期望集；"核心来源全挂"规则不变（未注册的核心来源仍算不新鲜）；缩减后少于 8 个来源时以 `expected_set_below_floor` 拒绝发布。必须在带下限与 unsupported 记录的编排器上线之后应用；应用后当前 serving head 的期望集与实时集不再相等，要等下一次发布才重新上榜。
 - **Tier-A 窗口回执接受穷尽完整性（迁移 `20261118161307`，postdeploy）**：`arena.record_tier_a_execution_window_receipt` 原来只接受 `terminal_state = 'complete'`，穷尽模式来源（okx_futures、okx_spot、binance_web3_bsc，以及以后的穷尽/报告总数漂移来源）每次发布成功后记回执都报“evidence is incomplete or mismatched”，worker 把已提交快照和证据的任务记为失败。本迁移只加一条分支：与 `20261115141050` 相同的穷尽结果形状且 `arena.leaderboard_outcome_exhaustion_bound` 成立。worker 启动门同时接受旧、新两个函数体摘要，所以必须先上线带该启动门的 worker 版本，之后任何时候应用本迁移都安全；旧 worker 遇到新函数体会在启动门失败。
 - **币安改由本机采集（2026-11-17 owner 已定）**：binance_futures、binance_spot 的采集区域由 `vps_sg` 改为 `local`（迁移 `20261117204948`，postdeploy），其余字段不变。依据：SG 节点未运行导致两源过期；2026-11-18 从本机用真实浏览器按适配器的预热方式只读探测，合约榜（7/30/90 天，total 13127）、现货榜（total 2469）、合约详情/曲线、现货详情均返回 `000000`。bitmart_futures 仍留在 `vps_sg`（本机被 Turnstile 拦，curl 403）。
+- **blofin_spot 详情采集契约（迁移 `20261120235710`，postdeploy）**：登记 `blofin_spot-profile-capture@1`，认证现货详情接口 `/sapi/v1/spot_copy/trader/stat/indicators` 的分周期胜率（`win_ratio_all`）和交易次数（`trades`）；回撤不登记（空仓账户在 7/30/90 天返回同一个非零值，不是所选窗口的值）；榜单行的回撤就是同一个数，不是独立证据，周期内零成交的行不把回撤当周期指标（另一处改动实现）。必须在带现货详情路由和同一契约文档的 worker 上线之后应用；旧 worker 不抓现货详情，也不开采集记录。每轮深抓覆盖全榜（约 150 人 × 3 个周期）。2026-11-20 公开只读实测：所选周期内有成交、因而有胜率的交易员只有 3 / 8 / 17 人（7D / 30D / 90D），其余人周期内零成交，交易所返回的胜率是 "0"，解析器按"无胜率"留空。
 
 ## 上线前要确认的产品问题
 
