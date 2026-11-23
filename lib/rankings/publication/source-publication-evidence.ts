@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import {
-  PUBLIC_RANKING_ROW_ELIGIBILITY,
+  publicRankingRowEligibility,
   type PublicRankingRowEligibility,
 } from '@/lib/rankings/publication-policy'
 
@@ -49,9 +49,9 @@ export const RANK_REQUIRED_SCORE_INPUT_METRICS_BY_ELIGIBILITY: Readonly<
   four_metrics: ['roi_pct', 'pnl_usd', 'win_rate', 'max_drawdown'],
 }
 
-/** The required metrics under the deployed PUBLIC_RANKING_ROW_ELIGIBILITY. */
+/** The required metrics under the default rule ('four_metrics'), as before the switch existed. */
 export const RANK_REQUIRED_SCORE_INPUT_METRICS: readonly ScoreInputMetric[] =
-  RANK_REQUIRED_SCORE_INPUT_METRICS_BY_ELIGIBILITY[PUBLIC_RANKING_ROW_ELIGIBILITY]
+  RANK_REQUIRED_SCORE_INPUT_METRICS_BY_ELIGIBILITY.four_metrics
 
 const scoreRowSchema = z
   .object({
@@ -155,7 +155,7 @@ export type SourcePublicationEvidenceErrorCode =
  */
 export function lacksRequiredMetricEvidence(
   row: SourcePublicationScoreRow,
-  rowEligibility: PublicRankingRowEligibility = PUBLIC_RANKING_ROW_ELIGIBILITY
+  rowEligibility: PublicRankingRowEligibility = publicRankingRowEligibility()
 ): boolean {
   const unevidenced = row.unevidenced_metrics ?? []
   return RANK_REQUIRED_SCORE_INPUT_METRICS_BY_ELIGIBILITY[rowEligibility].some(

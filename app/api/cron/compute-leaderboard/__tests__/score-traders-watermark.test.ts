@@ -9,7 +9,7 @@ jest.mock('@/lib/utils/arena-score', () => ({
     drawdownScore: 20,
     stabilityScore: 20,
   }),
-  computeArenaScoresV4WithOptions: () => [
+  computeArenaScoresV4: () => [
     {
       totalScore: 80,
       factors: {

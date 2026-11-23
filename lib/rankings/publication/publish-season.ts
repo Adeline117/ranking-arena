@@ -40,8 +40,9 @@ import { createHash, randomUUID } from 'node:crypto'
 
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import {
-  PUBLIC_RANKING_ROW_ELIGIBILITY,
+  publicRankingRowEligibility,
   publicRankingScoreCompleteness,
+  resolvePublicRankingRowEligibility,
   type PublicRankingRowEligibility,
 } from '@/lib/rankings/publication-policy'
 import { claimLeaderboardRankGeneration } from './claim-rank-generation'
@@ -119,6 +120,11 @@ export interface RankPublicationScoringContext {
   tx: RankPublicationSqlExecutor
   /** Display handle/avatar carried by the same score-input bundle rows. */
   handleMap: Map<string, { handle: string | null; avatar_url: string | null }>
+  /**
+   * Writer eligibility resolved once for this publication. A custom scorer
+   * may ignore it; the default scorer passes it to scoreTraders.
+   */
+  rowEligibility?: PublicRankingRowEligibility
 }
 
 export type RankPublicationCohortScorer = (
@@ -133,7 +139,7 @@ export type RankPublicationCohortScorer = (
  * cohort (`scoredFiltered`).
  */
 export function createDefaultCohortScorer(): RankPublicationCohortScorer {
-  return async (traderRows, season, { tx, handleMap }) => {
+  return async (traderRows, season, { tx, handleMap, rowEligibility }) => {
     const followers: ArenaFollowerCountSource = {
       async countTraderAccountFollowers(traderIds, sources) {
         const result = await tx.query<{ trader_id: string; source: string; cnt: number | string }>(
@@ -155,7 +161,8 @@ export function createDefaultCohortScorer(): RankPublicationCohortScorer {
       handleMap,
       new Set(),
       season,
-      followers
+      followers,
+      rowEligibility === undefined ? {} : { rowEligibility }
     )
     return scoredFiltered
   }
@@ -233,6 +240,12 @@ export interface PublishLeaderboardSeasonDependencies {
   coreSources?: readonly string[]
   /** Override RANK_PUBLICATION_MIN_EXPECTED_SOURCES (tests). */
   minExpectedSources?: number
+  /**
+   * Writer eligibility. Omitted in production: resolved from the
+   * PUBLIC_RANKING_ROW_ELIGIBILITY environment variable, default
+   * 'four_metrics' (tests and fixtures pass it explicitly).
+   */
+  rowEligibility?: PublicRankingRowEligibility
 }
 
 /** Why a scored trader did not become a published row. */
@@ -396,7 +409,7 @@ function fitInteger(value: number | null | undefined): number | null {
  */
 export function toPublishableRow(
   trader: ScoredTrader,
-  rowEligibility: PublicRankingRowEligibility = PUBLIC_RANKING_ROW_ELIGIBILITY
+  rowEligibility: PublicRankingRowEligibility = publicRankingRowEligibility()
 ): PublishableRow | null {
   const verdict = classifyPublishableRow(trader, rowEligibility)
   return 'row' in verdict ? verdict.row : null
@@ -418,7 +431,7 @@ export function toPublishableRow(
  */
 export function classifyPublishableRow(
   trader: ScoredTrader,
-  rowEligibility: PublicRankingRowEligibility = PUBLIC_RANKING_ROW_ELIGIBILITY
+  rowEligibility: PublicRankingRowEligibility = publicRankingRowEligibility()
 ): { row: PublishableRow; emptied?: RankRowEmptiedMetric[] } | { reason: RankRowExclusionReason } {
   const fourMetrics = rowEligibility === 'four_metrics'
   const source = trader.source
@@ -893,6 +906,15 @@ async function publishInTransaction(
   log: (message: string) => void,
   scoreCohortId: string
 ): Promise<PublishLeaderboardSeasonResult> {
+  // Resolved once per publication so every step applies the same rule.
+  const resolvedEligibility = deps.rowEligibility
+    ? {
+        value: deps.rowEligibility,
+        description: `row eligibility: ${deps.rowEligibility} (explicit)`,
+      }
+    : resolvePublicRankingRowEligibility()
+  const rowEligibility = resolvedEligibility.value
+  log(`[${season}] ${resolvedEligibility.description}`)
   return deps.database.transaction(async (tx) => {
     const rpc = createPgRpcClient(tx)
     await tx.query(`SET LOCAL statement_timeout = '${RANK_PUBLICATION_STEP_STATEMENT_TIMEOUT}'`)
@@ -1114,7 +1136,7 @@ async function publishInTransaction(
     log(rankPublicationStageTimingLine(season, 'read', traderRows.length, readElapsedMs))
     const unevidencedKeys = new Set(
       evidence.freshScoreRows
-        .filter((row) => lacksRequiredMetricEvidence(row))
+        .filter((row) => lacksRequiredMetricEvidence(row, rowEligibility))
         .map((row) => `${row.platform}\u0000${row.trader_key}`)
     )
     const scorerRows = traderRows.filter(
@@ -1132,7 +1154,7 @@ async function publishInTransaction(
       })
     }
     const scoreStartedAt = Date.now()
-    const scored = await deps.scoreCohort(scorerRows, season, { tx, handleMap })
+    const scored = await deps.scoreCohort(scorerRows, season, { tx, handleMap, rowEligibility })
     log(
       rankPublicationStageTimingLine(
         season,
@@ -1175,7 +1197,7 @@ async function publishInTransaction(
         continue
       }
       returnedBySource.set(trader.source, (returnedBySource.get(trader.source) ?? 0) + 1)
-      const verdict = classifyPublishableRow(trader)
+      const verdict = classifyPublishableRow(trader, rowEligibility)
       if ('reason' in verdict) {
         exclusions.excluded += 1
         bump(exclusions.byReason, verdict.reason)
@@ -1257,7 +1279,8 @@ async function publishInTransaction(
     // 5. Write every row with the cohort token.
     let written = 0
     const writeStartedAt = Date.now()
-    const rowsInWriteOrder = orderRowsForWrite(rows)
+    // 'four_metrics' sends rows in the order the scorer returned them, as before.
+    const rowsInWriteOrder = rowEligibility === 'roi_pnl' ? orderRowsForWrite(rows) : rows
     for (let offset = 0; offset < rows.length; offset += RANK_PUBLICATION_WRITE_CHUNK) {
       const chunk = rowsInWriteOrder.slice(offset, offset + RANK_PUBLICATION_WRITE_CHUNK)
       const result = await tx.query(WRITE_SQL, [

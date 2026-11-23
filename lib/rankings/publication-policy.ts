@@ -33,23 +33,76 @@ export const PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY = 'public-rankings:write-fence
 export const PUBLIC_RANKING_MAX_COMPUTED_AGE_MS = 48 * 60 * 60 * 1000
 
 /**
- * Row-level eligibility the rank publication WRITER applies (owner decision
- * 2026-11-22, "everyone with ROI and PnL is ranked").
+ * Row-level eligibility the rank publication WRITER applies.
  *
- *   'roi_pnl'      ROI and PnL are required. Win rate and max drawdown are
- *                  shown and range-checked when present and left empty when
- *                  absent; only null is missing, 0 is an observation.
- *   'four_metrics' the previous rule: all four required, and the historical
- *                  v4 scoring semantics (0 read as missing).
+ *   'four_metrics' THE DEFAULT: the rule in force before the "everyone with
+ *                  ROI and PnL is ranked" decision. All four metrics required,
+ *                  historical v4 scoring (computeArenaScoresV4). A build
+ *                  without the environment variable publishes exactly what it
+ *                  published before this switch existed.
+ *   'roi_pnl'      owner decision 2026-11-22. ROI and PnL are required; win
+ *                  rate and max drawdown are shown and range-checked when
+ *                  present and left empty when absent. Only null is missing, a
+ *                  missing dimension scores 0, idle-window rows are not scored,
+ *                  a 0% drawdown on a losing window is refused.
  *
  * One switch for every writer-side consequence (required evidence metrics,
- * cohort admission, row classification, score options), so a rollback is this
- * constant plus a scoring-worker deploy: the next publication replaces the
- * season with four-metric rows. Readers and the database row policy always
- * accept the relaxed superset and do not consult it.
+ * cohort admission, row classification, score options, score floors, idle and
+ * contradiction rules, write order). It is turned on only by setting
+ * PUBLIC_RANKING_ROW_ELIGIBILITY=roi_pnl in the scoring worker's environment,
+ * AFTER migration 20261122201611 and the website are deployed; removing the
+ * variable and redeploying the worker is the rollback. Readers and the
+ * database row policy accept the relaxed superset and never consult it.
  */
 export type PublicRankingRowEligibility = 'roi_pnl' | 'four_metrics'
-export const PUBLIC_RANKING_ROW_ELIGIBILITY: PublicRankingRowEligibility = 'roi_pnl'
+
+export const PUBLIC_RANKING_ROW_ELIGIBILITY_ENV = 'PUBLIC_RANKING_ROW_ELIGIBILITY'
+export const DEFAULT_PUBLIC_RANKING_ROW_ELIGIBILITY: PublicRankingRowEligibility = 'four_metrics'
+
+export interface ResolvedPublicRankingRowEligibility {
+  value: PublicRankingRowEligibility
+  /** 'set' = a recognized value; otherwise the default was used. */
+  source: 'set' | 'unset' | 'unrecognized'
+  /** One line for the worker log. Never echoes an unrecognized value's content beyond 40 chars. */
+  description: string
+}
+
+/**
+ * Resolve the writer switch from an environment value. Unset, empty or
+ * unrecognized all fall back to the default ('four_metrics'): a typo must
+ * never turn the new rule on, and must never turn publication off.
+ */
+export function resolvePublicRankingRowEligibility(
+  raw: string | undefined = typeof process === 'undefined'
+    ? undefined
+    : process.env[PUBLIC_RANKING_ROW_ELIGIBILITY_ENV]
+): ResolvedPublicRankingRowEligibility {
+  const fallback = DEFAULT_PUBLIC_RANKING_ROW_ELIGIBILITY
+  if (raw === undefined || raw.trim() === '') {
+    return {
+      value: fallback,
+      source: 'unset',
+      description: `row eligibility: ${fallback} (${PUBLIC_RANKING_ROW_ELIGIBILITY_ENV} is not set; default)`,
+    }
+  }
+  if (raw === 'roi_pnl' || raw === 'four_metrics') {
+    return {
+      value: raw,
+      source: 'set',
+      description: `row eligibility: ${raw} (${PUBLIC_RANKING_ROW_ELIGIBILITY_ENV})`,
+    }
+  }
+  return {
+    value: fallback,
+    source: 'unrecognized',
+    description: `row eligibility: ${fallback} (${PUBLIC_RANKING_ROW_ELIGIBILITY_ENV}=${JSON.stringify(raw.slice(0, 40))} is not recognized; expected roi_pnl or four_metrics; default)`,
+  }
+}
+
+/** The writer eligibility in force for this process. */
+export function publicRankingRowEligibility(): PublicRankingRowEligibility {
+  return resolvePublicRankingRowEligibility().value
+}
 export const PUBLIC_RANKING_FUTURE_TOLERANCE_MS = 5 * 60 * 1000
 
 export const PUBLIC_RANKING_SOURCE_QUARANTINES = [

@@ -89,10 +89,13 @@ fence / claim / seal 相关 RPC 只对 owner 和 `service_role` 开放。
   `-1e8 <= pnl <= 1e9`、`computed_at` 在 48 小时内。胜率、回撤可以为空；有值时
   `0 <= win_rate <= 100`、`0 <= max_drawdown < 100`。`score_completeness` 必须与两列一致：
   两项都有为 `full`，有一项为 `partial`，都没有为 `minimal`。只有 NULL 算缺失，0 是真实值。
-- 写入侧开关：`PUBLIC_RANKING_ROW_ELIGIBILITY`（`lib/rankings/publication-policy.ts`）。`'roi_pnl'`
-  （现行）：必需证据指标只有 ROI、PnL；缺失的回撤、一致性两维按 0 计且权重留在分母（空值不抬分）；
-  显示分下限 0.01（分数域仍是 `(0, 100]`）；越界的胜率、≥ 100 的回撤置空并计数进日志，不排除整行。
-  `'four_metrics'`：回滚用，恢复四项齐全和历史 v4 计分口径。读取端和数据库不看这个开关。
+- 写入侧开关：算分 worker 的环境变量 `PUBLIC_RANKING_ROW_ELIGIBILITY`（解析在 `lib/rankings/publication-policy.ts`
+  的 `resolvePublicRankingRowEligibility`）。**代码默认值是 `four_metrics`（旧规则）**：没设、设成空、设成认不出的值，
+  都回到 `four_metrics`，发布结果与引入开关之前逐值相同（走签名的 `computeArenaScoresV4`、四项齐全、
+  0 当缺失、没有下限、写入顺序不变）。只有显式设成 `roi_pnl` 才启用新规则：必需证据指标只有 ROI、PnL；
+  缺失的回撤、一致性两维按 0 计且权重留在分母（空值不抬分）；只有 null 算缺失，0 是真实值；越界的胜率、
+  ≥ 100 的回撤置空并计数进日志，不排除整行。每次发布的第一行日志是解析结果（`row eligibility: …`）。
+  读取端和数据库不看这个开关。
 - 空窗行（`'roi_pnl'` 下，`isIdleWindowRow`）：窗口内 ROI 为 0 且 PnL 为 0（按入库精度判断：ROI 四位小数、PnL 两位小数）的行没有可排名的表现，不进百分位队列、
   不参与任何维度打分，`arena_score` 直接取 0.01，`score_factors` 带 `idle_window: true`（界面可显示“本周期无交易”）。
   它自己的胜率、回撤照常保留和显示，包括 0。有盈亏的行显示分下限是 0.02，比空窗行高一档：重排同分按 id，
@@ -101,7 +104,7 @@ fence / claim / seal 相关 RPC 只对 owner 和 `service_role` 开放。
 - 矛盾回撤（`'roi_pnl'` 下，`hasContradictoryDrawdown`）：ROI < 0 且回撤为 0（都按入库精度）的行，回撤按不可信处理：
   该维按缺失计分，`max_drawdown` 写空，`score_factors` 带 `mdd_contradiction: true`，发布日志计数。窗口内亏损必然有回撤，
   0 是占位值或口径不同的迹象。这是拒收自相矛盾的值，和越界值置空留痕同一类，不推算替代值。空窗行不适用。
-- 写入顺序：按显示分、ROI、PnL、来源、交易员编号降序写入（`orderRowsForWrite`）。重排按
+- 写入顺序（仅 `roi_pnl`）：按显示分、ROI、PnL、来源、交易员编号降序写入（`orderRowsForWrite`）。重排按
   `arena_score DESC NULLS LAST, id`，新行按到达顺序取 id，所以同分的新行按这个顺序排名；已有行保留 id。
 - 分阶段耗时：每季发布输出六行 `[季] stage=<read|score|write|cleanup|rerank|seal> rows=<行数> ms=<毫秒>`。
 - 列精度（`20261111140053…:344-382`）：先按列的 `numeric(p,s)` 四舍五入再判断。可选比率

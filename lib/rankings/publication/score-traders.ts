@@ -5,6 +5,7 @@
 
 import {
   calculateArenaScore,
+  computeArenaScoresV4,
   computeArenaScoresV4WithOptions,
   type Period,
   type ArenaScoreV4Options,
@@ -19,7 +20,7 @@ import type { TraderRow } from './trader-row'
 import { createLogger } from '@/lib/utils/logger'
 import {
   hasConcretePublicRankingMetrics,
-  PUBLIC_RANKING_ROW_ELIGIBILITY,
+  publicRankingRowEligibility,
   type PublicRankingRowEligibility,
 } from '@/lib/rankings/publication-policy'
 import {
@@ -147,7 +148,11 @@ const IDLE_WINDOW_SCORE_FACTORS: RankScoreFactors = Object.freeze({
 })
 
 export interface ScoreTradersOptions {
-  /** Defaults to PUBLIC_RANKING_ROW_ELIGIBILITY; explicit for tests and offline comparison. */
+  /**
+   * Defaults to the process switch (publicRankingRowEligibility(): 'four_metrics'
+   * unless the environment turns 'roi_pnl' on). Explicit from the orchestrator,
+   * tests and the offline comparison.
+   */
   rowEligibility?: PublicRankingRowEligibility
 }
 
@@ -181,7 +186,7 @@ export async function scoreTraders(
   supabase: ArenaFollowersClient,
   options: ScoreTradersOptions = {}
 ): Promise<{ scored: ScoredTrader[]; scoredFiltered: ScoredTrader[] }> {
-  const rowEligibility = options.rowEligibility ?? PUBLIC_RANKING_ROW_ELIGIBILITY
+  const rowEligibility = options.rowEligibility ?? publicRankingRowEligibility()
   // Defense in depth: callers other than the arena reader can still construct
   // TraderRows directly. ROI and PnL are both mandatory for ranking, so reject
   // missing, malformed-at-runtime, and non-finite values before either score
@@ -369,20 +374,26 @@ export async function scoreTraders(
   const idleSet = new Set(idleRows)
   const scoredRows =
     idleSet.size > 0 ? scoredFiltered.filter((t) => !idleSet.has(t)) : scoredFiltered
-  const v4Results = computeArenaScoresV4WithOptions(
-    scoredRows.map((t) => ({
-      roi: t.roi,
-      pnl: t.pnl,
-      maxDrawdown: t.max_drawdown,
-      winRate: t.win_rate,
-      sharpeRatio: t.sharpe_ratio,
-      profitFactor: t.profit_factor,
-      tradesCount: t.trades_count,
-      source: t.source,
-    })),
-    season,
-    arenaScoreOptionsForRowEligibility(rowEligibility)
-  )
+  const v4Inputs = scoredRows.map((t) => ({
+    roi: t.roi,
+    pnl: t.pnl,
+    maxDrawdown: t.max_drawdown,
+    winRate: t.win_rate,
+    sharpeRatio: t.sharpe_ratio,
+    profitFactor: t.profit_factor,
+    tradesCount: t.trades_count,
+    source: t.source,
+  }))
+  // 'four_metrics' calls the signed historical contract itself, the same call
+  // this module made before the switch existed.
+  const v4Results =
+    rowEligibility === 'four_metrics'
+      ? computeArenaScoresV4(v4Inputs, season)
+      : computeArenaScoresV4WithOptions(
+          v4Inputs,
+          season,
+          arenaScoreOptionsForRowEligibility(rowEligibility)
+        )
   scoredRows.forEach((t, i) => {
     const r = v4Results[i]
     // 'roi_pnl': the lowest composite of a cohort maps to a display score of

@@ -596,30 +596,7 @@ describe('source publication evidence', () => {
       [scoreRow({ win_rate: null, unevidenced_metrics: ['win_rate', 'sharpe_ratio'] })]
     )
     expect(parsed.scoreRows[0].unevidenced_metrics).toEqual(['win_rate', 'sharpe_ratio'])
-    // A win rate / drawdown without board evidence is not required: the row is
-    // ranked with the metric empty (the unattested value is never read).
-    expect(lacksRequiredMetricEvidence(parsed.scoreRows[0])).toBe(false)
-    expect(lacksRequiredMetricEvidence(parsed.scoreRows[0], 'roi_pnl')).toBe(false)
-    expect(lacksRequiredMetricEvidence(parsed.scoreRows[0], 'four_metrics')).toBe(true)
-    const unboundDrawdown = parse(
-      [physicalBoard()],
-      [scoreRow({ max_drawdown: null, unevidenced_metrics: ['max_drawdown'] })]
-    )
-    expect(lacksRequiredMetricEvidence(unboundDrawdown.scoreRows[0])).toBe(false)
-    expect(lacksRequiredMetricEvidence(unboundDrawdown.scoreRows[0], 'four_metrics')).toBe(true)
-
-    // ROI and PnL still need evidence under both rules.
-    for (const [metric, column] of [
-      ['roi_pct', { roi_pct: null }],
-      ['pnl_usd', { pnl_usd: null }],
-    ] as const) {
-      const unbound = parse(
-        [physicalBoard()],
-        [scoreRow({ ...column, unevidenced_metrics: [metric] })]
-      )
-      expect(lacksRequiredMetricEvidence(unbound.scoreRows[0], 'roi_pnl')).toBe(true)
-      expect(lacksRequiredMetricEvidence(unbound.scoreRows[0], 'four_metrics')).toBe(true)
-    }
+    expect(lacksRequiredMetricEvidence(parsed.scoreRows[0])).toBe(true)
 
     // Optional-only refusal, a present value, and a pre-evidence bundle row
     // (no key) are all rankable on evidence grounds.

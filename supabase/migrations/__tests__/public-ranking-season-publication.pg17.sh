@@ -105,7 +105,9 @@ assert_equal() {
 
 publish() {
   # The orchestrator logs to stdout; the driver's verdict is its RESULT line.
-  (cd "$ROOT_DIR" && PGHOST="$SOCKET_DIR" PGPORT="$PORT" npx --no-install tsx "$DRIVER" "$1") \
+  # The scoring worker's switch, set the way production sets it at launch.
+  (cd "$ROOT_DIR" && PUBLIC_RANKING_ROW_ELIGIBILITY=roi_pnl PGHOST="$SOCKET_DIR" PGPORT="$PORT" \
+    npx --no-install tsx "$DRIVER" "$1") \
     | sed -n 's/^RESULT //p' | tail -1
 }
 
@@ -535,6 +537,9 @@ assert_equal "published rank count (partial by-flux included)" "8" \
 assert_equal "bybit is reported restored" '["bybit"]' "$(json_field "$OUT" result.restoredSources)"
 assert_equal "no row is excluded for a missing win rate" '{}' \
   "$(json_field "$OUT" result.exclusions.byReason)"
+assert_equal "the worker logs the rule it resolved from the environment" \
+  "[90D] row eligibility: roi_pnl (PUBLIC_RANKING_ROW_ELIGIBILITY)" \
+  "$(node -e 'console.log(JSON.parse(process.argv[1]).logs[0])' "$OUT")"
 # One timing line per stage, in order, each with its row count and whole ms.
 assert_equal "stage timing lines name every stage and its row count" \
   "read=8,score=8,write=8,cleanup=0,rerank=8,seal=8" \
