@@ -391,6 +391,11 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # It reads the 20261118135918 audit table, so it follows it. A source whose
 # boards carry outcomes but no metric-trust run becomes untrusted (isolated)
 # at the next publication; it touches no table 192134 guards.
+# 20261118134316 (RAW retention backlog census) adds a switch table (off),
+# an orphan GC queue and count-only census/scan functions; the worker release
+# that calls them treats a missing function as not_installed, so it follows
+# that release. It reads storage.objects, deletes nothing, and touches no
+# table 192134 guards.
 # 040440 forward replacement. V1_EXECUTION_STATUS requires the RAW-only
 # bridge SHA to be deployed and legacy callers drained before the legacy
 # position-history relations are frozen. Current main never reads or writes
@@ -456,6 +461,19 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # page ordinals for every observation ever written (15-17s in production
 # against the worker's 10s startup timeout). It follows 112703, depends on no
 # worker release and touches no table 192134 guards.
+# 20261121201553 makes public.arena_visible_sources() count the ranks the
+# public view serves instead of reading leaderboard_count_cache, which the
+# sealed publication path never refreshes (zero visible sources in production
+# while 3,546 ranks were served). Independent of every other entry.
+# 20261122152622 validates an observation batch's source-page lineage once per
+# acquisition run (AFTER INSERT ... FOR EACH STATEMENT) instead of once per
+# row; the per-row trigger re-verified the run's exhaustion proof for every
+# observation (63.5 ms x 12,900 rows for binance_futures against a 300 s
+# query timeout). It replaces the 112703 trigger function, so it follows it.
+# 20261122154211 re-creates the score bundle (204006 body) so its per-snapshot
+# entry counts come from index-only scans instead of fetching every entry row
+# from the 53 GB heap (5.5 s of a 9.9 s warm run; first 7D attempt timing out
+# at 30 s when cold). Output is unchanged. Independent of the other entries.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -485,6 +503,10 @@ POSTDEPLOY_MIGRATIONS=(
   20261121185937_metric_trust_readiness_bounded_lineage_count.sql
   20261118135918_trust_evidence_retention.sql
   20261118144144_rank_publication_trust_requires_run.sql
+  20261121201553_visible_sources_from_served_ranks.sql
+  20261122152622_metric_trust_observation_lineage_per_statement.sql
+  20261122154211_score_bundle_index_only_entry_counts.sql
+  20261118134316_raw_retention_backlog_census.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
