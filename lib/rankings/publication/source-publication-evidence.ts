@@ -1,5 +1,10 @@
 import { z } from 'zod'
 
+import {
+  PUBLIC_RANKING_ROW_ELIGIBILITY,
+  type PublicRankingRowEligibility,
+} from '@/lib/rankings/publication-policy'
+
 export const SOURCE_PUBLICATION_FUTURE_TOLERANCE_MS = 5 * 60 * 1000
 export const DEFAULT_SOURCE_PUBLICATION_MAX_AGE_HOURS = 48
 
@@ -31,13 +36,22 @@ export const SCORE_INPUT_METRICS = [
 ] as const
 export type ScoreInputMetric = (typeof SCORE_INPUT_METRICS)[number]
 
-/** Metrics without which no row can be ranked (public eligibility policy). */
-export const RANK_REQUIRED_SCORE_INPUT_METRICS: readonly ScoreInputMetric[] = [
-  'roi_pct',
-  'pnl_usd',
-  'win_rate',
-  'max_drawdown',
-]
+/**
+ * Metrics without which no row can be ranked, per writer eligibility policy.
+ * 'roi_pnl': only ROI and PnL. A win rate or drawdown the bundle refused for
+ * lack of board evidence arrives as null and is scored as missing; the
+ * unattested trader_stats value is never read.
+ */
+export const RANK_REQUIRED_SCORE_INPUT_METRICS_BY_ELIGIBILITY: Readonly<
+  Record<PublicRankingRowEligibility, readonly ScoreInputMetric[]>
+> = {
+  roi_pnl: ['roi_pct', 'pnl_usd'],
+  four_metrics: ['roi_pct', 'pnl_usd', 'win_rate', 'max_drawdown'],
+}
+
+/** The required metrics under the deployed PUBLIC_RANKING_ROW_ELIGIBILITY. */
+export const RANK_REQUIRED_SCORE_INPUT_METRICS: readonly ScoreInputMetric[] =
+  RANK_REQUIRED_SCORE_INPUT_METRICS_BY_ELIGIBILITY[PUBLIC_RANKING_ROW_ELIGIBILITY]
 
 const scoreRowSchema = z
   .object({
@@ -139,9 +153,12 @@ export type SourcePublicationEvidenceErrorCode =
  * for lack of board evidence: the value is null in the row and the bundle says
  * trader_stats held one.
  */
-export function lacksRequiredMetricEvidence(row: SourcePublicationScoreRow): boolean {
+export function lacksRequiredMetricEvidence(
+  row: SourcePublicationScoreRow,
+  rowEligibility: PublicRankingRowEligibility = PUBLIC_RANKING_ROW_ELIGIBILITY
+): boolean {
   const unevidenced = row.unevidenced_metrics ?? []
-  return RANK_REQUIRED_SCORE_INPUT_METRICS.some(
+  return RANK_REQUIRED_SCORE_INPUT_METRICS_BY_ELIGIBILITY[rowEligibility].some(
     (metric) => row[metric] === null && unevidenced.includes(metric)
   )
 }

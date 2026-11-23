@@ -208,7 +208,7 @@ describe('scoreTraders ROI and PnL eligibility boundary', () => {
     expect(result.scoredFiltered.map((row) => row.source_trader_id)).toEqual(publicIds)
   })
 
-  it('turns malformed risk metrics into partial evidence instead of coercing them', async () => {
+  it('empties malformed risk metrics and still ranks the row, instead of coercing them', async () => {
     const validZero = trader('valid-zero', 0, 0)
     validZero.win_rate = 0
     validZero.max_drawdown = 0
@@ -267,8 +267,30 @@ describe('scoreTraders ROI and PnL eligibility boundary', () => {
         .filter((row) => row.source_trader_id.startsWith('invalid-'))
         .every((row) => row.score_completeness === 'partial')
     ).toBe(true)
+    // ROI and PnL decide: every row is ranked, the bad metric is empty.
+    const v4Inputs = mockComputeArenaScoresV4.mock.calls[0][0] as unknown as Array<{
+      winRate: number | null
+      maxDrawdown: number | null
+    }>
+    expect(v4Inputs).toHaveLength(candidates.length)
+    // 0 is a value and reaches the formula as 0.
+    expect(v4Inputs[0]).toMatchObject({ winRate: 0, maxDrawdown: 0 })
+    expect(v4Inputs.slice(4, 4 + invalidWinRates.length).every((row) => row.winRate === null)).toBe(
+      true
+    )
+    expect(
+      v4Inputs.slice(4 + invalidWinRates.length).every((row) => row.maxDrawdown === null)
+    ).toBe(true)
+    expect(result.scoredFiltered.map((row) => row.source_trader_id)).toEqual(
+      candidates.map((row) => row.source_trader_id)
+    )
+
+    mockComputeArenaScoresV4.mockClear()
+    const rollback = await scoreTraders(candidates, new Map(), new Set(), '30D', {} as never, {
+      rowEligibility: 'four_metrics',
+    })
     expect(mockComputeArenaScoresV4.mock.calls[0][0]).toHaveLength(4)
-    expect(result.scoredFiltered.map((row) => row.source_trader_id)).toEqual([
+    expect(rollback.scoredFiltered.map((row) => row.source_trader_id)).toEqual([
       'valid-zero',
       'valid-decimal',
       'valid-percent',
@@ -301,7 +323,7 @@ describe('scoreTraders ROI and PnL eligibility boundary', () => {
     expect(result.scoredFiltered.every((row) => Number.isFinite(row.arena_score))).toBe(true)
   })
 
-  it('keeps partial and estimated rows out of both percentile influence and publication', async () => {
+  it('ranks a row without a drawdown and keeps estimated rows out of the cohort', async () => {
     const partial = trader('partial', 100)
     partial.max_drawdown = null
     const estimated = trader('estimated', 100)
@@ -316,8 +338,22 @@ describe('scoreTraders ROI and PnL eligibility boundary', () => {
       {} as never
     )
 
-    expect(mockComputeArenaScoresV4.mock.calls[0][0]).toHaveLength(1)
+    expect(mockComputeArenaScoresV4.mock.calls[0][0]).toHaveLength(2)
     expect(result.scored).toHaveLength(3)
-    expect(result.scoredFiltered.map((row) => row.source_trader_id)).toEqual(['full'])
+    expect(result.scoredFiltered.map((row) => row.source_trader_id)).toEqual(['partial', 'full'])
+    expect(result.scoredFiltered.map((row) => row.score_completeness)).toEqual(['partial', 'full'])
+    expect(result.scoredFiltered[0].max_drawdown).toBeNull()
+
+    mockComputeArenaScoresV4.mockClear()
+    const rollback = await scoreTraders(
+      [partial, estimated, full],
+      new Map(),
+      new Set(),
+      '30D',
+      {} as never,
+      { rowEligibility: 'four_metrics' }
+    )
+    expect(mockComputeArenaScoresV4.mock.calls[0][0]).toHaveLength(1)
+    expect(rollback.scoredFiltered.map((row) => row.source_trader_id)).toEqual(['full'])
   })
 })

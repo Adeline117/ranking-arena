@@ -110,3 +110,231 @@ describe('display score floor', () => {
     expect(scored.map((row) => row.source_trader_id).sort()).toEqual(['best', 'loser', 'middle'])
   })
 })
+
+describe("cohort admission under 'roi_pnl'", () => {
+  const filler = () => [
+    traderRow('f1', { roi: 80, pnl: 500_000, win_rate: 70, max_drawdown: 5 }),
+    traderRow('f2', { roi: 20, pnl: 20_000, win_rate: 55, max_drawdown: 15 }),
+    traderRow('f3', { roi: -5, pnl: -400, win_rate: 40, max_drawdown: 30 }),
+    traderRow('f4', { roi: -60, pnl: -9_000, win_rate: 10, max_drawdown: 80 }),
+  ]
+
+  it('ranks rows that only have ROI and PnL, and labels what they carry', async () => {
+    const rows = byId(
+      await publishedCohort(
+        [
+          ...filler(),
+          traderRow('only-roi-pnl', { win_rate: null, max_drawdown: null }),
+          traderRow('no-win-rate', { win_rate: null }),
+          traderRow('no-drawdown', { max_drawdown: null }),
+        ],
+        'roi_pnl'
+      )
+    )
+    expect(rows.get('only-roi-pnl')).toMatchObject({
+      score_completeness: 'minimal',
+      win_rate: null,
+      max_drawdown: null,
+    })
+    expect(rows.get('no-win-rate')).toMatchObject({ score_completeness: 'partial', win_rate: null })
+    expect(rows.get('no-drawdown')).toMatchObject({
+      score_completeness: 'partial',
+      max_drawdown: null,
+    })
+    for (const id of ['only-roi-pnl', 'no-win-rate', 'no-drawdown']) {
+      expect(rows.get(id)!.arena_score!).toBeGreaterThanOrEqual(MIN_RANKED_ARENA_SCORE)
+    }
+  })
+
+  it.each([
+    ['missing ROI', { roi: null }],
+    ['missing PnL', { pnl: null }],
+    ['ROI beyond the 30D bound', { roi: 5_001 }],
+    ['estimated metrics', { metrics_estimated: true }],
+    // markOutliers: |ROI| > 500% with no PnL behind it.
+    ['outlier', { roi: 900, pnl: 0 }],
+  ] as const)('does not rank a row with %s', async (_label, overrides) => {
+    const rows = byId(
+      await publishedCohort([...filler(), traderRow('subject', overrides)], 'roi_pnl')
+    )
+    expect(rows.has('subject')).toBe(false)
+    expect(rows.size).toBe(4)
+  })
+
+  it('empties a drawdown >= 100 and an out-of-range win rate, keeps the row, and logs the count', async () => {
+    const rows = byId(
+      await publishedCohort(
+        [
+          ...filler(),
+          traderRow('liquidated', { max_drawdown: 100 }),
+          traderRow('win-rate-150', { win_rate: 150 }),
+          traderRow('win-rate-negative', { win_rate: -1 }),
+        ],
+        'roi_pnl'
+      )
+    )
+    expect(rows.get('liquidated')).toMatchObject({
+      max_drawdown: null,
+      win_rate: 55,
+      score_completeness: 'partial',
+    })
+    expect(rows.get('win-rate-150')).toMatchObject({
+      win_rate: null,
+      score_completeness: 'partial',
+    })
+    expect(rows.get('win-rate-negative')).toMatchObject({ win_rate: null })
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      '[30D] Emptied out-of-range risk metrics (row kept): win_rate=2, max_drawdown=1'
+    )
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      '[30D] Ranking cohort completeness (roi_pnl): full=4, partial=3, minimal=0'
+    )
+  })
+
+  it('ranks the two blofin row shapes with the metric empty and never reads a carried value', async () => {
+    // #534: a blofin idle-window account has board max_drawdown NULL (the
+    // carried value lives in extras.carried_mdd, which the scorer never sees).
+    // #535: a blofin futures board row whose win rate was 0 is NULL.
+    const idleWindow = {
+      ...traderRow('blofin-idle-window', {
+        source: 'blofin',
+        roi: 0,
+        pnl: 0,
+        win_rate: 48,
+        max_drawdown: null,
+      }),
+      extras: { carried_mdd: 37.5 },
+    } as TraderRow
+    const noWinRate = traderRow('blofin-zero-win-rate', {
+      source: 'blofin',
+      roi: 14,
+      pnl: 2_300,
+      win_rate: null,
+      max_drawdown: 9,
+    })
+    const rows = byId(await publishedCohort([...filler(), idleWindow, noWinRate], 'roi_pnl'))
+
+    expect(rows.get('blofin-idle-window')).toMatchObject({
+      max_drawdown: null,
+      win_rate: 48,
+      score_completeness: 'partial',
+    })
+    expect(rows.get('blofin-idle-window')!.score_factors).toMatchObject({ drawdown: null })
+    expect(rows.get('blofin-zero-win-rate')).toMatchObject({
+      win_rate: null,
+      max_drawdown: 9,
+      score_completeness: 'partial',
+    })
+    expect(rows.get('blofin-zero-win-rate')!.score_factors).toMatchObject({ consistency: null })
+
+    // Under the previous rule neither is ranked.
+    const rollback = byId(
+      await publishedCohort([...filler(), idleWindow, noWinRate], 'four_metrics')
+    )
+    expect(rollback.has('blofin-idle-window')).toBe(false)
+    expect(rollback.has('blofin-zero-win-rate')).toBe(false)
+  })
+})
+
+describe('null and 0 are different through the publication scorer', () => {
+  const others = () => [
+    traderRow('o1', { roi: 80, pnl: 500_000, win_rate: 70, max_drawdown: 5 }),
+    traderRow('o2', { roi: 20, pnl: 20_000, win_rate: 55, max_drawdown: 15 }),
+    traderRow('o3', { roi: -5, pnl: -400, win_rate: 40, max_drawdown: 30 }),
+    traderRow('o4', { roi: -60, pnl: -9_000, win_rate: 10, max_drawdown: 80 }),
+  ]
+
+  it('a 0% drawdown is the best drawdown; a missing one scores nothing', async () => {
+    const rows = byId(
+      await publishedCohort(
+        [
+          ...others(),
+          traderRow('dd-zero', { max_drawdown: 0 }),
+          traderRow('dd-missing', { max_drawdown: null }),
+        ],
+        'roi_pnl'
+      )
+    )
+    expect(rows.get('dd-zero')).toMatchObject({ max_drawdown: 0, score_completeness: 'full' })
+    expect(rows.get('dd-zero')!.score_factors!.drawdown).toBe(1)
+    expect(rows.get('dd-missing')!.score_factors!.drawdown).toBeNull()
+    expect(rows.get('dd-zero')!.arena_score!).toBeGreaterThan(rows.get('dd-missing')!.arena_score!)
+  })
+
+  it('a 0% win rate is the worst win rate, and is still present data', async () => {
+    const rows = byId(
+      await publishedCohort(
+        [
+          ...others(),
+          traderRow('wr-zero', { win_rate: 0 }),
+          traderRow('wr-missing', { win_rate: null }),
+        ],
+        'roi_pnl'
+      )
+    )
+    expect(rows.get('wr-zero')).toMatchObject({ win_rate: 0, score_completeness: 'full' })
+    expect(rows.get('wr-zero')!.score_factors!.consistency).toBe(0)
+    expect(rows.get('wr-missing')!.score_factors!.consistency).toBeNull()
+    // Both contribute 0 to quality; the observation counts toward confidence,
+    // so the missing twin is never above it.
+    expect(rows.get('wr-missing')!.arena_score!).toBeLessThanOrEqual(
+      rows.get('wr-zero')!.arena_score!
+    )
+  })
+
+  it("'four_metrics' restores the legacy reading of 0 as missing", async () => {
+    const rows = byId(
+      await publishedCohort(
+        [...others(), traderRow('dd-zero', { max_drawdown: 0 })],
+        'four_metrics'
+      )
+    )
+    expect(rows.get('dd-zero')!.score_factors!.drawdown).toBeNull()
+  })
+})
+
+describe('a missing risk metric never lifts a trader through the publication scorer', () => {
+  it.each([
+    ['trade count unknown', null],
+    ['trade count known', 120],
+  ] as const)('%s', async (_label, tradesCount) => {
+    const cohort = Array.from({ length: 30 }, (_, i) =>
+      traderRow(`c${i}`, {
+        roi: i * 3 - 20,
+        pnl: i * 2_000 - 9_000,
+        win_rate: 30 + i,
+        max_drawdown: 60 - i,
+        trades_count: tradesCount,
+      })
+    )
+    const twin = {
+      roi: 400,
+      pnl: 900_000,
+      win_rate: 33,
+      max_drawdown: 55,
+      trades_count: tradesCount,
+    }
+    const rows = byId(
+      await publishedCohort(
+        [
+          ...cohort,
+          traderRow('complete', twin),
+          traderRow('no-drawdown', { ...twin, max_drawdown: null }),
+          traderRow('no-win-rate', { ...twin, win_rate: null }),
+          traderRow('neither', { ...twin, win_rate: null, max_drawdown: null }),
+        ],
+        'roi_pnl'
+      )
+    )
+    const complete = rows.get('complete')!.arena_score!
+    expect(rows.get('no-drawdown')!.arena_score!).toBeLessThanOrEqual(complete)
+    expect(rows.get('no-win-rate')!.arena_score!).toBeLessThanOrEqual(complete)
+    expect(rows.get('neither')!.arena_score!).toBeLessThan(complete)
+    expect(rows.get('neither')!.arena_score!).toBeLessThanOrEqual(
+      rows.get('no-drawdown')!.arena_score!
+    )
+    expect(rows.get('neither')!.arena_score!).toBeLessThanOrEqual(
+      rows.get('no-win-rate')!.arena_score!
+    )
+  })
+})

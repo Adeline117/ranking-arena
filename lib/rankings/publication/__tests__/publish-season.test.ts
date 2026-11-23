@@ -86,22 +86,119 @@ describe('toPublishableRow', () => {
   })
 
   it.each([
-    ['partial completeness', { score_completeness: 'partial' as const }],
     ['estimated metrics', { metrics_estimated: true }],
     ['outlier', { is_outlier: true }],
     ['zero score', { arena_score: 0 }],
     ['score above 100', { arena_score: 100.01 }],
     ['ROI beyond the clamp', { roi: 10000.5 }],
-    ['drawdown of 100%', { max_drawdown: 99.996 }],
-    ['missing win rate', { win_rate: null }],
+    ['missing ROI', { roi: null as unknown as number }],
+    ['missing PnL', { pnl: null }],
+    ['negative drawdown', { max_drawdown: -1 }],
+    ['unknown completeness label', { score_completeness: 'weird' as never }],
     ['untrimmed identity', { source_trader_id: ' x' }],
     ['non-canonical source', { source: 'Binance' }],
   ])('rejects rows the database seal would refuse: %s', (_label, overrides) => {
     expect(toPublishableRow(scored(overrides))).toBeNull()
   })
+
+  it.each([
+    ['partial completeness', { score_completeness: 'partial' as const }],
+    ['drawdown of 100%', { max_drawdown: 99.996 }],
+    ['missing win rate', { win_rate: null }],
+    ['missing drawdown', { max_drawdown: null }],
+  ])("'four_metrics' still rejects: %s", (_label, overrides) => {
+    expect(toPublishableRow(scored(overrides), 'four_metrics')).toBeNull()
+    expect(toPublishableRow(scored(), 'four_metrics')).not.toBeNull()
+  })
 })
 
-describe('classifyPublishableRow', () => {
+describe("classifyPublishableRow ('roi_pnl': ROI and PnL decide)", () => {
+  it.each([
+    ['estimated metrics', { metrics_estimated: true }, 'incomplete_or_estimated'],
+    ['unknown completeness', { score_completeness: 'weird' as never }, 'incomplete_or_estimated'],
+    ['outlier', { is_outlier: true }, 'outlier'],
+    ['zero score', { arena_score: 0 }, 'arena_score_out_of_range'],
+    ['ROI beyond the clamp', { roi: 10000.5 }, 'roi_out_of_range'],
+    ['missing roi', { roi: null as unknown as number }, 'roi_out_of_range'],
+    ['missing pnl', { pnl: null as unknown as number }, 'pnl_out_of_range'],
+    ['negative drawdown', { max_drawdown: -1 }, 'max_drawdown_negative'],
+    ['drawdown below the column', { max_drawdown: -1500 }, 'max_drawdown_negative'],
+    ['untrimmed identity', { source_trader_id: ' x' }, 'invalid_identity'],
+  ])('names the exclusion reason: %s', (_label, overrides, reason) => {
+    expect(classifyPublishableRow(scored(overrides))).toEqual({ reason })
+  })
+
+  it('publishes a row without a win rate, with the column empty', () => {
+    const verdict = classifyPublishableRow(
+      scored({ win_rate: null, score_completeness: 'partial' })
+    )
+    expect(verdict).toMatchObject({
+      row: { win_rate: null, max_drawdown: 12.34, score_completeness: 'partial' },
+    })
+    expect(verdict).not.toHaveProperty('emptied')
+  })
+
+  it('publishes a row without a drawdown, with the column empty', () => {
+    expect(
+      classifyPublishableRow(scored({ max_drawdown: null, score_completeness: 'partial' }))
+    ).toMatchObject({
+      row: { win_rate: 61.24, max_drawdown: null, score_completeness: 'partial' },
+    })
+  })
+
+  it('publishes a row with neither as minimal', () => {
+    expect(
+      classifyPublishableRow(
+        scored({ win_rate: null, max_drawdown: null, score_completeness: 'minimal' })
+      )
+    ).toMatchObject({ row: { win_rate: null, max_drawdown: null, score_completeness: 'minimal' } })
+  })
+
+  it('publishes zero win rate and zero drawdown as values, not as missing', () => {
+    expect(classifyPublishableRow(scored({ win_rate: 0, max_drawdown: 0 }))).toMatchObject({
+      row: { win_rate: 0, max_drawdown: 0, score_completeness: 'full' },
+    })
+  })
+
+  it('publishes a losing trader', () => {
+    expect(
+      classifyPublishableRow(scored({ roi: -35.5, pnl: -1200, arena_score: 0.01 }))
+    ).toMatchObject({ row: { roi: -35.5, pnl: -1200, arena_score: 0.01 } })
+  })
+
+  it.each([
+    ['drawdown rounding to 100%', { max_drawdown: 99.996 }, 'max_drawdown_out_of_range'],
+    ['drawdown overflowing numeric(5,2)', { max_drawdown: 1500 }, 'max_drawdown_out_of_range'],
+    ['win rate above 100', { win_rate: 100.01 }, 'win_rate_out_of_range'],
+    ['negative win rate', { win_rate: -0.5 }, 'win_rate_out_of_range'],
+    ['non-finite win rate', { win_rate: Number.NaN }, 'win_rate_out_of_range'],
+  ] as const)(
+    'empties the metric and keeps the row, with a trace: %s',
+    (_label, overrides, trace) => {
+      const verdict = classifyPublishableRow(scored(overrides))
+      expect(verdict).toMatchObject({ emptied: [trace] })
+      const row = 'row' in verdict ? verdict.row : null
+      expect(row).not.toBeNull()
+      const emptiedColumn = trace === 'win_rate_out_of_range' ? row?.win_rate : row?.max_drawdown
+      expect(emptiedColumn).toBeNull()
+      // The label follows what is written: the database rejects a mismatch.
+      expect(row?.score_completeness).toBe('partial')
+    }
+  )
+
+  it('derives score_completeness from the written columns, not from the input label', () => {
+    expect(
+      classifyPublishableRow(scored({ win_rate: null, score_completeness: 'full' }))
+    ).toMatchObject({ row: { score_completeness: 'partial' } })
+  })
+
+  it('returns the row when every rule passes', () => {
+    expect(classifyPublishableRow(scored())).toHaveProperty('row.source', 'binance_futures')
+    expect(classifyPublishableRow(scored())).toHaveProperty('row.score_completeness', 'full')
+  })
+})
+
+describe("classifyPublishableRow ('four_metrics' rollback rule)", () => {
   it.each([
     ['partial completeness', { score_completeness: 'partial' as const }, 'incomplete_or_estimated'],
     ['estimated metrics', { metrics_estimated: true }, 'incomplete_or_estimated'],
@@ -116,11 +213,14 @@ describe('classifyPublishableRow', () => {
     ['negative drawdown', { max_drawdown: -1 }, 'max_drawdown_negative'],
     ['untrimmed identity', { source_trader_id: ' x' }, 'invalid_identity'],
   ])('names the exclusion reason: %s', (_label, overrides, reason) => {
-    expect(classifyPublishableRow(scored(overrides))).toEqual({ reason })
+    expect(classifyPublishableRow(scored(overrides), 'four_metrics')).toEqual({ reason })
   })
 
   it('returns the row when every rule passes', () => {
-    expect(classifyPublishableRow(scored())).toHaveProperty('row.source', 'binance_futures')
+    expect(classifyPublishableRow(scored(), 'four_metrics')).toHaveProperty(
+      'row.source',
+      'binance_futures'
+    )
   })
 })
 
@@ -502,9 +602,11 @@ describe('publishLeaderboardSeason gate', () => {
     })
     const rows = [
       scoreRow('bound', 1, {}),
+      // A win rate (or drawdown, or any optional metric) refused for evidence
+      // does not exclude the row: it is scored with that metric empty.
       scoreRow('unbound-win-rate', 2, { win_rate: null, unevidenced_metrics: ['win_rate'] }),
-      // An optional metric refused for evidence does not exclude the row.
-      scoreRow('unbound-sharpe', 3, { unevidenced_metrics: ['sharpe_ratio'] }),
+      // ROI and PnL must be attested.
+      scoreRow('unbound-roi', 3, { roi_pct: null, unevidenced_metrics: ['roi_pct'] }),
     ]
     const board = { ...passedBoard('binance_futures', 1), actual_count: 3, entry_count: 3 }
     const { database } = harness([board, passedBoard('bybit', 2)])
@@ -542,7 +644,8 @@ describe('publishLeaderboardSeason gate', () => {
     const scorerInput = (scoreCohort.mock.calls[0] as unknown[])[0] as Array<{
       source_trader_id: string
     }>
-    expect(scorerInput.map((row) => row.source_trader_id)).toEqual(['bound', 'unbound-sharpe'])
+    expect(scorerInput.map((row) => row.source_trader_id)).toEqual(['bound', 'unbound-win-rate'])
+    expect(scorerInput[1]).toMatchObject({ win_rate: null, roi: 40, pnl: 900 })
     expect((error as RankPublicationError).details.exclusions).toEqual({
       scored: 3,
       excluded: 3,

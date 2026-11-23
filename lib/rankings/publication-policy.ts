@@ -138,13 +138,29 @@ export interface SanitizePublicRankingPayloadOptions {
   sourceOf?: (row: unknown) => unknown
 }
 
+export interface ConcretePublicRankingMetricsOptions {
+  /**
+   * Writer-only: require win rate and max drawdown as well (the
+   * 'four_metrics' rollback rule). Readers never set this.
+   */
+  requireWinRateAndDrawdown?: boolean
+}
+
 /**
  * Concrete source/identity/metric basis required before a row may participate
  * in the Arena Score percentile cohort. This deliberately excludes score and
  * computation-time checks because those values do not exist until after the
  * cohort has been scored.
+ *
+ * ROI and PnL are required. Win rate and max drawdown are optional: null (or
+ * an absent key) means "not provided"; a present value must be in range, and
+ * 0 is a value. score_completeness must describe exactly which of the two are
+ * present. The same rule is arena.leaderboard_rank_row_is_public_eligible.
  */
-export function hasConcretePublicRankingMetrics(row: unknown): boolean {
+export function hasConcretePublicRankingMetrics(
+  row: unknown,
+  options: ConcretePublicRankingMetricsOptions = {}
+): boolean {
   if (typeof row !== 'object' || row === null || Array.isArray(row)) return false
   const record = row as Record<string, unknown>
 
@@ -169,7 +185,11 @@ export function hasConcretePublicRankingMetrics(row: unknown): boolean {
   ])
   if (traderIdentity === null) return false
 
-  if (firstDefined(record, 'score_completeness', 'scoreConfidence') !== 'full') return false
+  const completeness = firstDefined(record, 'score_completeness', 'scoreConfidence')
+  if (completeness !== 'full' && completeness !== 'partial' && completeness !== 'minimal') {
+    return false
+  }
+  if (options.requireWinRateAndDrawdown === true && completeness !== 'full') return false
   if (firstDefined(record, 'metrics_estimated', 'metricsEstimated') !== false) return false
   if (firstDefined(record, 'is_outlier', 'isOutlier') === true) return false
 
@@ -177,27 +197,38 @@ export function hasConcretePublicRankingMetrics(row: unknown): boolean {
   const pnl = record.pnl
   const winRate = firstDefined(record, 'win_rate', 'winRate')
   const maxDrawdown = firstDefined(record, 'max_drawdown', 'maxDrawdown')
-  return (
-    finiteNumber(roi) &&
-    finiteNumber(pnl) &&
-    finiteNumber(winRate) &&
-    winRate >= 0 &&
-    winRate <= 100 &&
-    finiteNumber(maxDrawdown) &&
-    maxDrawdown >= 0 &&
-    // 100 is commonly an upstream cap/sentinel, not proof of a measured
-    // full-loss drawdown. Keep it profile-visible but outside ranking.
-    maxDrawdown < 100
-  )
+  if (!finiteNumber(roi) || !finiteNumber(pnl)) return false
+
+  // Only null/absent is "not provided". Anything else must be a real in-range
+  // observation; a malformed or out-of-range value is not silently read as
+  // missing here (the scorer nulls those before a row gets this far).
+  const hasWinRate = winRate !== null && winRate !== undefined
+  const hasMaxDrawdown = maxDrawdown !== null && maxDrawdown !== undefined
+  if (hasWinRate && !(finiteNumber(winRate) && winRate >= 0 && winRate <= 100)) return false
+  // 100 is commonly an upstream cap/sentinel, not proof of a measured
+  // full-loss drawdown, so the upper bound is exclusive.
+  if (hasMaxDrawdown && !(finiteNumber(maxDrawdown) && maxDrawdown >= 0 && maxDrawdown < 100)) {
+    return false
+  }
+  return completeness === publicRankingScoreCompleteness(hasWinRate, hasMaxDrawdown)
+}
+
+/** score_completeness is a statement about which optional risk metrics exist. */
+export function publicRankingScoreCompleteness(
+  hasWinRate: boolean,
+  hasMaxDrawdown: boolean
+): 'full' | 'partial' | 'minimal' {
+  if (hasWinRate && hasMaxDrawdown) return 'full'
+  return hasWinRate || hasMaxDrawdown ? 'partial' : 'minimal'
 }
 
 /**
  * Minimum row-level proof required for public ranking publication.
  *
  * Raw/profile observations remain visible when this returns false. A row may
- * enter a public ranking only when its identity is canonical, required score
- * inputs are concrete (not partial/estimated), and its score computation is
- * current. Source-level history/price/cost-basis authority remains a separate
+ * enter a public ranking only when its identity is canonical, ROI and PnL are
+ * concrete (not estimated), any win rate / drawdown it carries is in range,
+ * and its score computation is current. Source-level history/price/cost-basis authority remains a separate
  * reviewed contract and quarantine gate.
  */
 export function isPublicRankingRowEligible(

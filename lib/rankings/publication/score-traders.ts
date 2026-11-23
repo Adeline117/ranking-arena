@@ -122,9 +122,16 @@ export async function scoreTraders(
     )
   }
 
+  // A win rate outside 0..100 or a drawdown outside [0, 100) is not a
+  // measurement. The metric is emptied, the row stays; count it so an upstream
+  // regression is visible in the publication log.
+  let winRateNulled = 0
+  let maxDrawdownNulled = 0
   const scored = rankEligibleTraders.map((t) => {
     const normalizedWinRate = normalizeRankWinRate(t.win_rate)
     const normalizedMaxDrawdown = normalizeRankDrawdown(t.max_drawdown)
+    if (t.win_rate != null && normalizedWinRate === null) winRateNulled += 1
+    if (t.max_drawdown != null && normalizedMaxDrawdown === null) maxDrawdownNulled += 1
     const normalizedSharpe = normalizeRankSharpe(t.sharpe_ratio)
     const normalizedProfitFactor = normalizeRankProfitFactor(t.profit_factor)
     const normalizedTradesCount = normalizeRankTradesCount(t.trades_count)
@@ -219,6 +226,12 @@ export async function scoreTraders(
     }
   })
 
+  if (winRateNulled > 0 || maxDrawdownNulled > 0) {
+    logger.warn(
+      `[${season}] Emptied out-of-range risk metrics (row kept): win_rate=${winRateNulled}, max_drawdown=${maxDrawdownNulled}`
+    )
+  }
+
   // Mark outliers (uses roi/pnl, independent of the score)
   const outlierCount = markOutliers(scored)
   if (outlierCount > 0) {
@@ -233,16 +246,26 @@ export async function scoreTraders(
     `[${season}] Arena followers: ${applied} traders have followers (${uniqueAccounts} unique exchange accounts queried)`
   )
 
-  // Only rows with a concrete, non-estimated metric basis participate in the
-  // percentile cohort. Partial rows remain available in the upstream Arena
-  // model for profiles, but cannot influence or enter the public ranking.
-  const scoredFiltered = scored.filter(hasConcretePublicRankingMetrics)
+  // Only rows with a concrete, non-estimated ROI + PnL basis participate in
+  // the percentile cohort. 'roi_pnl': a row without a win rate or drawdown is
+  // ranked with that metric empty. 'four_metrics': such rows are left out.
+  const requireWinRateAndDrawdown = rowEligibility === 'four_metrics'
+  const scoredFiltered = scored.filter((trader) =>
+    hasConcretePublicRankingMetrics(trader, { requireWinRateAndDrawdown })
+  )
   const excludedForTrust = scored.length - scoredFiltered.length
   if (excludedForTrust > 0) {
     logger.warn(
-      `[${season}] Excluded ${excludedForTrust} trader(s) from ranking: partial, estimated, outlier, or untrusted metric basis`
+      `[${season}] Excluded ${excludedForTrust} trader(s) from ranking: ${
+        requireWinRateAndDrawdown ? 'partial, ' : ''
+      }estimated, outlier, or untrusted metric basis`
     )
   }
+  const completeness = { full: 0, partial: 0, minimal: 0 }
+  for (const trader of scoredFiltered) completeness[trader.score_completeness] += 1
+  logger.info(
+    `[${season}] Ranking cohort completeness (${rowEligibility}): full=${completeness.full}, partial=${completeness.partial}, minimal=${completeness.minimal}`
+  )
 
   // ── Arena Score v4 — NOW THE FLAGSHIP ──
   // Batch percentile over the SERVED cohort (percentiles are relative to what
