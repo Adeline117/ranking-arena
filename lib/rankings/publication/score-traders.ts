@@ -92,14 +92,20 @@ export const MIN_ACTIVE_ARENA_SCORE = 0.02
 export type RankScoreFactors = ArenaScoreV4Result['factors'] & { idle_window?: true }
 
 /**
- * Idle window ('roi_pnl' only): ROI is exactly 0 and PnL is exactly 0. There
- * is no performance to rank, so the row takes no part in any dimension of the
- * score (it is not in the percentile cohort either) and gets the floor score.
- * This is not "0 read as missing": its win rate and drawdown are kept and
- * shown as they are, 0 included.
+ * Idle window ('roi_pnl' only): ROI is 0 and PnL is 0. There is no performance
+ * to rank, so the row takes no part in any dimension of the score (it is not
+ * in the percentile cohort either) and gets the floor score. This is not
+ * "0 read as missing": its win rate and drawdown are kept and shown as they
+ * are, 0 included.
+ *
+ * "Is 0" is decided at the precision the row is stored and shown with:
+ * leaderboard_ranks.roi is numeric(12,4) and pnl numeric(18,2). A row whose
+ * ROI is 0.00003% and PnL $0.004 is written as 0.0000 / 0.00; treating it as
+ * scored would leave a row that reads "ROI 0, PnL 0" ranked among the traders
+ * who traded, indistinguishable in the table from the idle rows below it.
  */
 export function isIdleWindowRow(row: { roi: number; pnl: number | null }): boolean {
-  return row.roi === 0 && row.pnl === 0
+  return row.pnl !== null && Math.round(row.roi * 1e4) === 0 && Math.round(row.pnl * 1e2) === 0
 }
 
 const IDLE_WINDOW_SCORE_FACTORS: RankScoreFactors = Object.freeze({

@@ -22,6 +22,7 @@ jest.mock('@/lib/utils/logger', () => ({
 import {
   MIN_ACTIVE_ARENA_SCORE,
   MIN_RANKED_ARENA_SCORE,
+  isIdleWindowRow,
   scoreTraders,
   type ScoredTrader,
 } from '../score-traders'
@@ -567,6 +568,35 @@ describe('idle-window rows (ROI 0 and PnL 0) are ranked last and not scored', ()
       expect(rows.get(id)!.score_factors).not.toHaveProperty('idle_window')
       expect(rows.get(id)!.arena_score!).toBeGreaterThan(MIN_RANKED_ARENA_SCORE)
     }
+  })
+
+  it('decides "is 0" at the precision the row is stored with', async () => {
+    // roi numeric(12,4), pnl numeric(18,2): these are written as 0.0000 / 0.00.
+    expect(isIdleWindowRow({ roi: 0.00004, pnl: 0.004 })).toBe(true)
+    expect(isIdleWindowRow({ roi: -0.00004, pnl: -0.004 })).toBe(true)
+    expect(isIdleWindowRow({ roi: 0, pnl: 0 })).toBe(true)
+    // The smallest values that survive rounding are performance.
+    expect(isIdleWindowRow({ roi: 0.0001, pnl: 0 })).toBe(false)
+    expect(isIdleWindowRow({ roi: 0, pnl: 0.01 })).toBe(false)
+    expect(isIdleWindowRow({ roi: 0, pnl: -0.01 })).toBe(false)
+    expect(isIdleWindowRow({ roi: 0, pnl: null })).toBe(false)
+
+    const rows = byId(
+      await publishedCohort(
+        [
+          ...everyone(),
+          traderRow('dust', { roi: 0.00004, pnl: 0.004, win_rate: 80, max_drawdown: 1 }),
+        ],
+        'roi_pnl'
+      )
+    )
+    expect(rows.get('dust')).toMatchObject({
+      arena_score: MIN_RANKED_ARENA_SCORE,
+      score_factors: { idle_window: true },
+    })
+    // What is written for it reads as ROI 0, PnL 0.
+    const verdict = classifyPublishableRow(rows.get('dust')!, 'roi_pnl')
+    expect(verdict).toMatchObject({ row: { roi: 0, pnl: 0, arena_score: 0.01 } })
   })
 
   it("'four_metrics' has no idle rule: the rows are scored as before", async () => {
