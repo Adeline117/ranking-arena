@@ -54,7 +54,7 @@ export const PUBLIC_LEADERBOARD_FRESH_COMPUTED_AGE_MS = PUBLIC_COHORT_MAX_COMPUT
  * rejects rows whose basis, freshness, or score proof is missing.
  */
 const PUBLIC_SEARCH_RANKING_COLUMNS =
-  'season_id,source,source_trader_id,handle,avatar_url,rank,arena_score,roi,pnl,win_rate,max_drawdown,trades_count,followers,copiers,profitability_score,risk_control_score,execution_score,score_completeness,metrics_estimated,is_outlier,computed_at,trading_style,avg_holding_hours,sharpe_ratio,sortino_ratio,profit_factor,calmar_ratio,trader_type,source_type,rank_change,is_new'
+  'season_id,source,source_trader_id,handle,avatar_url,rank,arena_score,roi,pnl,win_rate,max_drawdown,trades_count,followers,copiers,profitability_score,risk_control_score,execution_score,score_completeness,metrics_estimated,is_outlier,computed_at,trading_style,avg_holding_hours,sharpe_ratio,sortino_ratio,profit_factor,calmar_ratio,trader_type,source_type,rank_change,is_new,idle_window,mdd_contradiction'
 
 const PUBLIC_SEARCH_PERIOD: TradingPeriod = '90D'
 const MAX_PUBLIC_SEARCH_CANDIDATES = 200
@@ -223,7 +223,7 @@ export async function getLeaderboard(
        trades_count, followers, copiers, ${LR.arena_score}, ${LR.avatar_url}, ${LR.rank}, rank_change, is_new, computed_at,
        profitability_score, risk_control_score, execution_score, score_completeness, metrics_estimated,
        trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio,
-       trader_type, is_outlier, ${LR.season_id}`
+       trader_type, is_outlier, idle_window, mdd_contradiction, ${LR.season_id}`
     )
     .eq(LR.season_id, period)
 
@@ -478,6 +478,8 @@ export async function getTraderDetail(
     avgHoldingHours: primaryData.avgHoldingHours ?? null,
     traderType: primaryData.traderType ?? null,
     isOutlier: primaryData.isOutlier ?? false,
+    idleWindow: primaryData.idleWindow ?? false,
+    mddContradiction: primaryData.mddContradiction ?? false,
     lastUpdated: sourceAsOf,
   }
 
@@ -804,6 +806,8 @@ function identityOnlySearchTrader(candidate: PublicSearchTraderCandidate): Unifi
     avgHoldingHours: null,
     traderType: candidate.traderType || (platform === 'web3_bot' ? 'bot' : null),
     isOutlier: false,
+    idleWindow: false,
+    mddContradiction: false,
     lastUpdated: null,
   }
 }

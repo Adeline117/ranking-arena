@@ -179,7 +179,7 @@ function leaderboardFiltersFromQuery(query: ParsedTradersQuery): LeaderboardFilt
 // Select only the response fields plus row-level publication proof required to
 // validate Redis payloads at read time. These proof fields never leave the API.
 const PUBLIC_RANKED_LEADERBOARD_COLUMNS =
-  'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, rank_change, is_new, profitability_score, risk_control_score, execution_score, score_completeness, metrics_estimated, trading_style, avg_holding_hours, style_confidence, computed_at, season_id, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type, is_outlier'
+  'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, rank_change, is_new, profitability_score, risk_control_score, execution_score, score_completeness, metrics_estimated, trading_style, avg_holding_hours, style_confidence, computed_at, season_id, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type, is_outlier, idle_window, mdd_contradiction'
 
 interface TradersCacheKeyParams {
   timeRange: Period
@@ -698,6 +698,8 @@ async function buildPublicTradersResponse(
       row.source === 'web3_bot' || row.trader_type === 'bot' || row.trader_type === 'suspected_bot',
     trader_type: (row.trader_type as string) || (row.source === 'web3_bot' ? 'bot' : null),
     is_outlier: row.is_outlier === true,
+    idle_window: row.idle_window === true,
+    mdd_contradiction: row.mdd_contradiction === true,
     computed_at: (row.computed_at as string) || null,
     // Trust-facing anti-gaming flags — derived at read time from serving-row
     // fields (no pipeline/migration change). Empty [] for the ~97% of rows

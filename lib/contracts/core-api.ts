@@ -77,6 +77,9 @@ export const TradersListRowSchema = z.object({
   is_verified: z.boolean().optional(),
   is_verified_data: z.boolean().optional(),
   anti_gaming_flags: z.array(z.string()).optional(),
+  // Public-ranking row flags (see RankingTableTypes.Trader).
+  idle_window: z.boolean().optional(),
+  mdd_contradiction: z.boolean().optional(),
 })
 
 export type TradersListRow = z.infer<typeof TradersListRowSchema>

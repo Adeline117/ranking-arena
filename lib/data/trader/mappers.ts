@@ -185,6 +185,8 @@ export function mapLeaderboardRow(row: Record<string, unknown>): UnifiedTrader {
     // Metadata
     traderType: (row.trader_type as string) || (platform === 'web3_bot' ? 'bot' : null),
     isOutlier: row.is_outlier === true,
+    idleWindow: row.idle_window === true,
+    mddContradiction: row.mdd_contradiction === true,
     lastUpdated: (row.computed_at as string) || null,
   }
 }

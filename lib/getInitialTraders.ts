@@ -95,6 +95,10 @@ export interface InitialTrader {
   metrics_estimated: false
   computed_at: string
   is_outlier: false
+  /** No ROI and no PnL in this window: ranked at the tail, not scored. */
+  idle_window: boolean
+  /** The reported drawdown was refused; max_drawdown is null. */
+  mdd_contradiction: boolean
 }
 
 /**
@@ -167,6 +171,8 @@ function mapUnifiedToInitial(t: UnifiedTrader): InitialTrader | null {
     metrics_estimated: t.metricsEstimated,
     computed_at: t.lastUpdated ?? '',
     is_outlier: t.isOutlier,
+    idle_window: t.idleWindow,
+    mdd_contradiction: t.mddContradiction,
   }
 }
 

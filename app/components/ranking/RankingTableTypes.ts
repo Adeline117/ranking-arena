@@ -158,6 +158,13 @@ export interface Trader {
   /** A1 data-authenticity: trades confirmed via a connected read-only API key
    *  (vs scraped "Tracked"). Drives the ✓ Verified badge. */
   is_verified_data?: boolean
+  /** Public-ranking flag: no ROI and no PnL in this window. Such a row is
+   *  ranked at the tail and not scored — show "no trading this period", never a
+   *  score breakdown. Read the flag; do not infer it from the score. */
+  idle_window?: boolean
+  /** Public-ranking flag: the reported drawdown was refused, so max_drawdown is
+   *  null and renders as "—". */
+  mdd_contradiction?: boolean
 }
 
 /**
