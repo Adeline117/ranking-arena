@@ -49,7 +49,8 @@ export interface PersonalRecommendation {
   arena_score: number
   roi: number
   pnl: number
-  win_rate: number
+  /** Null when the ranked row carries no win rate (optional metric). */
+  win_rate: number | null
   reason: PersonalRecommendationReason
   reason_detail: string
 }
@@ -79,7 +80,7 @@ interface PublicPersonalRankRow extends Record<string, unknown> {
   arena_score: number
   roi: number
   pnl: number
-  win_rate: number
+  win_rate: number | null
 }
 
 interface PublicPersonalCohort {
@@ -156,10 +157,12 @@ function hasVerifiedPublicPersonalRank(row: unknown): row is PublicPersonalRankR
     Number.isFinite(row.roi) &&
     typeof row.pnl === 'number' &&
     Number.isFinite(row.pnl) &&
-    typeof row.win_rate === 'number' &&
-    Number.isFinite(row.win_rate) &&
-    row.win_rate >= 0 &&
-    row.win_rate <= 100
+    // Optional on a ranked row: null means the source did not provide it.
+    (row.win_rate === null ||
+      (typeof row.win_rate === 'number' &&
+        Number.isFinite(row.win_rate) &&
+        row.win_rate >= 0 &&
+        row.win_rate <= 100))
   )
 }
 
