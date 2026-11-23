@@ -22,6 +22,7 @@ jest.mock('@/lib/utils/logger', () => ({
 import {
   MIN_ACTIVE_ARENA_SCORE,
   MIN_RANKED_ARENA_SCORE,
+  hasContradictoryDrawdown,
   isIdleWindowRow,
   scoreTraders,
   type ScoredTrader,
@@ -624,5 +625,121 @@ describe('idle-window rows (ROI 0 and PnL 0) are ranked last and not scored', ()
       )
       expect(row.score_factors).toMatchObject({ idle_window: true })
     }
+  })
+})
+
+describe('contradictory drawdown: a losing window with a 0% max drawdown', () => {
+  const cohort = () => [
+    traderRow('p1', { roi: 80, pnl: 500_000, win_rate: 70, max_drawdown: 5 }),
+    traderRow('p2', { roi: 20, pnl: 20_000, win_rate: 55, max_drawdown: 15 }),
+    traderRow('p3', { roi: 6, pnl: 900, win_rate: 48, max_drawdown: 35 }),
+    traderRow('l1', { roi: -9, pnl: -300, win_rate: 41, max_drawdown: 44 }),
+    traderRow('l2', { roi: -30, pnl: -4_000, win_rate: 30, max_drawdown: 60 }),
+    // A profit with no drawdown in the window is possible: a real value.
+    traderRow('profit-zero-dd', { roi: 12, pnl: 1_500, win_rate: 60, max_drawdown: 0 }),
+    // A loss with no drawdown is not.
+    traderRow('loss-zero-dd', { roi: -12, pnl: -1_500, win_rate: 60, max_drawdown: 0 }),
+    // The same loss with an ordinary drawdown, for comparison.
+    traderRow('loss-real-dd', { roi: -12, pnl: -1_500, win_rate: 60, max_drawdown: 20 }),
+    // The same loss reporting no drawdown at all.
+    traderRow('loss-no-dd', { roi: -12, pnl: -1_500, win_rate: 60, max_drawdown: null }),
+    traderRow('idle-zero-dd', { roi: 0, pnl: 0, win_rate: 0, max_drawdown: 0 }),
+  ]
+
+  it('refuses the drawdown: no credit on that dimension, column empty, marked', async () => {
+    const rows = byId(await publishedCohort(cohort(), 'roi_pnl'))
+    const refused = rows.get('loss-zero-dd')!
+
+    expect(refused.max_drawdown).toBeNull()
+    expect(refused.score_factors).toMatchObject({ drawdown: null, mdd_contradiction: true })
+    // The label follows the columns the row now carries.
+    expect(refused.score_completeness).toBe('partial')
+    expect(refused.win_rate).toBe(60)
+
+    // Scored exactly like the same loss that reports no drawdown at all...
+    const missing = rows.get('loss-no-dd')!
+    expect(refused.arena_score).toBe(missing.arena_score)
+    expect({ ...refused.score_factors, mdd_contradiction: undefined }).toEqual({
+      ...missing.score_factors,
+      mdd_contradiction: undefined,
+    })
+    expect(missing.score_factors).not.toHaveProperty('mdd_contradiction')
+    // ...and below the same loss with a real drawdown, which earns its percentile.
+    expect(refused.arena_score!).toBeLessThan(rows.get('loss-real-dd')!.arena_score!)
+
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      '[30D] Refused contradictory drawdowns (ROI < 0 with a 0% max drawdown; metric emptied, row kept): 1'
+    )
+  })
+
+  it('still reads a 0% drawdown on a profitable row as the best drawdown', async () => {
+    const rows = byId(await publishedCohort(cohort(), 'roi_pnl'))
+    const profitable = rows.get('profit-zero-dd')!
+    expect(profitable.max_drawdown).toBe(0)
+    expect(profitable.score_factors).toMatchObject({ drawdown: 1 })
+    expect(profitable.score_factors).not.toHaveProperty('mdd_contradiction')
+    expect(profitable.score_completeness).toBe('full')
+  })
+
+  it('leaves idle rows to the idle-window rule', async () => {
+    const rows = byId(await publishedCohort(cohort(), 'roi_pnl'))
+    const idle = rows.get('idle-zero-dd')!
+    expect(idle.max_drawdown).toBe(0)
+    expect(idle.arena_score).toBe(MIN_RANKED_ARENA_SCORE)
+    expect(idle.score_factors).toMatchObject({ idle_window: true })
+    expect(idle.score_factors).not.toHaveProperty('mdd_contradiction')
+  })
+
+  it('does not let the refused 0 count as the best drawdown for anyone else', async () => {
+    // With the refused row in the cohort, the profitable 0% row is still the
+    // only one at the top of the drawdown dimension, and p1 (5%) is next.
+    const rows = byId(await publishedCohort(cohort(), 'roi_pnl'))
+    const without = byId(
+      await publishedCohort(
+        cohort().filter((row) => row.source_trader_id !== 'loss-zero-dd'),
+        'roi_pnl'
+      )
+    )
+    expect(rows.get('p1')!.score_factors!.drawdown).toBe(without.get('p1')!.score_factors!.drawdown)
+  })
+
+  it('reads both sides at the stored precision', () => {
+    expect(hasContradictoryDrawdown({ roi: -12, max_drawdown: 0 })).toBe(true)
+    // max_drawdown is numeric(5,2): 0.004 is written as 0.00.
+    expect(hasContradictoryDrawdown({ roi: -12, max_drawdown: 0.004 })).toBe(true)
+    expect(hasContradictoryDrawdown({ roi: -12, max_drawdown: 0.01 })).toBe(false)
+    // roi is numeric(12,4): -0.00004 is written as 0.0000, not a loss.
+    expect(hasContradictoryDrawdown({ roi: -0.00004, max_drawdown: 0 })).toBe(false)
+    expect(hasContradictoryDrawdown({ roi: -0.0001, max_drawdown: 0 })).toBe(true)
+    expect(hasContradictoryDrawdown({ roi: 0, max_drawdown: 0 })).toBe(false)
+    expect(hasContradictoryDrawdown({ roi: 5, max_drawdown: 0 })).toBe(false)
+    expect(hasContradictoryDrawdown({ roi: -12, max_drawdown: null })).toBe(false)
+  })
+
+  it('writes the row with an empty drawdown that the row policy accepts', async () => {
+    const scored = await publishedCohort(cohort(), 'roi_pnl')
+    const verdict = classifyPublishableRow(
+      scored.find((row) => row.source_trader_id === 'loss-zero-dd')!,
+      'roi_pnl'
+    )
+    expect(verdict).toMatchObject({
+      row: {
+        max_drawdown: null,
+        win_rate: 60,
+        score_completeness: 'partial',
+        score_factors: { mdd_contradiction: true, drawdown: null },
+      },
+    })
+    expect(verdict).not.toHaveProperty('emptied')
+  })
+
+  it("'four_metrics' has no such rule", async () => {
+    const rows = byId(await publishedCohort(cohort(), 'four_metrics'))
+    const row = rows.get('loss-zero-dd')!
+    expect(row.max_drawdown).toBe(0)
+    expect(row.score_factors).not.toHaveProperty('mdd_contradiction')
+    expect(mockLogger.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('Refused contradictory drawdowns')
+    )
   })
 })

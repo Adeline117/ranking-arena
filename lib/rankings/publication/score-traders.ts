@@ -88,8 +88,37 @@ export const MIN_ACTIVE_ARENA_SCORE = 0.02
  * `idle_window: true` marks a row that was not scored on any dimension because
  * the account shows no performance in the window; the UI can say "no trading
  * in this period". Absent on every scored row.
+ * `mdd_contradiction: true` marks a scored row whose reported drawdown was
+ * refused (see hasContradictoryDrawdown): its max_drawdown is written empty
+ * and the drawdown dimension scored nothing.
  */
-export type RankScoreFactors = ArenaScoreV4Result['factors'] & { idle_window?: true }
+export type RankScoreFactors = ArenaScoreV4Result['factors'] & {
+  idle_window?: true
+  mdd_contradiction?: true
+}
+
+/**
+ * Contradictory drawdown ('roi_pnl' only): the window closed at a loss
+ * (ROI < 0) and the reported max drawdown is 0. A loss in the window implies
+ * a drawdown, so a 0 is a placeholder or a different definition, not a
+ * measurement. The value is refused like an out-of-range one: emptied, the
+ * row kept, the dimension scored as missing, and the refusal recorded. It is
+ * not replaced by anything derived.
+ *
+ * Both sides are read at the precision the row is stored with (ROI
+ * numeric(12,4), max_drawdown numeric(5,2)), as for the idle-window rule. An
+ * idle row has ROI 0 and is never contradictory.
+ */
+export function hasContradictoryDrawdown(row: {
+  roi: number
+  max_drawdown: number | null
+}): boolean {
+  return (
+    row.max_drawdown !== null &&
+    Math.round(row.roi * 1e4) < 0 &&
+    Math.round(row.max_drawdown * 1e2) === 0
+  )
+}
 
 /**
  * Idle window ('roi_pnl' only): ROI is 0 and PnL is 0. There is no performance
@@ -173,11 +202,20 @@ export async function scoreTraders(
   // regression is visible in the publication log.
   let winRateNulled = 0
   let maxDrawdownNulled = 0
+  // Rows whose reported 0% drawdown contradicts a losing window ('roi_pnl').
+  const contradictoryDrawdownKeys = new Set<string>()
   const scored = rankEligibleTraders.map((t) => {
     const normalizedWinRate = normalizeRankWinRate(t.win_rate)
-    const normalizedMaxDrawdown = normalizeRankDrawdown(t.max_drawdown)
+    let normalizedMaxDrawdown = normalizeRankDrawdown(t.max_drawdown)
     if (t.win_rate != null && normalizedWinRate === null) winRateNulled += 1
     if (t.max_drawdown != null && normalizedMaxDrawdown === null) maxDrawdownNulled += 1
+    if (
+      rowEligibility === 'roi_pnl' &&
+      hasContradictoryDrawdown({ roi: t.roi, max_drawdown: normalizedMaxDrawdown })
+    ) {
+      normalizedMaxDrawdown = null
+      contradictoryDrawdownKeys.add(`${t.source}\u0000${t.source_trader_id}`)
+    }
     const normalizedSharpe = normalizeRankSharpe(t.sharpe_ratio)
     const normalizedProfitFactor = normalizeRankProfitFactor(t.profit_factor)
     const normalizedTradesCount = normalizeRankTradesCount(t.trades_count)
@@ -278,6 +316,12 @@ export async function scoreTraders(
     )
   }
 
+  if (contradictoryDrawdownKeys.size > 0) {
+    logger.warn(
+      `[${season}] Refused contradictory drawdowns (ROI < 0 with a 0% max drawdown; metric emptied, row kept): ${contradictoryDrawdownKeys.size}`
+    )
+  }
+
   // Mark outliers (uses roi/pnl, independent of the score)
   const outlierCount = markOutliers(scored)
   if (outlierCount > 0) {
@@ -352,7 +396,11 @@ export async function scoreTraders(
         : r.totalScore
       : 0
     t.arena_score_v4 = t.arena_score
-    t.score_factors = r ? r.factors : null
+    t.score_factors = r
+      ? contradictoryDrawdownKeys.has(`${t.source}\u0000${t.source_trader_id}`)
+        ? { ...r.factors, mdd_contradiction: true }
+        : r.factors
+      : null
     // Repopulate the 3 existing breakdown sub-scores from v4 factors so the
     // radar/bars UI stays v4-consistent (0-100), no frontend plumbing change:
     //   盈利能力 = earnings(PnL 0.30 + ROI 0.20), 风控 = avg(回撤,Sharpe 百分位),

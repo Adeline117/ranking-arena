@@ -98,6 +98,9 @@ fence / claim / seal 相关 RPC 只对 owner 和 `service_role` 开放。
   它自己的胜率、回撤照常保留和显示，包括 0。有盈亏的行显示分下限是 0.02，比空窗行高一档：重排同分按 id，
   已在表里的行保留旧 id，同分会让老的空窗行排到新上榜的交易员前面。数据库没有新列，行级资格函数和重排不需要改
   （0.01 在 `(0, 100]` 内，空窗行的完整度标签照常与两列一致）。
+- 矛盾回撤（`'roi_pnl'` 下，`hasContradictoryDrawdown`）：ROI < 0 且回撤为 0（都按入库精度）的行，回撤按不可信处理：
+  该维按缺失计分，`max_drawdown` 写空，`score_factors` 带 `mdd_contradiction: true`，发布日志计数。窗口内亏损必然有回撤，
+  0 是占位值或口径不同的迹象。这是拒收自相矛盾的值，和越界值置空留痕同一类，不推算替代值。空窗行不适用。
 - 写入顺序：按显示分、ROI、PnL、来源、交易员编号降序写入（`orderRowsForWrite`）。重排按
   `arena_score DESC NULLS LAST, id`，新行按到达顺序取 id，所以同分的新行按这个顺序排名；已有行保留 id。
 - 分阶段耗时：每季发布输出六行 `[季] stage=<read|score|write|cleanup|rerank|seal> rows=<行数> ms=<毫秒>`。
