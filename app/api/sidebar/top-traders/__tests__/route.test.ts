@@ -97,7 +97,7 @@ describe('GET /api/sidebar/top-traders', () => {
 
     await expect(GET()).rejects.toBe(databaseError)
     expect(mockGetOrSetWithLock).toHaveBeenCalledWith(
-      'public-rank-policy-v8:sidebar:top-traders:v3',
+      'public-rank-policy-v7:sidebar:top-traders:v3',
       expect.any(Function),
       expect.objectContaining({ ttl: 300 })
     )

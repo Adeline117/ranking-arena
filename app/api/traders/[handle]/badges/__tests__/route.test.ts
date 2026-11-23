@@ -129,7 +129,7 @@ describe('GET /api/traders/[handle]/badges', () => {
     expect(mockFrom).not.toHaveBeenCalledWith('leaderboard_ranks')
     expect(mockCalculateBadges).toHaveBeenCalledWith({ handle: 'trader-1', rank: 1 })
     expect(mockGetOrSetWithLock).toHaveBeenCalledWith(
-      'public-rank-policy-v8:badges:verified:v2:binance_futures:trader-1',
+      'public-rank-policy-v7:badges:verified:v2:binance_futures:trader-1',
       expect.any(Function),
       expect.objectContaining({ ttl: 300 })
     )

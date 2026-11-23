@@ -10,15 +10,19 @@
 
 import { parsePublicActiveRankingSource } from '@/lib/constants/exchanges'
 
-// v8: row eligibility requires ROI and PnL only (20261122201611). Rows without
-// a win rate or drawdown, and losing traders at the 0.01 display floor, are
-// now ranked. Rotate every ranking key so a page cached under the four-metric
-// policy (truncated totals, `ranking_visibility: 'partial'`) is never replayed
-// next to pages of the larger cohort.
+// The epoch is NOT rotated for the ROI + PnL row policy (20261122201611).
+// Merging that change must not alter a running deployment, and an epoch the
+// website has but an older scoring worker does not would leave the new keys
+// outside whatever that worker invalidates. It is not needed for correctness
+// either: pages cached under the four-metric policy hold only complete rows,
+// which the relaxed reader accepts unchanged, and the fixed launch order
+// (database -> website -> scoring worker) means no reader ever truncates a
+// page of the larger cohort. If a rotation is wanted at launch it is a
+// one-line change deployed to the website and the scoring worker together.
 // v7: BingX ranking quarantine. Rotate every ranking key so orphaned v6
 // payloads whose legacy tag TTL expired cannot bypass the
 // new atomic generation invalidation contract.
-export const PUBLIC_RANKING_CACHE_EPOCH = 'public-rank-policy-v8'
+export const PUBLIC_RANKING_CACHE_EPOCH = 'public-rank-policy-v7'
 /**
  * Redis tag index for the current public ranking epoch. This must rotate with
  * the key epoch so an older rolling-deploy writer cannot shorten or recreate

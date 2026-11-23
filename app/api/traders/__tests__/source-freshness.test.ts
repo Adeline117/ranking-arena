@@ -442,10 +442,10 @@ describe('GET /api/traders public ranked cohort', () => {
       mockGetOrSetWithLock.mockClear()
       expect((await request(query)).status).toBe(200)
       expect(mockGetOrSetWithLock).toHaveBeenCalledWith(
-        expect.stringMatching(/^public-rank-policy-v8:leaderboard:v5:public-cohort:/),
+        expect.stringMatching(/^public-rank-policy-v7:leaderboard:v5:public-cohort:/),
         expect.any(Function),
         expect.objectContaining({
-          tags: ['rankings:public-rank-policy-v8', 'season:90D'],
+          tags: ['rankings:public-rank-policy-v7', 'season:90D'],
           skipMemory: true,
         })
       )
@@ -700,7 +700,7 @@ describe('GET /api/traders public ranked cohort', () => {
     expect(body.ranking_visibility_reasons).toBeUndefined()
     // The reloaded page replaces the stale entry under the current fence.
     expect(mockCacheSet).toHaveBeenCalledWith(
-      expect.stringMatching(/^public-rank-policy-v8:leaderboard:v5:public-cohort:/),
+      expect.stringMatching(/^public-rank-policy-v7:leaderboard:v5:public-cohort:/),
       expect.objectContaining({ rows: [expect.objectContaining({ source_trader_id: 'kept' })] }),
       expect.objectContaining({ writeFence: expect.objectContaining({ token: '7' }) })
     )
@@ -718,14 +718,14 @@ describe('GET /api/traders public ranked cohort', () => {
       warmDefaultPublicTradersCache({ from: mockFrom } as never, '90D', 50)
     ).resolves.toBe(1)
     expect(mockCacheSet).toHaveBeenCalledWith(
-      expect.stringMatching(/^public-rank-policy-v8:leaderboard:v5:public-cohort:/),
+      expect.stringMatching(/^public-rank-policy-v7:leaderboard:v5:public-cohort:/),
       expect.objectContaining({
         scope: publicRankedCohortScope(),
         rows: [expect.objectContaining({ source_trader_id: 'rank-one', metrics_estimated: false })],
       }),
       {
         ttl: 300,
-        tags: ['rankings:public-rank-policy-v8', 'season:90D'],
+        tags: ['rankings:public-rank-policy-v7', 'season:90D'],
         skipMemory: true,
         writeFence: { key: 'public-rankings:write-fence:v1', token: '7' },
       }
