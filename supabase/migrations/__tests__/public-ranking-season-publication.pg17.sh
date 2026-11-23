@@ -535,6 +535,16 @@ assert_equal "published rank count (partial by-flux included)" "8" \
 assert_equal "bybit is reported restored" '["bybit"]' "$(json_field "$OUT" result.restoredSources)"
 assert_equal "no row is excluded for a missing win rate" '{}' \
   "$(json_field "$OUT" result.exclusions.byReason)"
+# One timing line per stage, in order, each with its row count and whole ms.
+assert_equal "stage timing lines name every stage and its row count" \
+  "read=8,score=8,write=8,cleanup=0,rerank=8,seal=8" \
+  "$(node -e '
+    const logs = JSON.parse(process.argv[1]).logs
+    const stages = logs
+      .map((line) => /^\[90D\] stage=([a-z]+) rows=(\d+) ms=(\d+)$/.exec(line))
+      .filter(Boolean)
+    console.log(stages.map((match) => match[1] + "=" + match[2]).join(","))
+  ' "$OUT")"
 assert_equal "published rows are counted by completeness" '{"full":7,"partial":1,"minimal":0}' \
   "$(json_field "$OUT" result.exclusions.completeness)"
 assert_equal "isolation rows cleared, restore event recorded" "0|1" "$(psql_db -Atqc "

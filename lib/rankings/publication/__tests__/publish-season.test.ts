@@ -1,6 +1,8 @@
 import { createPgRpcClient } from '../pg-rpc-client'
 import {
   classifyPublishableRow,
+  RANK_PUBLICATION_STAGES,
+  rankPublicationStageTimingLine,
   exclusionAlertDetails,
   fitNumeric,
   publishLeaderboardSeason,
@@ -220,6 +222,18 @@ describe("classifyPublishableRow ('four_metrics' rollback rule)", () => {
     expect(classifyPublishableRow(scored(), 'four_metrics')).toHaveProperty(
       'row.source',
       'binance_futures'
+    )
+  })
+})
+
+describe('rankPublicationStageTimingLine', () => {
+  it('names the stage, the row count and whole milliseconds', () => {
+    expect(RANK_PUBLICATION_STAGES).toEqual(['read', 'score', 'write', 'cleanup', 'rerank', 'seal'])
+    expect(rankPublicationStageTimingLine('7D', 'rerank', 9012, 310.4)).toBe(
+      '[7D] stage=rerank rows=9012 ms=310'
+    )
+    expect(rankPublicationStageTimingLine('90D', 'cleanup', 0, -3)).toBe(
+      '[90D] stage=cleanup rows=0 ms=0'
     )
   })
 })

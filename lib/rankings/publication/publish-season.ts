@@ -662,6 +662,37 @@ ON CONFLICT (season_id, source, source_trader_id) DO UPDATE SET
   rank_publication_id = EXCLUDED.rank_publication_id
 `
 
+/** The timed stages of one season publication, in execution order. */
+export const RANK_PUBLICATION_STAGES = [
+  'read',
+  'score',
+  'write',
+  'cleanup',
+  'rerank',
+  'seal',
+] as const
+export type RankPublicationStage = (typeof RANK_PUBLICATION_STAGES)[number]
+
+/**
+ * One log line per stage: `[7D] stage=rerank rows=9012 ms=310`.
+ *   read    rows = score rows the bundle returned for the expected sources
+ *   score   rows = rows handed to the scorer
+ *   write   rows = rows written (all chunks; the statement timeout applies per chunk)
+ *   cleanup rows = rows deleted (previous cohort rows that left the board)
+ *   rerank  rows = rows of the cohort being ranked
+ *   seal    rows = rows sealed (the published rank count)
+ * Each of write-chunk / cleanup / rerank / seal is one statement under
+ * RANK_PUBLICATION_STEP_STATEMENT_TIMEOUT, so ms is the margin to watch.
+ */
+export function rankPublicationStageTimingLine(
+  season: PublicationWindow,
+  stage: RankPublicationStage,
+  rows: number,
+  elapsedMs: number
+): string {
+  return `[${season}] stage=${stage} rows=${rows} ms=${Math.max(0, Math.round(elapsedMs))}`
+}
+
 /**
  * Order in which rows are sent to the database.
  *
@@ -929,7 +960,9 @@ async function publishInTransaction(
         { expectedSources: allExpectedSources, unsupportedSources, floor: minExpectedSources }
       )
     }
+    const readStartedAt = Date.now()
     const bundle = await readSourcePublicationBundle(rpc, season, { now: new Date(computedAt) })
+    const readElapsedMs = Date.now() - readStartedAt
 
     // 2. Freshness + trust gate. A source without fresh PASSED evidence, or
     // whose PASSED boards lack attempt-bound trust evidence ('untrusted'), is
@@ -1078,6 +1111,7 @@ async function publishInTransaction(
     // the scorer as a bare null. An unevidenced win rate or drawdown is not
     // required: it arrives as null and the row is ranked with it empty.
     const traderRows = bundle.traderRows.filter((row) => expected.has(row.source))
+    log(rankPublicationStageTimingLine(season, 'read', traderRows.length, readElapsedMs))
     const unevidencedKeys = new Set(
       evidence.freshScoreRows
         .filter((row) => lacksRequiredMetricEvidence(row))
@@ -1097,7 +1131,16 @@ async function publishInTransaction(
         avatar_url: row.avatar_url,
       })
     }
+    const scoreStartedAt = Date.now()
     const scored = await deps.scoreCohort(scorerRows, season, { tx, handleMap })
+    log(
+      rankPublicationStageTimingLine(
+        season,
+        'score',
+        scorerRows.length,
+        Date.now() - scoreStartedAt
+      )
+    )
     const rows: PublishableRow[] = []
     const identities = new Map<string, string[]>(expectedSources.map((source) => [source, []]))
     const seen = new Set<string>()
@@ -1213,6 +1256,7 @@ async function publishInTransaction(
 
     // 5. Write every row with the cohort token.
     let written = 0
+    const writeStartedAt = Date.now()
     const rowsInWriteOrder = orderRowsForWrite(rows)
     for (let offset = 0; offset < rows.length; offset += RANK_PUBLICATION_WRITE_CHUNK) {
       const chunk = rowsInWriteOrder.slice(offset, offset + RANK_PUBLICATION_WRITE_CHUNK)
@@ -1224,6 +1268,7 @@ async function publishInTransaction(
       ])
       written += result.rowCount ?? 0
     }
+    log(rankPublicationStageTimingLine(season, 'write', written, Date.now() - writeStartedAt))
     if (written !== rows.length) {
       throw new RankPublicationError(
         'write_incomplete',
@@ -1235,16 +1280,31 @@ async function publishInTransaction(
     const finalEligibleIdentityMap: ReadonlyMap<string, readonly string[]> = identities
 
     // 6-8. Cleanup, global rerank, seal.
+    const cleanupStartedAt = Date.now()
     const cleanup = await cleanupLeaderboardRankPublication(
       rpc,
       { season, scoreCohortId, freshPublications, finalEligibleIdentityMap },
       stepOptions
     )
+    log(
+      rankPublicationStageTimingLine(
+        season,
+        'cleanup',
+        cleanup.deleted_count,
+        Date.now() - cleanupStartedAt
+      )
+    )
+    const rerankStartedAt = Date.now()
     await rerankLeaderboardPublication(rpc, { season, scoreCohortId }, stepOptions)
+    log(rankPublicationStageTimingLine(season, 'rerank', rows.length, Date.now() - rerankStartedAt))
+    const sealStartedAt = Date.now()
     const seal = await sealLeaderboardRankPublication(
       rpc,
       { season, scoreCohortId, freshPublications, finalEligibleIdentityMap },
       stepOptions
+    )
+    log(
+      rankPublicationStageTimingLine(season, 'seal', seal.trader_count, Date.now() - sealStartedAt)
     )
 
     // 9. The public view must now serve this season; otherwise roll back.
