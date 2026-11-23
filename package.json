@@ -140,6 +140,7 @@
     "qa:binance-profile-capture-pg17": "bash supabase/migrations/__tests__/binance-profile-capture.pg17.sh",
     "qa:profile-capture-bybit-copytrade-pg17": "bash supabase/migrations/__tests__/profile-capture-bybit-copytrade.pg17.sh",
     "qa:blofin-profile-capture-pg17": "bash supabase/migrations/__tests__/blofin-profile-capture.pg17.sh",
+    "qa:blofin-spot-profile-capture-pg17": "bash supabase/migrations/__tests__/blofin-spot-profile-capture.pg17.sh",
     "qa:codec-rebuild-slot-guard-pg17": "bash supabase/migrations/__tests__/leaderboard-ranks-codec-layout-rebuild-slot-guard.pg17.sh",
     "qa:retention-trust-evidence-pg17": "bash supabase/migrations/__tests__/retention-preserves-metric-trust-evidence.pg17.sh",
     "qa:trust-evidence-retention-pg17": "bash supabase/migrations/__tests__/trust-evidence-retention.pg17.sh",

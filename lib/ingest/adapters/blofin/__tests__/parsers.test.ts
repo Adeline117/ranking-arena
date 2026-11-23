@@ -1,8 +1,9 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { parseBlofinLeaderboardPage } from '../parsers'
+import { parseBlofinLeaderboardPage, parseBlofinProfile } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
 import { resolveHeadlineLineage } from '../../../testing/headline-lineage'
+import { validateLeaderboardRows } from '../../../staging/validate'
 
 function fixture(name: string): unknown {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
@@ -124,6 +125,44 @@ describe('parseBlofinLeaderboardPage', () => {
     expect(page.rows.length).toBeGreaterThan(0)
     expect(page.reportedTotal).toBeGreaterThan(0)
     expect(page.rows[0].exchangeTraderId).toBeTruthy()
+  })
+
+  // Public probe 2026-11-20 (30D spot board, one active and one idle trader).
+  // Every spot board row carries `mdd`; an idle account reports the literal
+  // "0" (90 of 129 rows on the 7D board), which is a value, not a gap.
+  it('blofin_spot: the board row drawdown survives staging, including an idle 0', () => {
+    const page = parseBlofinLeaderboardPage(fixture('board-spot-30-20261120.json'), {
+      ...ctx,
+      sourceSlug: 'blofin_spot',
+    })
+    const { valid, rejects } = validateLeaderboardRows(page.rows)
+    expect(rejects).toEqual([])
+    const [active, idle] = valid
+    expect(active.exchangeTraderId).toBe('4187422152')
+    expect(active.headlineMdd).toBeCloseTo(14.7976082140442, 9)
+    expect(active.headlineWinRate).toBeNull() // the board row has no win rate
+    expect(idle.headlineRoi).toBe(0)
+    expect(idle.headlinePnl).toBe(0)
+    expect(idle.headlineMdd).toBe(0)
+  })
+
+  it('blofin_spot: the detail drawdown repeats the board row drawdown of that range', () => {
+    const board = parseBlofinLeaderboardPage(fixture('board-spot-30-20261120.json'), ctx).rows[0]
+    const recorded = fixture('profile-capture-spot-4187422152.json') as {
+      responses: Record<string, unknown>
+    }
+    const profile = parseBlofinProfile(
+      {
+        info: recorded.responses['trader/info|'],
+        indicators: recorded.responses['trader/stat/indicators|D30'],
+        symbolPerf: null,
+        performance: recorded.responses['trader/stat/performance|D30'],
+        timeframe: 30,
+      },
+      { ...ctx, sourceSlug: 'blofin_spot' }
+    )
+    expect(profile.stats[0].mdd).toBe(board.headlineMdd)
+    expect(profile.stats[0].roi).toBe(board.headlineRoi)
   })
 
   it('returns empty on malformed payloads', () => {

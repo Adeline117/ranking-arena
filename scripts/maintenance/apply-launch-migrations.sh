@@ -474,6 +474,14 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # entry counts come from index-only scans instead of fetching every entry row
 # from the 53 GB heap (5.5 s of a 9.9 s warm run; first 7D attempt timing out
 # at 30 s when cold). Output is unchanged. Independent of the other entries.
+# 20261120235710 registers the blofin_spot profile capture contract
+# (win_rate, total_positions from the spot detail endpoints) in the registry of
+# predeploy 20261116215328. It is only meaningful to the worker release that
+# carries the same contract document and crawls the spot detail route, so it
+# follows that release; an older worker opens no blofin_spot profile attempt.
+# It is independent of 015119 (which leaves blofin_spot unregistered), refuses
+# a replay or an earlier blofin_spot registration, and touches no table 192134
+# guards.
 # 20261123020207 checks a RAW object's integrity metadata once per statement
 # instead of once per metric_trust_artifacts row; the per-row trigger
 # decompressed the capture's whole meta document (434 kB for a 2,042-page
@@ -511,6 +519,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261122152622_metric_trust_observation_lineage_per_statement.sql
   20261122154211_score_bundle_index_only_entry_counts.sql
   20261118134316_raw_retention_backlog_census.sql
+  20261120235710_register_blofin_spot_profile_capture_contract.sql
   20261123020207_metric_trust_artifact_raw_integrity_per_statement.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )

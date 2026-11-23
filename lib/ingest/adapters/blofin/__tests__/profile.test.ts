@@ -107,3 +107,66 @@ describe('parseBlofinProfile', () => {
     expect(r.nickname).toBeNull()
   })
 })
+
+/**
+ * blofin_spot detail (public probe 2026-11-20 of
+ * blofin.com/sapi/v1/spot_copy/trader/*, one trader, D7/D30/D90). The spot
+ * stat/performance response is an object carrying the chart and the
+ * per-symbol table; there is no separate symbol_performance response.
+ */
+describe('parseBlofinProfile (blofin_spot detail)', () => {
+  const recorded = fx('profile-capture-spot-4187422152.json') as {
+    responses: Record<string, unknown>
+  }
+  const spotCtx: ParseCtx = { ...ctx, sourceSlug: 'blofin_spot' }
+  const composite = (timeframe: 7 | 30 | 90) => ({
+    info: recorded.responses['trader/info|'],
+    indicators: recorded.responses[`trader/stat/indicators|D${timeframe}`],
+    symbolPerf: null,
+    performance: recorded.responses[`trader/stat/performance|D${timeframe}`],
+    timeframe,
+  })
+
+  it.each([
+    [30, 35.29, 6, 17, 14.7976082140442, -15.8433806762582024],
+    [90, 48.27, 14, 29, 27.566833876268518, -2.8714025503648557],
+  ] as const)(
+    '%sd block carries the period win rate, trade counts, drawdown and ROI',
+    (timeframe, winRate, wins, trades, mdd, roi) => {
+      const profile = parseBlofinProfile(composite(timeframe), spotCtx)
+      expect(profile.stats).toHaveLength(1)
+      const s = profile.stats[0]
+      expect(s.timeframe).toBe(timeframe)
+      expect(s.winRate).toBeCloseTo(winRate, 9)
+      expect(s.winPositions).toBe(wins)
+      expect(s.totalPositions).toBe(trades)
+      expect(s.mdd).toBeCloseTo(mdd, 9)
+      expect(s.roi).toBeCloseTo(roi, 9)
+      expect(s.volume).toBeNull() // spot indicators carry no volume field
+    }
+  )
+
+  it('keeps the win rate NULL for a period without trades', () => {
+    const s = parseBlofinProfile(composite(7), spotCtx).stats[0]
+    expect(s.totalPositions).toBe(0)
+    expect(s.winRate).toBeNull()
+    // 零成交周期的回撤是沿用值：置空，原值留痕。
+    expect(s.mdd).toBeNull()
+    expect(s.extras.carried_mdd).toBeCloseTo(0.1497742225083643, 9)
+  })
+
+  it('reads the per-symbol table and the cumulative ROI chart from stat/performance', () => {
+    const profile = parseBlofinProfile(composite(30), spotCtx)
+    const prefs = profile.stats[0].tradingPreferences as {
+      assets?: Array<Record<string, unknown>>
+    } | null
+    expect(prefs?.assets?.length).toBeGreaterThan(0)
+    expect(typeof prefs?.assets?.[0].asset).toBe('string')
+    const roi = profile.series.find((x) => x.metric === 'roi')
+    expect(roi?.points).toHaveLength(3)
+    expect(roi!.points[0].ts < roi!.points[2].ts).toBe(true)
+    // The spot `pnl` array is one bar per day, not a cumulative series.
+    expect(profile.series.find((x) => x.metric === 'pnl')).toBeUndefined()
+    expect(profile.nickname).toBe('Cryptoracle')
+  })
+})
