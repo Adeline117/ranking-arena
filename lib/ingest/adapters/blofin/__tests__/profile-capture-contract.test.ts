@@ -359,8 +359,11 @@ describe('blofin_spot profile capture contract', () => {
       expect(block.totalPositions).toBe(0)
       expect(block.winRate).toBeNull()
     }
-    expect(blocks[0].mdd).toBeGreaterThan(64)
-    expect(new Set(blocks.map((block) => block.mdd)).size).toBe(1)
+    // 空窗的回撤不是周期值：解析器置空，交易所原值留在 extras.carried_mdd，
+    // 三个周期是同一个沿用值。
+    for (const block of blocks) expect(block.mdd).toBeNull()
+    expect(blocks[0].extras.carried_mdd).toBeGreaterThan(64)
+    expect(new Set(blocks.map((block) => block.extras.carried_mdd)).size).toBe(1)
     expect(Object.keys(BLOFIN_SPOT_PROFILE_CAPTURE.metrics).sort()).toEqual([
       'total_positions',
       'win_rate',

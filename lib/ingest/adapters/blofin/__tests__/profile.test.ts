@@ -150,7 +150,9 @@ describe('parseBlofinProfile (blofin_spot detail)', () => {
     const s = parseBlofinProfile(composite(7), spotCtx).stats[0]
     expect(s.totalPositions).toBe(0)
     expect(s.winRate).toBeNull()
-    expect(s.mdd).toBeCloseTo(0.1497742225083643, 9)
+    // 零成交周期的回撤是沿用值：置空，原值留痕。
+    expect(s.mdd).toBeNull()
+    expect(s.extras.carried_mdd).toBeCloseTo(0.1497742225083643, 9)
   })
 
   it('reads the per-symbol table and the cumulative ROI chart from stat/performance', () => {
