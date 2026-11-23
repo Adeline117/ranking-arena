@@ -178,8 +178,12 @@ export function parseExpectedSourceWindows(data: unknown): ExpectedSourceWindow[
  * not prove that each physical board contributed ranks; score computation time
  * is never consulted.
  *
- * Multiple physical registry boards may map to the same public source alias.
- * Such duplicate visible rows share one count-cache value and are counted once.
+ * One public source name belongs to exactly one active serving registry board:
+ * the database refuses a second one (arena_sources_serving_public_name_key and
+ * the sources_reject_ambiguous_serving_name trigger, 20261122204058), because
+ * resolving a trader by that name must have one answer. The handling below of
+ * several boards under one name is defensive only; such rows would carry one
+ * shared count and are counted once.
  * Historical watermark rows outside the expected registry set are ignored.
  */
 export function buildRegistrySourceFreshnessStatuses(
