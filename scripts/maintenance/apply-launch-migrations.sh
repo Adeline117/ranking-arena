@@ -470,6 +470,10 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # row; the per-row trigger re-verified the run's exhaustion proof for every
 # observation (63.5 ms x 12,900 rows for binance_futures against a 300 s
 # query timeout). It replaces the 112703 trigger function, so it follows it.
+# 20261122154211 re-creates the score bundle (204006 body) so its per-snapshot
+# entry counts come from index-only scans instead of fetching every entry row
+# from the 53 GB heap (5.5 s of a 9.9 s warm run; first 7D attempt timing out
+# at 30 s when cold). Output is unchanged. Independent of the other entries.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -501,6 +505,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261118144144_rank_publication_trust_requires_run.sql
   20261121201553_visible_sources_from_served_ranks.sql
   20261122152622_metric_trust_observation_lineage_per_statement.sql
+  20261122154211_score_bundle_index_only_entry_counts.sql
   20261118134316_raw_retention_backlog_census.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )

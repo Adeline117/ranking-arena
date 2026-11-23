@@ -640,6 +640,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:observation-lineage-statement-pg17
 
+      - name: Prove the score bundle's index-only entry counts keep its output
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:score-bundle-entry-counts-pg17
+
       - name: Prove metric source contract retirement (binance_web3_bsc v2)
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
