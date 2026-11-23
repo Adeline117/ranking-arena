@@ -59,9 +59,12 @@ describe('claimed trader routing contract', () => {
     // A differing ?platform= counts as validated by a client override, or when
     // it is the source / a server-verified alias of the account already rendered.
     expect(client).toMatch(
-      /requestedPlatformValidated: Boolean\(\s*override \|\| legacyPlatformOverride \|\| urlPlatformIsServerAccount\s*\)/
+      /requestedPlatformValidated: Boolean\(\s*override \|\| legacyPlatformOverride \|\| urlPlatformMatchesServerAccount\s*\)/
     )
-    expect(client).toContain('(serverData.source_aliases ?? []).includes(urlPlatform)')
+    // The predicate itself is behavior-tested in lib/identity/__tests__/claimed-trader.test.ts.
+    expect(client).toContain(
+      'const urlPlatformMatchesServerAccount = urlPlatformIsServerAccount(urlPlatform, serverData)'
+    )
     expect(client).toContain('linkedAccountsReady &&')
     expect(client).toContain("searchParams.getAll('account').length === 0")
   })

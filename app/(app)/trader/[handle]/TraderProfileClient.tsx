@@ -26,6 +26,7 @@ import { useSourceCapabilities } from '@/lib/hooks/useSourceCapabilities'
 import { trackEvent } from '@/lib/analytics/track'
 import {
   claimedTraderCanonicalHref,
+  urlPlatformIsServerAccount,
   type ClaimedTraderIdentity,
 } from '@/lib/identity/claimed-trader'
 import { buildTraderClaimReturnPath } from '@/lib/auth/trader-claim-login'
@@ -363,10 +364,8 @@ export default function TraderProfileClient({
   // that is the source or one of its server-verified aliases needs no client
   // re-validation. Treating the alias as a mismatch replaced the whole
   // server-rendered header with a placeholder until /first-screen answered.
-  const urlPlatformIsServerAccount =
-    !!urlPlatform &&
-    (urlPlatform === serverData.source || (serverData.source_aliases ?? []).includes(urlPlatform))
-  const platformMismatch = !!urlPlatform && !!urlHandle && !urlPlatformIsServerAccount
+  const urlPlatformMatchesServerAccount = urlPlatformIsServerAccount(urlPlatform, serverData)
+  const platformMismatch = !!urlPlatform && !!urlHandle && !urlPlatformMatchesServerAccount
   const {
     data: accountOverride,
     error: accountOverrideError,
@@ -577,7 +576,7 @@ export default function TraderProfileClient({
     },
     requestedPlatform: urlPlatform,
     requestedPlatformValidated: Boolean(
-      override || legacyPlatformOverride || urlPlatformIsServerAccount
+      override || legacyPlatformOverride || urlPlatformMatchesServerAccount
     ),
   })
   // Period URL ↔ store sync extracted into hook (see ./hooks/useTraderPeriodSync)
