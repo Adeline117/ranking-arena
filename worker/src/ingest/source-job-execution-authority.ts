@@ -326,6 +326,36 @@ function executionError(
   return new SourceJobExecutionError(operation, code)
 }
 
+/**
+ * A database or transport error that is about to be reported under one of the
+ * fixed failure codes. The code alone hid the reason: on 2026-11-22 two
+ * bybit_mt5 windows ended in "assert failed (region_lost)" with no authority
+ * loss, shutdown or restart anywhere in the logs.
+ *
+ * The thrown error stays sanitized (messages can carry SQL and connection
+ * details), so only fields that cannot are logged: the error class, a
+ * SQLSTATE / errno-style code, and whether it was the client's query timeout.
+ */
+const SAFE_CAUSE_CODE = /^[A-Z0-9_]{2,40}$/
+
+function logUnclassifiedCause(
+  operation: SourceJobExecutionOperation,
+  code: SourceJobExecutionFailureCode,
+  cause: unknown
+): void {
+  let detail = `non-error rejection (${typeof cause})`
+  if (cause instanceof Error) {
+    const causeCode = (cause as { code?: unknown }).code
+    detail =
+      (/^[A-Za-z]{1,60}$/.test(cause.name) ? cause.name : 'Error') +
+      (typeof causeCode === 'string' && SAFE_CAUSE_CODE.test(causeCode)
+        ? ` code=${causeCode}`
+        : '') +
+      (cause.message === 'Query read timeout' ? ' query_read_timeout' : '')
+  }
+  console.error(`[ingest-worker] Tier-A execution ${operation} ${code} cause: ${detail}`)
+}
+
 function exactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
   const actual = Object.keys(value).sort()
   const sortedExpected = [...expected].sort()
@@ -918,6 +948,7 @@ export async function claimSourceJobExecutionAuthority(
                   ? 'rpc_contract_violation'
                   : 'unavailable'
               )
+        if (nextFailure !== error) logUnclassifiedCause('heartbeat', nextFailure.code, error)
         abortExecution(nextFailure)
         throw nextFailure
       }
@@ -1017,6 +1048,7 @@ export async function claimSourceJobExecutionAuthority(
                   ? 'rpc_contract_violation'
                   : 'region_lost'
               )
+        if (nextFailure !== error) logUnclassifiedCause('assert', nextFailure.code, error)
         abortExecution(nextFailure)
         throw nextFailure
       }
