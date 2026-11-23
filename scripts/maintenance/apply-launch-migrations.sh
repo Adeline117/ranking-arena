@@ -474,6 +474,10 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # entry counts come from index-only scans instead of fetching every entry row
 # from the 53 GB heap (5.5 s of a 9.9 s warm run; first 7D attempt timing out
 # at 30 s when cold). Output is unchanged. Independent of the other entries.
+# 20261123020207 checks a RAW object's integrity metadata once per statement
+# instead of once per metric_trust_artifacts row; the per-row trigger
+# decompressed the capture's whole meta document (434 kB for a 2,042-page
+# bybit_mt5 window) for each of ~130,600 rows. Independent of other entries.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -507,6 +511,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261122152622_metric_trust_observation_lineage_per_statement.sql
   20261122154211_score_bundle_index_only_entry_counts.sql
   20261118134316_raw_retention_backlog_census.sql
+  20261123020207_metric_trust_artifact_raw_integrity_per_statement.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
