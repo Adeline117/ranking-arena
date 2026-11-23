@@ -733,6 +733,109 @@ describe('captureNumericLeaderboard', () => {
     expect(Object.isFrozen((thrown as LeaderboardCaptureUpstreamError).capture)).toBe(true)
   })
 
+  it('re-issues a page whose transport failed before any response, then carries on', async () => {
+    const waits: number[] = []
+    const requested: string[] = []
+    const fetcher: JsonFetcher = async (template) => {
+      requested.push(template.url)
+      // page two fails twice before answering
+      if (
+        template.url.endsWith('page=2') &&
+        requested.filter((u) => u === template.url).length < 3
+      ) {
+        throw new Error('page fetch timeout')
+      }
+      return {
+        status: 200,
+        json: { rows: ['one', 'two'], total: 4, pages: 2, current: 1, size: 2 },
+      }
+    }
+
+    const capture = await captureNumericLeaderboard(
+      captureOptions(fetcher, {
+        transportRetryDelaysMs: [10, 20],
+        sleep: async (ms) => {
+          waits.push(ms)
+        },
+      })
+    )
+
+    expect(waits).toEqual([10, 20])
+    expect(requested.map((url) => url.slice(-6))).toEqual(['page=1', 'page=2', 'page=2', 'page=2'])
+    // The failed attempts left nothing behind: two pages, one entry each.
+    expect(capture.terminationReason).toBe('reported_population_reached')
+    expect(capture.sourcePages.map((page) => page.httpStatus)).toEqual([200, 200])
+    expect(capture.parserTransformation.source_page_ordinals).toEqual([1, 2])
+  })
+
+  it('gives up after the configured transport retries and keeps the earlier pages', async () => {
+    const waits: number[] = []
+    let requestCount = 0
+    const transportError = new Error('connection reset on page two')
+    const fetcher: JsonFetcher = async () => {
+      requestCount += 1
+      if (requestCount >= 2) throw transportError
+      return {
+        status: 200,
+        json: { rows: ['one', 'two'], total: 4, pages: 2, current: 1, size: 2 },
+      }
+    }
+
+    let thrown: unknown
+    try {
+      await captureNumericLeaderboard(
+        captureOptions(fetcher, {
+          transportRetryDelaysMs: [10, 20],
+          sleep: async (ms) => {
+            waits.push(ms)
+          },
+        })
+      )
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(waits).toEqual([10, 20])
+    expect(requestCount).toBe(4) // page one, then page two three times
+    expect(thrown).toBeInstanceOf(LeaderboardCaptureUpstreamError)
+    expect(thrown).toMatchObject({ status: null, cause: transportError })
+    expect((thrown as LeaderboardCaptureUpstreamError).capture.sourcePages).toHaveLength(1)
+  })
+
+  it('never re-issues a page that produced an HTTP response', async () => {
+    const sleep = jest.fn(async () => {})
+    const fetcher = jest.fn(async () => ({ status: 503, json: { error: 'unavailable' } }))
+
+    await expect(
+      captureNumericLeaderboard(
+        captureOptions(fetcher, { transportRetryDelaysMs: [10, 20], sleep })
+      )
+    ).rejects.toMatchObject({ status: 503 })
+
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(sleep).not.toHaveBeenCalled()
+  })
+
+  it('stops waiting when the capture is cancelled during a transport retry', async () => {
+    const controller = new AbortController()
+    const fetcher = jest.fn(async () => {
+      throw new Error('socket reset')
+    })
+
+    await expect(
+      captureNumericLeaderboard(
+        captureOptions(fetcher, {
+          signal: controller.signal,
+          transportRetryDelaysMs: [10, 20],
+          sleep: async () => {
+            controller.abort(new Error('job cancelled'))
+          },
+        })
+      )
+    ).rejects.toThrow('job cancelled')
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
   it('retains successful pages when a later request fails before a response', async () => {
     const transportError = new Error('connection reset on page two')
     let requestCount = 0
@@ -753,7 +856,7 @@ describe('captureNumericLeaderboard', () => {
 
     let thrown: unknown
     try {
-      await captureNumericLeaderboard(captureOptions(fetcher))
+      await captureNumericLeaderboard(captureOptions(fetcher, { transportRetryDelaysMs: [] }))
     } catch (error) {
       thrown = error
     }
@@ -1310,9 +1413,10 @@ describe('capturePartitionedNumericLeaderboard', () => {
 
     let thrown: unknown
     try {
-      await capturePartitionedNumericLeaderboard(
-        partitionedCaptureOptions(fetcher, ['first', 'second', 'third'])
-      )
+      await capturePartitionedNumericLeaderboard({
+        ...partitionedCaptureOptions(fetcher, ['first', 'second', 'third']),
+        transportRetryDelaysMs: [],
+      })
     } catch (error) {
       thrown = error
     }
