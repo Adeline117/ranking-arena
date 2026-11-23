@@ -460,6 +460,16 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # public view serves instead of reading leaderboard_count_cache, which the
 # sealed publication path never refreshes (zero visible sources in production
 # while 3,546 ranks were served). Independent of every other entry.
+# 20261122201611 replaces only the body of
+# arena.leaderboard_rank_row_is_public_eligible: a ranked row needs ROI and
+# PnL; win rate and max drawdown may be NULL (range-checked when present). It
+# is a superset of the previous policy, so it depends on no worker or website
+# version and the cohorts being served stay valid. It refuses unless the
+# installed body is the 20261111140053 one (or its own, on replay), so it runs
+# after predeploy. Order that matters is on the other side: the scoring worker
+# that publishes rows without a win rate or drawdown must be deployed AFTER
+# this migration (seal rejects such rows under the previous body). It touches
+# no table 192134 guards.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -490,6 +500,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261118135918_trust_evidence_retention.sql
   20261118144144_rank_publication_trust_requires_run.sql
   20261121201553_visible_sources_from_served_ranks.sql
+  20261122201611_row_eligibility_roi_pnl_only.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS

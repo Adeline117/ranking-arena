@@ -83,9 +83,19 @@ fence / claim / seal 相关 RPC 只对 owner 和 `service_role` 开放。
 
 - 算分：现有 Arena Score v4 路径 `scoreTraders`（`lib/rankings/publication/score-traders.ts`），取 `scoredFiltered`。
 - 行级政策：`arena.leaderboard_rank_row_is_public_eligible`
-  （`20260724235000…:155-191`，`20261111140053_leaderboard_ranks_codec_layout_rebuild.sql` 原样重建）：
-  `score_completeness='full'`、非估算、非离群、`0 < arena_score <= 100`、`|roi| <= 10000`、
-  `-1e8 <= pnl <= 1e9`、`0 <= win_rate <= 100`、`0 <= max_drawdown < 100`、`computed_at` 在 48 小时内。
+  （函数体由 `20261122201611_row_eligibility_roi_pnl_only.sql` 替换；之前是 `20260724235000…:155-191`，
+  `20261111140053_leaderboard_ranks_codec_layout_rebuild.sql` 原样重建的四项齐全版本）：
+  ROI 和 PnL 必须有；非估算、非离群、`0 < arena_score <= 100`、`|roi| <= 10000`、
+  `-1e8 <= pnl <= 1e9`、`computed_at` 在 48 小时内。胜率、回撤可以为空；有值时
+  `0 <= win_rate <= 100`、`0 <= max_drawdown < 100`。`score_completeness` 必须与两列一致：
+  两项都有为 `full`，有一项为 `partial`，都没有为 `minimal`。只有 NULL 算缺失，0 是真实值。
+- 写入侧开关：`PUBLIC_RANKING_ROW_ELIGIBILITY`（`lib/rankings/publication-policy.ts`）。`'roi_pnl'`
+  （现行）：必需证据指标只有 ROI、PnL；缺失的回撤、一致性两维按 0 计且权重留在分母（空值不抬分）；
+  显示分下限 0.01（分数域仍是 `(0, 100]`）；越界的胜率、≥ 100 的回撤置空并计数进日志，不排除整行。
+  `'four_metrics'`：回滚用，恢复四项齐全和历史 v4 计分口径。读取端和数据库不看这个开关。
+- 写入顺序：按显示分、ROI、PnL、来源、交易员编号降序写入（`orderRowsForWrite`）。重排按
+  `arena_score DESC NULLS LAST, id`，新行按到达顺序取 id，所以同分的新行按这个顺序排名；已有行保留 id。
+- 分阶段耗时：每季发布输出六行 `[季] stage=<read|score|write|cleanup|rerank|seal> rows=<行数> ms=<毫秒>`。
 - 列精度（`20261111140053…:344-382`）：先按列的 `numeric(p,s)` 四舍五入再判断。可选比率
   `sharpe_ratio / sortino_ratio / profit_factor / calmar_ratio` 为 `numeric(10,4)`（上限 999999.9999），
   超出时写 `NULL`，不让一个异常值把整季打挂；必填指标越界的行直接不发布。
