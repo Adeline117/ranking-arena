@@ -490,3 +490,57 @@ describe('zero-return accounts rank at the bottom, in a stable order', () => {
     expect(order.slice(6)).toEqual(zeroRows().map((row) => row.source_trader_id))
   })
 })
+
+describe('known consequence of "0 is a value": an idle account that reports 0% drawdown', () => {
+  // Not a rule added here: it is what the formula does once 0 is no longer
+  // read as missing. Whether an adapter should send 0 or null for an account
+  // with no activity in the window is a collection-layer question (xt, toobit).
+  it('gets the best drawdown factor and outranks a profitable trader with no risk metrics', async () => {
+    const rows = byId(
+      await publishedCohort(
+        [
+          traderRow('p1', { roi: 80, pnl: 500_000, win_rate: 70, max_drawdown: 5 }),
+          traderRow('p2', { roi: 20, pnl: 20_000, win_rate: 55, max_drawdown: 15 }),
+          traderRow('p3', { roi: 6, pnl: 900, win_rate: 48, max_drawdown: 35 }),
+          traderRow('small-profit-no-risk', {
+            roi: 2,
+            pnl: 40,
+            win_rate: null,
+            max_drawdown: null,
+          }),
+          traderRow('idle-no-risk', { roi: 0, pnl: 0, win_rate: null, max_drawdown: null }),
+          traderRow('idle-zero-risk', { roi: 0, pnl: 0, win_rate: 0, max_drawdown: 0 }),
+          traderRow('l1', { roi: -9, pnl: -300, win_rate: 41, max_drawdown: 44 }),
+        ],
+        'roi_pnl'
+      )
+    )
+
+    expect(rows.get('idle-zero-risk')!.score_factors).toMatchObject({ drawdown: 1, consistency: 0 })
+    expect(rows.get('idle-zero-risk')!.arena_score!).toBeGreaterThan(
+      rows.get('small-profit-no-risk')!.arena_score!
+    )
+    // The idle account that reports nothing stays below the profitable one.
+    expect(rows.get('idle-no-risk')!.arena_score!).toBeLessThan(
+      rows.get('small-profit-no-risk')!.arena_score!
+    )
+
+    // Under the previous rule the reported zeros were read as missing.
+    const rollback = byId(
+      await publishedCohort(
+        [
+          traderRow('p1', { roi: 80, pnl: 500_000, win_rate: 70, max_drawdown: 5 }),
+          traderRow('p2', { roi: 20, pnl: 20_000, win_rate: 55, max_drawdown: 15 }),
+          traderRow('idle-zero-risk', { roi: 0, pnl: 0, win_rate: 0, max_drawdown: 0 }),
+          // Keeps the idle row off the 0.00 bottom, which the previous rule drops.
+          traderRow('l1', { roi: -9, pnl: -300, win_rate: 41, max_drawdown: 44 }),
+        ],
+        'four_metrics'
+      )
+    )
+    expect(rollback.get('idle-zero-risk')!.score_factors).toMatchObject({
+      drawdown: null,
+      consistency: null,
+    })
+  })
+})
