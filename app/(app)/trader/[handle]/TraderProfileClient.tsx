@@ -165,6 +165,13 @@ export interface UnregisteredTraderData {
   profile_url?: string | null
   source: string
   source_trader_id: string
+  /**
+   * Other names the SERVER verified for this same account's source — the public
+   * alias of a serving slug (public `bybit`, slug `bybit_copytrade`). A
+   * `?platform=` equal to one of them is the account already rendered, not a
+   * request for a different one.
+   */
+  source_aliases?: string[]
   rank?: number | null
   arena_score?: number | null
   roi?: number | null
@@ -352,7 +359,14 @@ export default function TraderProfileClient({
       return rawUrlHandle
     }
   })()
-  const platformMismatch = !!urlPlatform && !!urlHandle && urlPlatform !== serverData.source
+  // The server reads ?platform= itself and resolves aliases, so a URL platform
+  // that is the source or one of its server-verified aliases needs no client
+  // re-validation. Treating the alias as a mismatch replaced the whole
+  // server-rendered header with a placeholder until /first-screen answered.
+  const urlPlatformIsServerAccount =
+    !!urlPlatform &&
+    (urlPlatform === serverData.source || (serverData.source_aliases ?? []).includes(urlPlatform))
+  const platformMismatch = !!urlPlatform && !!urlHandle && !urlPlatformIsServerAccount
   const {
     data: accountOverride,
     error: accountOverrideError,
@@ -562,7 +576,9 @@ export default function TraderProfileClient({
       traderId: data.source_trader_id,
     },
     requestedPlatform: urlPlatform,
-    requestedPlatformValidated: Boolean(override || legacyPlatformOverride),
+    requestedPlatformValidated: Boolean(
+      override || legacyPlatformOverride || urlPlatformIsServerAccount
+    ),
   })
   // Period URL ↔ store sync extracted into hook (see ./hooks/useTraderPeriodSync)
   const selectedPeriod = useTraderPeriodSync()

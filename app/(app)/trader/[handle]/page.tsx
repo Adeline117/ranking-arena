@@ -695,6 +695,8 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
           avatarOriginUrl: servingResolved.avatarOriginUrl,
         }),
       source: servingResolved.source,
+      // The public alias is this same account (see profile-identity).
+      source_aliases: publicSource !== servingResolved.source ? [publicSource] : undefined,
       source_trader_id: servingResolved.exchangeTraderId,
       rank: best?.rank ?? null,
       roi: best?.headlineRoi ?? null,
