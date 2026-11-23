@@ -53,6 +53,7 @@ async function main() {
     { syncPublicRankingsToMeilisearch },
     { routeRankPublicationAlert },
     { finalJobFailureAlert },
+    { startIngestCoverageWatch },
   ] = await Promise.all([
     import('bullmq'),
     import('./connection'),
@@ -70,6 +71,7 @@ async function main() {
     import('../../lib/search/meilisearch-sync'),
     import('../../lib/rankings/publication/alert-routing'),
     import('./job-failure-alert'),
+    import('./ingest-coverage-watch'),
   ])
   // An assertion function must carry an explicit type to be callable (TS2775).
   const assertSuccessfulMeilisearchSyncResponse: typeof import('./pipeline-response').assertSuccessfulMeilisearchSyncResponse =
@@ -231,6 +233,9 @@ async function main() {
   // so a scoring worker that cannot be monitored does not run unmonitored.
   const heartbeatTimer = await startScoringHeartbeat(getRankingCommandChainConnection())
   await markWorkerStarted(getRankingCommandChainConnection(), scoringHeartbeatNodeId())
+  // The ingest worker cannot report its own death: this separate process
+  // pages when no fresh ingest heartbeat covers a region.
+  const ingestCoverageTimer = startIngestCoverageWatch(getRankingCommandChainConnection())
 
   console.log(
     `[worker] Ready — processing queue "${QUEUE_NAME}" with ` +
@@ -245,6 +250,7 @@ async function main() {
   const shutdown = async (signal: string) => {
     console.log(`\n[worker] ${signal} received, shutting down gracefully...`)
     clearInterval(heartbeatTimer)
+    clearInterval(ingestCoverageTimer)
     await worker.close()
     await closeRankingCommandChainConnection()
     await closeRankPublicationPool()

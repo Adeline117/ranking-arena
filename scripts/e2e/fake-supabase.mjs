@@ -141,6 +141,9 @@ export const SCENARIOS = [
   'leaderboard-stale-source',
   // The scoring job stopped days ago (`computed_at` is old); watermarks are fresh.
   'leaderboard-stale-computed',
+  // The cache (Upstash REST) answers every command with a server error; the
+  // database is healthy. Pages must degrade to the database, not fail.
+  'cache-unavailable',
 ]
 
 export const STALE_AGE_MS = 3 * 24 * 60 * 60 * 1000
@@ -385,6 +388,9 @@ export function startFakeSupabase({ port = 54399, log } = {}) {
       Array.isArray(command) && String(command[0]).toUpperCase() === 'SET'
         ? { result: 'OK' }
         : { result: null }
+    if (scenario === 'cache-unavailable' && url.pathname.startsWith('/upstash')) {
+      return readBody(() => send(500, { error: 'e2e scenario: cache unavailable' }))
+    }
     if (url.pathname === '/upstash') {
       return readBody((body) => send(200, upstashResult(body)))
     }

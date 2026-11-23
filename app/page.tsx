@@ -224,7 +224,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Hom
   // from the SSR-fetched traders (no extra query); top 20 keeps the payload lean.
   // /rankings 301-redirects here, so this is the canonical rankings ItemList too.
   const itemListJsonLd =
-    isCanonical && timeRange === '90D' && pageIndex === 0
+    // 榜单为空时不输出：numberOfItems:0 的空 ItemList 只会告诉搜索引擎这页没内容。
+    isCanonical && timeRange === '90D' && pageIndex === 0 && traders.length > 0
       ? generateTraderItemListSchema({
           name: 'Top Crypto Traders — 90-Day Ranking',
           description:

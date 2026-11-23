@@ -167,6 +167,31 @@ export function resolveLinkedAccountViewScope({
   }
 }
 
+/**
+ * The server-rendered summary (TraderServerSummary) describes exactly the
+ * account the server resolved for the route. It may stay on screen only while
+ * the view still shows that one account: an aggregate, selected, unresolved or
+ * overridden view would otherwise sit above numbers that belong to another
+ * account. The server HTML is unaffected — this only decides the hydrated view.
+ */
+export function serverSummaryMatchesView({
+  mode,
+  server,
+  visible,
+}: {
+  mode: LinkedAccountViewMode
+  server: { source: string; traderKey: string }
+  visible: { source: string | undefined; traderKey: string | undefined }
+}): boolean {
+  return (
+    mode === 'primary' &&
+    server.source.length > 0 &&
+    server.traderKey.length > 0 &&
+    visible.source === server.source &&
+    visible.traderKey === server.traderKey
+  )
+}
+
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)

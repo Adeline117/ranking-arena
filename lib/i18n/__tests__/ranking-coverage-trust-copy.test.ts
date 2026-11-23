@@ -49,7 +49,7 @@ describe('ranking coverage trust copy', () => {
     const files = [
       'app/layout.tsx',
       'app/(app)/(legal)/about/layout.tsx',
-      'app/(app)/search/layout.tsx',
+      'app/(app)/search/page.tsx',
       'app/(app)/rankings/layout.tsx',
       'app/(app)/rankings/tokens/page.tsx',
       'app/(app)/rankings/tokens/[token]/page.tsx',

@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/supabase/database.types'
 import { EXCHANGE_CONFIG, resolveExchangeSlug } from '@/lib/constants/exchanges'
 import { TOP_EXCHANGE_SLUGS } from '@/lib/constants/exchange-slugs'
+import { isRetiredSource } from '@/lib/constants/retired-sources'
 import { BASE_URL } from '@/lib/constants/urls'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
 import PageHeader from '@/app/components/ui/PageHeader'
@@ -191,7 +192,8 @@ export async function generateMetadata({
   const sourceKey = resolveExchangeSlug(slug)
   const config = EXCHANGE_CONFIG[sourceKey as keyof typeof EXCHANGE_CONFIG]
 
-  if (!config) {
+  // 已退役来源没有任何数据，落地页只会是空壳（软 404），直接 404。
+  if (!config || isRetiredSource(sourceKey)) {
     notFound()
   }
 
@@ -210,7 +212,8 @@ export async function generateMetadata({
       : `View ${displayName} crypto trader rankings on Arena. Compare performance, Arena Scores, ROI, and PnL across top traders.`
 
   const ogImageUrl = `${BASE_URL}/api/og/exchange?exchange=${encodeURIComponent(sourceKey)}`
-  const canonicalUrl = `${BASE_URL}/exchange/${slug}`
+  // 下划线与连字符两种写法都能访问，规范网址统一成连字符形式。
+  const canonicalUrl = `${BASE_URL}/exchange/${slug.replace(/_/g, '-')}`
 
   return {
     title,
@@ -265,11 +268,13 @@ export default async function ExchangeLandingPage({
   const sourceKey = resolveExchangeSlug(slug)
   const config = EXCHANGE_CONFIG[sourceKey as keyof typeof EXCHANGE_CONFIG]
 
-  if (!config) {
+  // 已退役来源没有任何数据，落地页只会是空壳（软 404），直接 404。
+  if (!config || isRetiredSource(sourceKey)) {
     notFound()
   }
 
   const data = await fetchExchangeData(sourceKey)
+  const canonicalSlug = slug.replace(/_/g, '-')
 
   if (!data) {
     // Fallback: redirect to homepage with exchange filter if data fetch fails
@@ -280,14 +285,20 @@ export default async function ExchangeLandingPage({
   // Schema.org `numberOfItems` must be a real total, not the ten-row preview.
   // When the exact public-view count is unavailable, omit this count-bearing
   // schema rather than publishing a synthetic coverage claim.
+  // No ranked row means the source has no published board right now (withdrawn,
+  // empty, or not publicly rankable): the page says so in words instead of
+  // "0 ranked traders" / "Unknown ranked traders", and publishes no
+  // count-bearing schema. Rows with an unknown total keep the "unknown" wording.
+  const boardEmpty = data.topTraders.length === 0
+  const publishedCount = boardEmpty ? null : data.traderCount
   const collectionPageJsonLd =
-    data.traderCount === null
+    publishedCount === null
       ? null
       : generateExchangeCollectionPageSchema({
           name: data.displayName,
-          slug,
+          slug: canonicalSlug,
           sourceType: data.sourceType,
-          traderCount: data.traderCount,
+          traderCount: publishedCount,
           topTraders: data.topTraders.map((t) => ({
             handle: t.displayName,
             arenaScore: t.arena_score,
@@ -297,21 +308,27 @@ export default async function ExchangeLandingPage({
   const breadcrumbJsonLd = generateBreadcrumbSchema([
     { name: 'Arena', url: BASE_URL },
     { name: 'Rankings', url: `${BASE_URL}/` },
-    { name: `${data.displayName} Rankings`, url: `${BASE_URL}/exchange/${slug}` },
+    { name: `${data.displayName} Rankings`, url: `${BASE_URL}/exchange/${canonicalSlug}` },
   ])
 
   // Localized page chrome (labels/headings/body). Metadata above stays English
   // for stable SEO/OG; visible page content follows the visitor's language.
   const { t } = await getServerTranslation()
-  const traderCountStr =
-    data.traderCount === null ? t('dataUnknown') : data.traderCount.toLocaleString()
-
   const sourceTypeLabel =
     data.sourceType === 'futures'
       ? t('exchangePageTypeFutures')
       : data.sourceType === 'spot'
         ? t('exchangePageTypeSpot')
         : t('exchangePageTypeDefi')
+
+  const fillCopy = (publishedKey: string, emptyKey: string) =>
+    t(boardEmpty ? emptyKey : publishedKey)
+      .replace(
+        '{count}',
+        data.traderCount === null ? t('dataUnknown') : data.traderCount.toLocaleString()
+      )
+      .replace(/\{name\}/g, data.displayName)
+      .replace('{type}', sourceTypeLabel)
 
   return (
     <>
@@ -321,10 +338,7 @@ export default async function ExchangeLandingPage({
         {/* Header */}
         <PageHeader
           title={t('exchangePageTitle').replace('{name}', data.displayName)}
-          subtitle={t('exchangePageSubtitle')
-            .replace('{count}', traderCountStr)
-            .replace(/\{name\}/g, data.displayName)
-            .replace('{type}', sourceTypeLabel)}
+          subtitle={fillCopy('exchangePageSubtitle', 'exchangePageSubtitleEmpty')}
         />
 
         {/* Top traders table */}
@@ -534,10 +548,7 @@ export default async function ExchangeLandingPage({
               margin: 0,
             }}
           >
-            {t('exchangePageAboutBody')
-              .replace('{count}', traderCountStr)
-              .replace(/\{name\}/g, data.displayName)
-              .replace('{type}', sourceTypeLabel)}
+            {fillCopy('exchangePageAboutBody', 'exchangePageAboutBodyEmpty')}
           </p>
         </div>
       </div>

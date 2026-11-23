@@ -12,12 +12,14 @@ jest.mock('@/lib/ingest/db', () => ({
   getIngestPool: () => ({ query: async () => ({ rowCount: 0 }) }),
 }))
 jest.mock('@/lib/ingest/raw', () => ({ cleanupRawObjects: () => okStep() }))
+jest.mock('@/lib/ingest/raw-retention', () => ({ runRawRetention: () => okStep() }))
 jest.mock('@/lib/ingest/serving/series', () => ({
   ensurePartitions: () => ensurePartitionsMock(),
   downsampleOldSeries: () => okStep(),
   downsampleSnapshotEntries: () => okStep(),
   pruneLeaderboardSnapshots: () => okStep(),
   pruneLongTailHistories: () => okStep(),
+  retainTrustEvidence: () => okStep(),
 }))
 jest.mock('@/lib/ingest/alerting', () => ({
   alert: (...args: unknown[]) => alertMock(...args),
@@ -43,7 +45,7 @@ describe('maintenance alerting', () => {
     expect(report.partitions).toBe('ERROR: no month partition')
     expect(alertMock).toHaveBeenCalledTimes(1)
     expect(alertMock.mock.calls[0][1]).toMatchObject({ tier: 'maint', page: true })
-    expect(okStep).toHaveBeenCalledTimes(5)
+    expect(okStep).toHaveBeenCalledTimes(7)
   })
 
   it('keeps other step failures in the digest only', async () => {
@@ -59,6 +61,6 @@ describe('maintenance alerting', () => {
     const undelivered = new Error('page not delivered')
     alertMock.mockRejectedValueOnce(undelivered)
     await expect(processMaintenance(job)).rejects.toBe(undelivered)
-    expect(okStep).toHaveBeenCalledTimes(5)
+    expect(okStep).toHaveBeenCalledTimes(7)
   })
 })

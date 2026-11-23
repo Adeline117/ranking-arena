@@ -595,6 +595,21 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:retention-trust-evidence-pg17
 
+      - name: Prove trust evidence retention keeps pinned evidence and is switch-gated
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:trust-evidence-retention-pg17
+
+      - name: Prove publication trust requires the board's own run
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:trust-requires-run-pg17
+
+      - name: Prove RAW retention census is count-only and switch-gated
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:raw-retention-census-pg17
+
       - name: Prove public-source capture and metric contract registration
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
@@ -614,6 +629,26 @@ jobs:
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:tier-a-receipt-exhaustion-pg17
+
+      - name: Prove the readiness lineage count is per run and bounded to rankable observations
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:readiness-bounded-count-pg17
+
+      - name: Prove visible sources are the sources the public view serves
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:visible-sources-pg17
+
+      - name: Prove observation lineage per statement keeps every per-row outcome
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:observation-lineage-statement-pg17
+
+      - name: Prove the score bundle's index-only entry counts keep its output
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:score-bundle-entry-counts-pg17
 
       - name: Prove metric source contract retirement (binance_web3_bsc v2)
         env:

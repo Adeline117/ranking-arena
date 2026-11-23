@@ -1,5 +1,7 @@
 import {
   fetchPublicProfileRankingRows,
+  isProvenUnrankedProfile,
+  isPublicSourceCohortPublished,
   sanitizePublicProfileRankingRows,
 } from '../public-profile-ranking'
 
@@ -32,7 +34,7 @@ function row(overrides: Record<string, unknown> = {}) {
 
 function query(response: { data: unknown[] | null; error: { message: string } | null }) {
   const result: Record<string, jest.Mock | ((...args: unknown[]) => Promise<unknown>)> = {}
-  for (const method of ['select', 'eq', 'in', 'not', 'abortSignal']) {
+  for (const method of ['select', 'eq', 'in', 'not', 'limit', 'abortSignal']) {
     result[method] = jest.fn(() => result)
   }
   result.then = (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) =>
@@ -119,5 +121,68 @@ describe('public trader-profile ranking cohort', () => {
       rankingVisibility: 'unknown',
       rankingVisibilityReason: 'public_cohort_unavailable',
     })
+  })
+})
+
+describe('isPublicSourceCohortPublished', () => {
+  const client = (response: { data: unknown[] | null; error: { message: string } | null }) =>
+    ({ from: jest.fn(() => query(response)) }) as never
+
+  it('is true when the source has a published row', async () => {
+    await expect(
+      isPublicSourceCohortPublished(
+        client({ data: [{ source_trader_id: 'x' }], error: null }),
+        SCOPE.source
+      )
+    ).resolves.toBe(true)
+  })
+
+  it('is false when the source board is withdrawn or empty', async () => {
+    await expect(
+      isPublicSourceCohortPublished(client({ data: [], error: null }), SCOPE.source)
+    ).resolves.toBe(false)
+  })
+
+  it('is unknown, not false, when the read fails', async () => {
+    await expect(
+      isPublicSourceCohortPublished(
+        client({ data: null, error: { message: 'boom' } }),
+        SCOPE.source
+      )
+    ).resolves.toBeNull()
+  })
+})
+
+describe('isProvenUnrankedProfile', () => {
+  const empty = { rows: [], rankingVisibilityReason: 'public_rank_unavailable' }
+
+  it('only holds for a clean empty read on a source that is publishing', () => {
+    expect(isProvenUnrankedProfile(empty, true)).toBe(true)
+  })
+
+  it('keeps profiles indexable while the whole board is withdrawn', () => {
+    expect(isProvenUnrankedProfile(empty, false)).toBe(false)
+  })
+
+  it('keeps profiles indexable when either read is inconclusive', () => {
+    expect(isProvenUnrankedProfile(empty, null)).toBe(false)
+    expect(
+      isProvenUnrankedProfile(
+        { rows: [], rankingVisibilityReason: 'public_cohort_unavailable' },
+        true
+      )
+    ).toBe(false)
+    expect(
+      isProvenUnrankedProfile(
+        { rows: [], rankingVisibilityReason: 'public_cohort_unverified' },
+        true
+      )
+    ).toBe(false)
+  })
+
+  it('never applies to a ranked trader', () => {
+    const ranked = sanitizePublicProfileRankingRows([row()], SCOPE)
+    expect(ranked.rows).toHaveLength(1)
+    expect(isProvenUnrankedProfile(ranked, true)).toBe(false)
   })
 })

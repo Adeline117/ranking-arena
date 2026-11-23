@@ -3,6 +3,7 @@ import {
   isExactSourceNotServingError,
   parseExactTraderFirstScreenResponse,
   resolveLinkedAccountViewScope,
+  serverSummaryMatchesView,
   parseExactRankHistory,
   resolveTraderHeaderAccountMetrics,
   traderDetailMatchesLinkedAccount,
@@ -678,5 +679,47 @@ describe('parseExactRankHistory', () => {
         'secondary'
       )
     ).toBeNull()
+  })
+})
+
+describe('serverSummaryMatchesView', () => {
+  const server = { source: 'bybit', traderKey: 'account-1' }
+
+  it('keeps the summary while the view shows the server-resolved account', () => {
+    expect(serverSummaryMatchesView({ mode: 'primary', server, visible: { ...server } })).toBe(true)
+  })
+
+  it.each(['aggregate', 'selected', 'unresolved', 'invalid'] as const)(
+    'hides the summary in %s scope even if the identity happens to match',
+    (mode) => {
+      expect(serverSummaryMatchesView({ mode, server, visible: { ...server } })).toBe(false)
+    }
+  )
+
+  it('hides the summary when the visible account differs from the server one', () => {
+    expect(
+      serverSummaryMatchesView({
+        mode: 'primary',
+        server,
+        visible: { source: 'okx_futures', traderKey: 'account-1' },
+      })
+    ).toBe(false)
+    expect(
+      serverSummaryMatchesView({
+        mode: 'primary',
+        server,
+        visible: { source: 'bybit', traderKey: 'account-2' },
+      })
+    ).toBe(false)
+  })
+
+  it('hides the summary when the server identity is incomplete', () => {
+    expect(
+      serverSummaryMatchesView({
+        mode: 'primary',
+        server: { source: '', traderKey: '' },
+        visible: { source: '', traderKey: '' },
+      })
+    ).toBe(false)
   })
 })

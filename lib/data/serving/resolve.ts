@@ -44,10 +44,18 @@ export interface ServingResolved {
  */
 const RESOLVE_RETRY_BACKOFF_MS = [0, 150, 400] as const
 
-export async function resolveServingTrader(
+/** Every attempt errored: the lookup has no answer. NOT the same as "no such trader". */
+export const SERVING_RESOLVE_ERRORED = Symbol('serving-resolve-errored')
+
+/**
+ * Like resolveServingTrader, but keeps "every attempt errored" distinct from a
+ * genuine not-found (null). Callers that turn a not-found into something
+ * durable or crawler-visible (noindex, 404) must use this one.
+ */
+export async function resolveServingTraderOutcome(
   supabase: SupabaseClient,
   params: { handle: string; source?: string }
-): Promise<ServingResolved | null> {
+): Promise<ServingResolved | null | typeof SERVING_RESOLVE_ERRORED> {
   let lastError: unknown = null
   for (const backoff of RESOLVE_RETRY_BACKOFF_MS) {
     if (backoff > 0) await new Promise((r) => setTimeout(r, backoff))
@@ -83,5 +91,13 @@ export async function resolveServingTrader(
     source: params.source,
     error: (lastError as { message?: string })?.message ?? lastError,
   })
-  return null
+  return SERVING_RESOLVE_ERRORED
+}
+
+export async function resolveServingTrader(
+  supabase: SupabaseClient,
+  params: { handle: string; source?: string }
+): Promise<ServingResolved | null> {
+  const outcome = await resolveServingTraderOutcome(supabase, params)
+  return outcome === SERVING_RESOLVE_ERRORED ? null : outcome
 }

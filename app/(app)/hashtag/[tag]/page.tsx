@@ -6,16 +6,30 @@ interface HashtagPageProps {
   params: Promise<{ tag: string }>
 }
 
+// 畸形的 % 序列会让 decodeURIComponent 抛 URIError（→ 500）。
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
 export async function generateMetadata({ params }: HashtagPageProps): Promise<Metadata> {
   const { tag } = await params
-  const decodedTag = decodeURIComponent(tag)
+  const decodedTag = safeDecode(tag)
   const title = `#${decodedTag} - Arena`
   const description = `Posts tagged with #${decodedTag} on Arena, the crypto trader ranking platform.`
 
   return {
     title,
     description,
-    alternates: { canonical: `${BASE_URL}/hashtag/${tag}` },
+    // 任意字符串、任意大小写都能打开这个页面，且帖子列表只在客户端加载，
+    // 服务端 HTML 没有内容：不收录，只让爬虫沿链接继续走。
+    robots: { index: false, follow: true },
+    alternates: {
+      canonical: `${BASE_URL}/hashtag/${encodeURIComponent(decodedTag.toLowerCase())}`,
+    },
     openGraph: {
       title,
       description,
@@ -36,7 +50,7 @@ export async function generateMetadata({ params }: HashtagPageProps): Promise<Me
 
 export default async function HashtagPage({ params }: HashtagPageProps) {
   const { tag } = await params
-  const decodedTag = decodeURIComponent(tag)
+  const decodedTag = safeDecode(tag)
 
   return <HashtagClient tag={decodedTag} />
 }

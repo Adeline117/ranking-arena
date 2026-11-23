@@ -56,6 +56,62 @@ describe('parseBlofinLeaderboardPage', () => {
     )
   })
 
+  it("does not take a flat window's carried-over drawdown as the period drawdown", () => {
+    const point = (data: string) => ({ time: 1794787200000, data })
+    const row = (over: Record<string, unknown>) => ({
+      uid: '1',
+      roi: '0',
+      pnl: '0',
+      mdd: '1.4787',
+      sharpe_ratio: '0',
+      aum: '10',
+      followers: '0',
+      chart_data: { roi: [point('0'), point('0.000000')] },
+      ...over,
+    })
+    const parse = (item: Record<string, unknown>) =>
+      parseBlofinLeaderboardPage({ data: { trader_info: [item], page_total: 1 } }, ctx).rows[0]
+
+    // Nothing moved in the window: the 147.87% is the last active window's.
+    const flat = parse(row({}))
+    expect(flat.headlineMdd).toBeNull()
+    expect(flat.headlineExtras).toEqual({ carried_mdd: expect.closeTo(147.87, 2) })
+    expect((flat.raw as { mdd: string }).mdd).toBe('1.4787')
+
+    // Any movement in the window keeps the drawdown as reported.
+    for (const moved of [
+      row({ roi: '0.01' }),
+      row({ pnl: '-3.2' }),
+      row({ chart_data: { roi: [point('0'), point('-0.02')] } }),
+      // no chart to prove the window flat
+      row({ chart_data: { roi: [] } }),
+      row({ chart_data: undefined }),
+    ]) {
+      const parsed = parse(moved)
+      expect(parsed.headlineMdd).toBeCloseTo(147.87, 2)
+      expect(parsed.headlineExtras).toBeUndefined()
+    }
+
+    // A flat window that reports zero drawdown is simply zero.
+    const zero = parse(row({ mdd: '0' }))
+    expect(zero.headlineMdd).toBe(0)
+    expect(zero.headlineExtras).toBeUndefined()
+  })
+
+  it('reads the futures row win rate, and keeps a zero undefined', () => {
+    const parse = (winRate: unknown, sourceSlug = 'blofin_futures') =>
+      parseBlofinLeaderboardPage(
+        { data: { trader_info: [{ uid: '1', roi: '0.1', pnl: '5', win_rate: winRate }] } },
+        { ...ctx, sourceSlug }
+      ).rows[0].headlineWinRate
+    expect(parse('0.9069')).toBeCloseTo(90.69, 2)
+    // zero trades are reported as 0; the row cannot tell that from a real 0%
+    expect(parse('0')).toBeNull()
+    expect(parse(undefined)).toBeNull()
+    // not verified on the spot board
+    expect(parse('0.9069', 'blofin_spot')).toBeNull()
+  })
+
   it('re-anchors rank from page position', () => {
     const page = parseBlofinLeaderboardPage(fixture('board-fut-7.json'), ctx)
     expect(page.rows.map((r) => r.rank)).toEqual([1, 2])

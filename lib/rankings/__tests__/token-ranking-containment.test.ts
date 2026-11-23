@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import en from '@/lib/i18n/en'
 import ja from '@/lib/i18n/ja'
@@ -59,11 +59,12 @@ describe('token-ranking containment contract', () => {
     expect(pageSources.match(/index:\s*false/g)).toHaveLength(2)
   })
 
-  it('removes token rankings from navigation and both sitemap implementations', () => {
+  it('removes token rankings from navigation and the sitemap', () => {
     expect(source('app/(app)/rankings/RankingsSubNav.tsx')).not.toContain(
       "{ href: '/rankings/tokens'"
     )
-    expect(source('app/sitemap.ts')).not.toContain('/rankings/tokens')
+    // 站点地图只有 /api/sitemap-xml 一套；app/sitemap.ts 不得复活成第二套。
+    expect(existsSync(join(process.cwd(), 'app/sitemap.ts'))).toBe(false)
     expect(source('app/api/sitemap-xml/route.ts')).not.toContain('/rankings/tokens')
   })
 })

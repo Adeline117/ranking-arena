@@ -8,9 +8,7 @@ export const metadata: Metadata = {
   title: 'Rankings',
   description:
     'Crypto trader rankings across current CEX, DEX, and on-chain source boards. Compare 90-day ROI, win rate, drawdown, and Arena Score; rankings recompute every two hours.',
-  alternates: {
-    canonical: `${BASE_URL}/rankings`,
-  },
+  // 不在布局写 canonical：/rankings 本身是 308 到首页，子页面各自声明自己的 canonical。
   keywords: [
     'crypto trader ranking',
     'copy trading leaderboard',
@@ -24,7 +22,7 @@ export const metadata: Metadata = {
     title: 'Trader Rankings',
     description:
       'Trader rankings across current public source boards, recomputed every two hours. Compare ROI, win rate, drawdown, and Arena Score.',
-    url: `${BASE_URL}/rankings`,
+    url: BASE_URL,
     siteName: 'Arena',
     type: 'website',
     images: [{ url: `${BASE_URL}/og-image.png`, width: 1200, height: 630, alt: 'Arena Rankings' }],
@@ -40,7 +38,7 @@ export const metadata: Metadata = {
 
 const breadcrumbJsonLd = generateBreadcrumbSchema([
   { name: 'Arena', url: BASE_URL },
-  { name: 'Rankings', url: `${BASE_URL}/rankings` },
+  { name: 'Rankings', url: `${BASE_URL}/` },
 ])
 
 export default function RankingsLayout({ children }: { children: React.ReactNode }) {
