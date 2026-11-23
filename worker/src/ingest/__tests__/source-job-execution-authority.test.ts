@@ -848,6 +848,38 @@ describe('Tier-A source job execution authority', () => {
     }
   })
 
+  it('logs a fence error with its code and operation, and the code of the error it wraps', async () => {
+    const logged = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const h = harness()
+      const authority = await claim(h)
+      const driverError = Object.assign(new Error('read ECONNRESET 10.0.0.7:6543'), {
+        code: 'ECONNRESET',
+      })
+      const fenceError = Object.assign(
+        new Error('[ingest-worker] worker database fence write failed'),
+        {
+          name: 'WorkerDbFenceError',
+          code: 'write_deadline_exceeded',
+          operation: 'write',
+          retryPolicy: 'never',
+          cause: driverError,
+        }
+      )
+      h.behavior.queryFailure = { error: fenceError, sql: SOURCE_JOB_EXECUTION_ASSERT_SQL }
+      await expect(authority.withClaimedWrite(async () => undefined)).rejects.toMatchObject({
+        code: 'region_lost',
+      })
+      expect(logged).toHaveBeenCalledWith(
+        '[ingest-worker] Tier-A execution assert region_lost cause: ' +
+          'WorkerDbFenceError code=write_deadline_exceeded operation=write retry=never' +
+          ' <- Error code=ECONNRESET'
+      )
+    } finally {
+      logged.mockRestore()
+    }
+  })
+
   it('sanitizes a claim query failure containing SQL and connection secrets', async () => {
     const h = harness()
     const raw = new Error(
