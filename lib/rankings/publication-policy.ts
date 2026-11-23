@@ -10,10 +10,15 @@
 
 import { parsePublicActiveRankingSource } from '@/lib/constants/exchanges'
 
+// v8: row eligibility requires ROI and PnL only (20261122201611). Rows without
+// a win rate or drawdown, and losing traders at the 0.01 display floor, are
+// now ranked. Rotate every ranking key so a page cached under the four-metric
+// policy (truncated totals, `ranking_visibility: 'partial'`) is never replayed
+// next to pages of the larger cohort.
 // v7: BingX ranking quarantine. Rotate every ranking key so orphaned v6
 // payloads whose legacy tag TTL expired cannot bypass the
 // new atomic generation invalidation contract.
-export const PUBLIC_RANKING_CACHE_EPOCH = 'public-rank-policy-v7'
+export const PUBLIC_RANKING_CACHE_EPOCH = 'public-rank-policy-v8'
 /**
  * Redis tag index for the current public ranking epoch. This must rotate with
  * the key epoch so an older rolling-deploy writer cannot shorten or recreate

@@ -9,7 +9,7 @@ import {
 
 describe('public ranking response cache epoch', () => {
   it('derives the response epoch from the ranking authority cache namespace', () => {
-    expect(PUBLIC_RANKING_RESPONSE_CACHE_EPOCH).toBe('public-rank-policy-v7:public-response-v1')
+    expect(PUBLIC_RANKING_RESPONSE_CACHE_EPOCH).toBe('public-rank-policy-v8:public-response-v1')
   })
 
   it.each([
