@@ -217,6 +217,15 @@ describe('with the variable unset the writer behaves exactly as before the switc
     expect(byId.get('zero-drawdown')?.score_factors?.drawdown).toBeNull()
   })
 
+  it('writes neither mark, so the public view flags are false on every row', async () => {
+    // public.public_ranked_leaderboard.idle_window / .mdd_contradiction read
+    // these two keys of score_factors (20261123021904).
+    for (const row of await score()) {
+      expect(row.score_factors).not.toHaveProperty('idle_window')
+      expect(row.score_factors).not.toHaveProperty('mdd_contradiction')
+    }
+  })
+
   it('is the explicit four_metrics rule, value for value', async () => {
     expect(await score()).toEqual(await score('four_metrics'))
   })

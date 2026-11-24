@@ -53,6 +53,8 @@ CHAIN=(
   # Row policy requires ROI and PnL only: a row without a win rate or drawdown
   # is sealed and served (by-flux below).
   20261122201611_row_eligibility_roi_pnl_only.sql
+  # The public view exposes the idle-window and refused-drawdown marks.
+  20261123021904_public_ranked_leaderboard_window_flags.sql
 )
 
 for executable in initdb pg_ctl psql; do
@@ -854,6 +856,48 @@ SQL
 OUT="$(publish 90D)"
 assert_equal "the source's rows return with the next cohort" "true|8" \
   "$(json_field "$OUT" ok)|$(view_count)"
+
+# ---------------------------------------------------------------------------
+# Positive 5: the marks the scorer records reach the public view
+# (20261123021904). by-echo closes the window with ROI 0 and PnL 0: idle, not
+# scored, last, its own win rate and drawdown kept. by-dune closes at a loss
+# with a 0% max drawdown: the drawdown is refused and served NULL.
+# ---------------------------------------------------------------------------
+assert_equal "before any marked row, both flags are false on every served row" "false|false|8" \
+  "$(psql_db -Atqc "SELECT pg_catalog.bool_or(idle_window) || '|' || pg_catalog.bool_or(mdd_contradiction)
+       || '|' || pg_catalog.count(*) FROM public.public_ranked_leaderboard WHERE season_id = '90D'")"
+psql_db -q >/dev/null <<'SQL'
+UPDATE arena.fixture_trader_metrics SET roi_pct = 0, pnl_usd = 0 WHERE trader_id = 22;
+UPDATE arena.fixture_trader_metrics SET roi_pct = -5, pnl_usd = -300, max_drawdown = 0 WHERE trader_id = 21;
+SQL
+OUT="$(publish 90D)"
+assert_equal "season with an idle row and a refused drawdown publishes" "true|8" \
+  "$(json_field "$OUT" ok)|$(view_count)"
+assert_equal "the idle row is served last at 0.01 with its own metrics, marked" \
+  "by-echo|0.01|8|51.00|30.00|full|t|f" \
+  "$(psql_db -Atqc "SET ROLE anon; SELECT pg_catalog.concat_ws('|', source_trader_id, arena_score, rank,
+       win_rate, max_drawdown, score_completeness, idle_window, mdd_contradiction)
+     FROM public.public_ranked_leaderboard WHERE source_trader_id = 'by-echo'" | tail -1)"
+assert_equal "the refused drawdown is served NULL, marked, the row still ranked" \
+  "by-dune|null|68.00|partial|f|t|t" \
+  "$(psql_db -Atqc "SET ROLE anon; SELECT pg_catalog.concat_ws('|', source_trader_id,
+       COALESCE(max_drawdown::text, 'null'), win_rate, score_completeness, idle_window,
+       mdd_contradiction, rank BETWEEN 1 AND 7 AND arena_score >= 0.02)
+     FROM public.public_ranked_leaderboard WHERE source_trader_id = 'by-dune'" | tail -1)"
+assert_equal "no other row is marked, and ranks stay 1..8" "6|8|8" \
+  "$(psql_db -Atqc "SELECT pg_catalog.count(*) FILTER (WHERE NOT idle_window AND NOT mdd_contradiction)
+       || '|' || pg_catalog.count(DISTINCT rank) || '|' || pg_catalog.max(rank)
+     FROM public.public_ranked_leaderboard WHERE season_id = '90D'")"
+# Back to the previous metrics: the marks leave with the next cohort.
+psql_db -q >/dev/null <<'SQL'
+UPDATE arena.fixture_trader_metrics SET roi_pct = 20.0, pnl_usd = 2500 WHERE trader_id = 22;
+UPDATE arena.fixture_trader_metrics SET roi_pct = 130.0, pnl_usd = 41000, max_drawdown = 15.0 WHERE trader_id = 21;
+SQL
+OUT="$(publish 90D)"
+assert_equal "the marks leave with the next cohort" "true|false|false|8" \
+  "$(json_field "$OUT" ok)|$(psql_db -Atqc "SELECT pg_catalog.bool_or(idle_window) || '|' ||
+       pg_catalog.bool_or(mdd_contradiction) || '|' || pg_catalog.count(*)
+     FROM public.public_ranked_leaderboard WHERE season_id = '90D'")"
 
 # ---------------------------------------------------------------------------
 # Public snapshot readers (20261113012028): anon RPCs serve only sealed, fresh

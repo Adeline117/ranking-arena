@@ -25,6 +25,9 @@
  *               reproduce source isolation: freshness, evidence, the 50% rule).
  * --markdown    append the report as a Markdown section to this file.
  * --label       title of that section (default: the season).
+ * --top20-markdown  append "previous top 20 / new top 20" tables (platform,
+ *               handle, ROI, PnL, drawdown, win rate, old rank, new rank) to
+ *               this file. Real handles: same rule as --identities.
  * --identities  list the new top-100 entrants by source and trader key in the
  *               Markdown report. Real trader identities: keep that file out of
  *               the repository and out of pull requests.
@@ -73,6 +76,8 @@ interface RankedRow {
   max_drawdown: number | null
   score_completeness: 'full' | 'partial' | 'minimal'
   idle: boolean
+  /** The reported 0% drawdown was refused (losing window). */
+  contradiction: boolean
 }
 
 /** candidates = rows in each source's top 1,000; fourOk = of those, all four metrics. */
@@ -221,10 +226,16 @@ async function publish(
   if (dropped > 0) excluded.filtered_by_scorer = dropped
 
   const rows = []
+  const contradictions = new Set<string>()
   for (const trader of scoredFiltered) {
     const verdict = classifyPublishableRow(trader, rowEligibility)
     if ('reason' in verdict) count(verdict.reason)
-    else rows.push(verdict.row)
+    else {
+      rows.push(verdict.row)
+      if (trader.score_factors?.mdd_contradiction === true) {
+        contradictions.add(identity(trader.source, trader.source_trader_id))
+      }
+    }
   }
   // rerank: arena_score DESC NULLS LAST, id; a first-time row takes its id in
   // write order. (Existing rows keep their id in production; a fresh table is
@@ -242,6 +253,7 @@ async function publish(
     max_drawdown: row.max_drawdown,
     score_completeness: row.score_completeness,
     idle: isIdleWindowRow(row),
+    contradiction: contradictions.has(identity(row.source, row.source_trader_id)),
   }))
   return { ranked, excluded }
 }
@@ -510,6 +522,19 @@ const report = {
     inRealTop100: idleZeroDrawdownInRealTop500.filter((row) => realTopByKey.get(row.key)! <= 100)
       .length,
   },
+  contradictoryDrawdown: {
+    definition: 'ROI < 0 with a 0% max drawdown (stored precision): drawdown refused',
+    rows: after.ranked.filter((row) => row.contradiction).length,
+    bySource: countBy(
+      after.ranked.filter((row) => row.contradiction),
+      (row) => row.source
+    ),
+    exactZeroInInput: scoreRows.filter(
+      (row) => row.roi_pct !== null && row.roi_pct < 0 && row.max_drawdown === 0
+    ).length,
+    rank: quantiles(after.ranked.filter((row) => row.contradiction).map((row) => row.rank)),
+    inNewTop100: afterTop100.filter((row) => row.contradiction).length,
+  },
   losingRows: {
     definition: 'roi < 0 or pnl < 0 (not idle)',
     ranked: share(losingAfter.length, after.ranked.length),
@@ -583,6 +608,10 @@ if (markdownPath) {
     `- Rank change (after - before): ${json(report.previouslyRankedIdleWithZeroDrawdown.rankChange)}`,
     `- Of them in the real previous top 500: ${report.previouslyRankedIdleWithZeroDrawdown.inRealTop500}; in the real previous top 100: ${report.previouslyRankedIdleWithZeroDrawdown.inRealTop100}`,
     '',
+    '### Contradictory drawdown (ROI < 0 with a 0% max drawdown)',
+    '',
+    `- Rows whose drawdown was refused: ${report.contradictoryDrawdown.rows}; by source ${json(report.contradictoryDrawdown.bySource)}; with a drawdown of exactly 0 in the input: ${report.contradictoryDrawdown.exactZeroInInput}; rank ${json(report.contradictoryDrawdown.rank)}; in the new top 100: ${report.contradictoryDrawdown.inNewTop100}`,
+    '',
     '### Losing rows relative to idle rows',
     '',
     `- Losing rows ranked: ${report.losingRows.ranked}; ranked below any idle row: ${report.losingRows.belowAnyIdleRow}; lowest losing rank: ${report.losingRows.lowestLosingRank}; rank ${json(report.losingRows.rank)}`,
@@ -612,4 +641,65 @@ if (markdownPath) {
     '',
   ]
   appendFileSync(markdownPath, `${lines.join('\n')}\n`)
+}
+
+const top20Path = argument('top20-markdown')
+if (top20Path) {
+  const inputByKey = new Map(
+    scoreRows.map((row) => [
+      identity(row.platform, row.trader_key),
+      row as ScoreRow & { handle?: string | null },
+    ])
+  )
+  const cell = (value: number | null | undefined, digits: number) =>
+    value === null || value === undefined ? '—' : value.toFixed(digits)
+  const describe = (key: string) => {
+    const input = inputByKey.get(key)
+    const [source, traderKey] = key.split('\u0000')
+    const handle = (input?.handle ?? '').replace(/\|/g, '/').trim() || traderKey
+    return `| ${source} | ${handle} | ${cell(input?.roi_pct, 2)} | ${cell(input?.pnl_usd, 2)} | ${cell(input?.max_drawdown, 2)} | ${cell(input?.win_rate, 2)} |`
+  }
+  // Previous ranks: the served board when given (top 500 only), else simulated.
+  const previousRank = (key: string): string =>
+    realBeforeTop
+      ? realTopByKey.has(key)
+        ? String(realTopByKey.get(key))
+        : beforeByKey.has(key)
+          ? '>500'
+          : '未上榜'
+      : beforeByKey.has(key)
+        ? String(beforeByKey.get(key)!.rank)
+        : '未上榜'
+  const newRank = (key: string): string => {
+    const row = afterByKey.get(key)
+    if (!row) return '不在导出里'
+    return `${row.rank}${row.contradiction ? '（回撤拒收）' : ''}${row.idle ? '（空窗）' : ''}`
+  }
+  const previousTop20 = realBeforeTop
+    ? realBeforeTop.slice(0, 20).map((row) => row.key)
+    : top(before.ranked, 20).map((row) => row.key)
+  const header = [
+    '| # | 平台 | 昵称 | ROI % | PnL | 回撤 % | 胜率 % | 旧名次 | 新名次 |',
+    '|---:|---|---|---:|---:|---:|---:|---:|---:|',
+  ]
+  const lines = [
+    `### ${argument('label') ?? season}：旧前 20 名，以及它们的新名次`,
+    '',
+    `旧名次来自${realBeforeTop ? '线上榜单（top500 CSV）' : '模拟的旧规则榜单'}；指标是导出时的当前值。`,
+    '',
+    ...header,
+    ...previousTop20.map(
+      (key, index) => `| ${index + 1} ${describe(key)} ${previousRank(key)} | ${newRank(key)} |`
+    ),
+    '',
+    `### ${argument('label') ?? season}：新前 20 名，以及它们的旧名次`,
+    '',
+    ...header,
+    ...top(after.ranked, 20).map(
+      (row, index) =>
+        `| ${index + 1} ${describe(row.key)} ${previousRank(row.key)} | ${newRank(row.key)} |`
+    ),
+    '',
+  ]
+  appendFileSync(top20Path, `${lines.join('\n')}\n`)
 }

@@ -470,6 +470,13 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # that publishes rows without a win rate or drawdown must be deployed AFTER
 # this migration (seal rejects such rows under the previous body). It touches
 # no table 192134 guards.
+# 20261123021904 appends two boolean columns, idle_window and
+# mdd_contradiction, to public.public_ranked_leaderboard, read from
+# leaderboard_ranks.score_factors (false unless the JSON boolean true is
+# there). It refuses unless the view is the 20260816184500 definition (or its
+# own, on replay) and changes no existing column, option, owner or grant. No
+# release depends on it and both columns are false until the scoring worker
+# publishes with roi_pnl; it follows 201611 only to keep the two together.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -501,6 +508,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261118144144_rank_publication_trust_requires_run.sql
   20261121201553_visible_sources_from_served_ranks.sql
   20261122201611_row_eligibility_roi_pnl_only.sql
+  20261123021904_public_ranked_leaderboard_window_flags.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
