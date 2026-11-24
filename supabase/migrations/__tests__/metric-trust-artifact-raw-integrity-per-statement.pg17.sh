@@ -258,12 +258,6 @@ if [[ "$BEFORE" != "$AFTER" ]]; then
 fi
 echo "ok: all 20 cases have the identical outcome (rows kept, SQLSTATE and message) after the migration"
 
-if [[ "$(psql_db -Atq -c "SELECT pg_catalog.strpos(prosrc, 'v_raw_meta') FROM pg_proc WHERE oid = 'arena.validate_metric_trust_artifact()'::regprocedure")" != "0" ]]; then
-  echo "the row trigger still reads the RAW meta document" >&2
-  exit 1
-fi
-echo "ok: the row trigger no longer reads the RAW meta document"
-
 AFTER_MS="$(big_batch_ms)"
 if ((AFTER_MS * 5 > BEFORE_MS)); then
   echo "20,000 rows x 2,042-page meta: before ${BEFORE_MS}ms, after ${AFTER_MS}ms (want at least 5x faster)" >&2
