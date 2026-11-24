@@ -639,6 +639,8 @@ describe('contradictory drawdown: a losing window with a 0% max drawdown', () =>
     traderRow('profit-zero-dd', { roi: 12, pnl: 1_500, win_rate: 60, max_drawdown: 0 }),
     // A loss with no drawdown is not.
     traderRow('loss-zero-dd', { roi: -12, pnl: -1_500, win_rate: 60, max_drawdown: 0 }),
+    // ROI is positive but the account lost money: still a losing window.
+    traderRow('pnl-loss-zero-dd', { roi: 5.18, pnl: -67.64, win_rate: 52, max_drawdown: 0 }),
     // The same loss with an ordinary drawdown, for comparison.
     traderRow('loss-real-dd', { roi: -12, pnl: -1_500, win_rate: 60, max_drawdown: 20 }),
     // The same loss reporting no drawdown at all.
@@ -668,8 +670,19 @@ describe('contradictory drawdown: a losing window with a 0% max drawdown', () =>
     expect(refused.arena_score!).toBeLessThan(rows.get('loss-real-dd')!.arena_score!)
 
     expect(mockLogger.warn).toHaveBeenCalledWith(
-      '[30D] Refused contradictory drawdowns (ROI < 0 with a 0% max drawdown; metric emptied, row kept): 1'
+      '[30D] Refused contradictory drawdowns (ROI < 0 or PnL < 0 with a 0% max drawdown; metric emptied, row kept): 2'
     )
+  })
+
+  it('refuses it when ROI is positive but PnL is negative', async () => {
+    const rows = byId(await publishedCohort(cohort(), 'roi_pnl'))
+    const refused = rows.get('pnl-loss-zero-dd')!
+    expect(refused.roi).toBe(5.18)
+    expect(refused.pnl).toBe(-67.64)
+    expect(refused.max_drawdown).toBeNull()
+    expect(refused.score_factors).toMatchObject({ drawdown: null, mdd_contradiction: true })
+    expect(refused.score_completeness).toBe('partial')
+    expect(refused.win_rate).toBe(52)
   })
 
   it('still reads a 0% drawdown on a profitable row as the best drawdown', async () => {
@@ -704,16 +717,25 @@ describe('contradictory drawdown: a losing window with a 0% max drawdown', () =>
   })
 
   it('reads both sides at the stored precision', () => {
-    expect(hasContradictoryDrawdown({ roi: -12, max_drawdown: 0 })).toBe(true)
+    expect(hasContradictoryDrawdown({ roi: -12, pnl: -300, max_drawdown: 0 })).toBe(true)
     // max_drawdown is numeric(5,2): 0.004 is written as 0.00.
-    expect(hasContradictoryDrawdown({ roi: -12, max_drawdown: 0.004 })).toBe(true)
-    expect(hasContradictoryDrawdown({ roi: -12, max_drawdown: 0.01 })).toBe(false)
+    expect(hasContradictoryDrawdown({ roi: -12, pnl: -300, max_drawdown: 0.004 })).toBe(true)
+    expect(hasContradictoryDrawdown({ roi: -12, pnl: -300, max_drawdown: 0.01 })).toBe(false)
+    // Either side losing is enough.
+    expect(hasContradictoryDrawdown({ roi: -12, pnl: 40, max_drawdown: 0 })).toBe(true)
+    expect(hasContradictoryDrawdown({ roi: 5, pnl: -40, max_drawdown: 0 })).toBe(true)
+    expect(hasContradictoryDrawdown({ roi: -12, pnl: null, max_drawdown: 0 })).toBe(true)
     // roi is numeric(12,4): -0.00004 is written as 0.0000, not a loss.
-    expect(hasContradictoryDrawdown({ roi: -0.00004, max_drawdown: 0 })).toBe(false)
-    expect(hasContradictoryDrawdown({ roi: -0.0001, max_drawdown: 0 })).toBe(true)
-    expect(hasContradictoryDrawdown({ roi: 0, max_drawdown: 0 })).toBe(false)
-    expect(hasContradictoryDrawdown({ roi: 5, max_drawdown: 0 })).toBe(false)
-    expect(hasContradictoryDrawdown({ roi: -12, max_drawdown: null })).toBe(false)
+    expect(hasContradictoryDrawdown({ roi: -0.00004, pnl: 0, max_drawdown: 0 })).toBe(false)
+    expect(hasContradictoryDrawdown({ roi: -0.0001, pnl: 0, max_drawdown: 0 })).toBe(true)
+    // pnl is numeric(18,2): -0.004 is written as 0.00, not a loss.
+    expect(hasContradictoryDrawdown({ roi: 5, pnl: -0.004, max_drawdown: 0 })).toBe(false)
+    expect(hasContradictoryDrawdown({ roi: 5, pnl: -0.01, max_drawdown: 0 })).toBe(true)
+    // No loss on either side.
+    expect(hasContradictoryDrawdown({ roi: 0, pnl: 0, max_drawdown: 0 })).toBe(false)
+    expect(hasContradictoryDrawdown({ roi: 5, pnl: 40, max_drawdown: 0 })).toBe(false)
+    expect(hasContradictoryDrawdown({ roi: 5, pnl: null, max_drawdown: 0 })).toBe(false)
+    expect(hasContradictoryDrawdown({ roi: -12, pnl: -300, max_drawdown: null })).toBe(false)
   })
 
   it('writes the row with an empty drawdown that the row policy accepts', async () => {

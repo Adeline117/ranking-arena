@@ -99,26 +99,24 @@ export type RankScoreFactors = ArenaScoreV4Result['factors'] & {
 }
 
 /**
- * Contradictory drawdown ('roi_pnl' only): the window closed at a loss
- * (ROI < 0) and the reported max drawdown is 0. A loss in the window implies
+ * Contradictory drawdown ('roi_pnl' only): the window closed at a loss (ROI < 0
+ * or PnL < 0) and the reported max drawdown is 0. A loss in the window implies
  * a drawdown, so a 0 is a placeholder or a different definition, not a
  * measurement. The value is refused like an out-of-range one: emptied, the
  * row kept, the dimension scored as missing, and the refusal recorded. It is
  * not replaced by anything derived.
  *
- * Both sides are read at the precision the row is stored with (ROI
- * numeric(12,4), max_drawdown numeric(5,2)), as for the idle-window rule. An
- * idle row has ROI 0 and is never contradictory.
+ * Every side is read at the precision the row is stored with (ROI
+ * numeric(12,4), PnL numeric(18,2), max_drawdown numeric(5,2)), as for the
+ * idle-window rule. An idle row has ROI 0 and PnL 0 and is never contradictory.
  */
 export function hasContradictoryDrawdown(row: {
   roi: number
+  pnl: number | null
   max_drawdown: number | null
 }): boolean {
-  return (
-    row.max_drawdown !== null &&
-    Math.round(row.roi * 1e4) < 0 &&
-    Math.round(row.max_drawdown * 1e2) === 0
-  )
+  if (row.max_drawdown === null || Math.round(row.max_drawdown * 1e2) !== 0) return false
+  return Math.round(row.roi * 1e4) < 0 || (row.pnl !== null && Math.round(row.pnl * 1e2) < 0)
 }
 
 /**
@@ -216,7 +214,7 @@ export async function scoreTraders(
     if (t.max_drawdown != null && normalizedMaxDrawdown === null) maxDrawdownNulled += 1
     if (
       rowEligibility === 'roi_pnl' &&
-      hasContradictoryDrawdown({ roi: t.roi, max_drawdown: normalizedMaxDrawdown })
+      hasContradictoryDrawdown({ roi: t.roi, pnl: t.pnl, max_drawdown: normalizedMaxDrawdown })
     ) {
       normalizedMaxDrawdown = null
       contradictoryDrawdownKeys.add(`${t.source}\u0000${t.source_trader_id}`)
@@ -323,7 +321,7 @@ export async function scoreTraders(
 
   if (contradictoryDrawdownKeys.size > 0) {
     logger.warn(
-      `[${season}] Refused contradictory drawdowns (ROI < 0 with a 0% max drawdown; metric emptied, row kept): ${contradictoryDrawdownKeys.size}`
+      `[${season}] Refused contradictory drawdowns (ROI < 0 or PnL < 0 with a 0% max drawdown; metric emptied, row kept): ${contradictoryDrawdownKeys.size}`
     )
   }
 
