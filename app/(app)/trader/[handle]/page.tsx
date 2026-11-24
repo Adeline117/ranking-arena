@@ -44,6 +44,7 @@ import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-tr
 import { findClaimedUserHandleByIdentity } from '@/lib/identity/claimed-trader'
 import {
   fetchPublicProfileRankingRows,
+  isIdleOnlyProfile,
   isProvenUnrankedProfile,
   isPublicSourceCohortPublished,
   PUBLIC_PROFILE_RANKING_PERIODS,
@@ -385,6 +386,7 @@ async function getCurrentPublicLeaderboardMeta(platform: string, traderKey: stri
     )
   return {
     provenUnranked,
+    idleOnly: isIdleOnlyProfile(cohort),
     row: row
       ? {
           rank: row.rank,
@@ -476,11 +478,13 @@ export async function generateMetadata({
     pnl?: number | null
   } | null = null
   let provenUnranked = false
+  let idleOnly = false
   if (account) {
     try {
       const meta = await getCurrentPublicLeaderboardMeta(account.platform, account.traderKey)
       lr = meta.row
       provenUnranked = meta.provenUnranked
+      idleOnly = meta.idleOnly
     } catch (err) {
       // Leaderboard fetch failure should NOT prevent title generation.
       // The trader name is already known — produce metadata without stats.
@@ -560,7 +564,9 @@ export async function generateMetadata({
     // The board for this source is live and this trader is on none of its
     // periods: the page has no numbers to show. Keep following its links, and
     // drop the tag automatically once the trader is ranked again.
-    ...(provenUnranked ? { robots: { index: false, follow: true } } : {}),
+    // Likewise when every period it is ranked in is an idle window (no trading):
+    // the profile carries no performance, and it is not in the sitemap either.
+    ...(provenUnranked || idleOnly ? { robots: { index: false, follow: true } } : {}),
   }
 }
 

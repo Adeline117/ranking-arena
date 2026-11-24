@@ -1,5 +1,6 @@
 import {
   fetchPublicProfileRankingRows,
+  isIdleOnlyProfile,
   isProvenUnrankedProfile,
   isPublicSourceCohortPublished,
   sanitizePublicProfileRankingRows,
@@ -184,5 +185,30 @@ describe('isProvenUnrankedProfile', () => {
     const ranked = sanitizePublicProfileRankingRows([row()], SCOPE)
     expect(ranked.rows).toHaveLength(1)
     expect(isProvenUnrankedProfile(ranked, true)).toBe(false)
+  })
+})
+
+describe('isIdleOnlyProfile', () => {
+  const ranked = (overrides: Record<string, unknown>) => ({ ...row(overrides) }) as never
+
+  it('holds only when every ranked period is an idle window', () => {
+    expect(
+      isIdleOnlyProfile({
+        rows: [ranked({ season_id: '7D', idle_window: true }), ranked({ idle_window: true })],
+      })
+    ).toBe(true)
+  })
+
+  it('does not hold when any period shows trading', () => {
+    expect(
+      isIdleOnlyProfile({
+        rows: [ranked({ season_id: '7D', idle_window: true }), ranked({ idle_window: false })],
+      })
+    ).toBe(false)
+    expect(isIdleOnlyProfile({ rows: [ranked({})] })).toBe(false)
+  })
+
+  it('is not the unranked case', () => {
+    expect(isIdleOnlyProfile({ rows: [] })).toBe(false)
   })
 })
