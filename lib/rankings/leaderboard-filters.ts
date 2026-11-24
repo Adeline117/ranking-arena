@@ -58,6 +58,13 @@ export interface LeaderboardFilters {
   /** View `source_type` values (`onchain` is stored as `web3`). */
   sourceTypes?: LeaderboardSourceType[]
   preset?: LeaderboardPresetId
+  /**
+   * Also list idle-window rows (no ROI and no PnL in the period), which lists
+   * hide by default. Not a narrowing predicate — the reader applies it through
+   * excludeIdleWindowRows — but it is part of the cohort identity, so like any
+   * other filter it keeps the request out of the shared cache.
+   */
+  includeIdle?: true
 }
 
 /** Predicates of each preset — the same thresholds FilterPresets shows. */
@@ -149,6 +156,8 @@ export interface LeaderboardFilterInput {
   grade?: string
   exchange?: string[]
   category?: string[]
+  /** Show the idle-window rows the list hides by default. */
+  show_idle?: boolean
 }
 
 /** Inclusive bounds `/api/traders` accepts for each numeric filter param. */
@@ -213,6 +222,7 @@ export function leaderboardFilterQuery(
     ),
   ].sort()
   if (categories.length) entries.push(['fcat', categories.join(',')])
+  if (config.show_idle === true) entries.push(['idle', '1'])
   if (isLeaderboardPresetId(preset)) entries.push(['preset', preset])
   if (entries.length === 0) return null
   entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))

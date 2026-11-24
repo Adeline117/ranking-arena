@@ -6,6 +6,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   applyPublicCohortFilters,
+  excludeIdleWindowRows,
   PUBLIC_COHORT_MAX_COMPUTED_AGE_MS,
   PUBLIC_COHORT_MIN_ARENA_SCORE_EXCLUSIVE,
 } from '@/lib/rankings/public-cohort'
@@ -239,6 +240,8 @@ export async function getLeaderboard(
 
   // One cohort for every public reader (score floor, ROI bound, 48h window).
   query = applyPublicCohortFilters(query)
+  // Lists hide idle-window rows by default (see excludeIdleWindowRows).
+  query = excludeIdleWindowRows(query)
   // A caller may narrow further, but never widen past the shared floor.
   if (minScore != null && minScore > PUBLIC_COHORT_MIN_ARENA_SCORE_EXCLUSIVE) {
     query = query.gt('arena_score', minScore)

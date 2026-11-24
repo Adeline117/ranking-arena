@@ -25,6 +25,7 @@ import { computeAntiGamingFlags } from '@/lib/scoring/anti-gaming'
 import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
 import {
   applyPublicCohortFilters,
+  excludeIdleWindowRows,
   cachedRowsStillInPublicCohort,
   isInPublicCohort,
 } from '@/lib/rankings/public-cohort'
@@ -135,6 +136,9 @@ const tradersQuerySchema = z.object({
   fex: z.string().max(2_000).optional(),
   fcat: z.string().max(64).optional(),
   preset: z.enum(LEADERBOARD_PRESET_IDS).optional(),
+  // `idle=1` also lists idle-window rows (hidden by default). Part of the
+  // cohort, so it travels with the filters and is never cached.
+  idle: z.enum(['1']).optional(),
 })
 
 type ParsedTradersQuery = z.infer<typeof tradersQuerySchema>
@@ -151,6 +155,7 @@ function leaderboardFiltersFromQuery(query: ParsedTradersQuery): LeaderboardFilt
   if (query.min_wr !== undefined) filters.minWinRate = query.min_wr
   if (query.grade !== undefined) filters.grade = query.grade
   if (query.preset !== undefined) filters.preset = query.preset
+  if (query.idle === '1') filters.includeIdle = true
   if (query.fex !== undefined) {
     const sources = [...new Set(query.fex.split(','))]
     // Exact canonical ids only, like `exchange`: an alias or unknown string
@@ -570,6 +575,11 @@ async function fetchPublicRankedCohort(
 
   if (exchangeFilter) {
     query = query.eq('source', exchangeFilter)
+  }
+
+  // Idle-window rows stay out of the list unless the request asks for them.
+  if (params.filters?.includeIdle !== true) {
+    query = excludeIdleWindowRows(query)
   }
 
   // Advanced filters / presets, in SQL before ordering and paging so every

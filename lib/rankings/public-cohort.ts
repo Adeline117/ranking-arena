@@ -52,6 +52,22 @@ export function applyPublicCohortFilters<Q extends PublicCohortFilterable<Q>>(
 }
 
 /**
+ * Ranking LISTS hide idle-window rows by default.
+ *
+ * An idle-window row (public_ranked_leaderboard.idle_window) had no ROI and no
+ * PnL in the period: it is published and ranked at the tail, but it is not
+ * scored, and on a full board more than half of all rows are of this kind.
+ * Lists leave them out unless the reader explicitly asks to see them
+ * (`/api/traders?idle=1`); a trader's own profile and `/api/rankings` are not
+ * lists in this sense and still serve them.
+ */
+export function excludeIdleWindowRows<Q extends { eq(column: string, value: boolean): Q }>(
+  query: Q
+): Q {
+  return query.eq('idle_window', false)
+}
+
+/**
  * The same predicate for rows read back from a cache. A cached row that no
  * longer satisfies it (aged out, or written under an older predicate) must
  * not be served.

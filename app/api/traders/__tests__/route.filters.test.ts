@@ -251,6 +251,46 @@ describe('GET /api/traders server-side filters', () => {
     expect(rankingQuery.or).not.toHaveBeenCalled()
   })
 
+  it('hides idle-window rows by default and still caches that default page', async () => {
+    const { rankingQuery } = mockPublicView([publicRankedRow()])
+    const response = await GET(new NextRequest('http://localhost/api/traders?timeRange=90D'))
+    expect(response.status).toBe(200)
+    expect(rankingQuery.eq).toHaveBeenCalledWith('idle_window', false)
+    expect(mockGetOrSetWithLock).toHaveBeenCalledTimes(1)
+  })
+
+  it('idle=1 lists idle-window rows too, as an uncached cohort of its own', async () => {
+    const idleRow = publicRankedRow({
+      rank: 4261,
+      source_trader_id: 'idle',
+      arena_score: 0.01,
+      roi: 0,
+      pnl: 0,
+      win_rate: null,
+      max_drawdown: null,
+      score_completeness: 'minimal',
+      idle_window: true,
+    })
+    const { rankingQuery } = mockPublicView([idleRow])
+    const response = await GET(new NextRequest('http://localhost/api/traders?timeRange=90D&idle=1'))
+    const data = unwrap(await response.json())
+
+    expect(response.status).toBe(200)
+    expect(rankingQuery.eq).not.toHaveBeenCalledWith('idle_window', false)
+    expect(mockGetOrSetWithLock).not.toHaveBeenCalled()
+    const traders = data.traders as Array<Record<string, unknown>>
+    expect(traders).toHaveLength(1)
+    // The flag reaches the client; missing metrics stay missing, never 0.
+    expect(traders[0]).toMatchObject({ idle_window: true, win_rate: null, max_drawdown: null })
+  })
+
+  it('rejects any other idle value before database access', async () => {
+    mockPublicView([])
+    const response = await GET(new NextRequest('http://localhost/api/traders?idle=true'))
+    expect(response.status).toBe(400)
+    expect(mockSupabaseQuery).not.toHaveBeenCalled()
+  })
+
   it.each([
     'roi_min=abc',
     'roi_min=',

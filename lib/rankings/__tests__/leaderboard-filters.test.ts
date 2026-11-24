@@ -45,3 +45,16 @@ describe('leaderboardFilterQuery — canonical /api/traders filter params', () =
     ).toBe('fex=bybit')
   })
 })
+
+describe('idle-window rows', () => {
+  it('asks for them only when the filter state says so', () => {
+    expect(leaderboardFilterQuery({}, null)).toBeNull()
+    expect(leaderboardFilterQuery({ show_idle: false }, null)).toBeNull()
+    expect(leaderboardFilterQuery({ show_idle: true }, null)).toBe('idle=1')
+  })
+
+  it('counts as a cohort of its own, so the request stays out of the shared cache', () => {
+    expect(hasLeaderboardFilters({ includeIdle: true })).toBe(true)
+    expect(hasLeaderboardFilters({})).toBe(false)
+  })
+})
