@@ -1,7 +1,27 @@
 import { z } from 'zod'
 
 export const SOURCE_PUBLICATION_FUTURE_TOLERANCE_MS = 5 * 60 * 1000
-export const DEFAULT_SOURCE_PUBLICATION_MAX_AGE_HOURS = 48
+/**
+ * Read side: arena.public_ranked_leaderboard_serving_seasons hides a whole
+ * season as soon as any of its serving sources is older than this
+ * (migration 20260816184500, `interval '48 hours'`).
+ */
+export const PUBLIC_SERVING_SOURCE_MAX_AGE_HOURS = 48
+/** The scoring worker seals each season on this cadence (worker/src/scheduler.ts). */
+export const RANK_PUBLICATION_INTERVAL_HOURS = 2
+/** Slack for a late or retried publication round. */
+export const SOURCE_PUBLICATION_FRESHNESS_MARGIN_HOURS = 2
+/**
+ * Publish side: a source whose board is older than this is isolated at
+ * publication time. It must expire on the read side only after the next
+ * round has had the chance to isolate it; with the same 48h on both sides a
+ * source sealed at 47.3h hid the whole 7D season 43 minutes later
+ * (2026-11-24 18:44Z, bitget_spot, zero ranked rows).
+ */
+export const DEFAULT_SOURCE_PUBLICATION_MAX_AGE_HOURS =
+  PUBLIC_SERVING_SOURCE_MAX_AGE_HOURS -
+  RANK_PUBLICATION_INTERVAL_HOURS -
+  SOURCE_PUBLICATION_FRESHNESS_MARGIN_HOURS
 
 const publicationWindowSchema = z.enum(['7D', '30D', '90D'])
 const identifierSchema = z
