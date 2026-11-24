@@ -49,6 +49,9 @@ function buildRow(period, index, nowIso) {
     calmar_ratio: null,
     trader_type: null,
     computed_at: nowIso,
+    // Public view flags: false on every ordinary row (never null).
+    idle_window: false,
+    mdd_contradiction: false,
   }
 }
 
@@ -124,6 +127,52 @@ function buildNullMetricsRow(period, nowIso) {
   }
 }
 
+// A ranked trader the exchange publishes no win rate for, and whose reported
+// drawdown was refused (a loss with 0% drawdown): both metrics are EMPTY, not
+// zero. Every surface must show "—" for them.
+export const PARTIAL_TRADER = { id: 'e2e-partial', handle: 'E2E Partial Trader' }
+
+function buildPartialRow(period, nowIso) {
+  return {
+    ...buildRow(period, TRADERS_PER_PERIOD + 3, nowIso),
+    source: 'binance_futures',
+    source_type: 'futures',
+    source_trader_id: PARTIAL_TRADER.id,
+    handle: PARTIAL_TRADER.handle,
+    roi: -12.5,
+    pnl: -4_000,
+    win_rate: null,
+    max_drawdown: null,
+    score_completeness: 'minimal',
+    mdd_contradiction: true,
+  }
+}
+
+// An account with no ROI and no PnL in the period: published, ranked last, not
+// scored. Lists hide it by default, the sitemap leaves it out and its profile
+// is noindex.
+export const IDLE_TRADER = { id: 'e2e-idle', handle: 'E2E Idle Trader' }
+
+function buildIdleRow(period, nowIso) {
+  return {
+    ...buildRow(period, TRADERS_PER_PERIOD + 4, nowIso),
+    source: 'binance_futures',
+    source_type: 'futures',
+    source_trader_id: IDLE_TRADER.id,
+    handle: IDLE_TRADER.handle,
+    arena_score: 0.01,
+    roi: 0,
+    pnl: 0,
+    win_rate: null,
+    max_drawdown: null,
+    profitability_score: null,
+    risk_control_score: null,
+    execution_score: null,
+    score_completeness: 'minimal',
+    idle_window: true,
+  }
+}
+
 /**
  * Degraded states a test can switch the fake into (see POST /__e2e/scenario).
  * Each only changes the ranking relations; auth, profiles and writes stay as
@@ -167,6 +216,8 @@ export function buildFixtures(now = new Date(), scenario = 'normal') {
           ),
           buildSharedRow(period, computedIso),
           buildNullMetricsRow(period, computedIso),
+          buildPartialRow(period, computedIso),
+          buildIdleRow(period, computedIso),
         ])
   const freshness = PERIODS.flatMap((season_id) =>
     ['binance_futures', 'hyperliquid'].map((source) => ({
