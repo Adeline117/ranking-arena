@@ -2,8 +2,9 @@
  * RAW retention backlog (20261118134316). Runs from the worker maintenance
  * job right after the routine single-batch cleanupRawObjects(30).
  *
- * Count-only by default. Every run reports single-table aggregates, then walks
- * bounded id pages of arena.raw_objects (expired / pinned / eligible) and
+ * Count-only by default. Every run reports a cheap census (planner-statistics
+ * estimate of the pointer table, exact depths of the two small queues), then
+ * walks bounded id pages of arena.raw_objects (expired / pinned / eligible) and
  * bounded name pages of the raw-snapshots bucket looking for objects that have
  * no arena.raw_objects pointer (they can never enter arena.raw_object_gc_queue).
  * No statement joins the two large tables wholesale; each runs under a 60s
@@ -64,10 +65,13 @@ export interface RawRetentionReport {
   contract: 'arena.raw-retention-run@1'
   mode: 'count' | 'delete'
   delete_blocked_by: Array<'env' | 'db_switch'>
-  census: Record<string, unknown>
+  census: RawRetentionCensus
   pointer_scan: RawPointerScanTally
+  /** Running totals of the pass in progress: where the cursor is and what it has counted so far. */
+  pointer_pass_progress: Record<string, unknown> | null
   last_completed_pointer_pass: Record<string, unknown> | null
   orphan_scan: RawOrphanScanTally
+  orphan_pass_progress: Record<string, unknown> | null
   last_completed_orphan_pass: Record<string, unknown> | null
   orphan_gc_removed: number
   pointer_gc_removed: number
@@ -94,9 +98,95 @@ interface ScanPageResult {
   skipped?: string
 }
 
+/**
+ * Cheap census. arena.raw_retention_census (20261118134316) aggregates the
+ * whole of arena.raw_objects in one statement (~5.6M rows, a ~2.9GB sequential
+ * scan in production) and never finished inside the statement timeout, so the
+ * worker no longer calls it; the function stays in the database unused.
+ * Totals come from planner statistics and the relation size instead, and are
+ * ESTIMATES. Expired rows / bytes are not computed here at all: they accumulate
+ * page by page in the resumable pointer scan (see pointer_pass_progress).
+ */
+export interface RawRetentionCensus {
+  contract: 'arena.raw-retention-census@3'
+  estimated: true
+  /** pg_class.reltuples as of the last ANALYZE/VACUUM; null when never analyzed. */
+  pointer_rows_estimate: number | null
+  /** pg_total_relation_size: heap + indexes + TOAST on disk, NOT stored object bytes. */
+  pointer_relation_bytes: number | null
+  gc_queue_rows: number
+  gc_queue_failed_rows: number
+  orphan_queue_rows: number
+  orphan_queue_failed_rows: number
+  delete_enabled: boolean
+}
+
+export const RAW_POINTER_ESTIMATE_SQL = `SELECT relation.reltuples::bigint AS rows_estimate,
+        pg_catalog.pg_total_relation_size(relation.oid) AS relation_bytes
+   FROM pg_catalog.pg_class AS relation
+  WHERE relation.oid = pg_catalog.to_regclass('arena.raw_objects')`
+
+export const RAW_QUEUE_DEPTHS_SQL = `SELECT
+  (SELECT pg_catalog.count(*) FROM arena.raw_object_gc_queue) AS gc_queue_rows,
+  (SELECT pg_catalog.count(*) FROM arena.raw_object_gc_queue WHERE attempts > 0)
+    AS gc_queue_failed_rows,
+  (SELECT pg_catalog.count(*) FROM arena.raw_orphan_gc_queue) AS orphan_queue_rows,
+  (SELECT pg_catalog.count(*) FROM arena.raw_orphan_gc_queue WHERE attempts > 0)
+    AS orphan_queue_failed_rows`
+
+/** Cursor position and running tallies of the passes in progress, plus the last finished ones. */
+export const RAW_PASS_PROGRESS_SQL = `SELECT last_completed_pointer_pass AS pointer_pass,
+        last_completed_orphan_pass AS orphan_pass,
+        pg_catalog.jsonb_build_object(
+          'cursor_after_id', pointer_scan_after,
+          'started_at', pointer_pass_started_at,
+          'rows', pointer_pass_rows,
+          'expired_rows', pointer_pass_expired_rows,
+          'snapshot_pinned_rows', pointer_pass_snapshot_pinned_rows,
+          'trust_pinned_rows', pointer_pass_trust_pinned_rows,
+          'eligible_rows', pointer_pass_eligible_rows,
+          'eligible_bytes', pointer_pass_eligible_bytes
+        ) AS pointer_progress,
+        pg_catalog.jsonb_build_object(
+          'cursor_after_name', orphan_scan_after,
+          'started_at', orphan_pass_started_at,
+          'objects', orphan_pass_objects,
+          'bytes', orphan_pass_bytes,
+          'orphans', orphan_pass_orphans,
+          'orphan_bytes', orphan_pass_orphan_bytes
+        ) AS orphan_progress
+   FROM arena.raw_retention_settings WHERE singleton`
+
 const asNumber = (value: unknown): number => {
   const parsed = typeof value === 'number' ? value : Number(value ?? 0)
   return Number.isFinite(parsed) ? parsed : 0
+}
+
+async function readCheapCensus(
+  client: PoolClient,
+  deleteEnabled: boolean
+): Promise<RawRetentionCensus> {
+  const { rows: estimateRows } = await client.query<{
+    rows_estimate: number | null
+    relation_bytes: number | null
+  }>(RAW_POINTER_ESTIMATE_SQL)
+  const { rows: queueRows } = await client.query<Record<string, unknown>>(RAW_QUEUE_DEPTHS_SQL)
+  const estimate = estimateRows[0]
+  const queues = queueRows[0] ?? {}
+  // reltuples is -1 until the table has been analyzed or vacuumed once.
+  const rowsEstimate = estimate?.rows_estimate == null ? -1 : asNumber(estimate.rows_estimate)
+  return {
+    contract: 'arena.raw-retention-census@3',
+    estimated: true,
+    pointer_rows_estimate: rowsEstimate < 0 ? null : rowsEstimate,
+    pointer_relation_bytes:
+      estimate?.relation_bytes == null ? null : asNumber(estimate.relation_bytes),
+    gc_queue_rows: asNumber(queues.gc_queue_rows),
+    gc_queue_failed_rows: asNumber(queues.gc_queue_failed_rows),
+    orphan_queue_rows: asNumber(queues.orphan_queue_rows),
+    orphan_queue_failed_rows: asNumber(queues.orphan_queue_failed_rows),
+    delete_enabled: deleteEnabled,
+  }
 }
 
 async function drainOrphanQueue(
@@ -175,10 +265,7 @@ export async function runRawRetention(
     if (settingsRows[0]?.delete_enabled !== true) blockedBy.push('db_switch')
     const mode: 'count' | 'delete' = blockedBy.length === 0 ? 'delete' : 'count'
 
-    const { rows: censusRows } = await client.query<{ census: Record<string, unknown> }>(
-      `SELECT arena.raw_retention_census($1::integer) AS census`,
-      [retentionDays]
-    )
+    const census = await readCheapCensus(client, settingsRows[0]?.delete_enabled === true)
 
     const pointer: RawPointerScanTally = {
       pages: 0,
@@ -241,20 +328,20 @@ export async function runRawRetention(
     const { rows: passRows } = await client.query<{
       pointer_pass: Record<string, unknown> | null
       orphan_pass: Record<string, unknown> | null
-    }>(
-      `SELECT last_completed_pointer_pass AS pointer_pass,
-              last_completed_orphan_pass AS orphan_pass
-         FROM arena.raw_retention_settings WHERE singleton`
-    )
+      pointer_progress: Record<string, unknown> | null
+      orphan_progress: Record<string, unknown> | null
+    }>(RAW_PASS_PROGRESS_SQL)
 
     report = {
       contract: 'arena.raw-retention-run@1',
       mode,
       delete_blocked_by: blockedBy,
-      census: censusRows[0]?.census ?? {},
+      census,
       pointer_scan: pointer,
+      pointer_pass_progress: passRows[0]?.pointer_progress ?? null,
       last_completed_pointer_pass: passRows[0]?.pointer_pass ?? null,
       orphan_scan: scan,
+      orphan_pass_progress: passRows[0]?.orphan_progress ?? null,
       last_completed_orphan_pass: passRows[0]?.orphan_pass ?? null,
       orphan_gc_removed: orphanRemoved,
       pointer_gc_removed: 0,

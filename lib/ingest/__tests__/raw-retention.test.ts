@@ -21,14 +21,35 @@ interface FakeDb {
   deleteEnabled?: boolean
   pages?: Array<Record<string, unknown>>
   claims?: string[][]
+  estimate?: { rows: number | null; bytes: number | null }
 }
 
-function fakeDb({ installed = true, deleteEnabled = false, pages = [], claims = [] }: FakeDb) {
+function fakeDb({
+  installed = true,
+  deleteEnabled = false,
+  pages = [],
+  claims = [],
+  estimate = { rows: 5_560_000, bytes: 2_800_000_000 },
+}: FakeDb) {
   const scanModes: boolean[] = []
   mockQuery.mockImplementation(async (sql: string, params?: unknown[]) => {
     if (sql.includes('to_regprocedure')) return { rows: [{ present: installed }] }
     if (sql.includes('SELECT delete_enabled')) return { rows: [{ delete_enabled: deleteEnabled }] }
-    if (sql.includes('raw_retention_census')) return { rows: [{ census: { expired_rows: 4 } }] }
+    if (sql.includes('pg_total_relation_size')) {
+      return { rows: [{ rows_estimate: estimate.rows, relation_bytes: estimate.bytes }] }
+    }
+    if (sql.includes('AS gc_queue_rows')) {
+      return {
+        rows: [
+          {
+            gc_queue_rows: 7,
+            gc_queue_failed_rows: 1,
+            orphan_queue_rows: 3,
+            orphan_queue_failed_rows: 0,
+          },
+        ],
+      }
+    }
     if (sql.includes('scan_raw_pointer_retention')) {
       return {
         rows: [
@@ -55,7 +76,16 @@ function fakeDb({ installed = true, deleteEnabled = false, pages = [], claims = 
       return { rows: (claims.shift() ?? []).map((storage_path) => ({ storage_path })) }
     }
     if (sql.includes('last_completed_orphan_pass')) {
-      return { rows: [{ pointer_pass: { eligible_rows: 1 }, orphan_pass: { orphans: 3 } }] }
+      return {
+        rows: [
+          {
+            pointer_pass: { eligible_rows: 1 },
+            orphan_pass: { orphans: 3 },
+            pointer_progress: { cursor_after_id: 5000, rows: 5000, expired_rows: 40 },
+            orphan_progress: { cursor_after_name: 'b/o3.json.gz', objects: 3 },
+          },
+        ],
+      }
     }
     return { rows: [], rowCount: 0 }
   })
@@ -94,9 +124,21 @@ describe('runRawRetention', () => {
     expect(report).toMatchObject({
       mode: 'count',
       delete_blocked_by: ['env'],
-      census: { expired_rows: 4 },
+      census: {
+        contract: 'arena.raw-retention-census@3',
+        estimated: true,
+        pointer_rows_estimate: 5_560_000,
+        pointer_relation_bytes: 2_800_000_000,
+        gc_queue_rows: 7,
+        gc_queue_failed_rows: 1,
+        orphan_queue_rows: 3,
+        orphan_queue_failed_rows: 0,
+        delete_enabled: true,
+      },
       pointer_scan: { pages: 1, rows: 6, expired_rows: 4, eligible_rows: 1, eligible_bytes: 400 },
+      pointer_pass_progress: { cursor_after_id: 5000, rows: 5000, expired_rows: 40 },
       last_completed_pointer_pass: { eligible_rows: 1 },
+      orphan_pass_progress: { cursor_after_name: 'b/o3.json.gz', objects: 3 },
       orphan_scan: { pages: 2, objects: 3, bytes: 35, orphans: 2, orphan_bytes: 15, enqueued: 0 },
       last_completed_orphan_pass: { orphans: 3 },
       orphan_gc_removed: 0,
@@ -106,6 +148,23 @@ describe('runRawRetention', () => {
     expect(mockRemove).not.toHaveBeenCalled()
     expect(mockCleanup).not.toHaveBeenCalled()
     expect(mockQuery).toHaveBeenCalledWith("SET statement_timeout = '60s'")
+  })
+
+  it('never calls the whole-table census function or aggregates arena.raw_objects', async () => {
+    fakeDb({})
+    await runRawRetention({ env: {} })
+    const sqls = mockQuery.mock.calls.map(([sql]) => String(sql))
+    expect(sqls.some((sql) => sql.includes('raw_retention_census'))).toBe(false)
+    expect(sqls.some((sql) => /FROM\s+arena\.raw_objects/i.test(sql))).toBe(false)
+    expect(sqls.some((sql) => sql.includes('pg_class') && sql.includes('reltuples'))).toBe(true)
+  })
+
+  it('reports a never-analyzed pointer table as an unknown estimate, not a negative count', async () => {
+    fakeDb({ estimate: { rows: -1, bytes: 8192 } })
+    const report = await runRawRetention({ env: {} })
+    expect(report).toMatchObject({
+      census: { estimated: true, pointer_rows_estimate: null, pointer_relation_bytes: 8192 },
+    })
   })
 
   it('stays count-only when the env key is on but the database switch is off', async () => {
