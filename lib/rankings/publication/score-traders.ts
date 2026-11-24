@@ -136,6 +136,20 @@ export function isIdleWindowRow(row: { roi: number; pnl: number | null }): boole
   return row.pnl !== null && Math.round(row.roi * 1e4) === 0 && Math.round(row.pnl * 1e2) === 0
 }
 
+/**
+ * Sign mismatch: ROI and PnL have opposite signs at the stored precision (one
+ * positive, one negative). Counted per source in the publication log and
+ * nothing else: the row is ranked and scored as it is. Rows the outlier rule
+ * already excludes for a LARGE opposite-sign pair (markOutliers) never reach
+ * the cohort and are not counted here.
+ */
+export function hasSignMismatch(row: { roi: number; pnl: number | null }): boolean {
+  if (row.pnl === null) return false
+  const roi = Math.round(row.roi * 1e4)
+  const pnl = Math.round(row.pnl * 1e2)
+  return (roi > 0 && pnl < 0) || (roi < 0 && pnl > 0)
+}
+
 const IDLE_WINDOW_SCORE_FACTORS: RankScoreFactors = Object.freeze({
   roi: 0,
   pnl: 0,
@@ -436,6 +450,24 @@ export async function scoreTraders(
     logger.info(
       `[${season}] Idle-window rows (ROI 0 and PnL 0, not scored, score ${MIN_RANKED_ARENA_SCORE}): ${idleRows.length} of ${scoredFiltered.length}`
     )
+  }
+  if (rowEligibility === 'roi_pnl') {
+    // Counted for the record only; ranking and scoring are unchanged.
+    const signMismatchBySource: Record<string, number> = {}
+    let signMismatch = 0
+    for (const t of scoredFiltered) {
+      if (!hasSignMismatch(t)) continue
+      signMismatch += 1
+      signMismatchBySource[t.source] = (signMismatchBySource[t.source] ?? 0) + 1
+    }
+    if (signMismatch > 0) {
+      const bySource = Object.fromEntries(
+        Object.entries(signMismatchBySource).sort(([left], [right]) => (left < right ? -1 : 1))
+      )
+      logger.warn(
+        `[${season}] sign_mismatch (ROI and PnL have opposite signs; counted only, rows ranked unchanged): ${signMismatch} ${JSON.stringify(bySource)}`
+      )
+    }
   }
 
   const publishedCohort = scoredFiltered.filter(
