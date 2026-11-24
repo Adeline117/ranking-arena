@@ -6,15 +6,20 @@ const mockRelease = jest.fn()
 const mockCleanup = jest.fn()
 const mockRemove = jest.fn()
 
+const mockConnect = jest.fn(async () => ({ query: mockQuery, release: mockRelease }))
 jest.mock('@/lib/ingest/db', () => ({
-  ingestClientConnect: jest.fn(async () => ({ query: mockQuery, release: mockRelease })),
+  ingestClientConnect: () => mockConnect(),
 }))
 jest.mock('@/lib/ingest/raw', () => ({
   cleanupRawObjects: (...args: unknown[]) => mockCleanup(...args),
   removeRawStorageObjects: (...args: unknown[]) => mockRemove(...args),
 }))
 
-import { RAW_RETENTION_DELETE_ENV, runRawRetention } from '@/lib/ingest/raw-retention'
+import {
+  RAW_RETENTION_DELETE_ENV,
+  RAW_RETENTION_SWITCH_ENV,
+  runRawRetention,
+} from '@/lib/ingest/raw-retention'
 
 interface FakeDb {
   installed?: boolean
@@ -93,6 +98,7 @@ function fakeDb({
 }
 
 beforeEach(() => {
+  mockConnect.mockClear()
   mockQuery.mockReset()
   mockRelease.mockReset()
   mockCleanup.mockReset()
@@ -104,6 +110,28 @@ describe('runRawRetention', () => {
     fakeDb({ installed: false })
     await expect(runRawRetention({ env: {} })).resolves.toBe('not_installed')
     expect(mockRelease).toHaveBeenCalledWith(false)
+  })
+
+  it.each(['off', 'OFF', ' Off '])(
+    'INGEST_RAW_RETENTION=%s skips the step without connecting to the database',
+    async (value) => {
+      fakeDb({})
+      const log = jest.spyOn(console, 'warn').mockImplementation(() => {})
+      await expect(runRawRetention({ env: { [RAW_RETENTION_SWITCH_ENV]: value } })).resolves.toBe(
+        'disabled'
+      )
+      expect(mockConnect).not.toHaveBeenCalled()
+      expect(mockQuery).not.toHaveBeenCalled()
+      expect(log).toHaveBeenCalledWith('[raw-retention] skipped: INGEST_RAW_RETENTION=off')
+      log.mockRestore()
+    }
+  )
+
+  it.each([undefined, '', 'on', '0'])('INGEST_RAW_RETENTION=%s still runs', async (value) => {
+    fakeDb({})
+    const report = await runRawRetention({ env: { [RAW_RETENTION_SWITCH_ENV]: value } })
+    expect(report).toMatchObject({ mode: 'count' })
+    expect(mockConnect).toHaveBeenCalledTimes(1)
   })
 
   it('counts only by default: no enqueue, no Storage removal, no extra pointer GC', async () => {

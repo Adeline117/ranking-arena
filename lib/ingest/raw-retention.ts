@@ -11,6 +11,9 @@
  * statement_timeout. Storage objects are only removed through the Storage API
  * (supabase.storage.from(bucket).remove), never by deleting storage.objects rows.
  *
+ * INGEST_RAW_RETENTION=off (case-insensitive) skips the whole step before any
+ * database connection is taken; unset runs it.
+ *
  * Deletion needs BOTH keys:
  *   - worker env INGEST_RAW_RETENTION_DELETE=1, and
  *   - arena.raw_retention_settings.delete_enabled = true (owner-only).
@@ -25,6 +28,8 @@ import { ingestClientConnect } from './db'
 import { cleanupRawObjects, removeRawStorageObjects } from './raw'
 
 export const RAW_RETENTION_DELETE_ENV = 'INGEST_RAW_RETENTION_DELETE'
+/** Kill switch: `off` (any case) skips the whole step without a release. Unset = run. */
+export const RAW_RETENTION_SWITCH_ENV = 'INGEST_RAW_RETENTION'
 const ORPHAN_GC_ADVISORY_LOCK = "pg_catalog.hashtextextended('arena.raw_orphan_gc_queue', 0)"
 const ORPHAN_GC_BATCH = 500
 
@@ -231,7 +236,7 @@ async function drainOrphanQueue(
 
 export async function runRawRetention(
   options: RawRetentionOptions = {}
-): Promise<RawRetentionReport | 'not_installed'> {
+): Promise<RawRetentionReport | 'not_installed' | 'disabled'> {
   const retentionDays = options.retentionDays ?? 30
   const scanPageSize = options.scanPageSize ?? 50_000
   const maxScanPages = options.maxScanPages ?? 20
@@ -241,6 +246,11 @@ export async function runRawRetention(
   const deadline = now() + (options.deadlineMs ?? 20 * 60_000)
   const pastDeadline = () => now() >= deadline
   const env = options.env ?? process.env
+
+  if (env[RAW_RETENTION_SWITCH_ENV]?.trim().toLowerCase() === 'off') {
+    console.warn(`[raw-retention] skipped: ${RAW_RETENTION_SWITCH_ENV}=off`)
+    return 'disabled'
+  }
 
   const client = await ingestClientConnect()
   let destroyClient = false
