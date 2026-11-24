@@ -25,6 +25,7 @@ const ProUpsellModal = dynamic(
   { ssr: false }
 )
 const RankingFooter = dynamic(() => import('./RankingFooter'), { ssr: false })
+const IdleWindowTail = dynamic(() => import('./IdleWindowTail'), { ssr: false })
 
 interface RankingSectionProps {
   traders: Trader[]
@@ -118,6 +119,8 @@ export default function RankingSection({
     filteredTraders,
     searchMatchesElsewhere,
     handleFilterChange,
+    showIdle,
+    handleShowIdle,
     handleSortChange,
     handlePageChange,
     handleSearchChange,
@@ -269,6 +272,24 @@ export default function RankingSection({
         isStale={isStale}
         onResetFilters={handleResetFilters}
       />
+
+      {/* End of the list: the idle-window tail is hidden by default. Shown once
+          the reader has reached the last page of the board (or has expanded it),
+          and only for the plain board — a filtered or searched list is not the
+          place to offer rows the filter may not match. */}
+      {!loading &&
+        !error &&
+        !hasCohortFilters &&
+        !searchQuery &&
+        (showIdle || hasMore === false) && (
+          <IdleWindowTail
+            timeRange={activeTimeRange}
+            exchange={selectedExchange}
+            category={category}
+            expanded={showIdle}
+            onChange={handleShowIdle}
+          />
+        )}
 
       <ProUpsellModal
         open={proUpsellOpen}

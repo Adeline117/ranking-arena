@@ -41,6 +41,16 @@ function serverFilterQuery(config: FilterConfig, preset: PresetId | null): strin
   })
 }
 
+/**
+ * Idle-window rows (no ROI and no PnL in the period) are hidden by the API
+ * unless asked for. Kept apart from FilterConfig on purpose: it is not a saved
+ * or "active" filter, only whether the tail of the board is expanded.
+ */
+function withIdleRows(query: string | null, showIdle: boolean): string | null {
+  if (!showIdle) return query
+  return query ? `${query}&idle=1` : 'idle=1'
+}
+
 const URL_SORT_COLUMNS: readonly SortColumn[] = ['score', 'roi', 'pnl', 'winrate', 'mdd', 'sortino']
 const SORT_BY: Record<SortColumn, string> = {
   score: 'arena_score',
@@ -256,6 +266,7 @@ export function useRankingFilters({
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false)
   const [showMobileFilter, setShowMobileFilter] = useState(false)
   const [filterConfig, setFilterConfig] = useState<FilterConfig>({})
+  const [showIdle, setShowIdle] = useState(false)
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([])
   const [activePreset, setActivePreset] = useState<PresetId | null>(null)
   const [sortColumn, setSortColumn] = useState<SortColumn>('score')
@@ -378,6 +389,8 @@ export function useRankingFilters({
     const urlQ = searchParams.get('q')
     const urlPreset = searchParams.get('preset') as PresetId | null
     const urlEx = searchParams.get('ex')
+    const urlShowIdle = searchParams.get('idle') === '1'
+    if (urlShowIdle) setShowIdle(true)
     const urlCategory = categoryFromUrl(searchParams.get('category'))
     const legacyExchange = searchParams.get('exchange')
     const requestedSort = urlSortColumn(urlSortRaw)
@@ -459,7 +472,10 @@ export function useRankingFilters({
     // `?preset=` link and drop the legacy stored preference.
     const restoredPreset = urlPreset && isValidPresetId(urlPreset) ? urlPreset : null
     if (restoredPreset) setActivePreset(restoredPreset)
-    const initialFilters = serverFilterQuery(restoredConfig, restoredPreset)
+    const initialFilters = withIdleRows(
+      serverFilterQuery(restoredConfig, restoredPreset),
+      urlShowIdle
+    )
     try {
       localStorage.removeItem(LS_KEY_PRESET)
     } catch {
@@ -519,6 +535,7 @@ export function useRankingFilters({
     searchQuery,
     activePreset,
     selectedExchange,
+    showIdle,
   })
   useEffect(() => {
     stateRef.current = {
@@ -530,6 +547,7 @@ export function useRankingFilters({
       searchQuery,
       activePreset,
       selectedExchange,
+      showIdle,
     }
   })
 
@@ -545,6 +563,7 @@ export function useRankingFilters({
         q?: string
         preset?: string | null
         ex?: string | null
+        idle?: boolean
       } = {}
     ) => {
       if (syncTimeoutRef.current) {
@@ -573,6 +592,7 @@ export function useRankingFilters({
           'q',
           'preset',
           'ex',
+          'idle',
         ].forEach((k) => params.delete(k))
 
         if (config.roi_min != null) params.set('roi_min', String(config.roi_min))
@@ -607,6 +627,7 @@ export function useRankingFilters({
 
         const ex = overrides.ex !== undefined ? overrides.ex : s.selectedExchange
         if (ex) params.set('ex', ex)
+        if (overrides.idle ?? s.showIdle) params.set('idle', '1')
 
         const qs = params.toString()
         const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname
@@ -619,7 +640,11 @@ export function useRankingFilters({
   // Current filter params for a server request, read from the latest state so
   // a sort/page/category request never drops a just-changed filter.
   const currentFilterQuery = useCallback(
-    () => serverFilterQuery(stateRef.current.filterConfig, stateRef.current.activePreset),
+    () =>
+      withIdleRows(
+        serverFilterQuery(stateRef.current.filterConfig, stateRef.current.activePreset),
+        stateRef.current.showIdle
+      ),
     []
   )
 
@@ -639,6 +664,23 @@ export function useRankingFilters({
       }
     },
     [syncStateToUrl]
+  )
+
+  // Expand / collapse the idle-window tail. Like a filter change it restarts
+  // the board at page 1 of the newly selected cohort.
+  const handleShowIdle = useCallback(
+    (next: boolean) => {
+      setShowIdle(next)
+      stateRef.current = { ...stateRef.current, showIdle: next }
+      syncStateToUrl({ idle: next })
+      if (!fetchPage) return
+      void fetchPage(0, { filters: currentFilterQuery() }).then((succeeded) => {
+        if (!succeeded) return
+        setCurrentPage(1)
+        syncStateToUrl({ page: 1, idle: next })
+      })
+    },
+    [currentFilterQuery, fetchPage, syncStateToUrl]
   )
 
   const filterFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -1052,6 +1094,8 @@ export function useRankingFilters({
     showMobileFilter,
     setShowMobileFilter,
     filterConfig,
+    showIdle,
+    handleShowIdle,
     savedFilters,
     hasActiveFilters,
     hasCohortFilters,
