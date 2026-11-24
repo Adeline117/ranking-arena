@@ -11,8 +11,11 @@
  *   8. trust evidence retention (20261118135918): superseded/failed snapshot
  *      evidence counted per table; deleted only with BOTH
  *      INGEST_TRUST_EVIDENCE_RETENTION_DELETE=1 and the owner DB switch
- *   9. RAW retention backlog (20261118134316): census + orphan walk, count
- *      only unless INGEST_RAW_RETENTION_DELETE=1 AND the DB switch is on
+ *   9. RAW retention backlog (20261118134316): estimated census + bounded
+ *      pointer/orphan pages (5,000 rows, 15s per statement, 60s per run; a
+ *      page timeout ends the run, it is not a step failure), count only unless
+ *      INGEST_RAW_RETENTION_DELETE=1 AND the DB switch is on;
+ *      INGEST_RAW_RETENTION=off skips the step
  * Runs every 6h; each step is independent — one failure doesn't block the
  * rest, and failures land in the daily digest. A partitions failure also
  * pages: without the month's child partition every write to that table fails
