@@ -16,7 +16,11 @@ jest.mock('@/lib/ingest/raw', () => ({
 }))
 
 import {
+  RAW_RETENTION_DEADLINE_MS,
   RAW_RETENTION_DELETE_ENV,
+  RAW_RETENTION_MAX_SCAN_PAGES,
+  RAW_RETENTION_SCAN_PAGE_BOUNDS,
+  RAW_RETENTION_SCAN_PAGE_SIZE,
   RAW_RETENTION_SWITCH_ENV,
   runRawRetention,
 } from '@/lib/ingest/raw-retention'
@@ -27,6 +31,8 @@ interface FakeDb {
   pages?: Array<Record<string, unknown>>
   claims?: string[][]
   estimate?: { rows: number | null; bytes: number | null }
+  pointerPage?: Record<string, unknown>
+  endlessOrphanPages?: boolean
 }
 
 function fakeDb({
@@ -35,6 +41,16 @@ function fakeDb({
   pages = [],
   claims = [],
   estimate = { rows: 5_560_000, bytes: 2_800_000_000 },
+  pointerPage = {
+    page_rows: 6,
+    page_expired_rows: 4,
+    page_snapshot_pinned_rows: 1,
+    page_trust_pinned_rows: 2,
+    page_eligible_rows: 1,
+    page_eligible_bytes: 400,
+    pass_complete: true,
+  },
+  endlessOrphanPages = false,
 }: FakeDb) {
   const scanModes: boolean[] = []
   mockQuery.mockImplementation(async (sql: string, params?: unknown[]) => {
@@ -56,25 +72,14 @@ function fakeDb({
       }
     }
     if (sql.includes('scan_raw_pointer_retention')) {
-      return {
-        rows: [
-          {
-            result: {
-              page_rows: 6,
-              page_expired_rows: 4,
-              page_snapshot_pinned_rows: 1,
-              page_trust_pinned_rows: 2,
-              page_eligible_rows: 1,
-              page_eligible_bytes: 400,
-              pass_complete: true,
-            },
-          },
-        ],
-      }
+      return { rows: [{ result: pointerPage }] }
     }
     if (sql.includes('scan_raw_storage_orphans')) {
       scanModes.push(params?.[2] as boolean)
-      return { rows: [{ result: pages.shift() ?? { page_objects: 0, pass_complete: true } }] }
+      const fallback = endlessOrphanPages
+        ? { page_objects: 5000, pass_complete: false }
+        : { page_objects: 0, pass_complete: true }
+      return { rows: [{ result: pages.shift() ?? fallback }] }
     }
     if (sql.includes('pg_try_advisory_lock')) return { rows: [{ acquired: true }] }
     if (sql.includes('claim_raw_orphan_gc_batch')) {
@@ -175,7 +180,6 @@ describe('runRawRetention', () => {
     expect(scanModes).toEqual([false, false])
     expect(mockRemove).not.toHaveBeenCalled()
     expect(mockCleanup).not.toHaveBeenCalled()
-    expect(mockQuery).toHaveBeenCalledWith("SET statement_timeout = '60s'")
   })
 
   it('never calls the whole-table census function or aggregates arena.raw_objects', async () => {
@@ -192,6 +196,68 @@ describe('runRawRetention', () => {
     const report = await runRawRetention({ env: {} })
     expect(report).toMatchObject({
       census: { estimated: true, pointer_rows_estimate: null, pointer_relation_bytes: 8192 },
+    })
+  })
+
+  it('bounds every statement to 15s before running anything else', async () => {
+    fakeDb({})
+    await runRawRetention({ env: {} })
+    const sqls = mockQuery.mock.calls.map(([sql]) => String(sql))
+    expect(sqls[0]).toBe("SET statement_timeout = '15s'")
+    expect(sqls.filter((sql) => sql.startsWith('SET statement_timeout'))).toHaveLength(1)
+    expect(sqls[sqls.length - 1]).toBe('RESET statement_timeout')
+  })
+
+  it('scans in pages of 5,000 by default, for both walks', async () => {
+    fakeDb({})
+    await runRawRetention({ env: {} })
+    const pageSizes = mockQuery.mock.calls
+      .filter(([sql]) =>
+        /SELECT arena\.scan_raw_(pointer_retention|storage_orphans)/.test(String(sql))
+      )
+      .map(([, params]) => (params as unknown[])[0])
+    expect(pageSizes).toEqual([5000, 5000])
+    expect(RAW_RETENTION_SCAN_PAGE_SIZE).toBeGreaterThanOrEqual(RAW_RETENTION_SCAN_PAGE_BOUNDS.min)
+    expect(RAW_RETENTION_DEADLINE_MS).toBe(60_000)
+  })
+
+  it('never asks for a page below the database minimum', async () => {
+    fakeDb({})
+    await runRawRetention({ env: {}, scanPageSize: 0 })
+    const pageSizes = mockQuery.mock.calls
+      .filter(([sql]) =>
+        /SELECT arena\.scan_raw_(pointer_retention|storage_orphans)/.test(String(sql))
+      )
+      .map(([, params]) => (params as unknown[])[0])
+    expect(pageSizes).toEqual([1, 1])
+  })
+
+  it('stops paging when the time budget is spent', async () => {
+    // Never-ending passes: every page is full. Each page costs 10s of fake time.
+    let clock = 0
+    fakeDb({ pointerPage: { page_rows: 5000, pass_complete: false }, endlessOrphanPages: true })
+    mockQuery.mockImplementation(
+      ((inner) => async (sql: string, params?: unknown[]) => {
+        if (/SELECT arena\.scan_raw_(pointer_retention|storage_orphans)/.test(sql)) clock += 10_000
+        return inner(sql, params)
+      })(mockQuery.getMockImplementation() as (sql: string, params?: unknown[]) => Promise<unknown>)
+    )
+    const report = await runRawRetention({ env: {}, now: () => clock })
+    // 60s budget: the pointer walk gets the first 30s (3 pages), the orphan walk the rest (3 pages).
+    expect(report).toMatchObject({
+      pointer_scan: { pages: 3, rows: 15_000, pass_complete: false },
+      orphan_scan: { pages: 3, pass_complete: false },
+      stopped_by_deadline: true,
+    })
+  })
+
+  it('caps pages per walk even when the clock never moves', async () => {
+    fakeDb({ pointerPage: { page_rows: 5000, pass_complete: false }, endlessOrphanPages: true })
+    const report = await runRawRetention({ env: {}, now: () => 0 })
+    expect(report).toMatchObject({
+      pointer_scan: { pages: RAW_RETENTION_MAX_SCAN_PAGES },
+      orphan_scan: { pages: RAW_RETENTION_MAX_SCAN_PAGES },
+      stopped_by_deadline: false,
     })
   })
 

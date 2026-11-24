@@ -7,8 +7,8 @@
  * walks bounded id pages of arena.raw_objects (expired / pinned / eligible) and
  * bounded name pages of the raw-snapshots bucket looking for objects that have
  * no arena.raw_objects pointer (they can never enter arena.raw_object_gc_queue).
- * No statement joins the two large tables wholesale; each runs under a 60s
- * statement_timeout. Storage objects are only removed through the Storage API
+ * No statement joins the two large tables wholesale; each runs under a 15s
+ * statement_timeout, in pages of 5,000, inside a 60s budget per run. Storage objects are only removed through the Storage API
  * (supabase.storage.from(bucket).remove), never by deleting storage.objects rows.
  *
  * INGEST_RAW_RETENTION=off (case-insensitive) skips the whole step before any
@@ -19,7 +19,7 @@
  *   - arena.raw_retention_settings.delete_enabled = true (owner-only).
  * With both on, the run additionally queues old orphans, drains the orphan
  * queue through the Storage API, and runs extra pointer GC batches so the
- * backlog can shrink faster than 500 objects per 6h. Objects are only ever
+ * backlog can shrink faster than 500 objects per 6h — inside the same 60s budget. Objects are only ever
  * removed from a durable queue row; nothing here decides garbage on its own.
  */
 
@@ -30,6 +30,17 @@ import { cleanupRawObjects, removeRawStorageObjects } from './raw'
 export const RAW_RETENTION_DELETE_ENV = 'INGEST_RAW_RETENTION_DELETE'
 /** Kill switch: `off` (any case) skips the whole step without a release. Unset = run. */
 export const RAW_RETENTION_SWITCH_ENV = 'INGEST_RAW_RETENTION'
+/**
+ * Per-run load bounds. arena.scan_raw_pointer_retention and
+ * arena.scan_raw_storage_orphans accept pages of 1..200000 rows and any
+ * non-zero statement_timeout (they only refuse 0).
+ */
+export const RAW_RETENTION_SCAN_PAGE_SIZE = 5_000
+export const RAW_RETENTION_SCAN_PAGE_BOUNDS = { min: 1, max: 200_000 } as const
+/** Backstop per scan; the time budget is expected to end a run first. */
+export const RAW_RETENTION_MAX_SCAN_PAGES = 40
+export const RAW_RETENTION_DEADLINE_MS = 60_000
+export const RAW_RETENTION_STATEMENT_TIMEOUT = '15s'
 const ORPHAN_GC_ADVISORY_LOCK = "pg_catalog.hashtextextended('arena.raw_orphan_gc_queue', 0)"
 const ORPHAN_GC_BATCH = 500
 
@@ -238,13 +249,24 @@ export async function runRawRetention(
   options: RawRetentionOptions = {}
 ): Promise<RawRetentionReport | 'not_installed' | 'disabled'> {
   const retentionDays = options.retentionDays ?? 30
-  const scanPageSize = options.scanPageSize ?? 50_000
-  const maxScanPages = options.maxScanPages ?? 20
+  const scanPageSize = Math.min(
+    RAW_RETENTION_SCAN_PAGE_BOUNDS.max,
+    Math.max(
+      RAW_RETENTION_SCAN_PAGE_BOUNDS.min,
+      Math.trunc(options.scanPageSize ?? RAW_RETENTION_SCAN_PAGE_SIZE)
+    )
+  )
+  const maxScanPages = options.maxScanPages ?? RAW_RETENTION_MAX_SCAN_PAGES
   const maxPointerBatches = options.maxPointerBatches ?? 40
   const maxOrphanBatches = options.maxOrphanBatches ?? 40
   const now = options.now ?? Date.now
-  const deadline = now() + (options.deadlineMs ?? 20 * 60_000)
+  const startedAt = now()
+  const deadlineMs = options.deadlineMs ?? RAW_RETENTION_DEADLINE_MS
+  const deadline = startedAt + deadlineMs
   const pastDeadline = () => now() >= deadline
+  // The pointer scan may use at most half the budget so the orphan walk (and,
+  // in delete mode, the drains) are never starved by it.
+  const pointerDeadline = startedAt + deadlineMs / 2
   const env = options.env ?? process.env
 
   if (env[RAW_RETENTION_SWITCH_ENV]?.trim().toLowerCase() === 'off') {
@@ -256,16 +278,17 @@ export async function runRawRetention(
   let destroyClient = false
   let report: RawRetentionReport
   try {
+    // First statement on the connection: every statement of the run is one
+    // bounded page, a catalog lookup or a small-queue count, and the database
+    // functions refuse to run without this bound.
+    await client.query(`SET statement_timeout = '${RAW_RETENTION_STATEMENT_TIMEOUT}'`)
+
     const { rows: installed } = await client.query<{ present: boolean }>(
       `SELECT pg_catalog.to_regprocedure(
                 'arena.scan_raw_storage_orphans(integer,integer,boolean)'
               ) IS NOT NULL AS present`
     )
     if (installed[0]?.present !== true) return 'not_installed'
-
-    // Every statement below is one bounded page or a single-table aggregate;
-    // the database functions refuse to run without this bound.
-    await client.query(`SET statement_timeout = '60s'`)
 
     const { rows: settingsRows } = await client.query<{ delete_enabled: boolean }>(
       `SELECT delete_enabled FROM arena.raw_retention_settings WHERE singleton`
@@ -287,7 +310,7 @@ export async function runRawRetention(
       eligible_bytes: 0,
       pass_complete: false,
     }
-    while (pointer.pages < maxScanPages && !pointer.pass_complete && !pastDeadline()) {
+    while (pointer.pages < maxScanPages && !pointer.pass_complete && now() < pointerDeadline) {
       const { rows } = await client.query<{ result: PointerPageResult }>(
         `SELECT arena.scan_raw_pointer_retention($1::integer, $2::integer) AS result`,
         [scanPageSize, retentionDays]
