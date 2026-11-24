@@ -11,6 +11,10 @@
  * statement_timeout, in pages of 5,000, inside a 60s budget per run. Storage objects are only removed through the Storage API
  * (supabase.storage.from(bucket).remove), never by deleting storage.objects rows.
  *
+ * A scan page that times out (57014) or cannot take its lock (55P03) ends the
+ * run with stopped_on_timeout: true instead of failing the step; any other
+ * error still throws.
+ *
  * INGEST_RAW_RETENTION=off (case-insensitive) skips the whole step before any
  * database connection is taken; unset runs it.
  *
@@ -41,6 +45,13 @@ export const RAW_RETENTION_SCAN_PAGE_BOUNDS = { min: 1, max: 200_000 } as const
 export const RAW_RETENTION_MAX_SCAN_PAGES = 40
 export const RAW_RETENTION_DEADLINE_MS = 60_000
 export const RAW_RETENTION_STATEMENT_TIMEOUT = '15s'
+/**
+ * A scan page that hits the statement timeout (57014 query_canceled) or cannot
+ * take the settings row lock (55P03 lock_not_available) ends the run instead of
+ * failing the step. The page ran as one statement, so its cursor update rolled
+ * back with it and the next run resumes from the same place.
+ */
+const SCAN_STOP_SQLSTATES: ReadonlySet<string> = new Set(['57014', '55P03'])
 const ORPHAN_GC_ADVISORY_LOCK = "pg_catalog.hashtextextended('arena.raw_orphan_gc_queue', 0)"
 const ORPHAN_GC_BATCH = 500
 
@@ -92,6 +103,9 @@ export interface RawRetentionReport {
   orphan_gc_removed: number
   pointer_gc_removed: number
   stopped_by_deadline: boolean
+  /** A scan page timed out or could not take its lock; the cursor stayed put. */
+  stopped_on_timeout: boolean
+  stopped_on: { scan: 'pointer' | 'orphan'; sqlstate: string } | null
 }
 
 interface PointerPageResult {
@@ -176,6 +190,12 @@ export const RAW_PASS_PROGRESS_SQL = `SELECT last_completed_pointer_pass AS poin
 const asNumber = (value: unknown): number => {
   const parsed = typeof value === 'number' ? value : Number(value ?? 0)
   return Number.isFinite(parsed) ? parsed : 0
+}
+
+function scanStopSqlstate(error: unknown): string | null {
+  const code =
+    error !== null && typeof error === 'object' && 'code' in error ? String(error.code) : ''
+  return SCAN_STOP_SQLSTATES.has(code) ? code : null
 }
 
 async function readCheapCensus(
@@ -300,6 +320,7 @@ export async function runRawRetention(
 
     const census = await readCheapCensus(client, settingsRows[0]?.delete_enabled === true)
 
+    let stoppedOn: RawRetentionReport['stopped_on'] = null
     const pointer: RawPointerScanTally = {
       pages: 0,
       rows: 0,
@@ -311,11 +332,19 @@ export async function runRawRetention(
       pass_complete: false,
     }
     while (pointer.pages < maxScanPages && !pointer.pass_complete && now() < pointerDeadline) {
-      const { rows } = await client.query<{ result: PointerPageResult }>(
-        `SELECT arena.scan_raw_pointer_retention($1::integer, $2::integer) AS result`,
-        [scanPageSize, retentionDays]
-      )
-      const page = rows[0]?.result ?? {}
+      let page: PointerPageResult
+      try {
+        const { rows } = await client.query<{ result: PointerPageResult }>(
+          `SELECT arena.scan_raw_pointer_retention($1::integer, $2::integer) AS result`,
+          [scanPageSize, retentionDays]
+        )
+        page = rows[0]?.result ?? {}
+      } catch (error) {
+        const sqlstate = scanStopSqlstate(error)
+        if (sqlstate === null) throw error
+        stoppedOn = { scan: 'pointer', sqlstate }
+        break
+      }
       pointer.pages += 1
       pointer.rows += asNumber(page.page_rows)
       pointer.expired_rows += asNumber(page.page_expired_rows)
@@ -336,12 +365,25 @@ export async function runRawRetention(
       pass_complete: false,
       skipped: null,
     }
-    while (scan.pages < maxScanPages && !scan.pass_complete && !pastDeadline()) {
-      const { rows } = await client.query<{ result: ScanPageResult }>(
-        `SELECT arena.scan_raw_storage_orphans($1::integer, $2::integer, $3::boolean) AS result`,
-        [scanPageSize, retentionDays, mode === 'delete']
-      )
-      const page = rows[0]?.result ?? {}
+    while (
+      stoppedOn === null &&
+      scan.pages < maxScanPages &&
+      !scan.pass_complete &&
+      !pastDeadline()
+    ) {
+      let page: ScanPageResult
+      try {
+        const { rows } = await client.query<{ result: ScanPageResult }>(
+          `SELECT arena.scan_raw_storage_orphans($1::integer, $2::integer, $3::boolean) AS result`,
+          [scanPageSize, retentionDays, mode === 'delete']
+        )
+        page = rows[0]?.result ?? {}
+      } catch (error) {
+        const sqlstate = scanStopSqlstate(error)
+        if (sqlstate === null) throw error
+        stoppedOn = { scan: 'orphan', sqlstate }
+        break
+      }
       if (page.skipped) {
         scan.skipped = page.skipped
         break
@@ -355,8 +397,17 @@ export async function runRawRetention(
       scan.pass_complete = page.pass_complete === true
     }
 
+    if (stoppedOn !== null) {
+      console.warn(
+        `[raw-retention] ${stoppedOn.scan} scan page stopped on SQLSTATE ${stoppedOn.sqlstate}; ` +
+          'run ended, cursor unchanged, next run resumes'
+      )
+    }
+
     const orphanRemoved =
-      mode === 'delete' ? await drainOrphanQueue(client, maxOrphanBatches, pastDeadline) : 0
+      mode === 'delete' && stoppedOn === null
+        ? await drainOrphanQueue(client, maxOrphanBatches, pastDeadline)
+        : 0
 
     const { rows: passRows } = await client.query<{
       pointer_pass: Record<string, unknown> | null
@@ -379,6 +430,8 @@ export async function runRawRetention(
       orphan_gc_removed: orphanRemoved,
       pointer_gc_removed: 0,
       stopped_by_deadline: false,
+      stopped_on_timeout: stoppedOn !== null,
+      stopped_on: stoppedOn,
     }
   } catch (error) {
     destroyClient = true
@@ -395,7 +448,7 @@ export async function runRawRetention(
   }
 
   // Extra pointer GC batches beyond the routine single batch: delete mode only.
-  if (report.mode === 'delete') {
+  if (report.mode === 'delete' && !report.stopped_on_timeout) {
     for (let batch = 0; batch < maxPointerBatches && !pastDeadline(); batch += 1) {
       const removed = await cleanupRawObjects(retentionDays)
       report.pointer_gc_removed += removed

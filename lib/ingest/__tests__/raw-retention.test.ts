@@ -261,6 +261,110 @@ describe('runRawRetention', () => {
     })
   })
 
+  describe('a scan page that times out', () => {
+    const pgError = (code: string, message: string) => Object.assign(new Error(message), { code })
+    const failScan = (
+      fn: 'scan_raw_pointer_retention' | 'scan_raw_storage_orphans',
+      err: Error
+    ) => {
+      const inner = mockQuery.getMockImplementation() as (
+        sql: string,
+        params?: unknown[]
+      ) => Promise<unknown>
+      let calls = 0
+      mockQuery.mockImplementation(async (sql: string, params?: unknown[]) => {
+        if (sql.includes(`SELECT arena.${fn}(`)) {
+          calls += 1
+          // Page 1 succeeds, page 2 fails.
+          if (calls === 2) throw err
+        }
+        return inner(sql, params)
+      })
+    }
+    const scanCalls = (fn: string) =>
+      mockQuery.mock.calls.filter(([sql]) => String(sql).includes(`SELECT arena.${fn}(`)).length
+
+    beforeEach(() => jest.spyOn(console, 'warn').mockImplementation(() => {}))
+    afterEach(() => jest.restoreAllMocks())
+
+    it.each([
+      ['57014', 'canceling statement due to statement timeout'],
+      ['55P03', 'canceling statement due to lock timeout'],
+    ])(
+      'pointer page SQLSTATE %s: returns a report, keeps the cursor, ends the run',
+      async (code, msg) => {
+        fakeDb({
+          deleteEnabled: true,
+          pointerPage: { page_rows: 5000, page_expired_rows: 9, pass_complete: false },
+        })
+        failScan('scan_raw_pointer_retention', pgError(code, msg))
+        const report = await runRawRetention({ env: { [RAW_RETENTION_DELETE_ENV]: '1' } })
+        expect(report).toMatchObject({
+          mode: 'delete',
+          stopped_on_timeout: true,
+          stopped_on: { scan: 'pointer', sqlstate: code },
+          // Only the page that committed is counted; the failed page is not.
+          pointer_scan: { pages: 1, rows: 5000, expired_rows: 9, pass_complete: false },
+          orphan_scan: { pages: 0 },
+          pointer_pass_progress: { cursor_after_id: 5000 },
+          orphan_gc_removed: 0,
+          pointer_gc_removed: 0,
+        })
+        // The failed page is not retried and nothing else walks or deletes this run.
+        expect(scanCalls('scan_raw_pointer_retention')).toBe(2)
+        expect(scanCalls('scan_raw_storage_orphans')).toBe(0)
+        expect(mockRemove).not.toHaveBeenCalled()
+        expect(mockCleanup).not.toHaveBeenCalled()
+        // The connection is healthy after a cancelled statement: reset and returned to the pool.
+        expect(mockRelease).toHaveBeenCalledTimes(1)
+        expect(mockRelease).toHaveBeenCalledWith(false)
+      }
+    )
+
+    it('orphan page timeout: returns a report with what the earlier pages counted', async () => {
+      fakeDb({ endlessOrphanPages: true })
+      failScan(
+        'scan_raw_storage_orphans',
+        pgError('57014', 'canceling statement due to statement timeout')
+      )
+      const report = await runRawRetention({ env: {} })
+      expect(report).toMatchObject({
+        stopped_on_timeout: true,
+        stopped_on: { scan: 'orphan', sqlstate: '57014' },
+        pointer_scan: { pages: 1, pass_complete: true },
+        orphan_scan: { pages: 1, objects: 5000, pass_complete: false },
+      })
+      expect(scanCalls('scan_raw_storage_orphans')).toBe(2)
+    })
+
+    it('any other page error still fails the step and discards the connection', async () => {
+      fakeDb({ pointerPage: { page_rows: 5000, pass_complete: false } })
+      failScan('scan_raw_pointer_retention', pgError('42501', 'permission denied'))
+      await expect(runRawRetention({ env: {} })).rejects.toThrow('permission denied')
+      expect(mockRelease).toHaveBeenCalledTimes(1)
+      expect(mockRelease).toHaveBeenCalledWith(true)
+    })
+
+    it('a timeout outside the paged scans is not swallowed', async () => {
+      fakeDb({})
+      const inner = mockQuery.getMockImplementation() as (sql: string) => Promise<unknown>
+      mockQuery.mockImplementation(async (sql: string) => {
+        if (sql.includes('AS gc_queue_rows')) throw pgError('57014', 'canceling statement')
+        return inner(sql)
+      })
+      await expect(runRawRetention({ env: {} })).rejects.toThrow('canceling statement')
+      expect(mockRelease).toHaveBeenCalledWith(true)
+    })
+  })
+
+  it('reports no timeout stop on a normal run', async () => {
+    fakeDb({})
+    await expect(runRawRetention({ env: {} })).resolves.toMatchObject({
+      stopped_on_timeout: false,
+      stopped_on: null,
+    })
+  })
+
   it('stays count-only when the env key is on but the database switch is off', async () => {
     fakeDb({ deleteEnabled: false })
     const report = await runRawRetention({ env: { [RAW_RETENTION_DELETE_ENV]: '1' } })
