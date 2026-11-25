@@ -287,8 +287,8 @@ export function buildRegistrySourceFreshnessStatuses(
     ) {
       continue
     }
-    const timestamp = validTimestamp(row.source_as_of, nowMs)
-    if (timestamp !== null && nowMs - timestamp > RANKING_SOURCE_STALE_MS) {
+    const observed = timestampState(row.source_as_of, nowMs)
+    if (observed.state === 'valid' && nowMs - observed.timestamp > RANKING_SOURCE_STALE_MS) {
       staleSealedWindows.add(sourceWindowKey(row.season_id, row.source))
     }
   }
