@@ -170,6 +170,9 @@ async function fetchExchangeData(
 ): Promise<{ traders: TopTrader[]; total: number | null }> {
   const publicCohort = getSupabaseAdmin()
 
+  // The card's total and its top traders are traders with performance in the
+  // period: idle-window rows (no ROI and no PnL) are in neither query, as on
+  // the exchange page this image belongs to.
   const [topResult, countResult] = await Promise.all([
     publicCohort
       .from('public_ranked_leaderboard')
@@ -177,6 +180,7 @@ async function fetchExchangeData(
       .eq('source', exchange)
       .eq('season_id', '90D')
       .not('rank', 'is', null)
+      .eq('idle_window', false)
       .order('rank', { ascending: true, nullsFirst: false })
       .order('arena_score', { ascending: false, nullsFirst: false })
       .limit(OG_TRADER_CARD_LIMIT),
@@ -185,7 +189,8 @@ async function fetchExchangeData(
       .select('*', { count: 'exact', head: true })
       .eq('source', exchange)
       .eq('season_id', '90D')
-      .not('rank', 'is', null),
+      .not('rank', 'is', null)
+      .eq('idle_window', false),
   ])
 
   if (topResult.error) {
