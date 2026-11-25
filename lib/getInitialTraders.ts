@@ -647,8 +647,18 @@ async function fetchInitialLeaderboardPage(
   const traders = result.traders
     .map(mapUnifiedToInitial)
     .filter((trader): trader is InitialTrader => trader !== null)
-  if (traders.length !== result.traders.length) {
-    throw new Error('public cohort response failed local proof revalidation')
+  // A row that fails the local proof is DROPPED, not allowed to take the page
+  // down with it. Throwing here turned one unexpected row (an unknown
+  // completeness value, an estimated metric, …) into an empty first paint for
+  // every reader of that page. The drop is logged with a count so it is visible.
+  const dropped = result.traders.length - traders.length
+  if (dropped > 0) {
+    logger.warn('[getInitialTraders] dropped rows that failed local proof revalidation', {
+      period: timeRange,
+      page,
+      dropped,
+      kept: traders.length,
+    })
   }
   // The witness is kept only as cache proof; an unmappable witness simply
   // means a later cache hit cannot re-prove `hasMore` (fails closed).

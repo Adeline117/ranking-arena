@@ -110,10 +110,17 @@ async function fetchSimilarTradersUncached(
       ? sanitized.traders.filter((row) => hasPositiveScopedRank(row, platform))
       : ([] as Record<string, unknown>[])
 
-    // Filtering an invalid row after finite recommendation bounds would change
-    // the visible cohort. The sealed view should make this impossible; fail
-    // closed rather than show a shifted selection.
-    if (safeRows.length !== data.length) return []
+    // A row that fails the public-ranking proof is dropped; the rest of the
+    // list is still shown. Returning nothing here emptied the whole module for
+    // every trader whose neighbours included one unexpected row.
+    const dropped = data.length - safeRows.length
+    if (dropped > 0) {
+      logger.warn('[similar-traders] dropped rows that failed public-ranking proof', {
+        platform,
+        dropped,
+        kept: safeRows.length,
+      })
+    }
 
     // Dedupe and map
     const seen = new Set<string>()
