@@ -24,7 +24,17 @@ import { WORKER_OWNER_LEASE_TTL_MS } from './worker-instance-ownership'
 
 export const SOURCE_JOB_EXECUTION_CONTRACT = 'arena.ingest.tier-a-execution@1' as const
 export const SOURCE_JOB_EXECUTION_HEARTBEAT_MS = 30_000
-export const SOURCE_JOB_EXECUTION_DB_LEASE_SECONDS = 90
+/**
+ * The heartbeat and every claimed write go through the same serial fenced
+ * queue, and the database refuses a claimed write once the lease has expired.
+ * A write may start just before a heartbeat tick and run for the whole fenced
+ * write budget, so the lease must outlast one heartbeat interval plus that
+ * budget (WORKER_DB_FENCE_WRITE_TRANSACTION_CAP_MS, 120 s). At 90 s any write
+ * longer than about 60 s lost its lease mid-transaction and ended as
+ * "assert failed (region_lost)" (issue #542). 180 s leaves 30 s of margin; the
+ * database accepts 15-300 s.
+ */
+export const SOURCE_JOB_EXECUTION_DB_LEASE_SECONDS = 180
 export const SOURCE_JOB_EXECUTION_BULL_LOCK_MS = 180_000
 
 const MAX_SAFE_DATABASE_INTEGER = 9_007_199_254_740_000

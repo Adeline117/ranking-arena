@@ -28,7 +28,11 @@ import {
   type SourceJobLeaseProof,
 } from '../source-job-lease'
 import type { SourceJobRunProvenance } from '../source-job-routing'
-import type { WorkerDbFenceProof, WorkerDbFencedWrite } from '../worker-db-fence'
+import {
+  WORKER_DB_FENCE_WRITE_TRANSACTION_CAP_MS,
+  type WorkerDbFenceProof,
+  type WorkerDbFencedWrite,
+} from '../worker-db-fence'
 
 const SOURCE_ID = 42
 const CLAIM_ID = '11111111-1111-4111-8111-111111111111'
@@ -40,9 +44,9 @@ const SOURCE_DIGEST = 'b'.repeat(64)
 const RELEASE_ID = 'c'.repeat(64)
 const GIT_SHA = 'd'.repeat(40)
 const CLAIMED_AT = '2026-07-28T12:00:00.000Z'
-const CLAIM_LEASE_EXPIRES_AT = '2026-07-28T12:01:30.000Z'
+const CLAIM_LEASE_EXPIRES_AT = '2026-07-28T12:03:00.000Z'
 const HEARTBEAT_AT = '2026-07-28T12:00:30.000Z'
-const HEARTBEAT_LEASE_EXPIRES_AT = '2026-07-28T12:02:00.000Z'
+const HEARTBEAT_LEASE_EXPIRES_AT = '2026-07-28T12:03:30.000Z'
 const ASSERTED_AT = '2026-07-28T12:00:45.000Z'
 const CLOSED_AT = '2026-07-28T12:02:30.000Z'
 
@@ -349,6 +353,19 @@ async function claim(h: ReturnType<typeof harness>) {
 }
 
 describe('Tier-A source job execution authority', () => {
+  it('keeps the database lease alive across a heartbeat queued behind a full-length write', () => {
+    // The heartbeat waits in the same serial queue as the write, so the worst
+    // case is one heartbeat interval plus the whole fenced write budget.
+    const worstCaseGapMs =
+      SOURCE_JOB_EXECUTION_HEARTBEAT_MS + WORKER_DB_FENCE_WRITE_TRANSACTION_CAP_MS
+    expect(SOURCE_JOB_EXECUTION_DB_LEASE_SECONDS * 1_000).toBeGreaterThanOrEqual(
+      worstCaseGapMs + 30_000
+    )
+    // Bounds of arena.claim_tier_a_execution.
+    expect(SOURCE_JOB_EXECUTION_DB_LEASE_SECONDS).toBeGreaterThanOrEqual(15)
+    expect(SOURCE_JOB_EXECUTION_DB_LEASE_SECONDS).toBeLessThanOrEqual(300)
+  })
+
   it('claims in Bull → source → region order with exact SQL, params, and frozen proof', async () => {
     const h = harness()
     const authority = await claim(h)
