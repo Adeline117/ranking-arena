@@ -98,6 +98,7 @@ export default function RankingFooter({
             <circle cx="12" cy="12" r="10" />
             <path d="M12 6v6l4 2" />
           </svg>
+          <span>{t('publicLeaderboardData')} ·</span>
           {sourceClock && (
             <time dateTime={lastUpdated} suppressHydrationWarning>
               {t('rankingControlsDataAsOf')} {sourceClock}

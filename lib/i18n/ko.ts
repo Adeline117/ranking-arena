@@ -2189,6 +2189,8 @@ const ko = {
   idleWindowTailHidden: '이 기간 거래가 없는 계정 {count}개 더 있음',
   idleWindowShow: '펼치기',
   idleWindowHide: '이 기간 거래 없는 계정 숨기기',
+  publicLeaderboardData: '공개 랭킹 데이터',
+  rowDataAsOf: '{time} 기준',
   noTradingThisPeriod: '이 기간 거래 없음',
   holderBadge: '홀더',
   holderTooltip: '이 기간 내 청산 거래 없음 — 수익은 보유 포지션에서 발생',

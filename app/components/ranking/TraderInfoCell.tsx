@@ -11,6 +11,7 @@ import { CopyButton } from './HeroSection'
 import { getScoreColor } from '@/lib/utils/score-colors'
 import type { Trader } from './RankingTable'
 import type { SourceInfo } from './utils'
+import { describeRowProvenance } from './row-provenance'
 import { getStyleInfo } from '@/lib/utils/trading-style'
 import AntiGamingBadge from './AntiGamingBadge'
 import VerifiedDataBadge from './VerifiedDataBadge'
@@ -37,6 +38,12 @@ function tradingStyleKey(style: string): TranslationKey {
     .join('')}` as TranslationKey
 }
 
+const ROW_DATA_NOTE_STYLE: React.CSSProperties = {
+  fontSize: tokens.typography.fontSize.xs,
+  color: tokens.colors.text.tertiary,
+  whiteSpace: 'nowrap',
+}
+
 export interface TraderInfoCellProps {
   trader: Trader
   rank: number
@@ -60,8 +67,14 @@ export const TraderInfoCell = memo(function TraderInfoCell({
   traderHandle,
   sourceInfo,
   searchQuery,
+  language,
   tradingStyleInfo,
 }: TraderInfoCellProps) {
+  const provenance = describeRowProvenance(
+    { source: trader.source, asOf: trader.source_as_of },
+    i18nT as (key: string) => string,
+    language
+  )
   return (
     <Box style={TRADER_INFO_STYLE}>
       {/* Fixed size for ALL ranks: realtime reorders across the rank-3 boundary must
@@ -92,27 +105,30 @@ export const TraderInfoCell = memo(function TraderInfoCell({
           </Text>
           {isAddress && <CopyButton text={traderHandle} />}
           {/* Mobile Score Badge */}
-          {trader.arena_score != null && Number.isFinite(Number(trader.arena_score)) && (
-            <span
-              className="mobile-score-badge"
-              style={MOBILE_BADGE_STYLE}
-              aria-label={i18nT('arenaScoreAria').replace(
-                '{score}',
-                Number(trader.arena_score).toFixed(0)
-              )}
-            >
+          {/* An idle-window row was not scored: no badge (its 0.01 would print "0"). */}
+          {trader.idle_window !== true &&
+            trader.arena_score != null &&
+            Number.isFinite(Number(trader.arena_score)) && (
               <span
-                aria-hidden="true"
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: '50%',
-                  background: getScoreColor(trader.arena_score),
-                }}
-              />
-              <span style={MOBILE_BADGE_TEXT_STYLE}>{Number(trader.arena_score).toFixed(0)}</span>
-            </span>
-          )}
+                className="mobile-score-badge"
+                style={MOBILE_BADGE_STYLE}
+                aria-label={i18nT('arenaScoreAria').replace(
+                  '{score}',
+                  Number(trader.arena_score).toFixed(0)
+                )}
+              >
+                <span
+                  aria-hidden="true"
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: '50%',
+                    background: getScoreColor(trader.arena_score),
+                  }}
+                />
+                <span style={MOBILE_BADGE_TEXT_STYLE}>{Number(trader.arena_score).toFixed(0)}</span>
+              </span>
+            )}
         </Box>
         <Box style={TAGS_ROW_STYLE}>
           <Box
@@ -136,6 +152,19 @@ export const TraderInfoCell = memo(function TraderInfoCell({
               {sourceInfo.type}
             </Text>
           </Box>
+          {/* Data note (L1): public leaderboard data, its exchange and capture time. */}
+          {provenance && (
+            <time
+              className="row-data-as-of"
+              dateTime={provenance.iso}
+              title={provenance.full}
+              aria-label={provenance.full}
+              suppressHydrationWarning
+              style={ROW_DATA_NOTE_STYLE}
+            >
+              {provenance.short}
+            </time>
+          )}
           {/* Verified Badge */}
           {trader.is_verified && (
             <span

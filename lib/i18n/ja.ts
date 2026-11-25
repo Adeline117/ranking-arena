@@ -2095,6 +2095,8 @@ const ja = {
   idleWindowTailHidden: 'この期間に取引のないアカウントがあと {count} 件',
   idleWindowShow: '表示',
   idleWindowHide: 'この期間に取引のないアカウントを隠す',
+  publicLeaderboardData: '公開ランキングデータ',
+  rowDataAsOf: '{time} 時点',
   noTradingThisPeriod: 'この期間は取引なし',
   holderBadge: 'ホルダー',
   holderTooltip: 'この期間に決済取引なし — 利益は保有ポジションによるものです',

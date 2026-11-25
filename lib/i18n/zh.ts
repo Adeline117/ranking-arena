@@ -2271,6 +2271,8 @@ const zh = {
   idleWindowTailHidden: '另有 {count} 个本周期无交易的账户',
   idleWindowShow: '展开',
   idleWindowHide: '收起本周期无交易的账户',
+  publicLeaderboardData: '公开榜单数据',
+  rowDataAsOf: '截至 {time}',
   noTradingThisPeriod: '本周期无交易',
   holderBadge: '持有中',
   holderTooltip: '窗口内零平仓,收益来自持仓',

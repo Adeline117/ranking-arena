@@ -2278,6 +2278,8 @@ const en = {
   idleWindowTailHidden: '{count} more accounts with no trading this period',
   idleWindowShow: 'Show',
   idleWindowHide: 'Hide accounts with no trading this period',
+  publicLeaderboardData: 'Public leaderboard data',
+  rowDataAsOf: 'as of {time}',
   noTradingThisPeriod: 'No trading this period',
   holderBadge: 'Holder',
   holderTooltip: 'No closed trades in this window — gains come from held positions',

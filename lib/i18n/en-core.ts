@@ -460,6 +460,8 @@ const enCore = {
   idleWindowTailHidden: '{count} more accounts with no trading this period',
   idleWindowShow: 'Show',
   idleWindowHide: 'Hide accounts with no trading this period',
+  publicLeaderboardData: 'Public leaderboard data',
+  rowDataAsOf: 'as of {time}',
   noTradingThisPeriod: 'No trading this period',
   arenaScoreUnknownAria: 'Arena Score unknown',
   copyTraderIdAria: 'Copy trader ID',

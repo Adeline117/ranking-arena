@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import type { Trader } from '../ranking/RankingTableTypes'
 import type { TimeRange } from './hooks/useTraderData'
@@ -143,6 +143,20 @@ export default function RankingSection({
     fetchPage,
   })
 
+  // First-paint rows come from the server shell without a per-source capture
+  // time. Until the client list replaces them, they carry the board's own
+  // "data as of" — the OLDEST source watermark on the page, so it never claims
+  // a row is fresher than it is.
+  const rowsWithDataTime = useMemo(
+    () =>
+      lastUpdated
+        ? filteredTraders.map((trader) =>
+            trader.source_as_of ? trader : { ...trader, source_as_of: lastUpdated }
+          )
+        : filteredTraders,
+    [filteredTraders, lastUpdated]
+  )
+
   // Unified paywall: callback-style gates (locked tabs, export) open the
   // shared upsell modal instead of a dead-end toast.
   const [proUpsellOpen, setProUpsellOpen] = useState(false)
@@ -243,7 +257,7 @@ export default function RankingSection({
           previously duplicated here, producing two messages / two retry
           buttons and contradictory stale copy). */}
       <RankingTable
-        traders={filteredTraders}
+        traders={rowsWithDataTime}
         loading={loading || premiumLoading}
         isRefreshing={isRefreshing}
         loggedIn={isLoggedIn}

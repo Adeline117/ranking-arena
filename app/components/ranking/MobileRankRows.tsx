@@ -27,6 +27,7 @@ import { TraderAvatar, ScoreConfidenceIndicator, areTraderPropsEqual } from './s
 import { TraderRowSwipeActions } from './TraderRowSwipeActions'
 import { formatDisplayName } from './utils'
 import type { SourceInfo } from './utils'
+import { describeRowProvenance } from './row-provenance'
 import type { Trader } from './RankingTable'
 import { normalizeFiniteScore, type SortColumn, type SortDir } from './RankingTableTypes'
 import { getScoreColor } from '@/lib/utils/score-colors'
@@ -190,6 +191,7 @@ export const TraderMobileRow = memo(
     trader,
     rank,
     source,
+    language,
     searchQuery = '',
     parseSourceInfo,
   }: TraderMobileRowProps) {
@@ -205,6 +207,11 @@ export const TraderMobileRow = memo(
 
     // Idle-window rows were not scored: no score, and the label says why.
     const isIdleWindow = trader.idle_window === true
+    const provenance = describeRowProvenance(
+      { source: trader.source || source, asOf: trader.source_as_of },
+      t,
+      language
+    )
     const score = isIdleWindow ? null : normalizeFiniteScore(trader.arena_score)
     const roi = normalizeFiniteScore(trader.roi)
     const pnl = normalizeFiniteScore(trader.pnl)
@@ -281,6 +288,19 @@ export const TraderMobileRow = memo(
                     {' · '}
                     {t('noTradingThisPeriod')}
                   </span>
+                )}
+                {provenance && (
+                  <>
+                    {' · '}
+                    <time
+                      className="row-data-as-of"
+                      dateTime={provenance.iso}
+                      title={provenance.full}
+                      suppressHydrationWarning
+                    >
+                      {provenance.short}
+                    </time>
+                  </>
                 )}
                 {rankingPeriod === '90D' && isAllTime90dSource(traderSource) && (
                   <>
