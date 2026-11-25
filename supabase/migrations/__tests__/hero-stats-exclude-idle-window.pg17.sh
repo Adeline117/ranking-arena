@@ -11,13 +11,14 @@
 #      not counted as a board; other seasons still do not count.
 #   4. Old rule (no row is idle, both flags false everywhere): the function
 #      returns exactly what it returned before the migration.
-#   5. Owner, SECURITY DEFINER, configuration (search_path and the 2 second
-#      statement_timeout, no custom parameter), ACL and return type are
-#      unchanged; anon can still execute it and still cannot read the table.
+#   5. Owner, SECURITY DEFINER, ACL and return type are unchanged; the
+#      configuration becomes exactly search_path plus statement_timeout=5s (was
+#      2s), with no custom parameter, and the 5 second limit is the one in
+#      force; anon can still execute it and still cannot read the table.
 #   6. Replay changes nothing.
-#   7. Drift (body, owner, security, configuration, missing column, missing
-#      function) makes the whole migration refuse and leaves the function as it
-#      was.
+#   7. Drift (body, owner, security, configuration, either body with the other
+#      body's timeout, missing column, missing function) makes the whole
+#      migration refuse and leaves the function as it was.
 #   8. The read-only statement handed to the release owner for timing returns
 #      what the function returns.
 
@@ -93,7 +94,13 @@ body_sha256() {
   "
 }
 
-# Everything but the body.
+function_config() {
+  psql_cmd -Atqc "SELECT proconfig::pg_catalog.text FROM pg_catalog.pg_proc WHERE oid = pg_catalog.to_regprocedure('public.get_hero_stats()')"
+}
+CONFIG_2S='{"search_path=pg_catalog, pg_temp",statement_timeout=2s}'
+CONFIG_5S='{"search_path=pg_catalog, pg_temp",statement_timeout=5s}'
+
+# Everything but the body and the configuration.
 function_attributes() {
   psql_cmd -Atqc "
     SELECT pg_catalog.concat_ws('|',
@@ -107,7 +114,6 @@ function_attributes() {
       procedure_row.proisstrict,
       procedure_row.proleakproof,
       pg_catalog.pg_get_function_result(procedure_row.oid),
-      procedure_row.proconfig::pg_catalog.text,
       procedure_row.proacl::pg_catalog.text,
       COALESCE(pg_catalog.obj_description(procedure_row.oid, 'pg_proc'), '<no comment>'))
     FROM pg_catalog.pg_proc AS procedure_row
@@ -265,8 +271,7 @@ PGOPTIONS='-c client_min_messages=warning' psql_cmd -q -f "$HERO_BASELINE" >/dev
 expect_eq "the repository body is the body the migration accepts" \
   "$(body_sha256)" "$CURRENT_BODY_SHA256"
 expect_eq "current configuration: search_path and a 2 second statement_timeout, nothing custom" \
-  "$(psql_cmd -Atqc "SELECT proconfig::text FROM pg_catalog.pg_proc WHERE oid = pg_catalog.to_regprocedure('public.get_hero_stats()')")" \
-  '{"search_path=pg_catalog, pg_temp",statement_timeout=2s}'
+  "$(function_config)" "$CONFIG_2S"
 expect_eq "current ACL" \
   "$(psql_cmd -Atqc "SELECT proacl::text FROM pg_catalog.pg_proc WHERE oid = pg_catalog.to_regprocedure('public.get_hero_stats()')")" \
   "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
@@ -349,13 +354,15 @@ expect_eq "before: the function counts idle rows and idle-only sources" "$(hero_
 ATTRIBUTES_BEFORE="$(function_attributes)"
 
 # Copies of this exact state for the drift cases and for the old-rule case.
-for copy_db in old_rule drift_body drift_owner drift_security drift_config drift_custom_guc drift_missing; do
+for copy_db in old_rule drift_body drift_owner drift_security drift_config drift_mixed drift_custom_guc drift_missing; do
   psql_admin -q -c "CREATE DATABASE $copy_db TEMPLATE postgres OWNER postgres"
 done
 
 # 2. Apply as the non-superuser postgres role.
 psql_cmd -q -f "$MIGRATION"
 expect_eq "installed body digest" "$(body_sha256)" "$NEW_BODY_SHA256"
+expect_eq "installed configuration: search_path plus a 5 second statement_timeout" \
+  "$(function_config)" "$CONFIG_5S"
 
 # 3. Idle rows and idle-only sources are not counted.
 expect_eq "after: 6 rows with performance on 2 sources" "$(hero_stats)" "2|6"
@@ -376,16 +383,33 @@ for role in authenticated service_role; do
     "2|6"
 done
 
-# 5. Nothing but the body moved.
-expect_eq "owner, security, configuration, ACL, return type and comment" \
+# 5. Nothing but the body and the timeout moved.
+expect_eq "owner, security, ACL, return type and comment" \
   "$(function_attributes)" "$ATTRIBUTES_BEFORE"
-expect_eq "still SECURITY DEFINER, owned by postgres, 2 second timeout, no custom parameter" \
+expect_eq "still SECURITY DEFINER, owned by postgres, now a 5 second timeout, no custom parameter" \
   "$(psql_cmd -Atqc "
     SELECT pg_catalog.concat_ws('|', prosecdef, pg_catalog.pg_get_userbyid(proowner), proconfig::text,
       NOT EXISTS (SELECT 1 FROM pg_catalog.unnest(proconfig) AS entry
                   WHERE pg_catalog.strpos(pg_catalog.split_part(entry, '=', 1), '.') > 0))
     FROM pg_catalog.pg_proc WHERE oid = pg_catalog.to_regprocedure('public.get_hero_stats()')")" \
-  't|postgres|{"search_path=pg_catalog, pg_temp",statement_timeout=2s}|t'
+  't|postgres|{"search_path=pg_catalog, pg_temp",statement_timeout=5s}|t'
+# The limit in force inside a function declared with these two settings is the
+# function's own 5 seconds, whatever the caller's session has.
+psql_cmd -q <<'SQL'
+CREATE FUNCTION public.fixture_timeout_in_force()
+RETURNS text
+LANGUAGE sql
+STABLE
+SET search_path = pg_catalog, pg_temp
+SET statement_timeout = '5s'
+AS $function$ SELECT pg_catalog.current_setting('statement_timeout') $function$;
+SQL
+expect_eq "a function declared like the migration's runs under a 5 second limit" \
+  "$(psql_cmd -Atqc "SET statement_timeout = '1s'; SELECT public.fixture_timeout_in_force()" | tail -1)" "5s"
+expect_eq "the hero function carries the same two settings as that function" \
+  "$(function_config)" \
+  "$(psql_cmd -Atqc "SELECT proconfig::pg_catalog.text FROM pg_catalog.pg_proc WHERE oid = pg_catalog.to_regprocedure('public.fixture_timeout_in_force()')")"
+psql_cmd -q -c "DROP FUNCTION public.fixture_timeout_in_force()"
 expect_eq "privileges" \
   "$(psql_cmd -Atqc "
     SELECT pg_catalog.concat_ws('|',
@@ -418,6 +442,10 @@ psql_cmd -q -c "BEGIN; SET LOCAL statement_timeout = '10s'; EXPLAIN (ANALYZE, BU
 psql_cmd -q -f "$MIGRATION"
 expect_eq "replay body digest" "$(body_sha256)" "$NEW_BODY_SHA256"
 expect_eq "replay attributes" "$(function_attributes)" "$ATTRIBUTES_BEFORE"
+expect_eq "replay configuration" "$(function_config)" "$CONFIG_5S"
+psql_cmd -q -f "$MIGRATION"
+expect_eq "second replay body digest" "$(body_sha256)" "$NEW_BODY_SHA256"
+expect_eq "second replay configuration" "$(function_config)" "$CONFIG_5S"
 expect_eq "replay counts" "$(hero_stats)" "2|6"
 
 # 4. Old rule: no row carries a mark, so both flags are false on every row
@@ -431,6 +459,7 @@ OLD_RULE_BEFORE="$(hero_stats)"
 expect_eq "old rule: counts before the migration" "$OLD_RULE_BEFORE" "3|10"
 psql_cmd -q -f "$MIGRATION"
 expect_eq "old rule: installed body digest" "$(body_sha256)" "$NEW_BODY_SHA256"
+expect_eq "old rule: installed configuration" "$(function_config)" "$CONFIG_5S"
 expect_eq "old rule: the function returns exactly what it returned before" \
   "$(hero_stats)" "$OLD_RULE_BEFORE"
 # An empty board is still a real 0, not an error.
@@ -439,9 +468,10 @@ expect_eq "old rule: an unserved season counts 0" "$(hero_stats)" "0|0"
 
 # 7. Drift: each case must make the migration refuse and change nothing.
 refuses() {
-  local label="$1" expected_message="$2" output digest_before attributes_before
+  local label="$1" expected_message="$2" output digest_before attributes_before config_before
   digest_before="$(body_sha256)"
   attributes_before="$(function_attributes)"
+  config_before="$(function_config)"
   if output="$(psql_cmd -q -f "$MIGRATION" 2>&1)"; then
     echo "$label: the migration ran against a drifted function" >&2
     exit 1
@@ -453,6 +483,7 @@ refuses() {
   fi
   expect_eq "$label left the body alone" "$(body_sha256)" "$digest_before"
   expect_eq "$label left the attributes alone" "$(function_attributes)" "$attributes_before"
+  expect_eq "$label left the configuration alone" "$(function_config)" "$config_before"
 }
 
 # 7a. An unreviewed body (the pre-20261114103025 kind: reads the raw table).
@@ -487,10 +518,22 @@ refuses "security invoker" "unexpected attributes"
 # 7d. Configuration: another timeout, then no search_path.
 DB=drift_config
 psql_cmd -q -c "ALTER FUNCTION public.get_hero_stats() SET statement_timeout = '30s'"
-refuses "another statement_timeout" "unexpected attributes"
+refuses "another statement_timeout" "unexpected configuration"
 psql_cmd -q -c "ALTER FUNCTION public.get_hero_stats() SET statement_timeout = '2s'"
 psql_cmd -q -c "ALTER FUNCTION public.get_hero_stats() RESET search_path"
-refuses "search_path removed" "unexpected attributes"
+refuses "search_path removed" "unexpected configuration"
+
+# 7d'. Each accepted body with the OTHER body's timeout is not an accepted
+#      state: the current body already at 5s, and this migration's body put
+#      back to 2s after it was applied.
+DB=drift_mixed
+psql_cmd -q -c "ALTER FUNCTION public.get_hero_stats() SET statement_timeout = '5s'"
+refuses "current body with the 5 second timeout" "unexpected configuration"
+psql_cmd -q -c "ALTER FUNCTION public.get_hero_stats() SET statement_timeout = '2s'"
+psql_cmd -q -f "$MIGRATION"
+expect_eq "mixed case: applied from the exact current state" "$(function_config)" "$CONFIG_5S"
+psql_cmd -q -c "ALTER FUNCTION public.get_hero_stats() SET statement_timeout = '2s'"
+refuses "this migration's body with the 2 second timeout" "unexpected configuration"
 
 # 7e. A custom parameter attached to the function. The non-superuser postgres
 #     role cannot attach one; a superuser could have.
@@ -500,7 +543,7 @@ if psql_cmd -q -c "ALTER FUNCTION public.get_hero_stats() SET arena.hero_stats_m
   exit 1
 fi
 psql_admin -q -c "ALTER FUNCTION public.get_hero_stats() SET arena.hero_stats_mode = 'all'"
-refuses "custom parameter attached" "unexpected attributes"
+refuses "custom parameter attached" "unexpected configuration"
 
 # 7f. The function is missing.
 DB=drift_missing

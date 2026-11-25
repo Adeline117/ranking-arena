@@ -1,5 +1,6 @@
 -- Migration: hero_stats_exclude_idle_window
--- Description: public.get_hero_stats() counts only rows with idle_window = false.
+-- Description: public.get_hero_stats() counts only rows with idle_window = false,
+--   and its statement_timeout goes from 2 to 5 seconds.
 --
 -- Why: under the ROI + PnL row rule (20261122201611) the public 90D board also
 --   carries idle-window rows: accounts with no ROI and no PnL in the period,
@@ -16,22 +17,33 @@
 --   scored traders; an idle row's rank is greater than the new count and the
 --   badge shows nothing for it.
 --
--- What changes: ONLY the body of public.get_hero_stats(): one more predicate,
---   AND NOT ranked.idle_window (the column is boolean and never NULL). A source
---   whose served rows are all idle is no longer counted as a board.
+-- What changes, on public.get_hero_stats() only:
+--   1. the body: one more predicate, AND NOT ranked.idle_window (the column is
+--      boolean and never NULL). A source whose served rows are all idle is no
+--      longer counted as a board.
+--   2. the function's statement_timeout: 2s -> 5s. Measured read-only on
+--      production (2026-11-25): this query takes 1,368 ms over 5,419 served
+--      rows with every buffer cached, because the view evaluates the row
+--      policy once per row. After the roi_pnl switch the board is about 8,400
+--      rows, which does not fit in 2 seconds. 5 seconds is a stopgap; the
+--      follow-up is to read per-source non-idle row counts recorded at
+--      publication instead of evaluating every row (separate change).
 --   Signature, return columns, LANGUAGE sql, STABLE, SECURITY DEFINER,
---   search_path, the 2 second statement_timeout, owner, ACL and comment are
---   unchanged. No table, view, index or other function is touched.
+--   search_path, owner, ACL and comment are unchanged. No table, view, index
+--   or other function is touched.
 --
 --   While the scoring worker still publishes with the four-metric rule no row
 --   is idle, so the function returns exactly what it returned before.
 --
--- Safety: refuses unless the installed body is the 20261114103025 one (sha256
---   9462c36f...f944) or this migration's own (replay), with the expected
---   owner, security and configuration, and unless the view already has the
---   idle_window column. The function carries no custom-parameter SET (the
---   Supabase postgres role is not a superuser); only search_path and
---   statement_timeout, as before. Nothing is dropped.
+-- Safety: refuses unless the function is exactly the current one (the
+--   20261114103025 body, sha256 9462c36f...f944, with search_path and
+--   statement_timeout=2s; confirmed read-only on production 2026-11-25) or
+--   exactly this migration's own (its body with statement_timeout=5s, replay),
+--   with the expected owner and security, and unless the view already has the
+--   idle_window column. A mix of the two (one body with the other timeout) is
+--   refused. The function carries no custom-parameter SET (the Supabase
+--   postgres role is not a superuser); only the built-in search_path and
+--   statement_timeout. Nothing is dropped.
 --
 -- POSTDEPLOY, after 20261123021904 (it reads the column that migration adds).
 --   The website does not depend on it either way: the return shape is the
@@ -49,7 +61,8 @@ SET LOCAL search_path = pg_catalog, pg_temp;
 -- One block, so the state read before the replace is still in hand after it:
 --   1. preflight  - exact identity of the object being replaced
 --   2. replace    - CREATE OR REPLACE with the reviewed body
---   3. postflight - the body is the reviewed one and nothing else moved
+--   3. postflight - the body and configuration are the reviewed ones and
+--                   nothing else moved
 DO $migration$
 DECLARE
   v_before record;
@@ -97,6 +110,20 @@ BEGIN
       v_before.body_sha256;
   END IF;
 
+  -- Each accepted body goes with exactly one configuration: the current body
+  -- with the 2 second timeout, this migration's body with the 5 second one.
+  IF v_before.proconfig IS DISTINCT FROM (
+    CASE v_before.body_sha256
+      WHEN '9462c36f5e983078e8e25479aa8ad7235a448d428f7abeaebaa2ab3bfcaaf944'
+        THEN ARRAY['search_path=pg_catalog, pg_temp', 'statement_timeout=2s']
+      ELSE ARRAY['search_path=pg_catalog, pg_temp', 'statement_timeout=5s']
+    END
+  )::pg_catalog.text[] THEN
+    RAISE EXCEPTION
+      'hero_stats_exclude_idle_window: public.get_hero_stats() has unexpected configuration (%) for its body; refusing to replace an unreviewed definition',
+      v_before.proconfig;
+  END IF;
+
   SELECT role_row.rolname INTO v_owner
   FROM pg_catalog.pg_roles AS role_row
   WHERE role_row.oid = v_before.proowner;
@@ -111,13 +138,11 @@ BEGIN
      OR NOT v_before.proretset
      OR v_before.provolatile <> 's'
      OR v_before.result_type IS DISTINCT FROM
-          'TABLE(exchange_count bigint, trader_count bigint)'
-     OR v_before.proconfig IS DISTINCT FROM
-          ARRAY['search_path=pg_catalog, pg_temp', 'statement_timeout=2s']::pg_catalog.text[] THEN
+          'TABLE(exchange_count bigint, trader_count bigint)' THEN
     RAISE EXCEPTION
-      'hero_stats_exclude_idle_window: public.get_hero_stats() has unexpected attributes (owner %, language %, kind %, security definer %, volatility %, result %, config %)',
+      'hero_stats_exclude_idle_window: public.get_hero_stats() has unexpected attributes (owner %, language %, kind %, security definer %, volatility %, result %)',
       v_owner, v_language, v_before.prokind, v_before.prosecdef,
-      v_before.provolatile, v_before.result_type, v_before.proconfig;
+      v_before.provolatile, v_before.result_type;
   END IF;
 
   -- The body below filters on a column 20261123021904 adds to the view.
@@ -134,8 +159,8 @@ BEGIN
       'hero_stats_exclude_idle_window: public.public_ranked_leaderboard has no boolean idle_window column; apply 20261123021904 first';
   END IF;
 
-  -- 2. Replace the body. Everything outside AS $function$ ... $function$ is
-  --    the existing declaration, restated because CREATE OR REPLACE needs it.
+  -- 2. Replace the body and the timeout. The rest of the declaration is the
+  --    existing one, restated because CREATE OR REPLACE needs it.
   EXECUTE $ddl$
 CREATE OR REPLACE FUNCTION public.get_hero_stats()
 RETURNS TABLE(exchange_count bigint, trader_count bigint)
@@ -143,7 +168,7 @@ LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = pg_catalog, pg_temp
-SET statement_timeout = '2s'
+SET statement_timeout = '5s'
 AS $function$
   SELECT pg_catalog.count(DISTINCT ranked.source), pg_catalog.count(*)
   FROM public.public_ranked_leaderboard AS ranked
@@ -195,22 +220,19 @@ $ddl$;
      OR v_after.proparallel IS DISTINCT FROM v_before.proparallel
      OR v_after.prorettype IS DISTINCT FROM v_before.prorettype
      OR v_after.result_type IS DISTINCT FROM v_before.result_type
-     OR v_after.proconfig IS DISTINCT FROM v_before.proconfig
      OR v_after.proacl IS DISTINCT FROM v_before.proacl
      OR v_after.description IS DISTINCT FROM v_before.description THEN
     RAISE EXCEPTION
-      'hero_stats_exclude_idle_window: an attribute other than the body changed (owner, security, volatility, config, ACL or comment)';
+      'hero_stats_exclude_idle_window: an attribute other than the body and the timeout changed (owner, security, volatility, ACL or comment)';
   END IF;
 
-  -- No custom (dotted) parameter may be attached to the function: a
-  -- non-superuser owner cannot set one, and none is needed.
-  IF EXISTS (
-    SELECT 1
-    FROM pg_catalog.unnest(v_after.proconfig) AS setting(entry)
-    WHERE pg_catalog.strpos(pg_catalog.split_part(setting.entry, '=', 1), '.') > 0
-  ) THEN
+  -- The configuration is exactly search_path and the 5 second timeout: two
+  -- built-in parameters, and no custom (dotted) one, which a non-superuser
+  -- owner could not attach anyway.
+  IF v_after.proconfig IS DISTINCT FROM
+       ARRAY['search_path=pg_catalog, pg_temp', 'statement_timeout=5s']::pg_catalog.text[] THEN
     RAISE EXCEPTION
-      'hero_stats_exclude_idle_window: public.get_hero_stats() carries a custom-parameter SET (%)',
+      'hero_stats_exclude_idle_window: installed configuration % is not search_path plus statement_timeout=5s',
       v_after.proconfig;
   END IF;
 END

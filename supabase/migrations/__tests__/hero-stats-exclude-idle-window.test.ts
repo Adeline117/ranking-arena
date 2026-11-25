@@ -53,20 +53,23 @@ describe('get_hero_stats excludes idle-window rows (20261124225312)', () => {
     expect(sha256(functionBody(migration))).toBe(NEW_BODY_SHA256)
   })
 
-  it('is the previous declaration with one predicate added to the body', () => {
+  it('is the previous declaration with one predicate added and a 5 second timeout', () => {
     const before = functionStatement(baseline)
     const after = functionStatement(migration)
     expect(before).toContain("  WHERE ranked.season_id = '90D';\n")
+    expect(before).toContain("SET statement_timeout = '2s'\n")
     expect(after).toBe(
-      before.replace(
-        "  WHERE ranked.season_id = '90D';\n",
-        "  WHERE ranked.season_id = '90D'\n    AND NOT ranked.idle_window;\n"
-      )
+      before
+        .replace(
+          "  WHERE ranked.season_id = '90D';\n",
+          "  WHERE ranked.season_id = '90D'\n    AND NOT ranked.idle_window;\n"
+        )
+        .replace("SET statement_timeout = '2s'\n", "SET statement_timeout = '5s'\n")
     )
-    // The declaration keeps its two built-in settings and attaches no custom one.
+    // Two built-in settings, no custom (dotted) one.
     expect(after.match(/^SET .+$/gm)).toEqual([
       'SET search_path = pg_catalog, pg_temp',
-      "SET statement_timeout = '2s'",
+      "SET statement_timeout = '5s'",
     ])
     expect(after).toContain('SECURITY DEFINER')
     expect(after).toContain('RETURNS TABLE(exchange_count bigint, trader_count bigint)')
@@ -76,6 +79,7 @@ describe('get_hero_stats excludes idle-window rows (20261124225312)', () => {
     expect(migration.match(/'[0-9a-f]{64}'/g)).toEqual([
       `'${CURRENT_BODY_SHA256}'`,
       `'${NEW_BODY_SHA256}'`,
+      `'${CURRENT_BODY_SHA256}'`,
       `'${NEW_BODY_SHA256}'`,
     ])
     const statements = migration.replace(/--.*$/gm, '')
@@ -89,11 +93,19 @@ describe('get_hero_stats excludes idle-window rows (20261124225312)', () => {
       'SET LOCAL statement_timeout',
       'SET LOCAL search_path',
     ])
-    // Owner, SECURITY, configuration and ACL are compared before and after.
-    for (const attribute of ['proowner', 'prosecdef', 'proconfig', 'proacl', 'result_type']) {
+    // Owner, SECURITY and ACL are compared before and after.
+    for (const attribute of ['proowner', 'prosecdef', 'proacl', 'result_type']) {
       expect(statements).toContain(`v_after.${attribute} IS DISTINCT FROM v_before.${attribute}`)
     }
-    expect(statements).toContain('carries a custom-parameter SET')
+    // Configuration: the current body only with 2s, this migration's body only
+    // with 5s; afterwards exactly search_path plus 5s (so nothing custom).
+    expect(statements.match(/'statement_timeout=2s'/g)).toHaveLength(1)
+    expect(statements.match(/'statement_timeout=5s'/g)).toHaveLength(2)
+    expect(statements).toContain(`WHEN '${CURRENT_BODY_SHA256}'
+        THEN ARRAY['search_path=pg_catalog, pg_temp', 'statement_timeout=2s']
+      ELSE ARRAY['search_path=pg_catalog, pg_temp', 'statement_timeout=5s']`)
+    expect(statements).toContain(`IF v_after.proconfig IS DISTINCT FROM
+       ARRAY['search_path=pg_catalog, pg_temp', 'statement_timeout=5s']::pg_catalog.text[] THEN`)
     expect(statements).toContain('apply 20261123021904 first')
   })
 
@@ -118,7 +130,11 @@ describe('get_hero_stats excludes idle-window rows (20261124225312)', () => {
       'the repository body is the body the migration accepts',
       'after: 6 rows with performance on 2 sources',
       'old rule: the function returns exactly what it returned before',
-      'owner, security, configuration, ACL, return type and comment',
+      'owner, security, ACL, return type and comment',
+      'installed configuration: search_path plus a 5 second statement_timeout',
+      'second replay configuration',
+      'current body with the 5 second timeout',
+      "this migration's body with the 2 second timeout",
       'unreviewed body',
       'another owner',
       'security invoker',
