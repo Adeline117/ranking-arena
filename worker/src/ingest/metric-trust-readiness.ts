@@ -158,7 +158,14 @@ export async function loadMetricTrustWorkerReadiness({
     // (2026-11-22), so a 10s budget failed every worker start and deploy
     // preflight closed. 25s here, 30s for the caller's race; the RPC itself
     // must be made cheap again (bounded scan) before the table doubles.
-    await client.query("SET LOCAL statement_timeout = '25s'")
+    //
+    // 2026-11-25: with binance_futures and bybit_mt5 publishing, the RPC's
+    // per-run lineage statement measured 19.5-20.7s warm in production (1.2M
+    // buffer hits; one exhaustion proof per run in the freshness horizon), so
+    // 25s left no margin: one slow call would fail every restart and leave
+    // ingestion down. 90s here, 100s for the caller's race, until the per-run
+    // proof stops being recomputed on every start.
+    await client.query("SET LOCAL statement_timeout = '90s'")
     const result = await client.query(
       'SELECT public.arena_metric_trust_release_readiness() AS readiness'
     )
@@ -180,7 +187,7 @@ export async function loadMetricTrustWorkerReadiness({
 
 export async function assertMetricTrustWorkerReadiness({
   load = loadMetricTrustWorkerReadiness,
-  timeoutMs = 30_000,
+  timeoutMs = 100_000,
 }: {
   load?: LoadReadiness
   timeoutMs?: number
