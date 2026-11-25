@@ -8,7 +8,10 @@ import {
   readSourcePublicationBundle,
   type SourcePublicationBundleReaderErrorCode,
 } from '../read-source-publication-bundle'
-import { SourcePublicationEvidenceError } from '../source-publication-evidence'
+import {
+  DEFAULT_SOURCE_PUBLICATION_MAX_AGE_HOURS,
+  SourcePublicationEvidenceError,
+} from '../source-publication-evidence'
 
 const NOW = new Date('2026-07-22T00:00:00.000Z')
 
@@ -148,7 +151,7 @@ describe('readSourcePublicationBundle', () => {
     expect(supabase.rpc).toHaveBeenCalledWith('arena_score_inputs_publish_bundle_json', {
       p_window: '30D',
       p_per_platform_limit: 1000,
-      p_max_age_hours: 48,
+      p_max_age_hours: DEFAULT_SOURCE_PUBLICATION_MAX_AGE_HOURS,
     })
     expect(result.evidence.scoreRows).toHaveLength(3)
     expect(result.evidence.freshScoreRows.map((row) => row.platform)).toEqual(['shared', 'shared'])
@@ -240,7 +243,7 @@ describe('readSourcePublicationBundle', () => {
     expect(supabase.rpc).toHaveBeenCalledWith('arena_score_inputs_publish_bundle_json', {
       p_window: '30D',
       p_per_platform_limit: 925,
-      p_max_age_hours: 48,
+      p_max_age_hours: DEFAULT_SOURCE_PUBLICATION_MAX_AGE_HOURS,
     })
     expect(mapScoreRow).not.toHaveBeenCalled()
   })

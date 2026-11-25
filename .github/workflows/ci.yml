@@ -650,6 +650,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:observation-lineage-statement-pg17
 
+      - name: Prove artifact RAW integrity per statement keeps every per-row outcome
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:artifact-integrity-statement-pg17
+
       - name: Prove the score bundle's index-only entry counts keep its output
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin

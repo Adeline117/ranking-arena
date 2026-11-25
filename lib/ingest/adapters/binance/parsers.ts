@@ -96,6 +96,11 @@ export function dedupeHash(...fields: unknown[]): string {
 
 // ── Leaderboard ──
 
+function withoutChartItems(item: Dict): Dict {
+  const { chartItems: _chartItems, ...rest } = item
+  return rest
+}
+
 /**
  * Futures query-list / spot home-page-list share one row shape:
  * { leadPortfolioId, nickname, avatarUrl, roi, pnl, aum, mdd, sharpRatio,
@@ -154,9 +159,13 @@ export function parseBinanceLeaderboardPage(
       // was captured only for deep-crawled profiles (~17% fill). Lift it so all
       // binance traders get copier PnL (audit 2026-07-03).
       headlineCopierPnl: num(item.copierPnl),
-      // Board card extras (sharpRatio, sparkline chartItems, badge,
-      // aiSummary...) ride along verbatim in raw.
-      raw: item,
+      // Board card extras (sharpRatio, badge, aiSummary...) ride along in
+      // raw, without chartItems: that per-row ROI series is 91% of a 90D row
+      // (5.9 KB of 6.4 KB) and made the entries insert of one 12,845-row board
+      // a 79 MB statement that ran past the 120 s write budget in production
+      // (2026-11-23). Nothing reads it from the entry; the stored RAW page
+      // keeps it.
+      raw: withoutChartItems(item),
     })
   }
   return { rows, reportedTotal }

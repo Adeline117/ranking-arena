@@ -210,6 +210,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20261124114140_stale_source_hides_only_its_own_rows.sql',
     '20261118134316_raw_retention_backlog_census.sql',
     '20261120235710_register_blofin_spot_profile_capture_contract.sql',
+    '20261123020207_metric_trust_artifact_raw_integrity_per_statement.sql',
     '20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql',
   ])
   // Classified, never emitted: applied one file at a time via ADR-023 at the
