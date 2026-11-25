@@ -70,7 +70,7 @@ BEGIN
   END IF;
 
   -- The view is restated below; it must already be the 37-column
-  -- 20261123021904 shape, or replacing it would drop or reorder columns.
+  -- 20261123021904 shape, or replacing it would lose or reorder columns.
   IF (
        SELECT pg_catalog.array_agg(attribute.attname::text ORDER BY attribute.attnum)
          FROM pg_catalog.pg_attribute AS attribute
