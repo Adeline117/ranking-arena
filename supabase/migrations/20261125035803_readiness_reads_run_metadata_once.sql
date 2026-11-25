@@ -1,41 +1,43 @@
--- Migration: 20261124224208_readiness_counts_untrusted_runs_not_rows.sql
--- Description: public.arena_metric_trust_release_readiness() counts the
---   rankable observations of runs whose lineage does not hold, without
---   re-validating every observation's page ordinal on every call.
+-- Migration: 20261125035803_readiness_reads_run_metadata_once.sql
+-- Description: public.arena_metric_trust_release_readiness() derives a run's
+--   page metadata once per run instead of once per parser ordinal.
 --
--- Why: the readiness RPC is the worker startup gate (10 s statement timeout
---   in worker/src/ingest/metric-trust-readiness.ts). Its last query joined
---   every run in the freshness horizon to all of its observations and
---   re-checked each row's source_page_ordinal. With about 500,000 new
---   observations a day it read about 100,000 blocks to return a count that is
---   zero: 1.1-1.5 s warm and about 15 s cold in production on 2026-11-25
---   (0.3 s the day before), and a deployment preflight failed on it.
+-- Why: the readiness RPC is the worker startup gate. In production on
+--   2026-11-25 it went from 1.1-1.5 s (02:00Z) to about 20 s (11:40Z), five
+--   seconds short of the gate's budget, after bybit_mt5 and binance_futures
+--   began to pass: bybit_mt5 captures 2,042 pages and its RAW meta document
+--   is 434 kB stored, binance_futures 433 pages and 94 kB.
 --
---   That count has two parts. Whether a RUN's lineage holds (its two RAW
---   objects, canonical page metadata, the exact @3 terminal, the exhaustion
---   proof) can change after the fact and is cheap: 78 runs were in the
---   horizon. Whether a ROW's ordinal is present, positive, a member of its
---   run's parser ordinals and within the terminal page count is fixed when
---   the row is written, and since 20261122152622 the per-statement insert
---   trigger refuses any statement that breaks it; this RPC already requires
---   that trigger (function hash, enabled, transition table) to report ready.
---   20261122152622 was applied on 2026-11-23 04:11Z and the longest
---   max_freshness is 6 hours, so no observation written before the trigger
---   can still be ranked.
+--   The executed plan of the run-level CTE (77 runs, 14.8 s, 812,664 buffer
+--   hits) put 13.8 s and 756,251 hits in one node: the aggregate over the
+--   run's parserSourcePageOrdinals. It compares every ordinal with
+--   source_lineage.page_count, and the planner had inlined that lateral
+--   subquery, so each comparison re-evaluated
+--   population_raw.meta->>'pageCount' and re-read and decompressed the whole
+--   TOASTed meta document: pages x meta size per run, about 6 s for one
+--   bybit_mt5 run. Locating the terminal outcome (12.5 ms per run) and the
+--   observation join (3% of the buffers) were not the cost.
 --
--- What changes, in the final query only: the run-level CTE is unchanged and
---   still evaluated for every run in the horizon; the query now counts the
---   rankable complete/verified observations of the runs that fail it, and no
---   longer re-checks the row-level rules of runs that pass. For a run that
---   fails, the count is the same as before (every such observation was
---   already counted). Every other statement of the function, the returned
---   JSON, the contract name, owner, ACL, SECURITY DEFINER and configuration
---   are unchanged.
---
---   What is given up: an observation with a bad ordinal inside a run whose
---   lineage holds would no longer be counted here. It cannot be written while
---   the pinned trigger is enabled, and a disabled trigger makes this RPC
---   report not ready.
+-- What changes:
+--   1. An evaluation barrier (OFFSET 0) on the source_lineage lateral: page
+--      count, parser page count and the ordinals array are computed once per
+--      run and referenced as values. No predicate changes. Reproduced on
+--      PostgreSQL 17 with a 2,042-page run and a 547 kB meta document:
+--      286,049 buffer hits and 112 ms before, 309 hits and 0.9 ms after.
+--   2. The final count reads observations only for runs whose lineage fails
+--      (it no longer re-validates each observation's page ordinal). That
+--      rule is fixed when a row is written and enforced by the per-statement
+--      insert trigger this RPC already requires; the run-level verdict is
+--      still evaluated for every run in the horizon. In production this was
+--      3% of the buffers; it removes the dependency on the number of
+--      rankable observations. What is given up: an observation with a bad
+--      ordinal inside a run whose lineage holds is no longer counted here.
+--      It cannot be written while the pinned trigger is enabled, and a
+--      disabled trigger makes this RPC report not ready. 20261122152622 was
+--      applied on 2026-11-23 04:11Z and the longest max_freshness is 6 hours,
+--      so no observation written before the trigger can still be ranked.
+--   Every other statement of the function, the returned JSON, the contract
+--   name, owner, ACL, SECURITY DEFINER and configuration are unchanged.
 --
 -- POSTDEPLOY, after 20261122152622 (whose readiness body it replaces). No
 -- worker code depends on it. It touches no table 20261111192134 guards.
@@ -59,7 +61,7 @@ BEGIN
               'public.arena_metric_trust_release_readiness()'::pg_catalog.regprocedure
      ) NOT IN (
        '4f11232d5635e39eddbc061e137398c0a515ed388b660b438b7904b2f446df6d',
-       'b65ce4ccb6ca66ea80522f23754276130bab0327d6a8f03ca34c439f73dad860'
+       'a00a3e36517b1ce4fddc874203ce4752f5d43cbf564b77e47e8048da2ad093f1'
      ) THEN
     RAISE EXCEPTION 'readiness RPC is not the 20261122152622 definition';
   END IF;
@@ -1099,12 +1101,9 @@ BEGIN
   -- positive, a member of its run's parser ordinals and within the terminal
   -- page count never changes after the row is written (the table is
   -- append-only, RAW metadata is immutable), and the per-statement insert
-  -- trigger pinned above refuses any statement that breaks it. Re-checking
-  -- it here read every rankable observation on every call (about 100,000
-  -- blocks, 1.1-1.5 s warm and 15 s cold in production on 2026-11-25, against
-  -- the worker's 10 s startup gate). The run-level verdict can change over
-  -- time and is still evaluated for every run in the horizon; observations
-  -- are read only for a run that fails it.
+  -- trigger pinned above refuses any statement that breaks it. The run-level
+  -- verdict can change over time and is still evaluated for every run in the
+  -- horizon; observations are read only for a run that fails it.
   --
   -- Bounded by design (20261121): arena.metric_rankable_observations serves
   -- an observation only while valid_until > now() and only when
@@ -1201,6 +1200,11 @@ BEGIN
           population_raw.meta->>'pageCount' AS page_count_text,
           population_raw.meta->>'parserPageCount' AS parser_page_count_text
       ) AS lineage_text
+      -- Evaluation barrier (20261125): without it the planner inlines these
+      -- expressions wherever source_lineage is referenced, and the ordinal
+      -- aggregate below re-read and decompressed the run's whole RAW meta
+      -- document once per parser ordinal.
+      OFFSET 0
     ) AS source_lineage
     CROSS JOIN LATERAL (
       SELECT
@@ -1392,7 +1396,7 @@ BEGIN
          FROM pg_catalog.pg_proc AS function_row
         WHERE function_row.oid =
               'public.arena_metric_trust_release_readiness()'::pg_catalog.regprocedure
-     ) IS DISTINCT FROM 'b65ce4ccb6ca66ea80522f23754276130bab0327d6a8f03ca34c439f73dad860' THEN
+     ) IS DISTINCT FROM 'a00a3e36517b1ce4fddc874203ce4752f5d43cbf564b77e47e8048da2ad093f1' THEN
     RAISE EXCEPTION 'the readiness RPC body is not the reviewed definition';
   END IF;
 END

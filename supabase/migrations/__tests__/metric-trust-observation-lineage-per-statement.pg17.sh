@@ -371,11 +371,11 @@ fi
 grep -q "is not the 20261118112703 definition" "$TMP_ROOT/replay.err"
 echo "ok: a replay is refused"
 
-# 20261124224208 stops re-validating row ordinals in the readiness RPC and
+# 20261125035803 stops re-validating row ordinals in the readiness RPC and
 # relies on the statement trigger instead, so the dependency is proven here,
 # on the real triggers: it refuses to apply while the trigger is disabled, and
 # the body it installs still reports not-ready when the trigger is disabled.
-RUN_LEVEL_MIGRATION="$MIGRATIONS/20261124224208_readiness_counts_untrusted_runs_not_rows.sql"
+RUN_LEVEL_MIGRATION="$MIGRATIONS/20261125035803_readiness_reads_run_metadata_once.sql"
 psql_db -q -c "ALTER TABLE arena.metric_trust_observations DISABLE TRIGGER metric_trust_observations_source_page_lineage_after_statement"
 if psql_db -q -c "SET check_function_bodies = off" -f "$RUN_LEVEL_MIGRATION" >/dev/null 2>"$TMP_ROOT/run-level.err"; then
   echo "the run-level readiness migration applied with the statement trigger disabled" >&2

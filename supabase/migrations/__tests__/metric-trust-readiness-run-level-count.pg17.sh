@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-# PostgreSQL 17 proof for 20261124224208: the readiness RPC counts the rankable
+# PostgreSQL 17 proof for 20261125035803: the readiness RPC counts the rankable
 # observations of runs whose lineage does not hold and no longer re-validates
 # every observation's page ordinal.
 #
 # The count query of 20261122152622 (run-level verdict AND per-row ordinal
-# rules) and the one of 20261124224208 (run-level verdict only) are lifted
+# rules) and the one of 20261125035803 (run-level verdict only) are lifted
 # verbatim out of the two migration files and run side by side on a fixture of
 # the relations they read:
 #   = for every run-level violation (unordered / malformed / out-of-range
@@ -21,6 +21,9 @@
 #   = with those rows absent, as the trigger guarantees, the counts are equal
 #   + with 200,000 rankable observations in healthy runs, the new query reads
 #     only the observations of the failing runs (asserted on the executed plan)
+#   + a 2,042-page run with a RAW meta document of several hundred kB is
+#     checked with a bounded number of reads of that document; the previous
+#     query re-read it once per parser ordinal (asserted on the plan's buffers)
 # It owns an isolated cluster on a private socket and never touches
 # application data.
 
@@ -29,7 +32,7 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MIGRATIONS="$ROOT_DIR/supabase/migrations"
 OLD_MIGRATION="$MIGRATIONS/20261122152622_metric_trust_observation_lineage_per_statement.sql"
-NEW_MIGRATION="$MIGRATIONS/20261124224208_readiness_counts_untrusted_runs_not_rows.sql"
+NEW_MIGRATION="$MIGRATIONS/20261125035803_readiness_reads_run_metadata_once.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -471,5 +474,50 @@ if ((OLD_ROWS_READ < 100000)); then
   exit 1
 fi
 echo "ok: per-row read $OLD_ROWS_READ observations, run-level read $NEW_ROWS_READ (failing and fixture runs hold $FAILING_RUN_ROWS)"
+
+# A capture the size of bybit_mt5 (2,042 pages, a RAW meta document of several
+# hundred kB): the run-level check must read that document a bounded number of
+# times, not once per parser ordinal. This was 13.8 s of a 14.8 s call in
+# production on 2026-11-25.
+psql_db -q >/dev/null <<'SQL'
+SELECT public.fixture_run(300, 'v2', interval '1 hour', interval '6 hours',
+  (SELECT pg_catalog.jsonb_agg(n) FROM pg_catalog.generate_series(1, 2042) AS n), 2042,
+  ARRAY[1, 2042]);
+UPDATE arena.raw_objects
+   SET meta = meta || pg_catalog.jsonb_build_object('pages', (
+         SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+                  'n', n,
+                  'sha', pg_catalog.md5(n::text) || pg_catalog.md5((n * 7)::text),
+                  'cursor', pg_catalog.md5((n * 13)::text) || pg_catalog.md5((n * 17)::text),
+                  'etag', pg_catalog.md5((n * 19)::text) || pg_catalog.md5((n * 23)::text)))
+           FROM pg_catalog.generate_series(1, 2042) AS n))
+ WHERE id = 300 * 10 + 1;
+ANALYZE;
+SQL
+assert_equal "the large capture's meta document is stored out of line (several hundred kB)" "t" \
+  "$(psql_db -Atqc "SELECT pg_column_size(meta) > 300000 FROM arena.raw_objects WHERE id = 3001")"
+assert_equal "per-row: the large healthy run adds nothing" "15" "$(psql_db -Atq -f "$OLD_COUNT")"
+assert_equal "run-level: nor here" "15" "$(psql_db -Atq -f "$NEW_COUNT")"
+buffers_hit() {
+  { echo "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)"; cat "$1"; } >"$TMP_ROOT/explain.sql"
+  psql_db -Atq -f "$TMP_ROOT/explain.sql" >"$TMP_ROOT/plan.json"
+  node -e '
+    const plan = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))[0].Plan
+    console.log(plan["Shared Hit Blocks"] + plan["Shared Read Blocks"])
+  ' "$TMP_ROOT/plan.json"
+}
+OLD_BUFFERS="$(buffers_hit "$OLD_COUNT")"
+NEW_BUFFERS="$(buffers_hit "$NEW_COUNT")"
+# 400 small healthy runs plus the fixture runs cost a few thousand buffers; the
+# old query adds about 2,042 reads of the large document on top.
+if ((NEW_BUFFERS > 20000)); then
+  echo "the new query touched $NEW_BUFFERS buffers with one 2,042-page run in the horizon" >&2
+  exit 1
+fi
+if ((OLD_BUFFERS < NEW_BUFFERS * 10)); then
+  echo "expected the previous query to re-read the large meta per ordinal (old $OLD_BUFFERS, new $NEW_BUFFERS)" >&2
+  exit 1
+fi
+echo "ok: one 2,042-page run with a large meta document: $OLD_BUFFERS buffers before, $NEW_BUFFERS after"
 
 echo "metric trust readiness run-level count PostgreSQL 17 proof passed"
