@@ -503,6 +503,12 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # own, on replay) and changes no existing column, option, owner or grant. No
 # release depends on it and both columns are false until the scoring worker
 # publishes with roi_pnl; it follows 201611 only to keep the two together.
+# 20261124224208 re-creates the readiness RPC (20261122152622 body) so its
+# last query counts the rankable observations of runs whose lineage fails
+# instead of re-validating every observation's page ordinal on every call
+# (about 100,000 blocks per call; 15 s cold against the worker's 10 s startup
+# gate). It refuses unless the 152622 statement trigger is installed and
+# enabled, so it follows it. Independent of the other entries.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -540,6 +546,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261123020207_metric_trust_artifact_raw_integrity_per_statement.sql
   20261122201611_row_eligibility_roi_pnl_only.sql
   20261123021904_public_ranked_leaderboard_window_flags.sql
+  20261124224208_readiness_counts_untrusted_runs_not_rows.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
