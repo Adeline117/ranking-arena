@@ -7,6 +7,16 @@ jest.mock('@/lib/types/premium', () => ({
 }))
 const mockedHasFeatureAccess = hasFeatureAccess as jest.MockedFunction<typeof hasFeatureAccess>
 
+const mockLogInfo = jest.fn()
+jest.mock('@/lib/utils/logger', () => ({
+  createLogger: () => ({
+    info: (...args: unknown[]) => mockLogInfo(...args),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  }),
+}))
+
 interface Call {
   table: string
   method: string
@@ -105,6 +115,8 @@ const delivery = {
 
 describe('runTraderAlerts', () => {
   const now = new Date('2026-07-15T05:00:00.000Z')
+
+  beforeEach(() => mockLogInfo.mockClear())
 
   it('does not evaluate or deliver alerts for users without an active paid subscription', async () => {
     const { client, calls } = clientWith({
@@ -479,5 +491,236 @@ describe('runTraderAlerts', () => {
     expect(
       client.from.mock.calls.filter(([table]) => table === 'trader_alert_deliveries')
     ).toHaveLength(1)
+  })
+
+  describe('rows without max drawdown and idle-window rows', () => {
+    const sealedState = (metric: string, value: number) => ({
+      alert_id: 'alert-1',
+      metric,
+      baseline_value: value,
+      last_value: value,
+      baseline_version: SEALED_PUBLIC_RANKING_ALERT_BASELINE_VERSION,
+      observed_at: '2026-07-15T04:30:00.000Z',
+      updated_at: '2026-07-15T04:30:00.000Z',
+    })
+    // Published without a max drawdown: score_completeness says so.
+    const noDrawdownRow = {
+      ...observation,
+      max_drawdown: null,
+      score_completeness: 'partial',
+      idle_window: false,
+    }
+    // No ROI and no PnL in the period: placeholders, not performance.
+    const idleRow = {
+      ...observation,
+      roi: 0,
+      pnl: 0,
+      win_rate: null,
+      max_drawdown: null,
+      arena_score: 0.01,
+      rank: 8_000,
+      score_completeness: 'minimal',
+      idle_window: true,
+    }
+    const everyCondition = {
+      ...alert,
+      alert_drawdown: true,
+      alert_pnl_change: true,
+      alert_score_change: true,
+      alert_rank_change: true,
+    }
+
+    it('skips only the drawdown condition when the trader publishes no max drawdown', async () => {
+      const { client, calls, rpc } = clientWith({
+        trader_alerts: [{ data: [everyCondition], error: null }],
+        subscriptions: [{ data: [{ user_id: 'user-1' }], error: null }],
+        user_profiles: [{ data: [{ id: 'user-1' }], error: null }],
+        public_ranked_leaderboard: [{ data: [noDrawdownRow], error: null }],
+        trader_alert_states: [
+          { data: [sealedState('roi', 10), sealedState('drawdown', 12)], error: null },
+          { data: null, error: null },
+        ],
+        trader_alert_deliveries: [
+          { data: [], error: null },
+          { data: delivery, error: null },
+        ],
+      })
+
+      const result = await runTraderAlerts(client as never, now)
+
+      // The ROI alert (10 -> 25, threshold 10) still fires.
+      expect(result).toMatchObject({
+        alertsSent: 1,
+        tradersChecked: 1,
+        drawdownConditionsSkippedNoDrawdown: 1,
+        alertsSkippedIdleWindow: 0,
+        // pnl, score, rank are seeded; drawdown is not touched.
+        statesWritten: 3,
+      })
+      expect(rpc).toHaveBeenCalledTimes(1)
+      const upsert = calls.find(
+        (call) => call.table === 'trader_alert_states' && call.method === 'upsert'
+      )
+      expect((upsert?.args[0] as { metric: string }[]).map((row) => row.metric).sort()).toEqual([
+        'pnl',
+        'rank',
+        'score',
+      ])
+      expect(mockLogInfo).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ drawdownConditionsSkippedNoDrawdown: 1 })
+      )
+    })
+
+    it('does not count a missing drawdown when the owner never enabled that condition', async () => {
+      const { client } = clientWith({
+        trader_alerts: [{ data: [alert], error: null }],
+        subscriptions: [{ data: [{ user_id: 'user-1' }], error: null }],
+        user_profiles: [{ data: [{ id: 'user-1' }], error: null }],
+        public_ranked_leaderboard: [{ data: [noDrawdownRow], error: null }],
+        trader_alert_states: [
+          { data: [], error: null },
+          { data: null, error: null },
+        ],
+        trader_alert_deliveries: [{ data: [], error: null }],
+      })
+
+      const result = await runTraderAlerts(client as never, now)
+
+      expect(result).toMatchObject({ statesWritten: 4, drawdownConditionsSkippedNoDrawdown: 0 })
+      expect(mockLogInfo).not.toHaveBeenCalled()
+    })
+
+    it('still rejects a row whose drawdown is present but not a number', async () => {
+      const { client, calls } = clientWith({
+        trader_alerts: [{ data: [alert], error: null }],
+        subscriptions: [{ data: [{ user_id: 'user-1' }], error: null }],
+        user_profiles: [{ data: [{ id: 'user-1' }], error: null }],
+        public_ranked_leaderboard: [
+          { data: [{ ...observation, max_drawdown: '12' }], error: null },
+        ],
+        trader_alert_states: [{ data: [], error: null }],
+        trader_alert_deliveries: [{ data: [], error: null }],
+      })
+
+      const result = await runTraderAlerts(client as never, now)
+
+      expect(result).toMatchObject({ statesWritten: 0, tradersChecked: 0 })
+      expect(calls).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ table: 'trader_alert_states', method: 'upsert' }),
+        ])
+      )
+    })
+
+    it('fires nothing and moves no baseline for an idle-window row', async () => {
+      // Every stored baseline is far enough from the idle placeholders
+      // (ROI 0, PnL 0, score 0.01, rank 8000) to cross its threshold.
+      const { client, calls, rpc } = clientWith({
+        trader_alerts: [{ data: [everyCondition], error: null }],
+        subscriptions: [{ data: [{ user_id: 'user-1' }], error: null }],
+        user_profiles: [{ data: [{ id: 'user-1' }], error: null }],
+        public_ranked_leaderboard: [{ data: [idleRow], error: null }],
+        trader_alert_states: [
+          {
+            data: [
+              sealedState('roi', 25),
+              sealedState('pnl', 20_000),
+              sealedState('score', 80),
+              sealedState('rank', 15),
+            ],
+            error: null,
+          },
+        ],
+        trader_alert_deliveries: [{ data: [delivery], error: null }],
+      })
+
+      const result = await runTraderAlerts(client as never, now)
+
+      expect(result).toMatchObject({
+        alertsChecked: 1,
+        tradersChecked: 0,
+        statesWritten: 0,
+        alertsSent: 0,
+        deliveryFailures: 0,
+        alertsSkippedIdleWindow: 1,
+        drawdownConditionsSkippedNoDrawdown: 0,
+      })
+      expect(rpc).not.toHaveBeenCalled()
+      expect(calls).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ table: 'trader_alert_states', method: 'upsert' }),
+        ])
+      )
+      expect(mockLogInfo).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ alertsSkippedIdleWindow: 1 })
+      )
+    })
+
+    it('reads idle_window from the public view', async () => {
+      const { client, calls } = clientWith({
+        trader_alerts: [{ data: [alert], error: null }],
+        subscriptions: [{ data: [{ user_id: 'user-1' }], error: null }],
+        user_profiles: [{ data: [{ id: 'user-1' }], error: null }],
+        public_ranked_leaderboard: [{ data: [], error: null }],
+        trader_alert_states: [{ data: [], error: null }],
+        trader_alert_deliveries: [{ data: [], error: null }],
+      })
+
+      await runTraderAlerts(client as never, now)
+
+      const select = calls.find(
+        (call) => call.table === 'public_ranked_leaderboard' && call.method === 'select'
+      )
+      expect(String(select?.args[0]).split(',')).toContain('idle_window')
+    })
+
+    it('behaves exactly as before under the old rule (full rows, both flags false)', async () => {
+      const run = async (rankingRow: Record<string, unknown>) => {
+        const { client, calls, rpc } = clientWith({
+          trader_alerts: [{ data: [everyCondition], error: null }],
+          subscriptions: [{ data: [{ user_id: 'user-1' }], error: null }],
+          user_profiles: [{ data: [{ id: 'user-1' }], error: null }],
+          public_ranked_leaderboard: [{ data: [rankingRow], error: null }],
+          trader_alert_states: [
+            { data: [sealedState('roi', 10), sealedState('drawdown', 12)], error: null },
+            { data: null, error: null },
+          ],
+          trader_alert_deliveries: [
+            { data: [], error: null },
+            { data: delivery, error: null },
+          ],
+        })
+        const result = await runTraderAlerts(client as never, now)
+        const upsert = calls.find(
+          (call) => call.table === 'trader_alert_states' && call.method === 'upsert'
+        )
+        return { result, upsert: upsert?.args[0], rpcCalls: rpc.mock.calls }
+      }
+
+      // The row as the view served it before the flag columns existed, and the
+      // same row with both flags false, must produce the same run.
+      const before = await run(observation)
+      const after = await run({ ...observation, idle_window: false, mdd_contradiction: false })
+
+      expect(after).toEqual(before)
+      // What the pre-change runner produced for this input: one ROI delivery,
+      // and pnl / score / rank / drawdown all seeded or advanced.
+      expect(before.result).toMatchObject({
+        alertsSent: 1,
+        tradersChecked: 1,
+        statesWritten: 4,
+        alertsSkippedIdleWindow: 0,
+        drawdownConditionsSkippedNoDrawdown: 0,
+      })
+      expect((before.upsert as { metric: string }[]).map((row) => row.metric).sort()).toEqual([
+        'drawdown',
+        'pnl',
+        'rank',
+        'score',
+      ])
+      expect(mockLogInfo).not.toHaveBeenCalled()
+    })
   })
 })
