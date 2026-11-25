@@ -585,6 +585,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:blofin-profile-capture-pg17
 
+      - name: Prove the blofin_spot profile contract registration and a recorded spot capture
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:blofin-spot-profile-capture-pg17
+
       - name: Prove retention keeps metric-trust evidence
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
@@ -599,6 +604,11 @@ jobs:
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:trust-requires-run-pg17
+
+      - name: Prove RAW retention census is count-only and switch-gated
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:raw-retention-census-pg17
 
       - name: Prove public-source capture and metric contract registration
         env:
@@ -629,6 +639,21 @@ jobs:
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:visible-sources-pg17
+
+      - name: Prove observation lineage per statement keeps every per-row outcome
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:observation-lineage-statement-pg17
+
+      - name: Prove artifact RAW integrity per statement keeps every per-row outcome
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:artifact-integrity-statement-pg17
+
+      - name: Prove the score bundle's index-only entry counts keep its output
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:score-bundle-entry-counts-pg17
 
       - name: Prove the row policy requires ROI and PnL only
         env:

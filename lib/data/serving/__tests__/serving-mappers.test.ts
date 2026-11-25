@@ -195,6 +195,36 @@ describe('getPublicFirstScreen', () => {
     })
   })
 
+  it('reads the public cohort under the public alias while the RPC keeps the slug', async () => {
+    mockFetchPublicProfileRankingRows.mockResolvedValue({
+      rows: [
+        {
+          source: 'bitget',
+          source_trader_id: 'beb24d718eb23b54ac91',
+          season_id: '30D',
+          rank: 4,
+          roi: 12.34,
+        },
+      ],
+      rankingVisibility: 'partial',
+      rankingVisibilityReason: 'public_period_not_published',
+    })
+
+    const fs = await getPublicFirstScreen(
+      rpcClient(rpcPayload),
+      'bitget_futures',
+      'beb24d718eb23b54ac91',
+      'bitget'
+    )
+
+    expect(mockFetchPublicProfileRankingRows).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ source: 'bitget', sourceTraderId: 'beb24d718eb23b54ac91' })
+    )
+    expect(fs?.source).toBe('bitget_futures')
+    expect(fs?.entries[0]).toMatchObject({ rank: 4, headlineRoi: 12.34 })
+  })
+
   it('returns null on RPC null (unknown trader) and on error', async () => {
     expect(await getFirstScreen(rpcClient(null), 'bitget_futures', 'nope')).toBeNull()
     expect(await getFirstScreen(rpcClient(null, { message: 'x' }), 's', 't')).toBeNull()

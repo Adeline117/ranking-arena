@@ -1,0 +1,319 @@
+{
+  "uid": "4187422152",
+  "captured": "2026-11-20 public probe of https://blofin.com/sapi/v1/spot_copy/trader/* (sanitized: chart arrays trimmed to the 3 latest points, self_introduction blanked)",
+  "responses": {
+    "trader/stat/indicators|D7": {
+      "code": 200,
+      "msg": "succeed",
+      "data": {
+        "rio_d7": "-0.000911442669585082",
+        "pnl_d7": "-0.5347862018953812",
+        "pnl_all": "84.572946915034389999",
+        "max_drawdown_all": "0.001497742225083643",
+        "win_ratio_all": "0",
+        "trades": 0,
+        "winning_trades": 0,
+        "roi": "-0.000911442669585082",
+        "annualized_roi": "-0.047525224914079275",
+        "max_drawdown": "0.001497742225083643",
+        "sharpe_ratio": "6437.0774",
+        "volatility": "0.0109",
+        "down_risk": "0",
+        "calmar_ratio": "0",
+        "sortino_ratio": "0",
+        "update_time": 1795219208999,
+        "total_copiers": 0,
+        "copier_pnl": null,
+        "last_trade_at": 1794181795013,
+        "real_pnl": "-0.593621331761590751"
+      },
+      "alert": null
+    },
+    "trader/stat/performance|D7": {
+      "code": 200,
+      "msg": "succeed",
+      "data": {
+        "performance": {
+          "roi": "-0.000911442669585082",
+          "pnl": "-0.593621331761590751",
+          "max_drawdown": "0.001497742225083643",
+          "win_rate": "0"
+        },
+        "roi": [
+          {
+            "time": 1795046400000,
+            "value": "0.000097194857135735"
+          },
+          {
+            "time": 1795132800000,
+            "value": "-0.000911442669585082"
+          },
+          {
+            "time": 1795219200000,
+            "value": "-0.001341371392179713"
+          }
+        ],
+        "pnl": [
+          {
+            "time": 1795046400000,
+            "value": "-0.112163754677957533"
+          },
+          {
+            "time": 1795132800000,
+            "value": "-0.446370599050699104"
+          },
+          {
+            "time": 1795219200000,
+            "value": "-0.190264129947234993"
+          }
+        ],
+        "symbols": []
+      },
+      "alert": null
+    },
+    "trader/stat/indicators|D30": {
+      "code": 200,
+      "msg": "succeed",
+      "data": {
+        "rio_d7": "-0.000911442669585082",
+        "pnl_d7": "-0.5347862018953812",
+        "pnl_all": "84.572946915034389999",
+        "max_drawdown_all": "0.147976082140442",
+        "win_ratio_all": "0.3529",
+        "trades": 17,
+        "winning_trades": 6,
+        "roi": "-0.158433806762582024",
+        "annualized_roi": "-1.927611315611414625",
+        "max_drawdown": "0.147976082140442",
+        "sharpe_ratio": "74.7315",
+        "volatility": "1.0474",
+        "down_risk": "0",
+        "calmar_ratio": "0",
+        "sortino_ratio": "0",
+        "update_time": 1795219208999,
+        "total_copiers": 0,
+        "copier_pnl": null,
+        "last_trade_at": 1794181795013,
+        "real_pnl": "-70.304840834638073615"
+      },
+      "alert": null
+    },
+    "trader/stat/performance|D30": {
+      "code": 200,
+      "msg": "succeed",
+      "data": {
+        "performance": {
+          "roi": "-0.158433806762582024",
+          "pnl": "-70.304840834638073615",
+          "max_drawdown": "0.147976082140442",
+          "win_rate": "0.3529"
+        },
+        "roi": [
+          {
+            "time": 1795046400000,
+            "value": "-0.157425169235861206"
+          },
+          {
+            "time": 1795132800000,
+            "value": "-0.158433806762582024"
+          },
+          {
+            "time": 1795219200000,
+            "value": "-0.158863735485176655"
+          }
+        ],
+        "pnl": [
+          {
+            "time": 1795046400000,
+            "value": "-0.112163754677957533"
+          },
+          {
+            "time": 1795132800000,
+            "value": "-0.446370599050699104"
+          },
+          {
+            "time": 1795219200000,
+            "value": "-0.190264129947234993"
+          }
+        ],
+        "symbols": [
+          {
+            "symbol": "ALGO-USDT",
+            "trades": 3,
+            "ratio": "0.1764",
+            "win_ratio": "0"
+          },
+          {
+            "symbol": "METIS-USDT",
+            "trades": 3,
+            "ratio": "0.1764",
+            "win_ratio": "0"
+          },
+          {
+            "symbol": "LINK-USDT",
+            "trades": 2,
+            "ratio": "0.1176",
+            "win_ratio": "0.5"
+          },
+          {
+            "symbol": "INJ-USDT",
+            "trades": 2,
+            "ratio": "0.1176",
+            "win_ratio": "1"
+          },
+          {
+            "symbol": "OSMO-USDT",
+            "trades": 2,
+            "ratio": "0.1176",
+            "win_ratio": "0"
+          },
+          {
+            "symbol": "Others",
+            "trades": 5,
+            "ratio": "0.2944",
+            "win_ratio": "0.6"
+          }
+        ]
+      },
+      "alert": null
+    },
+    "trader/stat/indicators|D90": {
+      "code": 200,
+      "msg": "succeed",
+      "data": {
+        "rio_d7": "-0.000911442669585082",
+        "pnl_d7": "-0.5347862018953812",
+        "pnl_all": "84.572946915034389999",
+        "max_drawdown_all": "0.27566833876268518",
+        "win_ratio_all": "0.4827",
+        "trades": 29,
+        "winning_trades": 14,
+        "roi": "-0.028714025503648557",
+        "annualized_roi": "-0.116451325653685814",
+        "max_drawdown": "0.27566833876268518",
+        "sharpe_ratio": "44.761",
+        "volatility": "2.5374",
+        "down_risk": "0",
+        "calmar_ratio": "0",
+        "sortino_ratio": "0",
+        "update_time": 1795219208999,
+        "total_copiers": 0,
+        "copier_pnl": null,
+        "last_trade_at": 1794181795013,
+        "real_pnl": "-12.897600933972691162"
+      },
+      "alert": null
+    },
+    "trader/stat/performance|D90": {
+      "code": 200,
+      "msg": "succeed",
+      "data": {
+        "performance": {
+          "roi": "-0.028714025503648557",
+          "pnl": "-12.897600933972691162",
+          "max_drawdown": "0.27566833876268518",
+          "win_rate": "0.4827"
+        },
+        "roi": [
+          {
+            "time": 1795046400000,
+            "value": "-0.027705387976927739"
+          },
+          {
+            "time": 1795132800000,
+            "value": "-0.028714025503648557"
+          },
+          {
+            "time": 1795219200000,
+            "value": "-0.029143954226243188"
+          }
+        ],
+        "pnl": [
+          {
+            "time": 1795046400000,
+            "value": "-0.112163754677957533"
+          },
+          {
+            "time": 1795132800000,
+            "value": "-0.446370599050699104"
+          },
+          {
+            "time": 1795219200000,
+            "value": "-0.190264129947234993"
+          }
+        ],
+        "symbols": [
+          {
+            "symbol": "BTC-USDT",
+            "trades": 4,
+            "ratio": "0.1379",
+            "win_ratio": "1"
+          },
+          {
+            "symbol": "LINK-USDT",
+            "trades": 4,
+            "ratio": "0.1379",
+            "win_ratio": "0.75"
+          },
+          {
+            "symbol": "ALGO-USDT",
+            "trades": 3,
+            "ratio": "0.1034",
+            "win_ratio": "0"
+          },
+          {
+            "symbol": "METIS-USDT",
+            "trades": 3,
+            "ratio": "0.1034",
+            "win_ratio": "0"
+          },
+          {
+            "symbol": "IO-USDT",
+            "trades": 3,
+            "ratio": "0.1034",
+            "win_ratio": "1"
+          },
+          {
+            "symbol": "Others",
+            "trades": 12,
+            "ratio": "0.414",
+            "win_ratio": "0.3333"
+          }
+        ]
+      },
+      "alert": null
+    },
+    "trader/info|": {
+      "code": 200,
+      "msg": "succeed",
+      "data": {
+        "uid": 4187422152,
+        "nick_name": "Cryptoracle",
+        "profile": "https://blofin.com/cdn-cgi/image/width=64,height=64,format=webp,quality=100,fit=cover/https://s2.blofin.com/static/user/img/profile/1ae76d1660dd4a2293f30755a7749582.",
+        "followers": 0,
+        "followers_max": 200,
+        "aum": "9",
+        "profit_sharing_ratio": "0.1",
+        "joined_date": 1770636963495,
+        "follow_state": 0,
+        "roi_d7": "-0.000911442669585082",
+        "real_pnl": "84.572946915034389999",
+        "max_draw_down": "0.147976082140442",
+        "win_rate": "0.4444",
+        "self_introduction": "",
+        "sharing_period": "WEEKLY",
+        "hidden_order": false,
+        "can_copy": true,
+        "hidden_all": false,
+        "copier_whitelist": false,
+        "whitelist_copier": false,
+        "source": 0,
+        "order_amount_limit": 1000,
+        "forbidden_follow_type": 0,
+        "tag_list": [],
+        "verified": false
+      },
+      "alert": null
+    }
+  }
+}

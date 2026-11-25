@@ -51,7 +51,11 @@ import {
   classifyPublishableRow,
   orderRowsForWrite,
 } from '@/lib/rankings/publication/publish-season'
-import { isIdleWindowRow, scoreTraders } from '@/lib/rankings/publication/score-traders'
+import {
+  hasSignMismatch,
+  isIdleWindowRow,
+  scoreTraders,
+} from '@/lib/rankings/publication/score-traders'
 import {
   lacksRequiredMetricEvidence,
   type SourcePublicationScoreRow,
@@ -523,17 +527,37 @@ const report = {
       .length,
   },
   contradictoryDrawdown: {
-    definition: 'ROI < 0 with a 0% max drawdown (stored precision): drawdown refused',
+    definition: 'ROI < 0 or PnL < 0 with a 0% max drawdown (stored precision): drawdown refused',
     rows: after.ranked.filter((row) => row.contradiction).length,
     bySource: countBy(
       after.ranked.filter((row) => row.contradiction),
       (row) => row.source
     ),
     exactZeroInInput: scoreRows.filter(
-      (row) => row.roi_pct !== null && row.roi_pct < 0 && row.max_drawdown === 0
+      (row) =>
+        row.max_drawdown === 0 &&
+        ((row.roi_pct !== null && row.roi_pct < 0) || (row.pnl_usd !== null && row.pnl_usd < 0))
+    ).length,
+    roiPositivePnlNegative: after.ranked.filter(
+      (row) => row.contradiction && row.roi > 0 && row.pnl < 0
     ).length,
     rank: quantiles(after.ranked.filter((row) => row.contradiction).map((row) => row.rank)),
     inNewTop100: afterTop100.filter((row) => row.contradiction).length,
+  },
+  signMismatch: {
+    definition: 'ROI and PnL have opposite signs (stored precision); counted only',
+    rows: after.ranked.filter((row) => hasSignMismatch(row)).length,
+    bySource: countBy(
+      after.ranked.filter((row) => hasSignMismatch(row)),
+      (row) => row.source
+    ),
+    roiPositivePnlNegative: after.ranked.filter((row) => hasSignMismatch(row) && row.roi > 0)
+      .length,
+    alsoContradictoryDrawdown: after.ranked.filter(
+      (row) => hasSignMismatch(row) && row.contradiction
+    ).length,
+    inNewTop100: afterTop100.filter((row) => hasSignMismatch(row)).length,
+    rank: quantiles(after.ranked.filter((row) => hasSignMismatch(row)).map((row) => row.rank)),
   },
   losingRows: {
     definition: 'roi < 0 or pnl < 0 (not idle)',
@@ -608,9 +632,13 @@ if (markdownPath) {
     `- Rank change (after - before): ${json(report.previouslyRankedIdleWithZeroDrawdown.rankChange)}`,
     `- Of them in the real previous top 500: ${report.previouslyRankedIdleWithZeroDrawdown.inRealTop500}; in the real previous top 100: ${report.previouslyRankedIdleWithZeroDrawdown.inRealTop100}`,
     '',
-    '### Contradictory drawdown (ROI < 0 with a 0% max drawdown)',
+    '### Contradictory drawdown (ROI < 0 or PnL < 0, with a 0% max drawdown)',
     '',
     `- Rows whose drawdown was refused: ${report.contradictoryDrawdown.rows}; by source ${json(report.contradictoryDrawdown.bySource)}; with a drawdown of exactly 0 in the input: ${report.contradictoryDrawdown.exactZeroInInput}; rank ${json(report.contradictoryDrawdown.rank)}; in the new top 100: ${report.contradictoryDrawdown.inNewTop100}`,
+    '',
+    '### Sign mismatch (ROI and PnL with opposite signs; counted only)',
+    '',
+    `- Rows: ${report.signMismatch.rows}; by source ${json(report.signMismatch.bySource)}; ROI positive with PnL negative: ${report.signMismatch.roiPositivePnlNegative}; also a refused drawdown: ${report.signMismatch.alsoContradictoryDrawdown}; in the new top 100: ${report.signMismatch.inNewTop100}; rank ${json(report.signMismatch.rank)}`,
     '',
     '### Losing rows relative to idle rows',
     '',

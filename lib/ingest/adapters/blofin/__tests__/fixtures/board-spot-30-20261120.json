@@ -1,0 +1,77 @@
+{
+  "code": 200,
+  "msg": "succeed",
+  "data": {
+    "trader_info": [
+      {
+        "uid": 4187422152,
+        "nick_name": "Cryptoracle",
+        "verified": false,
+        "follow_state": 0,
+        "profile": "https://s2.blofin.com/static/user/img/profile/1ae76d1660dd4a2293f30755a7749582.",
+        "range_time": 2,
+        "roi": "-0.158433806762582024",
+        "pnl": "-70.245476334500525214",
+        "mdd": "0.147976082140442",
+        "aum": "9",
+        "sharpe_ratio": "12.0378",
+        "followers": 0,
+        "followers_max": 200,
+        "lead_trading_days": 285,
+        "chart_data": {
+          "roi": [
+            {
+              "time": 1795046400000,
+              "data": "-0.157425169235861206"
+            },
+            {
+              "time": 1795132800000,
+              "data": "-0.158433806762582024"
+            },
+            {
+              "time": 1795219200000,
+              "data": "-0.158854536664982933"
+            }
+          ]
+        }
+      },
+      {
+        "uid": 59201479546,
+        "nick_name": "blofin_001",
+        "verified": false,
+        "follow_state": 0,
+        "profile": "https://s2.blofin.com/static/user/img/default3.png",
+        "range_time": 2,
+        "roi": "0",
+        "pnl": "0",
+        "mdd": "0",
+        "aum": "0",
+        "sharpe_ratio": "0",
+        "followers": 0,
+        "followers_max": 200,
+        "lead_trading_days": 10,
+        "chart_data": {
+          "roi": [
+            {
+              "time": 1795046400000,
+              "data": "0"
+            },
+            {
+              "time": 1795132800000,
+              "data": "0"
+            },
+            {
+              "time": 1795219200000,
+              "data": "0"
+            }
+          ]
+        }
+      }
+    ],
+    "page_num": 1,
+    "page_size": 2,
+    "page_total": 148,
+    "pages": 8,
+    "range_time": 2
+  }
+}

@@ -64,6 +64,20 @@ export const EXPECTED_METRICS_BY_SOURCE: Record<string, ExpectedMetrics> = {
   // spot board-only in practice: no profile crawl upstream → profile-only
   // metrics (win/total positions, copier_pnl, aum, holding) never fill
   xt_spot: ['roi', 'pnl', 'mdd', 'win_rate', 'copier_count'],
+  // spot detail indicators carry no volume field (public probe 2026-11-20:
+  // /sapi/v1/spot_copy/trader/stat/indicators has no trade_volume). win_rate
+  // exists only for periods with trades (the source reports "0" otherwise).
+  blofin_spot: [
+    'roi',
+    'pnl',
+    'sharpe',
+    'mdd',
+    'win_rate',
+    'win_positions',
+    'total_positions',
+    'copier_count',
+    'aum',
+  ],
 }
 
 export const EXPECTED_METRICS: Record<string, ExpectedMetrics> = {

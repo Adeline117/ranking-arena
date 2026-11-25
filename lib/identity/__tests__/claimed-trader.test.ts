@@ -1,5 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { claimedTraderCanonicalHref, findClaimedUserHandleByIdentity } from '../claimed-trader'
+import {
+  claimedTraderCanonicalHref,
+  findClaimedUserHandleByIdentity,
+  urlPlatformIsServerAccount,
+} from '../claimed-trader'
 
 type QueryResult = { data: unknown; error: unknown }
 
@@ -160,5 +164,57 @@ describe('claimed trader canonical redirect', () => {
         requestedPlatformValidated: true,
       })
     ).toBe('/u/alice%2Fname')
+  })
+})
+
+// The account the server resolved and rendered: arena slug plus the public
+// alias it verified through the resolver. The client composes exactly these two
+// functions to decide a mismatch and a claimed-account redirect.
+describe('a ?platform= that names the server-rendered account', () => {
+  const serverAccount = { source: 'bybit_copytrade', source_aliases: ['bybit'] }
+  const claimedIdentity = { source: 'bybit_copytrade', traderId: 'acct-1', userHandle: 'alice' }
+  const visibleIdentity = { source: 'bybit_copytrade', traderId: 'acct-1' }
+
+  const redirectFor = (requestedPlatform: string | undefined) =>
+    claimedTraderCanonicalHref({
+      claimedIdentity,
+      visibleIdentity,
+      requestedPlatform,
+      // No client override happened: only the server-account check can validate.
+      requestedPlatformValidated: urlPlatformIsServerAccount(requestedPlatform, serverAccount),
+    })
+
+  it('accepts the source itself and a server-verified alias, nothing else', () => {
+    expect(urlPlatformIsServerAccount('bybit_copytrade', serverAccount)).toBe(true)
+    expect(urlPlatformIsServerAccount('bybit', serverAccount)).toBe(true)
+    for (const forged of ['okx', 'bybit_spot', 'BYBIT', 'bybit ', '', null, undefined]) {
+      expect(urlPlatformIsServerAccount(forged, serverAccount)).toBe(false)
+    }
+  })
+
+  it('has no aliases to accept when the server sent none', () => {
+    expect(urlPlatformIsServerAccount('bybit', { source: 'bybit_copytrade' })).toBe(false)
+  })
+
+  it('redirects a claimed account opened by its alias URL', () => {
+    expect(redirectFor('bybit')).toBe('/u/alice')
+    expect(redirectFor('bybit_copytrade')).toBe('/u/alice')
+    expect(redirectFor(undefined)).toBe('/u/alice')
+  })
+
+  it('does not redirect for a forged platform, which stays unvalidated', () => {
+    expect(redirectFor('okx')).toBeNull()
+    expect(redirectFor('bybit_spot')).toBeNull()
+  })
+
+  it('never redirects when the visible account is not the claimed one, alias or not', () => {
+    expect(
+      claimedTraderCanonicalHref({
+        claimedIdentity,
+        visibleIdentity: { source: 'bybit_copytrade', traderId: 'someone-else' },
+        requestedPlatform: 'bybit',
+        requestedPlatformValidated: urlPlatformIsServerAccount('bybit', serverAccount),
+      })
+    ).toBeNull()
   })
 })

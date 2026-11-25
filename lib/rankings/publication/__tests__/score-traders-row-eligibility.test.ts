@@ -23,6 +23,7 @@ import {
   MIN_ACTIVE_ARENA_SCORE,
   MIN_RANKED_ARENA_SCORE,
   hasContradictoryDrawdown,
+  hasSignMismatch,
   isIdleWindowRow,
   scoreTraders,
   type ScoredTrader,
@@ -639,6 +640,8 @@ describe('contradictory drawdown: a losing window with a 0% max drawdown', () =>
     traderRow('profit-zero-dd', { roi: 12, pnl: 1_500, win_rate: 60, max_drawdown: 0 }),
     // A loss with no drawdown is not.
     traderRow('loss-zero-dd', { roi: -12, pnl: -1_500, win_rate: 60, max_drawdown: 0 }),
+    // ROI is positive but the account lost money: still a losing window.
+    traderRow('pnl-loss-zero-dd', { roi: 5.18, pnl: -67.64, win_rate: 52, max_drawdown: 0 }),
     // The same loss with an ordinary drawdown, for comparison.
     traderRow('loss-real-dd', { roi: -12, pnl: -1_500, win_rate: 60, max_drawdown: 20 }),
     // The same loss reporting no drawdown at all.
@@ -668,8 +671,19 @@ describe('contradictory drawdown: a losing window with a 0% max drawdown', () =>
     expect(refused.arena_score!).toBeLessThan(rows.get('loss-real-dd')!.arena_score!)
 
     expect(mockLogger.warn).toHaveBeenCalledWith(
-      '[30D] Refused contradictory drawdowns (ROI < 0 with a 0% max drawdown; metric emptied, row kept): 1'
+      '[30D] Refused contradictory drawdowns (ROI < 0 or PnL < 0 with a 0% max drawdown; metric emptied, row kept): 2'
     )
+  })
+
+  it('refuses it when ROI is positive but PnL is negative', async () => {
+    const rows = byId(await publishedCohort(cohort(), 'roi_pnl'))
+    const refused = rows.get('pnl-loss-zero-dd')!
+    expect(refused.roi).toBe(5.18)
+    expect(refused.pnl).toBe(-67.64)
+    expect(refused.max_drawdown).toBeNull()
+    expect(refused.score_factors).toMatchObject({ drawdown: null, mdd_contradiction: true })
+    expect(refused.score_completeness).toBe('partial')
+    expect(refused.win_rate).toBe(52)
   })
 
   it('still reads a 0% drawdown on a profitable row as the best drawdown', async () => {
@@ -704,16 +718,25 @@ describe('contradictory drawdown: a losing window with a 0% max drawdown', () =>
   })
 
   it('reads both sides at the stored precision', () => {
-    expect(hasContradictoryDrawdown({ roi: -12, max_drawdown: 0 })).toBe(true)
+    expect(hasContradictoryDrawdown({ roi: -12, pnl: -300, max_drawdown: 0 })).toBe(true)
     // max_drawdown is numeric(5,2): 0.004 is written as 0.00.
-    expect(hasContradictoryDrawdown({ roi: -12, max_drawdown: 0.004 })).toBe(true)
-    expect(hasContradictoryDrawdown({ roi: -12, max_drawdown: 0.01 })).toBe(false)
+    expect(hasContradictoryDrawdown({ roi: -12, pnl: -300, max_drawdown: 0.004 })).toBe(true)
+    expect(hasContradictoryDrawdown({ roi: -12, pnl: -300, max_drawdown: 0.01 })).toBe(false)
+    // Either side losing is enough.
+    expect(hasContradictoryDrawdown({ roi: -12, pnl: 40, max_drawdown: 0 })).toBe(true)
+    expect(hasContradictoryDrawdown({ roi: 5, pnl: -40, max_drawdown: 0 })).toBe(true)
+    expect(hasContradictoryDrawdown({ roi: -12, pnl: null, max_drawdown: 0 })).toBe(true)
     // roi is numeric(12,4): -0.00004 is written as 0.0000, not a loss.
-    expect(hasContradictoryDrawdown({ roi: -0.00004, max_drawdown: 0 })).toBe(false)
-    expect(hasContradictoryDrawdown({ roi: -0.0001, max_drawdown: 0 })).toBe(true)
-    expect(hasContradictoryDrawdown({ roi: 0, max_drawdown: 0 })).toBe(false)
-    expect(hasContradictoryDrawdown({ roi: 5, max_drawdown: 0 })).toBe(false)
-    expect(hasContradictoryDrawdown({ roi: -12, max_drawdown: null })).toBe(false)
+    expect(hasContradictoryDrawdown({ roi: -0.00004, pnl: 0, max_drawdown: 0 })).toBe(false)
+    expect(hasContradictoryDrawdown({ roi: -0.0001, pnl: 0, max_drawdown: 0 })).toBe(true)
+    // pnl is numeric(18,2): -0.004 is written as 0.00, not a loss.
+    expect(hasContradictoryDrawdown({ roi: 5, pnl: -0.004, max_drawdown: 0 })).toBe(false)
+    expect(hasContradictoryDrawdown({ roi: 5, pnl: -0.01, max_drawdown: 0 })).toBe(true)
+    // No loss on either side.
+    expect(hasContradictoryDrawdown({ roi: 0, pnl: 0, max_drawdown: 0 })).toBe(false)
+    expect(hasContradictoryDrawdown({ roi: 5, pnl: 40, max_drawdown: 0 })).toBe(false)
+    expect(hasContradictoryDrawdown({ roi: 5, pnl: null, max_drawdown: 0 })).toBe(false)
+    expect(hasContradictoryDrawdown({ roi: -12, pnl: -300, max_drawdown: null })).toBe(false)
   })
 
   it('writes the row with an empty drawdown that the row policy accepts', async () => {
@@ -741,5 +764,105 @@ describe('contradictory drawdown: a losing window with a 0% max drawdown', () =>
     expect(mockLogger.warn).not.toHaveBeenCalledWith(
       expect.stringContaining('Refused contradictory drawdowns')
     )
+  })
+})
+
+describe('sign_mismatch: ROI and PnL with opposite signs are counted, nothing else', () => {
+  const base = () => [
+    traderRow('p1', { roi: 80, pnl: 500_000, win_rate: 70, max_drawdown: 5 }),
+    traderRow('p2', { roi: 20, pnl: 20_000, win_rate: 55, max_drawdown: 15 }),
+    traderRow('l1', { roi: -9, pnl: -300, win_rate: 41, max_drawdown: 44 }),
+    traderRow('idle', { roi: 0, pnl: 0, win_rate: null, max_drawdown: null }),
+  ]
+  const mismatched = () => [
+    traderRow('roi-up-pnl-down', { source: 'toobit_futures', roi: 5.18, pnl: -67.64 }),
+    traderRow('roi-up-pnl-down-2', { source: 'toobit_futures', roi: 2.86, pnl: -385.33 }),
+    traderRow('roi-down-pnl-up', { source: 'bybit', roi: -4, pnl: 120 }),
+    // Also a losing window with a 0% drawdown: the drawdown rule still applies.
+    traderRow('mismatch-zero-dd', { source: 'bybit', roi: 1.6, pnl: -40, max_drawdown: 0 }),
+  ]
+  const signMismatchLogs = () =>
+    mockLogger.warn.mock.calls
+      .map(([line]) => String(line))
+      .filter((line) => line.includes('sign_mismatch'))
+
+  it('logs the count per source', async () => {
+    await publishedCohort([...base(), ...mismatched()], 'roi_pnl')
+    expect(signMismatchLogs()).toEqual([
+      '[30D] sign_mismatch (ROI and PnL have opposite signs; counted only, rows ranked unchanged): 4 {"bybit":2,"toobit_futures":2}',
+    ])
+  })
+
+  it('does not change whether or how the rows are ranked', async () => {
+    const rows = byId(await publishedCohort([...base(), ...mismatched()], 'roi_pnl'))
+    for (const id of ['roi-up-pnl-down', 'roi-up-pnl-down-2', 'roi-down-pnl-up']) {
+      const row = rows.get(id)!
+      expect(row.arena_score!).toBeGreaterThanOrEqual(MIN_ACTIVE_ARENA_SCORE)
+      expect(row.max_drawdown).toBe(12)
+      expect(row.win_rate).toBe(55)
+      expect(row.score_completeness).toBe('full')
+      // No new mark: only the count in the log.
+      expect(Object.keys(row.score_factors!).sort()).toEqual([
+        'consistency',
+        'drawdown',
+        'pnl',
+        'roi',
+        'sharpe',
+      ])
+    }
+    // Scored exactly like rows with the same numbers would be: the same call
+    // without the counting gives the same scores.
+    expect(hasSignMismatch({ roi: 5.18, pnl: -67.64 })).toBe(true)
+    // The row that is also a losing window with a 0% drawdown follows that rule.
+    expect(rows.get('mismatch-zero-dd')).toMatchObject({
+      max_drawdown: null,
+      score_factors: { mdd_contradiction: true },
+    })
+  })
+
+  it('is silent when no row has opposite signs', async () => {
+    await publishedCohort(base(), 'roi_pnl')
+    expect(signMismatchLogs()).toEqual([])
+  })
+
+  it('reads both signs at the stored precision, and zero is not a sign', () => {
+    expect(hasSignMismatch({ roi: 5, pnl: -1 })).toBe(true)
+    expect(hasSignMismatch({ roi: -5, pnl: 1 })).toBe(true)
+    expect(hasSignMismatch({ roi: 5, pnl: 1 })).toBe(false)
+    expect(hasSignMismatch({ roi: -5, pnl: -1 })).toBe(false)
+    expect(hasSignMismatch({ roi: 0, pnl: -1 })).toBe(false)
+    expect(hasSignMismatch({ roi: 5, pnl: 0 })).toBe(false)
+    expect(hasSignMismatch({ roi: 5, pnl: null })).toBe(false)
+    // Written as ROI 0.0000 / PnL 0.00: no sign.
+    expect(hasSignMismatch({ roi: 0.00004, pnl: -1 })).toBe(false)
+    expect(hasSignMismatch({ roi: 5, pnl: -0.004 })).toBe(false)
+    expect(hasSignMismatch({ roi: 0.0001, pnl: -0.01 })).toBe(true)
+  })
+
+  it('does not count rows the outlier rule already excludes for a large opposite-sign pair', async () => {
+    // markOutliers: PnL < -500 with ROI > 50 (and the reverse) is an outlier
+    // and never reaches the cohort.
+    const rows = byId(
+      await publishedCohort(
+        [
+          ...base(),
+          traderRow('outlier-up-down', { source: 'xt', roi: 60, pnl: -800 }),
+          traderRow('outlier-down-up', { source: 'xt', roi: -60, pnl: 800 }),
+          traderRow('small-mismatch', { source: 'xt', roi: 3, pnl: -20 }),
+        ],
+        'roi_pnl'
+      )
+    )
+    expect(rows.has('outlier-up-down')).toBe(false)
+    expect(rows.has('outlier-down-up')).toBe(false)
+    expect(rows.has('small-mismatch')).toBe(true)
+    expect(signMismatchLogs()).toEqual([
+      '[30D] sign_mismatch (ROI and PnL have opposite signs; counted only, rows ranked unchanged): 1 {"xt":1}',
+    ])
+  })
+
+  it("'four_metrics' logs nothing about it", async () => {
+    await publishedCohort([...base(), ...mismatched()], 'four_metrics')
+    expect(signMismatchLogs()).toEqual([])
   })
 })

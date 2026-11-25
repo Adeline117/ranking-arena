@@ -296,11 +296,12 @@ const NOT_FOUND_METADATA: Metadata = {
 // header on the next request instead of replaying a prior cohort.
 const getCurrentPublicFirstScreen = async (
   source: string,
-  traderId: string
+  traderId: string,
+  publicSource: string
 ): Promise<TraderFirstScreen | null> => {
   try {
     return await Promise.race([
-      getPublicFirstScreen(getReadReplica(), source, traderId),
+      getPublicFirstScreen(getReadReplica(), source, traderId, publicSource),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_DETAIL_TIMEOUT_MS)),
     ])
   } catch (err) {
@@ -460,7 +461,8 @@ export async function generateMetadata({
   const account = identity.serving
     ? {
         handle: identity.serving.nickname,
-        platform: identity.serving.source,
+        // Public-ranking name of the source (alias-aware), not the arena slug.
+        platform: identity.publicSource ?? identity.serving.source,
         traderKey: identity.serving.exchangeTraderId,
       }
     : legacy && !isRetiredSource(legacy.platform)
@@ -618,6 +620,10 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
   // unconditionally. This guarantees NO stale legacy row can ever shadow a live
   // serving trader, for any source, present or future.
   const servingResolved = identity.serving
+  // Every public-ranking read below (rank overlay, per-period scores, similar
+  // traders) and the canonical URL use the public name of the source; the arena
+  // slug stays the key for arena.* reads and for what the client is told.
+  const publicSource = identity.publicSource ?? servingResolved?.source ?? ''
 
   if (servingResolved) {
     // Everything here depends only on the resolved identity, so it runs in
@@ -625,21 +631,24 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
     // best-effort with a 2s cap so they can never extend the batch beyond it.
     const [firstScreenRaw, capabilities, userHandle, verifiedKeys, servingScores] =
       await Promise.all([
-        getCurrentPublicFirstScreen(servingResolved.source, servingResolved.exchangeTraderId),
+        getCurrentPublicFirstScreen(
+          servingResolved.source,
+          servingResolved.exchangeTraderId,
+          publicSource
+        ),
         cachedCapabilities(),
         findUserHandleByTraderFresh(servingResolved.source, servingResolved.exchangeTraderId),
         getVerifiedTraderKeys(getReadReplica()),
         Promise.race([
-          getCurrentPublicServingScores(
-            servingResolved.source,
-            servingResolved.exchangeTraderId
-          ).catch((e) => {
-            logger.warn('[trader/page] getCurrentPublicServingScores failed', {
-              source: servingResolved.source,
-              error: String(e),
-            })
-            return []
-          }),
+          getCurrentPublicServingScores(publicSource, servingResolved.exchangeTraderId).catch(
+            (e) => {
+              logger.warn('[trader/page] getCurrentPublicServingScores failed', {
+                source: servingResolved.source,
+                error: String(e),
+              })
+              return []
+            }
+          ),
           new Promise<never[]>((resolve) => setTimeout(() => resolve([]), 2_000)),
         ]),
       ])
@@ -692,6 +701,8 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
           avatarOriginUrl: servingResolved.avatarOriginUrl,
         }),
       source: servingResolved.source,
+      // The public alias is this same account (see profile-identity).
+      source_aliases: publicSource !== servingResolved.source ? [publicSource] : undefined,
       source_trader_id: servingResolved.exchangeTraderId,
       rank: best?.rank ?? null,
       roi: best?.headlineRoi ?? null,
@@ -721,7 +732,7 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
     const serverSimilarTraders = (
       await fetchSimilarTraders(
         getReadReplica(),
-        servingResolved.source,
+        publicSource,
         servingResolved.exchangeTraderId,
         similarArenaScore,
         servingTraderData.roi ?? null
@@ -746,7 +757,7 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
       // Same inputs as generateMetadata's canonical, so the JSON-LD url and the
       // canonical tag never differ.
       sourceTraderId: servingResolved.exchangeTraderId,
-      source: servingResolved.source,
+      source: publicSource,
     })}`
     const servingJsonLd = generateTraderProfilePageSchema({
       url: servingCanonicalUrl,
@@ -754,7 +765,7 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
       id: servingResolved.exchangeTraderId,
       bio: undefined,
       avatarUrl: servingTraderData.avatar_url ?? undefined,
-      source: servingResolved.source,
+      source: publicSource,
       roi90d: servingTraderData.roi ?? undefined,
       winRate: servingTraderData.win_rate ?? undefined,
     })
@@ -774,7 +785,7 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
     const servingSummary = (
       <TraderServerSummary
         name={servingTraderData.handle}
-        exchange={EXCHANGE_DISPLAY[servingResolved.source] || servingResolved.source}
+        exchange={EXCHANGE_DISPLAY[publicSource] || publicSource}
         windowLabel={t(SUMMARY_WINDOW_KEY[summaryWindow])}
         metrics={{
           rank: servingTraderData.rank,
