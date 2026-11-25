@@ -503,6 +503,14 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # own, on replay) and changes no existing column, option, owner or grant. No
 # release depends on it and both columns are false until the scoring worker
 # publishes with roi_pnl; it follows 201611 only to keep the two together.
+# 20261124225312 replaces only the body of public.get_hero_stats(): it counts
+# the served 90D rows with idle_window = false (and the sources that have such
+# rows) instead of every served row. It reads the column 021904 adds, so it
+# follows it, and refuses unless the installed body is the 20261114103025 one
+# (or its own, on replay). The return shape is unchanged, so no website
+# release depends on it; it must be applied before the scoring worker
+# publishes with roi_pnl, or the hero count and the profile percentile badge
+# include idle rows. It touches no table 192134 guards.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -540,6 +548,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261123020207_metric_trust_artifact_raw_integrity_per_statement.sql
   20261122201611_row_eligibility_roi_pnl_only.sql
   20261123021904_public_ranked_leaderboard_window_flags.sql
+  20261124225312_hero_stats_exclude_idle_window.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
