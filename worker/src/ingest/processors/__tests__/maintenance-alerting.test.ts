@@ -6,13 +6,16 @@ import type { Job } from 'bullmq'
 const alertMock = jest.fn()
 const ensurePartitionsMock = jest.fn()
 const okStep = jest.fn(async () => 0)
+const rawRetentionMock = jest.fn()
 
 jest.mock('../../../connection', () => ({ getConnection: () => ({}) }))
 jest.mock('@/lib/ingest/db', () => ({
   getIngestPool: () => ({ query: async () => ({ rowCount: 0 }) }),
 }))
 jest.mock('@/lib/ingest/raw', () => ({ cleanupRawObjects: () => okStep() }))
-jest.mock('@/lib/ingest/raw-retention', () => ({ runRawRetention: () => okStep() }))
+jest.mock('@/lib/ingest/raw-retention', () => ({
+  runRawRetention: () => rawRetentionMock(),
+}))
 jest.mock('@/lib/ingest/serving/series', () => ({
   ensurePartitions: () => ensurePartitionsMock(),
   downsampleOldSeries: () => okStep(),
@@ -33,6 +36,7 @@ beforeEach(() => {
   alertMock.mockReset().mockResolvedValue(undefined)
   ensurePartitionsMock.mockReset()
   okStep.mockClear()
+  rawRetentionMock.mockReset().mockImplementation(() => okStep())
   jest.spyOn(console, 'log').mockImplementation(() => {})
 })
 
@@ -54,6 +58,22 @@ describe('maintenance alerting', () => {
     await processMaintenance(job)
     expect(alertMock).toHaveBeenCalledTimes(1)
     expect(alertMock.mock.calls[0][1]).toMatchObject({ page: false })
+  })
+
+  it('reports a switched-off RAW retention step as disabled, without an alert', async () => {
+    ensurePartitionsMock.mockResolvedValue(0)
+    rawRetentionMock.mockResolvedValue('disabled')
+    const report = await processMaintenance(job)
+    expect(report.raw_retention).toBe('disabled')
+    expect(alertMock).not.toHaveBeenCalled()
+  })
+
+  it('reports a RAW retention run that stopped on a page timeout as a report, not an ERROR', async () => {
+    ensurePartitionsMock.mockResolvedValue(0)
+    rawRetentionMock.mockResolvedValue({ mode: 'count', stopped_on_timeout: true })
+    const report = await processMaintenance(job)
+    expect(report.raw_retention).toEqual({ mode: 'count', stopped_on_timeout: true })
+    expect(alertMock).not.toHaveBeenCalled()
   })
 
   it('fails the job after the remaining steps when the page reached no channel', async () => {

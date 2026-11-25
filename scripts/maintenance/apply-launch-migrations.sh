@@ -482,6 +482,10 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # It is independent of 015119 (which leaves blofin_spot unregistered), refuses
 # a replay or an earlier blofin_spot registration, and touches no table 192134
 # guards.
+# 20261123020207 checks a RAW object's integrity metadata once per statement
+# instead of once per metric_trust_artifacts row; the per-row trigger
+# decompressed the capture's whole meta document (434 kB for a 2,042-page
+# bybit_mt5 window) for each of ~130,600 rows. Independent of other entries.
 # 20261124114433 registers bitget_spot as a live board (reported_total_drift,
 # 0.35% of the board, at most 20 rows) in the append-only exhaustion registry.
 # It needs the declaration 114230 makes valid, so it follows it; it takes
@@ -522,6 +526,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261122154211_score_bundle_index_only_entry_counts.sql
   20261118134316_raw_retention_backlog_census.sql
   20261120235710_register_blofin_spot_profile_capture_contract.sql
+  20261123020207_metric_trust_artifact_raw_integrity_per_statement.sql
   20261124114433_register_bitget_spot_live_board_exhaustion_contract.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )

@@ -10,6 +10,12 @@
 #   * referenced RAW (snapshot / trust pinned, or any pointer row) never
 #     becomes an orphan GC obligation; a path that regains a pointer is
 #     retired at claim time instead of being handed to Storage removal.
+#   * the worker (lib/ingest/raw-retention.ts) no longer calls
+#     arena.raw_retention_census: its cheap census statements run as
+#     service_role under a 15s statement_timeout, a scan page that times out
+#     (57014) or cannot take its lock (55P03) leaves the cursor and the pass
+#     tallies untouched, and the read-only EXPLAIN statements handed to the
+#     launch driver parse against this schema.
 # Isolated cluster on a private socket with minimal stand-ins for the
 # Supabase storage schema and the arena RAW/evidence tables.
 
@@ -69,6 +75,8 @@ CREATE TABLE arena.raw_object_gc_queue (
   raw_object_id bigint NOT NULL UNIQUE, storage_path text PRIMARY KEY,
   content_hash text NOT NULL, attempts integer NOT NULL DEFAULT 0
 );
+-- 20260721130000_raw_object_gc_outbox grants this to the worker role.
+GRANT SELECT, DELETE ON TABLE arena.raw_object_gc_queue TO service_role;
 CREATE TABLE arena.leaderboard_snapshots (id bigint PRIMARY KEY, raw_object_id bigint);
 CREATE TABLE arena.metric_trust_runs (
   source_run_id text PRIMARY KEY, population_raw_object_id bigint, manifest_raw_object_id bigint
@@ -189,5 +197,194 @@ assert_equal "anon cannot run any of it" "false|false|false" "$(psql_db -Atqc "
     || '|' || has_function_privilege('anon', 'arena.scan_raw_storage_orphans(integer,integer,boolean)', 'EXECUTE')
     || '|' || has_function_privilege('anon', 'arena.claim_raw_orphan_gc_batch(integer)', 'EXECUTE')")"
 assert_equal "storage.objects rows were never touched" "12" "$(psql_db -Atqc "SELECT count(*) FROM storage.objects")"
+
+# ── Worker statements (lib/ingest/raw-retention.ts) ─────────────────────────
+# The worker no longer calls arena.raw_retention_census. Its census is planner
+# statistics + relation size + the two small queue counts, run as the worker
+# role under the 15s statement_timeout it sets. service_role has no privilege
+# on arena.raw_objects here: pg_class and pg_total_relation_size need none.
+psql_db -qc "ANALYZE arena.raw_objects"
+assert_equal "worker estimate as service_role: reltuples matches, size is positive" "7|true" "$(psql_db -Atq <<'SQL'
+SET ROLE service_role;
+SET statement_timeout = '15s';
+SELECT relation.reltuples::bigint || '|' || (pg_catalog.pg_total_relation_size(relation.oid) > 0)
+  FROM pg_catalog.pg_class AS relation
+ WHERE relation.oid = pg_catalog.to_regclass('arena.raw_objects');
+SQL
+)"
+assert_equal "service_role cannot read arena.raw_objects directly in this stand-in" "f" \
+  "$(psql_db -Atqc "SELECT has_table_privilege('service_role', 'arena.raw_objects', 'SELECT')")"
+assert_equal "worker queue depths as service_role" "1|0|2|0" "$(psql_db -Atq <<'SQL'
+SET ROLE service_role;
+SET statement_timeout = '15s';
+SELECT concat_ws('|',
+  (SELECT pg_catalog.count(*) FROM arena.raw_object_gc_queue),
+  (SELECT pg_catalog.count(*) FROM arena.raw_object_gc_queue WHERE attempts > 0),
+  (SELECT pg_catalog.count(*) FROM arena.raw_orphan_gc_queue),
+  (SELECT pg_catalog.count(*) FROM arena.raw_orphan_gc_queue WHERE attempts > 0));
+SQL
+)"
+
+# A 15s statement_timeout satisfies the functions' bounded-timeout guard, and
+# the worker role can page with the new 5,000 page size.
+psql_db -qc "UPDATE arena.raw_retention_settings SET delete_enabled = false"
+assert_equal "15s timeout + page 5000 accepted as service_role" "7|true" "$(psql_db -Atq <<'SQL'
+SET ROLE service_role;
+SET statement_timeout = '15s';
+SELECT concat_ws('|', r->>'page_rows', r->>'pass_complete')
+  FROM (SELECT arena.scan_raw_pointer_retention(5000, 30) AS r) AS scan;
+SQL
+)"
+assert_equal "orphan page 5000 accepted as service_role" "11|true" "$(psql_db -Atq <<'SQL'
+SET ROLE service_role;
+SET statement_timeout = '15s';
+SELECT concat_ws('|', r->>'page_objects', r->>'pass_complete')
+  FROM (SELECT arena.scan_raw_storage_orphans(5000, 30, false) AS r) AS scan;
+SQL
+)"
+
+# A page that times out or cannot take the settings row lock must leave the
+# cursor and the running tallies exactly where they were. Start a pass (page
+# of 4 of 7 rows), then hold the row lock from another session.
+psql_db -Atqc "SELECT arena.scan_raw_pointer_retention(4, 30)" >/dev/null
+progress_sql="SELECT concat_ws('|', pointer_scan_after, pointer_pass_rows, pointer_pass_expired_rows,
+  pointer_pass_eligible_rows, pointer_pass_eligible_bytes, orphan_scan_after, orphan_pass_objects)
+  FROM arena.raw_retention_settings"
+progress_before="$(psql_db -Atqc "$progress_sql")"
+assert_equal "pass in progress: cursor after id 4, 4 rows counted" "4|4|4|1|400||0" "$progress_before"
+assert_equal "worker progress read as service_role" "4|4" "$(psql_db -Atq <<'SQL'
+SET ROLE service_role;
+SET statement_timeout = '15s';
+SELECT concat_ws('|', pointer_scan_after, pointer_pass_rows)
+  FROM arena.raw_retention_settings WHERE singleton;
+SQL
+)"
+
+psql_db -q >/dev/null <<'SQL' &
+BEGIN;
+SELECT 1 FROM arena.raw_retention_settings WHERE singleton FOR UPDATE;
+SELECT pg_sleep(8);
+COMMIT;
+SQL
+blocker_pid=$!
+for _ in $(seq 1 50); do
+  [[ "$(psql_db -Atqc "SELECT count(*) FROM pg_stat_activity WHERE query = 'SELECT pg_sleep(8);'")" == "1" ]] && break
+  sleep 0.1
+done
+sqlstate_of() { psql_db -v VERBOSITY=sqlstate -Atq 2>&1 <<<"$1" | grep -o 'ERROR:  [0-9A-Z]*' | head -1 || true; }
+assert_equal "pointer page under a short statement_timeout is cancelled with 57014" "ERROR:  57014" \
+  "$(sqlstate_of "SET statement_timeout = '300ms'; SELECT arena.scan_raw_pointer_retention(4, 30);")"
+assert_equal "orphan page under a short statement_timeout is cancelled with 57014" "ERROR:  57014" \
+  "$(sqlstate_of "SET statement_timeout = '300ms'; SELECT arena.scan_raw_storage_orphans(4, 30, false);")"
+assert_equal "pointer page gives up on the row lock with 55P03 inside the 15s bound" "ERROR:  55P03" \
+  "$(sqlstate_of "SET statement_timeout = '15s'; SELECT arena.scan_raw_pointer_retention(4, 30);")"
+assert_equal "timed-out pages moved neither cursor nor tallies" "$progress_before" \
+  "$(psql_db -Atqc "$progress_sql")"
+wait "$blocker_pid"
+assert_equal "the next run resumes from the kept cursor and finishes the pass" "3|true" "$(psql_db -Atqc "
+  SELECT concat_ws('|', r->>'page_rows', r->>'pass_complete')
+  FROM (SELECT arena.scan_raw_pointer_retention(4, 30) AS r) AS scan")"
+
+# Read-only EXPLAIN statements (no ANALYZE) given to the launch driver in the
+# PR. They must stay valid SQL against the migration's tables; with seq scans
+# discouraged, the pointer page must be able to walk the primary key.
+explain() { psql_db -Atq -c "SET enable_seqscan = off" -c "$1"; }
+old_census_plan="$(explain "
+EXPLAIN
+SELECT pg_catalog.count(*) AS pointer_rows,
+       COALESCE(pg_catalog.sum(raw.bytes::bigint), 0) AS pointer_bytes,
+       pg_catalog.count(*) FILTER (WHERE raw.quarantined) AS quarantined_rows,
+       pg_catalog.min(raw.fetched_at) AS oldest_fetched_at,
+       pg_catalog.count(*) FILTER (
+         WHERE NOT raw.quarantined AND raw.fetched_at < now() - interval '30 days'
+       ) AS expired_rows,
+       COALESCE(
+         pg_catalog.sum(raw.bytes::bigint) FILTER (
+           WHERE NOT raw.quarantined AND raw.fetched_at < now() - interval '30 days'
+         ),
+         0
+       ) AS expired_bytes
+  FROM arena.raw_objects AS raw;")"
+[[ "$old_census_plan" == *"Seq Scan on raw_objects"* ]] \
+  || { echo "old census EXPLAIN: expected a sequential scan even with seq scans discouraged" >&2; exit 1; }
+
+pointer_page_plan="$(explain "
+EXPLAIN
+WITH page AS MATERIALIZED (
+  SELECT raw.id, raw.bytes::bigint AS bytes,
+         NOT raw.quarantined AND raw.fetched_at < now() - interval '30 days' AS expired
+    FROM arena.raw_objects AS raw
+   WHERE raw.id > 0            -- example cursor: arena.raw_retention_settings.pointer_scan_after
+   ORDER BY raw.id
+   LIMIT 5000
+),
+classified AS MATERIALIZED (
+  SELECT page.id,
+         page.bytes,
+         EXISTS (
+           SELECT 1 FROM arena.leaderboard_snapshots AS snapshot
+            WHERE snapshot.raw_object_id = page.id
+         ) AS snapshot_pinned,
+         (
+           EXISTS (
+             SELECT 1 FROM arena.metric_trust_runs AS run
+              WHERE run.population_raw_object_id = page.id
+           )
+           OR EXISTS (
+             SELECT 1 FROM arena.metric_trust_runs AS run
+              WHERE run.manifest_raw_object_id = page.id
+           )
+           OR EXISTS (
+             SELECT 1 FROM arena.metric_trust_artifacts AS artifact
+              WHERE artifact.raw_object_id = page.id
+           )
+         ) AS trust_pinned
+    FROM page
+   WHERE page.expired
+)
+SELECT (SELECT pg_catalog.count(*) FROM page),
+       (SELECT pg_catalog.count(*) FROM classified),
+       (SELECT pg_catalog.count(*) FROM classified WHERE snapshot_pinned),
+       (SELECT pg_catalog.count(*) FROM classified WHERE trust_pinned),
+       (SELECT pg_catalog.count(*) FROM classified WHERE NOT snapshot_pinned AND NOT trust_pinned),
+       (SELECT COALESCE(pg_catalog.sum(classified.bytes), 0) FROM classified
+         WHERE NOT snapshot_pinned AND NOT trust_pinned),
+       (SELECT pg_catalog.max(page.id) FROM page);")"
+[[ "$pointer_page_plan" == *"Index Scan using raw_objects_pkey on raw_objects"* ]] \
+  || { echo "pointer page EXPLAIN: expected a primary-key walk" >&2; echo "$pointer_page_plan" >&2; exit 1; }
+
+orphan_page_plan="$(explain "
+EXPLAIN
+WITH page AS MATERIALIZED (
+  SELECT object_row.name,
+         object_row.created_at,
+         CASE WHEN object_row.metadata->>'size' ~ '^[0-9]{1,18}\$'
+              THEN (object_row.metadata->>'size')::bigint END AS bytes
+    FROM storage.objects AS object_row
+   WHERE object_row.bucket_id = 'raw-snapshots'
+     AND object_row.name > ''  -- example cursor: arena.raw_retention_settings.orphan_scan_after
+   ORDER BY object_row.name
+   LIMIT 5000
+),
+orphan AS MATERIALIZED (
+  SELECT page.name, page.created_at, page.bytes
+    FROM page
+   WHERE page.created_at < now() - interval '30 days'
+     AND NOT EXISTS (
+       SELECT 1 FROM arena.raw_objects AS raw WHERE raw.storage_path = page.name
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM arena.raw_object_gc_queue AS gc WHERE gc.storage_path = page.name
+     )
+)
+SELECT (SELECT pg_catalog.count(*) FROM page),
+       (SELECT COALESCE(pg_catalog.sum(page.bytes), 0) FROM page),
+       (SELECT pg_catalog.count(*) FROM orphan),
+       (SELECT COALESCE(pg_catalog.sum(orphan.bytes), 0) FROM orphan),
+       (SELECT pg_catalog.max(page.name) FROM page);")"
+[[ "$orphan_page_plan" == *"on objects"* ]] \
+  || { echo "orphan page EXPLAIN: expected a plan over storage.objects" >&2; exit 1; }
+assert_equal "EXPLAIN executed nothing: cursor still reset after the finished pass" "0|" "$(psql_db -Atqc "
+  SELECT concat_ws('|', pointer_scan_after, orphan_scan_after) FROM arena.raw_retention_settings")"
 
 echo "RAW retention backlog census PostgreSQL 17 proof passed"
