@@ -583,6 +583,27 @@ describe('worker database fence lifecycle', () => {
     expect(database.clients[1].release).toHaveBeenCalledWith(false)
   })
 
+  it('logs the driver code of a failed control RPC, never its message', async () => {
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const redis = redisHarness([
+        scriptResult(1, INITIAL_CONTROL_TIME),
+        scriptResult(1, INITIAL_CONTROL_TIME, INITIAL_CONTROL_TIME, 0),
+      ])
+      const database = databaseHarness([{ connectError: connectionError() }])
+
+      await expect(
+        acquireWorkerDbFenceAuthority({ connect: database.connect, heartbeat: heartbeat(), redis })
+      ).rejects.toMatchObject({ code: 'control_plane_unavailable', operation: 'activate' })
+
+      expect(errors.mock.calls.map(([line]) => line)).toEqual([
+        '[ingest-worker] DB fence control RPC activate failed: kind=unavailable code=08006 outcome_unknown=false',
+      ])
+    } finally {
+      errors.mockRestore()
+    }
+  })
+
   it('classifies a connection failure before BEGIN as known-no-effect', async () => {
     const redis = redisHarness([
       scriptResult(1, INITIAL_CONTROL_TIME),
@@ -1334,10 +1355,11 @@ describe('worker database fenced writes', () => {
       })
 
       const lines = errors.mock.calls.map(([line]) => String(line))
-      expect(lines).toHaveLength(1)
-      expect(lines[0]).toMatch(
-        /^\[ingest-worker\] DB fence lost on renew at redis \([a-z_]+\) cause: [A-Za-z]+/
-      )
+      expect(lines.filter((line) => line.includes('DB fence lost'))).toEqual([
+        expect.stringMatching(
+          /^\[ingest-worker\] DB fence lost on renew at redis \([a-z_]+\) cause: [A-Za-z]+/
+        ),
+      ])
       expect(fence.state).not.toBe('active')
     } finally {
       errors.mockRestore()

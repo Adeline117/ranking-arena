@@ -815,6 +815,18 @@ async function executeRpc<T>({
     }
   }
 
+  // The fence error thrown below carries only a fixed code; the driver's
+  // SQLSTATE / errno would otherwise be lost here.
+  if (lastFailure !== undefined) {
+    const driverCode =
+      lastFailure.sqlState !== undefined && /^[A-Za-z0-9_]{2,40}$/.test(lastFailure.sqlState)
+        ? lastFailure.sqlState
+        : 'none'
+    console.error(
+      `[ingest-worker] DB fence control RPC ${operation} failed: kind=${lastFailure.kind} code=${driverCode} outcome_unknown=${sawUncertainCommit}`
+    )
+  }
+
   // A failed exact replay can never erase provenance from an earlier
   // outcome-unknown COMMIT. Only a successfully validated replay resolves it.
   if (sawUncertainCommit) {
@@ -1102,6 +1114,20 @@ export async function acquireWorkerDbFenceAuthority({
       remaining
     )
     watchdog.unref?.()
+  }
+  // One line per lost authority: whatever fails afterwards (a renewal that
+  // finds the fence already gone, the writes it aborts) is that loss's
+  // aftermath, not another cause.
+  let lossLogged = false
+  const logLossOnce = (
+    operation: 'write' | 'renew',
+    step: string,
+    fenced: WorkerDbFenceError,
+    cause: unknown
+  ) => {
+    if (lossLogged) return
+    lossLogged = true
+    logFenceControlCause(operation, step, fenced, cause)
   }
   const enqueue = <T>(operation: () => Promise<T>): Promise<T> => {
     const result = operationTail.then(operation)
@@ -1436,7 +1462,7 @@ export async function acquireWorkerDbFenceAuthority({
       if (state === 'active' && sanitized.code !== 'write_deadline_exceeded') {
         // This write is the one that fences the whole authority; every other
         // in-flight operation then aborts with the same code.
-        logFenceControlCause('write', controlStep, sanitized, error)
+        logLossOnce('write', controlStep, sanitized, error)
         fence(sanitized)
       }
       throw sanitized
@@ -1546,7 +1572,7 @@ export async function acquireWorkerDbFenceAuthority({
               ? error
               : dbFenceError('control_plane_unavailable', 'renew', 'reacquire')
           if (state === 'releasing') throw sanitized
-          logFenceControlCause('renew', renewStep, sanitized, error)
+          logLossOnce('renew', renewStep, sanitized, error)
           state = 'releasing'
           clearWatchdog()
           const pendingRelease = releaseBothPlanes()
