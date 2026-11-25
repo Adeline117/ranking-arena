@@ -503,11 +503,29 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # own, on replay) and changes no existing column, option, owner or grant. No
 # release depends on it and both columns are false until the scoring worker
 # publishes with roi_pnl; it follows 201611 only to keep the two together.
+# 20261124114140 makes a serving source whose sealed watermark leaves the
+# 48-hour window hide only its own rows instead of the whole season, and
+# applies the publisher's isolation bound at read time. It replaces the
+# 20261121201553 body of arena_visible_sources, so it follows it.
+# 20261124114433 registers bitget_spot as a live board (reported_total_drift,
+# 0.35% of the board, at most 20 rows) in the append-only exhaustion registry.
+# It needs the declaration 114230 makes valid, so it follows it; it takes
+# effect with the worker release that captures bitget_spot in this mode. It
+# refuses a replay or an earlier bitget_spot registration and touches no table
+# 192134 guards.
+# 20261125035803 re-creates the readiness RPC (20261122152622 body) so a run's
+# page metadata is derived once per run instead of once per parser ordinal
+# (one bybit_mt5 run re-read its 434 kB RAW meta 2,042 times; the RPC took
+# about 20 s against the worker startup gate), and so its last query reads
+# observations only for runs whose lineage fails. It refuses unless the
+# 152622 statement trigger is installed and enabled, so it follows it.
+# Independent of the other entries.
 # 20261124225312 replaces the body of public.get_hero_stats() and raises its
 # statement_timeout from 2s to 5s: it counts the served 90D rows with
 # idle_window = false (and the sources that have such rows) instead of every
 # served row; the timeout is a stopgap for the per-row policy cost on a board
-# twice the size. It reads the column 021904 adds, so it follows it, and
+# twice the size. It reads the column 021904 adds (114140 restates the view
+# with it), so it follows both, and
 # refuses unless the function is the 20261114103025 one with the 2s timeout
 # (or its own with 5s, on replay). The return shape is unchanged, so no website
 # release depends on it; it must be applied before the scoring worker
@@ -550,6 +568,9 @@ POSTDEPLOY_MIGRATIONS=(
   20261123020207_metric_trust_artifact_raw_integrity_per_statement.sql
   20261122201611_row_eligibility_roi_pnl_only.sql
   20261123021904_public_ranked_leaderboard_window_flags.sql
+  20261124114140_stale_source_hides_only_its_own_rows.sql
+  20261124114433_register_bitget_spot_live_board_exhaustion_contract.sql
+  20261125035803_readiness_reads_run_metadata_once.sql
   20261124225312_hero_stats_exclude_idle_window.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )

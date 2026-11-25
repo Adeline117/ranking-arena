@@ -13,6 +13,9 @@ const migration = read(`supabase/migrations/${MIGRATION_NAME}`)
 const baseline = read(`supabase/migrations/${BASELINE_NAME}`)
 const proof = read('supabase/migrations/__tests__/hero-stats-exclude-idle-window.pg17.sh')
 const seasonProof = read('supabase/migrations/__tests__/public-ranking-season-publication.pg17.sh')
+const staleSourceProof = read(
+  'supabase/migrations/__tests__/stale-source-hides-only-its-own-rows.pg17.sh'
+)
 const launchRunner = read('scripts/maintenance/apply-launch-migrations.sh')
 const packageJson = read('package.json')
 const ciWorkflow = read('.github/workflows/ci.yml')
@@ -109,14 +112,14 @@ describe('get_hero_stats excludes idle-window rows (20261124225312)', () => {
     expect(statements).toContain('apply 20261123021904 first')
   })
 
-  it('is registered as postdeploy after the view flags, with 192134 still last', () => {
+  it('is registered as postdeploy after every other entry, with 192134 still last', () => {
     const list = launchRunner.slice(
       launchRunner.indexOf('POSTDEPLOY_MIGRATIONS=('),
       launchRunner.indexOf('readonly -a POSTDEPLOY_MIGRATIONS')
     )
     const entries = list.match(/^ {2}\d{14}_\S+\.sql$/gm)?.map((entry) => entry.trim()) ?? []
     expect(entries.slice(-3)).toEqual([
-      '20261123021904_public_ranked_leaderboard_window_flags.sql',
+      '20261125035803_readiness_reads_run_metadata_once.sql',
       MIGRATION_NAME,
       '20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql',
     ])
@@ -153,5 +156,10 @@ describe('get_hero_stats excludes idle-window rows (20261124225312)', () => {
     // The real orchestrator publishes an idle row and the hero count leaves it out.
     expect(seasonProof).toContain(MIGRATION_NAME)
     expect(seasonProof).toContain('hero stats count the 7 rows with performance, not the idle one')
+    // ...and on the view as the later migration 20261124114140 re-creates it.
+    expect(staleSourceProof).toContain(MIGRATION_NAME)
+    expect(staleSourceProof).toContain(
+      'hero stats after: only served rows that are not idle, and their sources'
+    )
   })
 })
