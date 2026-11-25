@@ -252,7 +252,9 @@ function hasPublishedInitialRank(value: unknown): value is InitialTrader {
 }
 
 function isCurrentHomepageCohortRow(value: InitialTrader, nowMs = Date.now()): boolean {
-  return isInPublicCohort(value, nowMs)
+  // The first-paint list never contains idle-window rows (the reader excludes
+  // them in SQL). A cached page that does was written under another predicate.
+  return value.idle_window !== true && isInPublicCohort(value, nowMs)
 }
 
 /**
@@ -406,7 +408,7 @@ export function homeInitialTradersCacheKeys(timeRange: Period, page: number, lim
   const safeLimit = normalizeInitialPageLimit(limit)
   return {
     cacheKey: publicRankingCacheKey(
-      `home-initial-traders-v7:${timeRange}:n${safeLimit}:p${safePage}`
+      `home-initial-traders-v8:${timeRange}:n${safeLimit}:p${safePage}`
     ),
   }
 }

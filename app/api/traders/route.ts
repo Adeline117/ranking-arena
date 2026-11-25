@@ -256,7 +256,7 @@ function tradersResponseCacheKey(params: TradersCacheKeyParams): string {
   // particular, JSON preserves `null` for an omitted exchange while retaining
   // the literal string for `exchange=all`.
   const scope = encodeURIComponent(JSON.stringify(publicRankedCohortCacheScope(params)))
-  return publicRankingCacheKey(`leaderboard:v5:public-cohort:${scope}`)
+  return publicRankingCacheKey(`leaderboard:v6:public-cohort:${scope}`)
 }
 
 type PublicRankedLeaderboardRow = Record<string, unknown>

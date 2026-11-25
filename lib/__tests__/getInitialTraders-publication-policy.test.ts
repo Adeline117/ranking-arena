@@ -641,13 +641,13 @@ describe('SSR public ranking cohort', () => {
 
   it('epochs cache entries that lack the view proof fields', () => {
     expect(homeInitialTradersCacheKeys('90D', 2)).toEqual({
-      cacheKey: 'public-rank-policy-v7:home-initial-traders-v7:90D:n50:p2',
+      cacheKey: 'public-rank-policy-v7:home-initial-traders-v8:90D:n50:p2',
     })
   })
 
   it('keeps cache pages isolated by their normalized page size', () => {
     expect(homeInitialTradersCacheKeys('90D', 2, 20)).toEqual({
-      cacheKey: 'public-rank-policy-v7:home-initial-traders-v7:90D:n20:p2',
+      cacheKey: 'public-rank-policy-v7:home-initial-traders-v8:90D:n20:p2',
     })
   })
 })
