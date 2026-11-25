@@ -1285,6 +1285,65 @@ describe('worker database fenced writes', () => {
     expect(database.remainingBehaviors).toHaveLength(0)
   })
 
+  it('logs the step and the safe cause when a write control failure fences the authority', async () => {
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const database = databaseHarness(
+        [
+          { operation: 'activate' },
+          { operation: 'renew' },
+          {
+            operation: 'write',
+            timeoutConfigurationError: connectionError(
+              '42501',
+              'timeout configuration was denied with private database detail'
+            ),
+          },
+          { operation: 'release' },
+        ],
+        [],
+        true
+      )
+      const { fence } = await acquireActiveFence(database)
+
+      await expect(fence.withFencedWrite(async () => 'must-not-run')).rejects.toMatchObject({
+        code: 'control_plane_unavailable',
+      })
+
+      expect(errors.mock.calls.map(([line]) => line)).toEqual([
+        '[ingest-worker] DB fence lost on write at timeouts (control_plane_unavailable) cause: Error code=42501',
+      ])
+    } finally {
+      errors.mockRestore()
+    }
+  })
+
+  it('logs which plane failed when a renewal fences the authority', async () => {
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const database = databaseHarness(
+        [{ operation: 'activate' }, { operation: 'renew' }, { operation: 'release' }],
+        [],
+        true
+      )
+      const { fence } = await acquireActiveFence(database)
+      // The Redis harness has no further scripted reply: the next renewal's
+      // control-plane call rejects.
+      await expect(fence.renewAndPublish(heartbeat(43))).rejects.toMatchObject({
+        operation: 'renew',
+      })
+
+      const lines = errors.mock.calls.map(([line]) => String(line))
+      expect(lines).toHaveLength(1)
+      expect(lines[0]).toMatch(
+        /^\[ingest-worker\] DB fence lost on renew at redis \([a-z_]+\) cause: [A-Za-z]+/
+      )
+      expect(fence.state).not.toBe('active')
+    } finally {
+      errors.mockRestore()
+    }
+  })
+
   it('rolls back and self-fences before authority assertion when timeout configuration fails', async () => {
     const callback = jest.fn(async () => 'must-not-run')
     const database = databaseHarness(
