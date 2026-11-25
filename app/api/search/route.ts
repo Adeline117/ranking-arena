@@ -110,7 +110,10 @@ function materializeSearchTraderResults(
       exchangeName,
       rankStr,
       roiStr,
-      trader.arenaScore != null ? `Score ${formatScoreWhole(trader.arenaScore)}` : null,
+      // An idle-window account is ranked but not scored: no score in the subtitle.
+      trader.arenaScore != null && trader.idleWindow !== true
+        ? `Score ${formatScoreWhole(trader.arenaScore)}`
+        : null,
     ]
       .filter(Boolean)
       .join(' \u00B7 ')

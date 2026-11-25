@@ -131,3 +131,26 @@ describe('summary data note (L1: public leaderboard data)', () => {
     }
   })
 })
+
+describe('idle-window account (ranked, no trading, not scored)', () => {
+  it('says there was no trading and never prints a score', () => {
+    const markup = html({
+      idleWindow: true,
+      metrics: { rank: 4261, arenaScore: 0.01, roi: 0, pnl: 0 },
+    })
+    expect(markup).toContain('data-testid="trader-summary-idle"')
+    expect(markup).toContain(en.noTradingThisPeriod)
+    expect(markup).toContain('#4261')
+    expect(markup).not.toContain(en.arenaScore)
+    expect(markup).not.toContain('&lt;1')
+  })
+
+  it('still renders the note when there is nothing else to show', () => {
+    const markup = html({ idleWindow: true })
+    expect(markup).toContain(en.noTradingThisPeriod)
+  })
+
+  it('does not show the note for an account that traded', () => {
+    expect(html({ metrics: { roi: 12.5, arenaScore: 0.3 } })).not.toContain('trader-summary-idle')
+  })
+})

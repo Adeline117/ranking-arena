@@ -127,6 +127,7 @@ export default function TraderServerSummary({
   t,
   dataAsOf,
   language = 'en',
+  idleWindow = false,
 }: {
   name: string
   exchange: string
@@ -142,9 +143,15 @@ export default function TraderServerSummary({
   dataAsOf?: string | null
   /** UI language, for the capture-time format. */
   language?: string
+  /**
+   * The account is ranked in this window but did no trading (idle window). It
+   * has no score: the summary says so and never prints one, whatever `metrics`
+   * carries.
+   */
+  idleWindow?: boolean
 }) {
-  const rows = buildTraderSummaryRows(metrics, t)
-  if (rows.length === 0 && similar.length === 0) return null
+  const rows = buildTraderSummaryRows(idleWindow ? { ...metrics, arenaScore: null } : metrics, t)
+  if (rows.length === 0 && similar.length === 0 && !idleWindow) return null
 
   return (
     <section aria-labelledby="trader-summary-heading" style={{ marginTop: tokens.spacing[8] }}>
@@ -167,6 +174,19 @@ export default function TraderServerSummary({
               the trader (tests and screen readers locate the page by it). */}
           {t('traderSummaryHeading')}
         </h2>
+
+        {idleWindow && (
+          <p
+            data-testid="trader-summary-idle"
+            style={{
+              margin: `${tokens.spacing[2]} 0 0`,
+              fontSize: tokens.typography.fontSize.sm,
+              color: tokens.colors.text.secondary,
+            }}
+          >
+            {t('noTradingThisPeriod')}
+          </p>
+        )}
 
         {rows.length > 0 && (
           <>

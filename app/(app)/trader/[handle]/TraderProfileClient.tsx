@@ -300,6 +300,8 @@ export interface ServingScoreRow {
   trading_style: string | null
   style_confidence: number | null
   avg_holding_hours: number | null
+  /** Ranked but unscored in this period (no ROI and no PnL): scores are null. */
+  idle_window?: boolean
 }
 
 export default function TraderProfileClient({

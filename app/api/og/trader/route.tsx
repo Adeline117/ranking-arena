@@ -28,7 +28,7 @@ import {
 export const runtime = 'edge'
 
 const PUBLIC_RANKING_COLUMNS =
-  'season_id,source,source_trader_id,handle,avatar_url,rank,arena_score,roi,pnl,win_rate,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at'
+  'season_id,source,source_trader_id,handle,avatar_url,rank,arena_score,roi,pnl,win_rate,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at,idle_window'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -175,7 +175,8 @@ type TraderIdentity = {
 type PublishedTraderCard = {
   rank: number
   roi: number
-  score: number
+  /** Null for an idle-window row: ranked, but not scored. */
+  score: number | null
   // Optional on a ranked row: null means the source did not provide it.
   winRate: number | null
   maxDrawdown: number | null
@@ -216,7 +217,8 @@ function verifiedTraderCard(
   return {
     rank: row.rank,
     roi: row.roi,
-    score: row.arena_score,
+    // An idle-window row carries a placeholder score that means "not scored".
+    score: row.idle_window === true ? null : row.arena_score,
     winRate: row.win_rate,
     maxDrawdown: row.max_drawdown,
   }
