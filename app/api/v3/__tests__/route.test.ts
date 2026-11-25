@@ -340,6 +340,34 @@ describe('GET /api/v3 cache and publication boundaries', () => {
     )
   })
 
+  it('keeps the valid search rows and marks the result partial when one row fails the proof', async () => {
+    const query = publicRankedQuery({
+      data: [
+        publicSearchRow(),
+        {
+          source: 'binance_futures',
+          source_trader_id: 'alice-unverified',
+          season_id: '90D',
+          rank: 2,
+        },
+      ],
+    })
+    mockFrom.mockReturnValue(query)
+
+    const response = await GET(request('/api/v3?endpoint=search&q=alice'))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.data).toEqual([expect.objectContaining({ traderKey: 'alice', rank: 1 })])
+    expect(body.meta).toEqual(
+      expect.objectContaining({
+        total_count_is_exact: false,
+        ranking_visibility: 'partial',
+        ranking_visibility_reason: 'public_cohort_unverified',
+      })
+    )
+  })
+
   it('does not promote a page or an upstream fallback count to a rankings total', async () => {
     mockGetLeaderboard.mockResolvedValueOnce({
       traders: [

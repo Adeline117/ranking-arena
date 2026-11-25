@@ -474,13 +474,15 @@ async function handleSearch(params: URLSearchParams) {
     }
 
     const cohort = sanitizePublicSearchRows(data)
+    // A row that fails the public-ranking proof is dropped and the rest of the
+    // search result is still returned, marked partial. One unexpected row used
+    // to empty the whole result. (The platform count map below still fails as a
+    // whole: a shortened count would be a wrong number, not a shorter list.)
     if (cohort.integrityCompromised) {
-      return {
-        data: [],
-        totalCountIsExact: false,
-        rankingVisibility: 'partial' as const,
-        rankingVisibilityReason: 'public_cohort_unverified',
-      }
+      log.warn('public search dropped rows that failed public-ranking proof', {
+        dropped: Array.isArray(data) ? data.length - cohort.rows.length : null,
+        kept: cohort.rows.length,
+      })
     }
 
     const cleaned = cohort.rows
@@ -495,7 +497,16 @@ async function handleSearch(params: URLSearchParams) {
     // This is a bounded candidate page, not a same-predicate total. Omitting
     // `total` is intentional: a visible page length must not masquerade as
     // the total number of public matching traders.
-    return { data: cleaned, totalCountIsExact: false }
+    return {
+      data: cleaned,
+      totalCountIsExact: false,
+      ...(cohort.integrityCompromised
+        ? {
+            rankingVisibility: 'partial' as const,
+            rankingVisibilityReason: 'public_cohort_unverified',
+          }
+        : {}),
+    }
   } catch (err) {
     log.warn('public search cohort unavailable', {
       error: err instanceof Error ? err.message : String(err),
