@@ -8,6 +8,12 @@
  * lib/constants/metric-registry.ts) so the hero strip reuses the same
  * registry-driven formatting as the core modules.
  *
+ * Only keys that something renders are projected: `copier_count` (the profile's
+ * copier figure) and `win_rate` / `mdd`. The latter two are the exchange's raw,
+ * unit-inconsistent values and are REPLACED by the published ranking values in
+ * overlayPublicFirstScreenRanking before any page sees them. `sparkline`,
+ * `copier_pnl` and `aum` used to be projected too; nothing read them.
+ *
  * Data-driven: one small declarative projection per source slug, generic
  * key-scan fallback for everything else. Adding an exchange means adding a
  * projection entry (or nothing, if the generic scan covers it) — never UI
@@ -36,28 +42,12 @@ function utaColumns(raw: Dict): Record<string, number | null> {
   return out
 }
 
-/** Normalize a sparkline value: number[] or [{value|profit|y}, ...]. */
-function sparklineOf(v: unknown): number[] | null {
-  if (!Array.isArray(v) || v.length === 0) return null
-  const points: number[] = []
-  for (const p of v) {
-    const n =
-      typeof p === 'object' && p !== null
-        ? num((p as Dict).value ?? (p as Dict).profit ?? (p as Dict).y)
-        : num(p)
-    if (n !== null) points.push(n)
-  }
-  return points.length > 0 ? points : null
-}
-
 /** Bitget family (futures/spot/cfd/bots): UTA columns + legacy keys. */
 function bitgetProjection(raw: Dict): Dict {
   const cols = utaColumns(raw)
   return {
     win_rate: cols.winning_rate ?? num(raw.winRate),
     mdd: cols.max_retracement ?? num(raw.drawDown ?? raw.maxDrawdown),
-    copier_pnl: cols.total_follow_profit ?? num(raw.copyTraderProfit ?? raw.traceProfit),
-    aum: cols.total_follow_trade_amount ?? num(raw.totalFollowAssets),
     copier_count: num(raw.followCount ?? raw.copyTraderNum ?? raw.traceUserNum),
   }
 }
@@ -67,10 +57,7 @@ function genericProjection(raw: Dict): Dict {
   return {
     win_rate: num(raw.winRate ?? raw.win_rate ?? raw.winningRate),
     mdd: num(raw.mdd ?? raw.maxDrawdown ?? raw.max_drawdown ?? raw.drawDown),
-    copier_pnl: num(raw.copierPnl ?? raw.copyTraderProfit ?? raw.followerPnl),
-    aum: num(raw.aum ?? raw.leadAum ?? raw.totalFollowAssets),
     copier_count: num(raw.copiers ?? raw.copierCount ?? raw.followCount ?? raw.copyTraderNum),
-    sparkline: sparklineOf(raw.sparkline ?? raw.klineProfit ?? raw.pnlTrend),
   }
 }
 
