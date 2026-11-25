@@ -522,6 +522,9 @@ async function handlePlatforms() {
       .select(PUBLIC_V3_PLATFORM_COUNT_COLUMNS)
       .eq('season_id', V3_PLATFORM_COUNT_PERIOD)
       .not('rank', 'is', null)
+      // Per-platform trader counts are traders with performance in the
+      // period, as in get_hero_stats: idle-window rows are not counted.
+      .eq('idle_window', false)
 
     if (error || !Array.isArray(data)) {
       return {

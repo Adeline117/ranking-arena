@@ -238,6 +238,29 @@ describe('GET /api/v3 cache and publication boundaries', () => {
     expect(body.meta).toEqual(expect.objectContaining({ total_count_is_exact: true, total: 2 }))
   })
 
+  it('counts each platform without idle-window rows', async () => {
+    const query = publicRankedQuery({
+      data: [
+        publicSearchRow(),
+        publicSearchRow({ source_trader_id: 'alice-2', rank: 2 }),
+        publicSearchRow({ source: 'bybit', source_trader_id: 'bob', rank: 3 }),
+      ],
+    })
+    mockFrom.mockReturnValueOnce(query)
+
+    const response = await GET(request('/api/v3?endpoint=platforms'))
+    const body = await response.json()
+
+    expect(query.eq).toHaveBeenCalledWith('idle_window', false)
+    // Old rule (no idle row): the predicate removes nothing, same counts.
+    expect(body.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'binance_futures', traderCount: 2 }),
+        expect.objectContaining({ key: 'bybit', traderCount: 1 }),
+      ])
+    )
+  })
+
   it('does not reuse a stale platform count between requests', async () => {
     const firstQuery = publicRankedQuery({
       data: [publicSearchRow(), publicSearchRow({ source_trader_id: 'alice-2', rank: 2 })],
