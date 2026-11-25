@@ -46,7 +46,7 @@ test('orders and pages like PostgREST range requests', () => {
   const page = query('season_id=eq.90D&order=rank.desc&offset=2&limit=2')
   assert.deepEqual(
     page.map((row) => row.rank),
-    [33, 32]
+    [35, 34]
   )
 })
 

@@ -148,6 +148,23 @@ function buildPartialRow(period, nowIso) {
   }
 }
 
+// One optional risk metric missing each (score_completeness 'partial'): the
+// present one is shown, the missing one renders as "—".
+export const NO_WIN_RATE_TRADER = { id: 'e2e-no-winrate', handle: 'E2E No WinRate Trader' }
+export const NO_DRAWDOWN_TRADER = { id: 'e2e-no-drawdown', handle: 'E2E No Drawdown Trader' }
+
+function buildOneMetricMissingRow(period, nowIso, trader, offset, missing) {
+  return {
+    ...buildRow(period, TRADERS_PER_PERIOD + offset, nowIso),
+    source: 'binance_futures',
+    source_type: 'futures',
+    source_trader_id: trader.id,
+    handle: trader.handle,
+    [missing]: null,
+    score_completeness: 'partial',
+  }
+}
+
 // An account with no ROI and no PnL in the period: published, ranked last, not
 // scored. Lists hide it by default, the sitemap leaves it out and its profile
 // is noindex.
@@ -155,7 +172,7 @@ export const IDLE_TRADER = { id: 'e2e-idle', handle: 'E2E Idle Trader' }
 
 function buildIdleRow(period, nowIso) {
   return {
-    ...buildRow(period, TRADERS_PER_PERIOD + 4, nowIso),
+    ...buildRow(period, TRADERS_PER_PERIOD + 6, nowIso),
     source: 'binance_futures',
     source_type: 'futures',
     source_trader_id: IDLE_TRADER.id,
@@ -293,6 +310,8 @@ export function buildFixtures(now = new Date(), scenario = 'normal') {
           buildSharedRow(period, computedIso),
           buildNullMetricsRow(period, computedIso),
           buildPartialRow(period, computedIso),
+          buildOneMetricMissingRow(period, computedIso, NO_WIN_RATE_TRADER, 4, 'win_rate'),
+          buildOneMetricMissingRow(period, computedIso, NO_DRAWDOWN_TRADER, 5, 'max_drawdown'),
           buildIdleRow(period, computedIso),
           buildAliasRow(period, computedIso),
         ])
