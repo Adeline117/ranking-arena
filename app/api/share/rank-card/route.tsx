@@ -418,7 +418,9 @@ export async function GET(request: NextRequest) {
                 display: 'flex',
               }}
             >
-              {wv ? winRate.toFixed(0) + '%' : '--'}
+              {/* Win rate is optional on the public board: null means the
+                  source did not provide it, which is not the same as 0%. */}
+              {wv ? winRate.toFixed(0) + '%' : '—'}
             </span>
           </div>
         </div>
