@@ -325,6 +325,9 @@ async function getCurrentTraderRecommendations(
           .select(PUBLIC_RANKED_TRADER_RECOMMENDATION_SELECT)
           .eq('season_id', TRADER_RECOMMENDATION_PERIOD)
           .not('rank', 'is', null)
+          // An idle-window row (no ROI and no PnL in the period) has nothing
+          // to recommend it, whatever the collaborative signal says.
+          .eq('idle_window', false)
           .in('source', traderSources)
           .in('source_trader_id', traderKeys)
 
@@ -374,6 +377,7 @@ async function getCurrentTraderRecommendations(
       .select(PUBLIC_RANKED_TRADER_RECOMMENDATION_SELECT)
       .eq('season_id', TRADER_RECOMMENDATION_PERIOD)
       .not('rank', 'is', null)
+      .eq('idle_window', false)
       .gt('arena_score', 0)
       .or('is_outlier.is.null,is_outlier.eq.false')
       .order('arena_score', { ascending: false, nullsFirst: false })
