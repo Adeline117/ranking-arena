@@ -213,6 +213,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20261122201611_row_eligibility_roi_pnl_only.sql',
     '20261123021904_public_ranked_leaderboard_window_flags.sql',
     '20261124114140_stale_source_hides_only_its_own_rows.sql',
+    '20261124114433_register_bitget_spot_live_board_exhaustion_contract.sql',
     '20261124224208_readiness_counts_untrusted_runs_not_rows.sql',
     '20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql',
   ])
@@ -276,7 +277,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20261113151848_sync_user_profile_email_from_auth.sql',
     '20261113151849_auth_user_has_password_rpc.sql',
   ])
-  assert.equal(new Set(all).size, 235)
+  assert.equal(new Set(all).size, 236)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
   assert.deepEqual(predeploy.slice(-120), [
     '20260718120000_leaderboard_source_freshness.sql',
