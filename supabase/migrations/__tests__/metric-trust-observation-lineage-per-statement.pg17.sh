@@ -371,4 +371,42 @@ fi
 grep -q "is not the 20261118112703 definition" "$TMP_ROOT/replay.err"
 echo "ok: a replay is refused"
 
+# 20261124224208 stops re-validating row ordinals in the readiness RPC and
+# relies on the statement trigger instead, so the dependency is proven here,
+# on the real triggers: it refuses to apply while the trigger is disabled, and
+# the body it installs still reports not-ready when the trigger is disabled.
+RUN_LEVEL_MIGRATION="$MIGRATIONS/20261124224208_readiness_counts_untrusted_runs_not_rows.sql"
+psql_db -q -c "ALTER TABLE arena.metric_trust_observations DISABLE TRIGGER metric_trust_observations_source_page_lineage_after_statement"
+if psql_db -q -c "SET check_function_bodies = off" -f "$RUN_LEVEL_MIGRATION" >/dev/null 2>"$TMP_ROOT/run-level.err"; then
+  echo "the run-level readiness migration applied with the statement trigger disabled" >&2
+  exit 1
+fi
+grep -q "per-statement lineage trigger is required and must be enabled" "$TMP_ROOT/run-level.err"
+psql_db -q -c "ALTER TABLE arena.metric_trust_observations ENABLE TRIGGER metric_trust_observations_source_page_lineage_after_statement"
+echo "ok: the run-level readiness migration refuses to apply while the statement trigger is disabled"
+
+psql_db -q -c "SET check_function_bodies = off" -f "$RUN_LEVEL_MIGRATION" >/dev/null
+{
+  echo "SELECT EXISTS ("
+  awk '/-- lineage-trigger-contract:begin/ { on = 1; next }
+       /-- lineage-trigger-contract:end/ { on = 0 }
+       on { print }' "$RUN_LEVEL_MIGRATION" | sed "s/v_postgres/pg_catalog.to_regrole('postgres')/g"
+  echo ");"
+} >"$TMP_ROOT/run-level-contract.sql"
+grep -q "tgnewtable = 'inserted_observations'" "$TMP_ROOT/run-level-contract.sql"
+if [[ "$(psql_db -Atq -f "$TMP_ROOT/run-level-contract.sql")" != "t" ]]; then
+  echo "the run-level readiness body does not hold its trigger contract" >&2
+  exit 1
+fi
+psql_db -q -c "ALTER TABLE arena.metric_trust_observations DISABLE TRIGGER metric_trust_observations_source_page_lineage_after_statement"
+if [[ "$(psql_db -Atq -f "$TMP_ROOT/run-level-contract.sql")" != "f" ]]; then
+  echo "the run-level readiness body is still satisfied with the statement trigger disabled" >&2
+  exit 1
+fi
+psql_db -q -c "ALTER TABLE arena.metric_trust_observations ENABLE TRIGGER metric_trust_observations_source_page_lineage_after_statement"
+echo "ok: the run-level readiness body reports not-ready while the statement trigger is disabled"
+psql_db -q -c "SET check_function_bodies = off" -f "$RUN_LEVEL_MIGRATION" >/dev/null
+echo "ok: replaying the run-level readiness migration is a no-op"
+
+
 echo "metric trust observation lineage per statement PostgreSQL 17 proof passed"
