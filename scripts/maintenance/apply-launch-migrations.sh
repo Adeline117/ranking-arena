@@ -507,6 +507,12 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # 48-hour window hide only its own rows instead of the whole season, and
 # applies the publisher's isolation bound at read time. It replaces the
 # 20261121201553 body of arena_visible_sources, so it follows it.
+# 20261124114433 registers bitget_spot as a live board (reported_total_drift,
+# 0.35% of the board, at most 20 rows) in the append-only exhaustion registry.
+# It needs the declaration 114230 makes valid, so it follows it; it takes
+# effect with the worker release that captures bitget_spot in this mode. It
+# refuses a replay or an earlier bitget_spot registration and touches no table
+# 192134 guards.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -545,6 +551,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261122201611_row_eligibility_roi_pnl_only.sql
   20261123021904_public_ranked_leaderboard_window_flags.sql
   20261124114140_stale_source_hides_only_its_own_rows.sql
+  20261124114433_register_bitget_spot_live_board_exhaustion_contract.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
