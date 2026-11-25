@@ -36,6 +36,22 @@ describe('parseBitgetLeaderboardPage', () => {
     })
   })
 
+  it('keeps every board field except the daily PnL series in the entry raw', () => {
+    const payload = fixture('uta-board-futures-7d-p1.json') as {
+      data: { rows: Array<Record<string, unknown>> }
+    }
+    const klineProfit = { rows: [{ amount: '-14.76', dataTime: 1787760000000 }] }
+    const withSeries = {
+      ...payload,
+      data: { ...payload.data, rows: payload.data.rows.map((row) => ({ ...row, klineProfit })) },
+    }
+    const page = parseBitgetLeaderboardPage(withSeries, ctx)
+    expect(page.rows.length).toBe(payload.data.rows.length)
+    page.rows.forEach((row, index) => {
+      expect(row.raw).toEqual(payload.data.rows[index])
+    })
+  })
+
   it('reads the leader PnL under either column code, never the copiers profit', () => {
     const futures = parseBitgetLeaderboardPage(fixture('uta-board-futures-7d-p1.json'), ctx).rows
     // Futures names the column total_income (total_follow_profit there is 2538.76).

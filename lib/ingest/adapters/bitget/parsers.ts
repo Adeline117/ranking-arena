@@ -89,6 +89,11 @@ function pct(item: Dict, pctKey: string, decimalKeys: string[]): number | null {
   return null
 }
 
+function withoutKlineProfit(item: Dict): Dict {
+  const { klineProfit: _klineProfit, ...rest } = item
+  return rest
+}
+
 function listOf(payload: unknown): Dict[] {
   const data = ((payload as Dict)?.data ?? {}) as Dict
   // UTA traderView puts the board in data.rows; legacy shapes use list/traderList.
@@ -169,7 +174,14 @@ export function parseBitgetLeaderboardPage(
       // Only the futures board has a max-drawdown column (already a percent);
       // spot and cfd never return one, whatever the sort.
       headlineMdd: cols.max_retracement ?? null,
-      raw: item,
+      // Without klineProfit: that daily PnL series ({ rows: [{ amount,
+      // dataTime }] }) grows with the window (0.4 KB on a 7D row, 4.3 KB of
+      // 5.5 KB on a 90D row; 31 MB for one bitget_spot 90D board) and inflates
+      // the entries insert that must fit the 120 s fenced write budget.
+      // Nothing reads it from the entry (the first-screen projection expected
+      // an array and got null for this object), and the stored RAW page keeps
+      // it.
+      raw: withoutKlineProfit(item),
     })
   }
   return { rows, reportedTotal }

@@ -205,4 +205,62 @@ describe('legacy user-full public ranking projection', () => {
       sanitizePublicFullSimilarTraders([valid, { ...valid, rank: null }], SCOPE.source)
     ).toEqual([])
   })
+
+  it('keeps the similar-trader slice when a ranked member has no win rate or drawdown', () => {
+    const member = (traderKey: string, rank: number, overrides: Record<string, unknown> = {}) => ({
+      platform: SCOPE.source,
+      traderKey,
+      handle: traderKey,
+      avatarUrl: null,
+      followers: 3,
+      copiers: 1,
+      tradesCount: 10,
+      roi: 9,
+      pnl: 200,
+      winRate: 60,
+      maxDrawdown: 8,
+      arenaScore: 80,
+      rank,
+      ...overrides,
+    })
+
+    const slice = sanitizePublicFullSimilarTraders(
+      [
+        member('full', 2),
+        member('no-win-rate', 3, { winRate: null }),
+        member('no-drawdown', 4, { maxDrawdown: null }),
+        member('roi-pnl-only', 5, { winRate: null, maxDrawdown: null }),
+        // 0 is a value, not "missing".
+        member('zeros', 6, { winRate: 0, maxDrawdown: 0 }),
+        // A losing trader is a ranked trader.
+        member('loser', 7, { roi: -40, pnl: -900, arenaScore: 0.01 }),
+      ],
+      SCOPE.source
+    )
+    expect(slice.map((row) => [row.id, row.win_rate, row.max_drawdown])).toEqual([
+      ['full', 60, 8],
+      ['no-win-rate', null, 8],
+      ['no-drawdown', 60, null],
+      ['roi-pnl-only', null, null],
+      ['zeros', 0, 0],
+      ['loser', 60, 8],
+    ])
+
+    // ROI and PnL stay mandatory, and a present-but-malformed optional metric
+    // still fails the slice closed.
+    for (const broken of [
+      { roi: null },
+      { pnl: null },
+      { winRate: Number.NaN },
+      { winRate: '60' },
+      { maxDrawdown: Number.POSITIVE_INFINITY },
+    ]) {
+      expect(
+        sanitizePublicFullSimilarTraders(
+          [member('full', 2), member('bad', 3, broken)],
+          SCOPE.source
+        )
+      ).toEqual([])
+    }
+  })
 })

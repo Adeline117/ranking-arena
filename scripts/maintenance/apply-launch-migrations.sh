@@ -486,6 +486,23 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # instead of once per metric_trust_artifacts row; the per-row trigger
 # decompressed the capture's whole meta document (434 kB for a 2,042-page
 # bybit_mt5 window) for each of ~130,600 rows. Independent of other entries.
+# 20261122201611 replaces only the body of
+# arena.leaderboard_rank_row_is_public_eligible: a ranked row needs ROI and
+# PnL; win rate and max drawdown may be NULL (range-checked when present). It
+# is a superset of the previous policy, so it depends on no worker or website
+# version and the cohorts being served stay valid. It refuses unless the
+# installed body is the 20261111140053 one (or its own, on replay), so it runs
+# after predeploy. Order that matters is on the other side: the scoring worker
+# that publishes rows without a win rate or drawdown must be deployed AFTER
+# this migration (seal rejects such rows under the previous body). It touches
+# no table 192134 guards.
+# 20261123021904 appends two boolean columns, idle_window and
+# mdd_contradiction, to public.public_ranked_leaderboard, read from
+# leaderboard_ranks.score_factors (false unless the JSON boolean true is
+# there). It refuses unless the view is the 20260816184500 definition (or its
+# own, on replay) and changes no existing column, option, owner or grant. No
+# release depends on it and both columns are false until the scoring worker
+# publishes with roi_pnl; it follows 201611 only to keep the two together.
 # 20261124114433 registers bitget_spot as a live board (reported_total_drift,
 # 0.35% of the board, at most 20 rows) in the append-only exhaustion registry.
 # It needs the declaration 114230 makes valid, so it follows it; it takes
@@ -527,6 +544,8 @@ POSTDEPLOY_MIGRATIONS=(
   20261118134316_raw_retention_backlog_census.sql
   20261120235710_register_blofin_spot_profile_capture_contract.sql
   20261123020207_metric_trust_artifact_raw_integrity_per_statement.sql
+  20261122201611_row_eligibility_roi_pnl_only.sql
+  20261123021904_public_ranked_leaderboard_window_flags.sql
   20261124114433_register_bitget_spot_live_board_exhaustion_contract.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )

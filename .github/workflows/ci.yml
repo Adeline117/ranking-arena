@@ -660,6 +660,16 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:score-bundle-entry-counts-pg17
 
+      - name: Prove the row policy requires ROI and PnL only
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:row-eligibility-roi-pnl-pg17
+
+      - name: Prove the public view exposes the idle-window and refused-drawdown flags
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:ranked-view-window-flags-pg17
+
       - name: Prove metric source contract retirement (binance_web3_bsc v2)
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin

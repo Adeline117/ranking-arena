@@ -39,6 +39,12 @@
 import { createHash, randomUUID } from 'node:crypto'
 
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import {
+  publicRankingRowEligibility,
+  publicRankingScoreCompleteness,
+  resolvePublicRankingRowEligibility,
+  type PublicRankingRowEligibility,
+} from '@/lib/rankings/publication-policy'
 import { claimLeaderboardRankGeneration } from './claim-rank-generation'
 import { cleanupLeaderboardRankPublication } from './cleanup-rank-publication'
 import { createPgRpcClient, type RankPublicationSqlExecutor } from './pg-rpc-client'
@@ -114,6 +120,11 @@ export interface RankPublicationScoringContext {
   tx: RankPublicationSqlExecutor
   /** Display handle/avatar carried by the same score-input bundle rows. */
   handleMap: Map<string, { handle: string | null; avatar_url: string | null }>
+  /**
+   * Writer eligibility resolved once for this publication. A custom scorer
+   * may ignore it; the default scorer passes it to scoreTraders.
+   */
+  rowEligibility?: PublicRankingRowEligibility
 }
 
 export type RankPublicationCohortScorer = (
@@ -128,7 +139,7 @@ export type RankPublicationCohortScorer = (
  * cohort (`scoredFiltered`).
  */
 export function createDefaultCohortScorer(): RankPublicationCohortScorer {
-  return async (traderRows, season, { tx, handleMap }) => {
+  return async (traderRows, season, { tx, handleMap, rowEligibility }) => {
     const followers: ArenaFollowerCountSource = {
       async countTraderAccountFollowers(traderIds, sources) {
         const result = await tx.query<{ trader_id: string; source: string; cnt: number | string }>(
@@ -150,7 +161,8 @@ export function createDefaultCohortScorer(): RankPublicationCohortScorer {
       handleMap,
       new Set(),
       season,
-      followers
+      followers,
+      rowEligibility === undefined ? {} : { rowEligibility }
     )
     return scoredFiltered
   }
@@ -228,6 +240,12 @@ export interface PublishLeaderboardSeasonDependencies {
   coreSources?: readonly string[]
   /** Override RANK_PUBLICATION_MIN_EXPECTED_SOURCES (tests). */
   minExpectedSources?: number
+  /**
+   * Writer eligibility. Omitted in production: resolved from the
+   * PUBLIC_RANKING_ROW_ELIGIBILITY environment variable, default
+   * 'four_metrics' (tests and fixtures pass it explicitly).
+   */
+  rowEligibility?: PublicRankingRowEligibility
 }
 
 /** Why a scored trader did not become a published row. */
@@ -240,14 +258,17 @@ export type RankRowExclusionReason =
   | 'arena_score_out_of_range'
   | 'roi_out_of_range'
   | 'pnl_out_of_range'
+  /** Only under the 'four_metrics' rollback rule; 'roi_pnl' ranks the row. */
   | 'win_rate_missing_or_out_of_range'
+  /** Only under the 'four_metrics' rollback rule; 'roi_pnl' ranks the row. */
   | 'max_drawdown_missing'
+  /** Only under the 'four_metrics' rollback rule; 'roi_pnl' empties the metric. */
   | 'max_drawdown_liquidated'
   | 'max_drawdown_negative'
   /**
-   * A required metric (ROI, PnL, win rate, drawdown) exists only in
-   * arena.trader_stats and no bound board evidence attests it, so the row
-   * cannot be ranked (arena.publication_score_rows_json).
+   * A required metric (ROI or PnL; under 'four_metrics' also win rate and
+   * drawdown) exists only in arena.trader_stats and no bound board evidence
+   * attests it, so the row cannot be ranked (arena.publication_score_rows_json).
    */
   | 'score_input_evidence_missing'
 
@@ -258,7 +279,17 @@ export interface RankRowExclusionSummary {
   byReason: Partial<Record<RankRowExclusionReason, number>>
   /** source -> reason -> count (expected sources only). */
   bySource: Record<string, Partial<Record<RankRowExclusionReason, number>>>
+  /**
+   * Published rows whose out-of-range win rate / drawdown was emptied at the
+   * codec boundary instead of excluding the row ('roi_pnl').
+   */
+  emptiedMetrics?: Partial<Record<RankRowEmptiedMetric, number>>
+  /** Published rows by score_completeness. */
+  completeness?: Record<'full' | 'partial' | 'minimal', number>
 }
+
+/** A risk metric emptied (row kept) because its value was not a measurement. */
+export type RankRowEmptiedMetric = 'win_rate_out_of_range' | 'max_drawdown_out_of_range'
 
 /**
  * Alert (not refuse) when more than this share of a season's scored rows, or
@@ -324,8 +355,8 @@ interface PublishableRow {
   score_factors: unknown
   roi: number
   pnl: number
-  win_rate: number
-  max_drawdown: number
+  win_rate: number | null
+  max_drawdown: number | null
   followers: number | null
   copiers: number | null
   trades_count: number | null
@@ -334,7 +365,7 @@ interface PublishableRow {
   profitability_score: number | null
   risk_control_score: number | null
   execution_score: number | null
-  score_completeness: 'full'
+  score_completeness: 'full' | 'partial' | 'minimal'
   trading_style: string | null
   avg_holding_hours: number | null
   style_confidence: number | null
@@ -376,8 +407,11 @@ function fitInteger(value: number | null | undefined): number | null {
  * could never be sealed; optional ratios that overflow their numeric(10,4)
  * columns become NULL instead of failing the whole season.
  */
-export function toPublishableRow(trader: ScoredTrader): PublishableRow | null {
-  const verdict = classifyPublishableRow(trader)
+export function toPublishableRow(
+  trader: ScoredTrader,
+  rowEligibility: PublicRankingRowEligibility = publicRankingRowEligibility()
+): PublishableRow | null {
+  const verdict = classifyPublishableRow(trader, rowEligibility)
   return 'row' in verdict ? verdict.row : null
 }
 
@@ -386,10 +420,20 @@ export function toPublishableRow(trader: ScoredTrader): PublishableRow | null {
  * publication can count and report exclusions instead of dropping them
  * silently. The first failing rule wins (identity, then completeness, then the
  * numeric policy in column order).
+ *
+ * 'roi_pnl' (default): ROI and PnL decide. A missing win rate or drawdown is
+ * published empty; a win rate outside 0..100 or a drawdown >= 100 is emptied
+ * and reported in `emptied` (the default scorer already empties both, so this
+ * is the codec-boundary backstop). A negative drawdown still excludes the row.
+ * score_completeness is derived from what is actually written, because the
+ * database policy rejects a label that disagrees with the columns.
+ * 'four_metrics': the previous rule, all four required.
  */
 export function classifyPublishableRow(
-  trader: ScoredTrader
-): { row: PublishableRow } | { reason: RankRowExclusionReason } {
+  trader: ScoredTrader,
+  rowEligibility: PublicRankingRowEligibility = publicRankingRowEligibility()
+): { row: PublishableRow; emptied?: RankRowEmptiedMetric[] } | { reason: RankRowExclusionReason } {
+  const fourMetrics = rowEligibility === 'four_metrics'
   const source = trader.source
   const traderId = trader.source_trader_id
   if (
@@ -400,15 +444,22 @@ export function classifyPublishableRow(
   ) {
     return { reason: 'invalid_identity' }
   }
-  if (trader.score_completeness !== 'full' || trader.metrics_estimated !== false) {
+  if (
+    (fourMetrics
+      ? trader.score_completeness !== 'full'
+      : trader.score_completeness !== 'full' &&
+        trader.score_completeness !== 'partial' &&
+        trader.score_completeness !== 'minimal') ||
+    trader.metrics_estimated !== false
+  ) {
     return { reason: 'incomplete_or_estimated' }
   }
   if (trader.is_outlier === true) return { reason: 'outlier' }
   const arenaScore = fitNumeric(trader.arena_score, 10, 2)
   const roi = fitNumeric(trader.roi, 12, 4)
   const pnl = fitNumeric(trader.pnl, 18, 2)
-  const winRate = fitNumeric(trader.win_rate, 5, 2)
-  const maxDrawdown = fitNumeric(trader.max_drawdown, 5, 2)
+  let winRate = fitNumeric(trader.win_rate, 5, 2)
+  let maxDrawdown = fitNumeric(trader.max_drawdown, 5, 2)
   if (arenaScore === null || arenaScore <= 0 || arenaScore > 100) {
     return { reason: 'arena_score_out_of_range' }
   }
@@ -416,24 +467,48 @@ export function classifyPublishableRow(
   if (pnl === null || pnl < -100_000_000 || pnl > 1_000_000_000) {
     return { reason: 'pnl_out_of_range' }
   }
-  if (winRate === null || winRate < 0 || winRate > 100) {
-    return { reason: 'win_rate_missing_or_out_of_range' }
-  }
-  if (maxDrawdown === null) {
-    // A raw value that only overflowed numeric(5,2) is >= 1000 => liquidated.
-    return {
-      reason:
-        trader.max_drawdown !== null &&
-        trader.max_drawdown !== undefined &&
-        Number.isFinite(trader.max_drawdown) &&
-        trader.max_drawdown >= 100
-          ? 'max_drawdown_liquidated'
-          : 'max_drawdown_missing',
+  const emptied: RankRowEmptiedMetric[] = []
+  if (fourMetrics) {
+    if (winRate === null || winRate < 0 || winRate > 100) {
+      return { reason: 'win_rate_missing_or_out_of_range' }
+    }
+    if (maxDrawdown === null) {
+      // A raw value that only overflowed numeric(5,2) is >= 1000 => liquidated.
+      return {
+        reason:
+          trader.max_drawdown !== null &&
+          trader.max_drawdown !== undefined &&
+          Number.isFinite(trader.max_drawdown) &&
+          trader.max_drawdown >= 100
+            ? 'max_drawdown_liquidated'
+            : 'max_drawdown_missing',
+      }
+    }
+    if (maxDrawdown < 0) return { reason: 'max_drawdown_negative' }
+    if (maxDrawdown >= 100) return { reason: 'max_drawdown_liquidated' }
+  } else {
+    // Only null/undefined is "not provided". A value that is present but is
+    // not a measurement (non-finite, outside the column, outside the range) is
+    // emptied and counted; it never excludes the row.
+    const hadWinRate = trader.win_rate !== null && trader.win_rate !== undefined
+    if (hadWinRate && (winRate === null || winRate < 0 || winRate > 100)) {
+      winRate = null
+      emptied.push('win_rate_out_of_range')
+    }
+    const hadMaxDrawdown = trader.max_drawdown !== null && trader.max_drawdown !== undefined
+    if (hadMaxDrawdown && maxDrawdown !== null && maxDrawdown < 0) {
+      return { reason: 'max_drawdown_negative' }
+    }
+    if (hadMaxDrawdown && (maxDrawdown === null || maxDrawdown >= 100)) {
+      if (Number.isFinite(trader.max_drawdown) && (trader.max_drawdown as number) < 0) {
+        return { reason: 'max_drawdown_negative' }
+      }
+      maxDrawdown = null
+      emptied.push('max_drawdown_out_of_range')
     }
   }
-  if (maxDrawdown < 0) return { reason: 'max_drawdown_negative' }
-  if (maxDrawdown >= 100) return { reason: 'max_drawdown_liquidated' }
   return {
+    ...(emptied.length > 0 ? { emptied } : {}),
     row: {
       source,
       source_type: SOURCE_TYPE_MAP[source] || 'futures',
@@ -454,7 +529,7 @@ export function classifyPublishableRow(
       profitability_score: fitNumeric(trader.profitability_score, 6, 2),
       risk_control_score: fitNumeric(trader.risk_control_score, 6, 2),
       execution_score: fitNumeric(trader.execution_score, 6, 2),
-      score_completeness: 'full',
+      score_completeness: publicRankingScoreCompleteness(winRate !== null, maxDrawdown !== null),
       trading_style: trader.trading_style,
       avg_holding_hours: fitNumeric(trader.avg_holding_hours, 10, 2),
       style_confidence: fitNumeric(trader.style_confidence, 6, 4),
@@ -599,6 +674,64 @@ ON CONFLICT (season_id, source, source_trader_id) DO UPDATE SET
   score_factors = EXCLUDED.score_factors,
   rank_publication_id = EXCLUDED.rank_publication_id
 `
+
+/** The timed stages of one season publication, in execution order. */
+export const RANK_PUBLICATION_STAGES = [
+  'read',
+  'score',
+  'write',
+  'cleanup',
+  'rerank',
+  'seal',
+] as const
+export type RankPublicationStage = (typeof RANK_PUBLICATION_STAGES)[number]
+
+/**
+ * One log line per stage: `[7D] stage=rerank rows=9012 ms=310`.
+ *   read    rows = score rows the bundle returned for the expected sources
+ *   score   rows = rows handed to the scorer
+ *   write   rows = rows written (all chunks; the statement timeout applies per chunk)
+ *   cleanup rows = rows deleted (previous cohort rows that left the board)
+ *   rerank  rows = rows of the cohort being ranked
+ *   seal    rows = rows sealed (the published rank count)
+ * Each of write-chunk / cleanup / rerank / seal is one statement under
+ * RANK_PUBLICATION_STEP_STATEMENT_TIMEOUT, so ms is the margin to watch.
+ */
+export function rankPublicationStageTimingLine(
+  season: PublicationWindow,
+  stage: RankPublicationStage,
+  rows: number,
+  elapsedMs: number
+): string {
+  return `[${season}] stage=${stage} rows=${rows} ms=${Math.max(0, Math.round(elapsedMs))}`
+}
+
+/**
+ * Order in which rows are sent to the database.
+ *
+ * The rerank assigns rank by `arena_score DESC NULLS LAST, id`, and the display
+ * score has two decimals, so rows that share a score are ordered by id. A row
+ * inserted for the first time takes the next id, i.e. insertion order. Sending
+ * rows by score, then ROI, then PnL, then identity therefore makes ties among
+ * newly ranked rows fall in that order: a zero-return account never gets an id
+ * (and so a rank) ahead of a profitable trader with the same displayed score.
+ * Rows already in the table keep their id (ON CONFLICT ... DO UPDATE), so ranks
+ * inside a tie are stable from one publication to the next.
+ *
+ * The write set is unchanged: writeSetSha256 canonicalizes by identity.
+ */
+export function orderRowsForWrite<
+  Row extends Pick<PublishableRow, 'arena_score' | 'roi' | 'pnl' | 'source' | 'source_trader_id'>,
+>(rows: readonly Row[]): Row[] {
+  return [...rows].sort(
+    (left, right) =>
+      right.arena_score - left.arena_score ||
+      right.roi - left.roi ||
+      right.pnl - left.pnl ||
+      compareText(left.source, right.source) ||
+      compareText(left.source_trader_id, right.source_trader_id)
+  )
+}
 
 function writeSetSha256(season: PublicationWindow, rows: readonly PublishableRow[]): string {
   const canonical = [...rows]
@@ -773,6 +906,15 @@ async function publishInTransaction(
   log: (message: string) => void,
   scoreCohortId: string
 ): Promise<PublishLeaderboardSeasonResult> {
+  // Resolved once per publication so every step applies the same rule.
+  const resolvedEligibility = deps.rowEligibility
+    ? {
+        value: deps.rowEligibility,
+        description: `row eligibility: ${deps.rowEligibility} (explicit)`,
+      }
+    : resolvePublicRankingRowEligibility()
+  const rowEligibility = resolvedEligibility.value
+  log(`[${season}] ${resolvedEligibility.description}`)
   return deps.database.transaction(async (tx) => {
     const rpc = createPgRpcClient(tx)
     await tx.query(`SET LOCAL statement_timeout = '${RANK_PUBLICATION_STEP_STATEMENT_TIMEOUT}'`)
@@ -840,7 +982,9 @@ async function publishInTransaction(
         { expectedSources: allExpectedSources, unsupportedSources, floor: minExpectedSources }
       )
     }
+    const readStartedAt = Date.now()
     const bundle = await readSourcePublicationBundle(rpc, season, { now: new Date(computedAt) })
+    const readElapsedMs = Date.now() - readStartedAt
 
     // 2. Freshness + trust gate. A source without fresh PASSED evidence, or
     // whose PASSED boards lack attempt-bound trust evidence ('untrusted'), is
@@ -984,13 +1128,15 @@ async function publishInTransaction(
     const evidence = restrictEvidence(bundle.evidence, expected)
 
     // 3. Score the fresh authority rows; keep only DB-sealable rows. A row
-    // whose required metric was refused for lack of board evidence can never
-    // be ranked (ROI/PnL gate the scorer, win rate/drawdown its completeness),
-    // so it is counted here instead of reaching the scorer as a bare null.
+    // whose required metric (ROI or PnL) was refused for lack of board
+    // evidence can never be ranked, so it is counted here instead of reaching
+    // the scorer as a bare null. An unevidenced win rate or drawdown is not
+    // required: it arrives as null and the row is ranked with it empty.
     const traderRows = bundle.traderRows.filter((row) => expected.has(row.source))
+    log(rankPublicationStageTimingLine(season, 'read', traderRows.length, readElapsedMs))
     const unevidencedKeys = new Set(
       evidence.freshScoreRows
-        .filter(lacksRequiredMetricEvidence)
+        .filter((row) => lacksRequiredMetricEvidence(row, rowEligibility))
         .map((row) => `${row.platform}\u0000${row.trader_key}`)
     )
     const scorerRows = traderRows.filter(
@@ -1007,7 +1153,16 @@ async function publishInTransaction(
         avatar_url: row.avatar_url,
       })
     }
-    const scored = await deps.scoreCohort(scorerRows, season, { tx, handleMap })
+    const scoreStartedAt = Date.now()
+    const scored = await deps.scoreCohort(scorerRows, season, { tx, handleMap, rowEligibility })
+    log(
+      rankPublicationStageTimingLine(
+        season,
+        'score',
+        scorerRows.length,
+        Date.now() - scoreStartedAt
+      )
+    )
     const rows: PublishableRow[] = []
     const identities = new Map<string, string[]>(expectedSources.map((source) => [source, []]))
     const seen = new Set<string>()
@@ -1042,7 +1197,7 @@ async function publishInTransaction(
         continue
       }
       returnedBySource.set(trader.source, (returnedBySource.get(trader.source) ?? 0) + 1)
-      const verdict = classifyPublishableRow(trader)
+      const verdict = classifyPublishableRow(trader, rowEligibility)
       if ('reason' in verdict) {
         exclusions.excluded += 1
         bump(exclusions.byReason, verdict.reason)
@@ -1051,6 +1206,10 @@ async function publishInTransaction(
         continue
       }
       const row = verdict.row
+      for (const metric of verdict.emptied ?? []) {
+        exclusions.emptiedMetrics ??= {}
+        bump(exclusions.emptiedMetrics, metric)
+      }
       const key = JSON.stringify([row.source, row.source_trader_id])
       if (seen.has(key)) {
         throw new RankPublicationError(
@@ -1084,8 +1243,11 @@ async function publishInTransaction(
         `[${season}] ${rows.length} rows exceed the ${MAX_ROWS_PER_GENERATION}-row generation bound`
       )
     }
+    const completeness = { full: 0, partial: 0, minimal: 0 }
+    for (const row of rows) completeness[row.score_completeness] += 1
+    exclusions.completeness = completeness
     log(
-      `[${season}] ${rows.length} publishable rows across ${expectedSources.length} sources (${exclusions.excluded} excluded: ${JSON.stringify(exclusions.byReason)})`
+      `[${season}] ${rows.length} publishable rows across ${expectedSources.length} sources (${exclusions.excluded} excluded: ${JSON.stringify(exclusions.byReason)}; completeness: ${JSON.stringify(completeness)}; emptied metrics: ${JSON.stringify(exclusions.emptiedMetrics ?? {})})`
     )
     const exclusionAlert = exclusionAlertDetails(exclusions, scoredBySource)
 
@@ -1116,8 +1278,11 @@ async function publishInTransaction(
 
     // 5. Write every row with the cohort token.
     let written = 0
+    const writeStartedAt = Date.now()
+    // 'four_metrics' sends rows in the order the scorer returned them, as before.
+    const rowsInWriteOrder = rowEligibility === 'roi_pnl' ? orderRowsForWrite(rows) : rows
     for (let offset = 0; offset < rows.length; offset += RANK_PUBLICATION_WRITE_CHUNK) {
-      const chunk = rows.slice(offset, offset + RANK_PUBLICATION_WRITE_CHUNK)
+      const chunk = rowsInWriteOrder.slice(offset, offset + RANK_PUBLICATION_WRITE_CHUNK)
       const result = await tx.query(WRITE_SQL, [
         JSON.stringify(chunk),
         season,
@@ -1126,6 +1291,7 @@ async function publishInTransaction(
       ])
       written += result.rowCount ?? 0
     }
+    log(rankPublicationStageTimingLine(season, 'write', written, Date.now() - writeStartedAt))
     if (written !== rows.length) {
       throw new RankPublicationError(
         'write_incomplete',
@@ -1137,16 +1303,31 @@ async function publishInTransaction(
     const finalEligibleIdentityMap: ReadonlyMap<string, readonly string[]> = identities
 
     // 6-8. Cleanup, global rerank, seal.
+    const cleanupStartedAt = Date.now()
     const cleanup = await cleanupLeaderboardRankPublication(
       rpc,
       { season, scoreCohortId, freshPublications, finalEligibleIdentityMap },
       stepOptions
     )
+    log(
+      rankPublicationStageTimingLine(
+        season,
+        'cleanup',
+        cleanup.deleted_count,
+        Date.now() - cleanupStartedAt
+      )
+    )
+    const rerankStartedAt = Date.now()
     await rerankLeaderboardPublication(rpc, { season, scoreCohortId }, stepOptions)
+    log(rankPublicationStageTimingLine(season, 'rerank', rows.length, Date.now() - rerankStartedAt))
+    const sealStartedAt = Date.now()
     const seal = await sealLeaderboardRankPublication(
       rpc,
       { season, scoreCohortId, freshPublications, finalEligibleIdentityMap },
       stepOptions
+    )
+    log(
+      rankPublicationStageTimingLine(season, 'seal', seal.trader_count, Date.now() - sealStartedAt)
     )
 
     // 9. The public view must now serve this season; otherwise roll back.

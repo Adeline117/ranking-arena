@@ -102,6 +102,35 @@ describe('getLinkedTraders', () => {
     })
   })
 
+  it.each([
+    ['no win rate', { win_rate: null, score_completeness: 'partial' }, null, 20],
+    ['no drawdown', { max_drawdown: null, score_completeness: 'partial' }, 60, null],
+    [
+      'ROI and PnL only',
+      { win_rate: null, max_drawdown: null, score_completeness: 'minimal' },
+      null,
+      null,
+    ],
+  ])(
+    'keeps a ranked account verified with %s',
+    async (_label, overrides, expectedWinRate, expectedMaxDrawdown) => {
+      const { client } = queueClient({
+        user_linked_traders: [{ data: [ultRow('t1', true)] }],
+        public_ranked_leaderboard: [{ data: [rankRow('t1', -12, -300, 4.2, overrides)] }],
+      })
+      const [link] = await getLinkedTraders(client, 'u1')
+      expect(link).toMatchObject({
+        roi: -12,
+        arenaScore: 4.2,
+        winRate: expectedWinRate,
+        maxDrawdown: expectedMaxDrawdown,
+        rank: 5,
+        rankingVisibility: 'verified',
+        rankingVisibilityReason: null,
+      })
+    }
+  )
+
   it('suppresses every performance field when a returned cohort row is estimated', async () => {
     const { client } = queueClient({
       user_linked_traders: [{ data: [ultRow('t1', true)] }],

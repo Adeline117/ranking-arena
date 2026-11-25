@@ -89,6 +89,45 @@ describe('/quiz/result public recommendation authority', () => {
     ])
   })
 
+  it('keeps a ranked trader without a win rate in the recommendation cohort', async () => {
+    const query = publicRankedQuery({
+      data: [
+        publicRankedRow(),
+        publicRankedRow({
+          source_trader_id: 'no-win-rate',
+          handle: 'No Win Rate',
+          rank: 8,
+          win_rate: null,
+          score_completeness: 'partial',
+        }),
+        publicRankedRow({
+          source_trader_id: 'roi-pnl-only',
+          handle: 'ROI PnL Only',
+          rank: 9,
+          roi: -4,
+          pnl: -80,
+          win_rate: null,
+          max_drawdown: null,
+          score_completeness: 'minimal',
+        }),
+      ],
+      error: null,
+    })
+    mockFrom.mockImplementation(() => query)
+
+    const page = (await QuizResultPage(quizProps('narrator'))) as {
+      props: { recommendedTraders: Array<Record<string, unknown>> }
+    }
+
+    expect(page.props.recommendedTraders.map((trader) => [trader.handle, trader.win_rate])).toEqual(
+      [
+        ['Verified Quiz Trader', 61],
+        ['No Win Rate', null],
+        ['ROI PnL Only', null],
+      ]
+    )
+  })
+
   it('fails closed instead of replacing an unproved top-three row with a lower recommendation', async () => {
     const query = publicRankedQuery({
       data: [
