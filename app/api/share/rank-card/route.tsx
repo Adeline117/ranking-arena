@@ -56,8 +56,12 @@ const PLAT_L: Record<string, string> = {
   etoro: 'eToro',
 }
 
+// Every column the shared row check (isPublicRankingRowEligible) reads must be
+// selected, including ones the card never draws: pnl is required, and
+// max_drawdown is compared against score_completeness. Leaving either out makes
+// the check reject every row and the card renders no numbers at all.
 const PUBLIC_RANK_CARD_COLUMNS =
-  'rank,roi,win_rate,arena_score,source,source_trader_id,score_completeness,metrics_estimated,is_outlier,computed_at,season_id'
+  'rank,roi,pnl,win_rate,max_drawdown,arena_score,source,source_trader_id,score_completeness,metrics_estimated,is_outlier,computed_at,season_id'
 
 type VerifiedRankCardRow = {
   rank: number
