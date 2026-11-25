@@ -290,11 +290,14 @@ export default function RankingSection({
       {/* End of the list: the idle-window tail is hidden by default. Shown once
           the reader has reached the last page of the board (or has expanded it),
           and only for the plain board — a filtered or searched list is not the
-          place to offer rows the filter may not match. */}
+          place to offer rows the filter may not match, and under another sort
+          order idle rows would not stay at the tail, so they are not listed. */}
       {!loading &&
         !error &&
         !hasCohortFilters &&
         !searchQuery &&
+        sortColumn === 'score' &&
+        sortDir === 'desc' &&
         (showIdle || hasMore === false) && (
           <IdleWindowTail
             timeRange={activeTimeRange}

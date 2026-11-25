@@ -284,6 +284,19 @@ describe('GET /api/traders server-side filters', () => {
     expect(traders[0]).toMatchObject({ idle_window: true, win_rate: null, max_drawdown: null })
   })
 
+  it.each([
+    ['a non-default sort', 'idle=1&sortBy=roi&page=0'],
+    ['ascending score order', 'idle=1&order=asc&page=0'],
+    ['another filter', 'idle=1&min_score=10'],
+  ])('ignores idle=1 together with %s: idle rows would not stay at the tail', async (_l, query) => {
+    const { rankingQuery } = mockPublicView([publicRankedRow()])
+    const response = await GET(
+      new NextRequest(`http://localhost/api/traders?timeRange=90D&${query}`)
+    )
+    expect(response.status).toBe(200)
+    expect(rankingQuery.eq).toHaveBeenCalledWith('idle_window', false)
+  })
+
   it('rejects any other idle value before database access', async () => {
     mockPublicView([])
     const response = await GET(new NextRequest('http://localhost/api/traders?idle=true'))

@@ -639,14 +639,21 @@ export function useRankingFilters({
 
   // Current filter params for a server request, read from the latest state so
   // a sort/page/category request never drops a just-changed filter.
-  const currentFilterQuery = useCallback(
-    () =>
-      withIdleRows(
-        serverFilterQuery(stateRef.current.filterConfig, stateRef.current.activePreset),
-        stateRef.current.showIdle
-      ),
-    []
-  )
+  // Idle rows are requested only on the plain board: default order, no filter,
+  // no search (the API enforces the same rule — see listsIdleRows). With a sort
+  // or a filter active the switch simply has no effect, so it can never leave
+  // the reader with idle rows they cannot collapse.
+  // `next` names the order the request is FOR when it differs from the order
+  // currently on screen (a sort change commits its state only after the fetch).
+  const currentFilterQuery = useCallback((next?: { sortColumn: SortColumn; sortDir: SortDir }) => {
+    const state = stateRef.current
+    const filters = serverFilterQuery(state.filterConfig, state.activePreset)
+    const sortColumn = next?.sortColumn ?? state.sortColumn
+    const sortDir = next?.sortDir ?? state.sortDir
+    const plainBoard =
+      filters === null && sortColumn === 'score' && sortDir === 'desc' && !state.searchQuery
+    return withIdleRows(filters, state.showIdle && plainBoard)
+  }, [])
 
   const commitFilterConfig = useCallback(
     (config: FilterConfig) => {
@@ -666,21 +673,35 @@ export function useRankingFilters({
     [syncStateToUrl]
   )
 
-  // Expand / collapse the idle-window tail. Like a filter change it restarts
-  // the board at page 1 of the newly selected cohort.
+  // Expand / collapse the idle-window tail IN PLACE.
+  //
+  // Idle rows rank after every trading account, so the expanded board is the
+  // same list with more rows appended: the page the reader is on (the last
+  // page, where the note is) keeps its rows and the idle ones follow. Jumping
+  // back to page 1 would put them some eighty pages away. Collapsing returns to
+  // the page where the tail was expanded, which always exists in the short list.
+  const idleAnchorPageRef = useRef<number | null>(null)
   const handleShowIdle = useCallback(
     (next: boolean) => {
+      const currentIndex = Math.max(0, (stateRef.current.currentPage || 1) - 1)
+      const targetIndex = next ? currentIndex : (idleAnchorPageRef.current ?? 0)
+      if (next) idleAnchorPageRef.current = currentIndex
       setShowIdle(next)
       stateRef.current = { ...stateRef.current, showIdle: next }
       syncStateToUrl({ idle: next })
       if (!fetchPage) return
-      void fetchPage(0, { filters: currentFilterQuery() }).then((succeeded) => {
+      void fetchPage(targetIndex, {
+        category: apiCategoryFor(category),
+        sortBy: SORT_BY[sortColumn],
+        sortDir: sortDir,
+        filters: currentFilterQuery(),
+      }).then((succeeded) => {
         if (!succeeded) return
-        setCurrentPage(1)
-        syncStateToUrl({ page: 1, idle: next })
+        setCurrentPage(targetIndex + 1)
+        syncStateToUrl({ page: targetIndex + 1, idle: next })
       })
     },
-    [currentFilterQuery, fetchPage, syncStateToUrl]
+    [category, currentFilterQuery, fetchPage, sortColumn, sortDir, syncStateToUrl]
   )
 
   const filterFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -726,7 +747,7 @@ export function useRankingFilters({
           category: apiCategoryFor(category),
           sortBy: SORT_BY[col],
           sortDir: dir,
-          filters: currentFilterQuery(),
+          filters: currentFilterQuery({ sortColumn: col, sortDir: dir }),
         }).then((succeeded) => {
           if (!succeeded) return
           setSortColumn(col)

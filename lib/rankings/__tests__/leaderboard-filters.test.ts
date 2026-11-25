@@ -1,4 +1,8 @@
-import { hasLeaderboardFilters, leaderboardFilterQuery } from '../leaderboard-filters'
+import {
+  hasLeaderboardFilters,
+  leaderboardFilterQuery,
+  listsIdleRows,
+} from '../leaderboard-filters'
 
 describe('leaderboardFilterQuery — canonical /api/traders filter params', () => {
   it('returns null when nothing narrows the cohort', () => {
@@ -56,5 +60,37 @@ describe('idle-window rows', () => {
   it('counts as a cohort of its own, so the request stays out of the shared cache', () => {
     expect(hasLeaderboardFilters({ includeIdle: true })).toBe(true)
     expect(hasLeaderboardFilters({})).toBe(false)
+  })
+})
+
+describe('listsIdleRows (idle rows only on the plain board)', () => {
+  it('lists them for the default order with no other filter', () => {
+    expect(listsIdleRows({ includeIdle: true }, 'arena_score', 'desc')).toBe(true)
+  })
+
+  it('does not list them unless asked', () => {
+    expect(listsIdleRows({}, 'arena_score', 'desc')).toBe(false)
+    expect(listsIdleRows(null, 'arena_score', 'desc')).toBe(false)
+  })
+
+  it.each([
+    ['roi', 'desc'],
+    ['pnl', 'desc'],
+    ['arena_score', 'asc'],
+  ] as const)(
+    'does not list them when sorted by %s %s — they would leave the tail',
+    (sortBy, order) => {
+      expect(listsIdleRows({ includeIdle: true }, sortBy, order)).toBe(false)
+    }
+  )
+
+  it('does not list them together with any other filter or preset', () => {
+    expect(listsIdleRows({ includeIdle: true, minScore: 10 }, 'arena_score', 'desc')).toBe(false)
+    expect(listsIdleRows({ includeIdle: true, sources: ['bybit'] }, 'arena_score', 'desc')).toBe(
+      false
+    )
+    expect(listsIdleRows({ includeIdle: true, preset: 'low_risk' }, 'arena_score', 'desc')).toBe(
+      false
+    )
   })
 })

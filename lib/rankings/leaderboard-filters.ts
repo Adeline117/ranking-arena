@@ -91,6 +91,26 @@ export function toLeaderboardSourceType(value: string): LeaderboardSourceType | 
   return value === 'onchain' ? 'web3' : null
 }
 
+/**
+ * Idle-window rows may be listed only on the PLAIN board: default order
+ * (Arena Score, descending) and no other filter.
+ *
+ * Their place is the tail. Under any other order that no longer holds — sorted
+ * by ROI, a row with ROI 0 sits above every losing trader — and a filter
+ * selects rows the idle accounts do not belong among. So a request that asks
+ * for them together with a sort or a filter gets the board without them.
+ */
+export function listsIdleRows(
+  filters: LeaderboardFilters | null | undefined,
+  sortBy: string,
+  order: 'asc' | 'desc'
+): boolean {
+  if (filters?.includeIdle !== true) return false
+  if (sortBy !== 'arena_score' || order !== 'desc') return false
+  const { includeIdle: _includeIdle, ...others } = filters
+  return !hasLeaderboardFilters(others)
+}
+
 export function hasLeaderboardFilters(filters: LeaderboardFilters): boolean {
   return Object.values(filters).some((value) =>
     Array.isArray(value) ? value.length > 0 : value !== undefined

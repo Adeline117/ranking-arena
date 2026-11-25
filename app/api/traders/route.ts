@@ -38,6 +38,7 @@ import {
   toLeaderboardSourceType,
   type LeaderboardFilters,
   type LeaderboardSourceType,
+  listsIdleRows,
 } from '@/lib/rankings/leaderboard-filters'
 import { validateTradersResponse } from '@/lib/api/traders-response-schema'
 import { attachAvatarMirrors } from '@/lib/data/avatar-mirrors'
@@ -578,7 +579,9 @@ async function fetchPublicRankedCohort(
   }
 
   // Idle-window rows stay out of the list unless the request asks for them.
-  if (params.filters?.includeIdle !== true) {
+  // Only the plain board (default order, no other filter) can list them: under
+  // another sort or a filter they would not stay at the tail (listsIdleRows).
+  if (!listsIdleRows(params.filters, sortBy, order)) {
     query = excludeIdleWindowRows(query)
   }
 
