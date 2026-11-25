@@ -359,9 +359,6 @@ async function getCurrentPublicServingScores(platform: string, traderKey: string
     trading_style: typeof row.trading_style === 'string' ? row.trading_style : null,
     style_confidence: finiteOrNull(row.style_confidence),
     avg_holding_hours: finiteOrNull(row.avg_holding_hours),
-    // The published, percent-normalized values the ranking itself shows.
-    win_rate: finiteOrNull(row.win_rate),
-    max_drawdown: finiteOrNull(row.max_drawdown),
   }))
 }
 
@@ -690,13 +687,11 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
       entries.find((e) => e.timeframe === 90) ??
       entries.find((e) => e.timeframe === 30) ??
       entries[0]
-    // Win rate and drawdown come from the PUBLISHED ranking row for the same
-    // window as the headline ROI — the value the board shows, in percent. The
-    // first-screen board extras are the exchange's raw row: some sources send
-    // these as fractions (0.66) and others as percents (66), so rendering them
-    // through one formatter was off by 100x for the fractional sources.
-    const headlineSeason = (headlineWindowFor(best?.timeframe) ?? '90d').toUpperCase()
-    const publishedRow = servingScores.find((row) => row.season_id === headlineSeason)
+    // Win rate and drawdown here are already the PUBLISHED ranking values: the
+    // public overlay replaces the exchange's raw ones (see first-screen.ts).
+    const bestWinRate =
+      best?.headlineWinRate ??
+      (typeof best?.extras.win_rate === 'number' ? (best.extras.win_rate as number) : null)
 
     const servingTraderData: UnregisteredTraderData = {
       handle: firstScreen.nickname ?? servingResolved.nickname ?? decodedHandle,
@@ -715,8 +710,8 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
       rank: best?.rank ?? null,
       roi: best?.headlineRoi ?? null,
       pnl: best?.headlinePnl?.value ?? null,
-      win_rate: publishedRow?.win_rate ?? null,
-      max_drawdown: publishedRow?.max_drawdown ?? null,
+      win_rate: bestWinRate,
+      max_drawdown: typeof best?.extras.mdd === 'number' ? (best.extras.mdd as number) : null,
       headline_window: headlineWindowFor(best?.timeframe),
       is_verified_data: verifiedKeys.has(
         verifiedTraderKey(servingResolved.source, servingResolved.exchangeTraderId)

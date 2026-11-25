@@ -300,9 +300,6 @@ export interface ServingScoreRow {
   trading_style: string | null
   style_confidence: number | null
   avg_holding_hours: number | null
-  /** Published ranking values for this period, in percent (null = not published). */
-  win_rate?: number | null
-  max_drawdown?: number | null
 }
 
 export default function TraderProfileClient({
