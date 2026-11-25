@@ -782,7 +782,7 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
     // Server-rendered summary: the numbers already resolved above, as real HTML
     // (see TraderServerSummary). The Arena Score shown is the one for the same
     // window as the headline ROI/PnL, never a different period's.
-    const { t } = await getServerTranslation()
+    const { t, lang } = await getServerTranslation()
     const summaryWindow = servingTraderData.headline_window ?? '90d'
     const summarySeason = summaryWindow.toUpperCase()
     const servingSummary = (
@@ -800,6 +800,9 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
         }}
         similar={toSummarySimilar(serverSimilarTraders)}
         t={t}
+        language={lang}
+        // Board capture time of the headline entry (not Arena's re-score time).
+        dataAsOf={best?.provenance?.asOf ?? null}
       />
     )
 
@@ -942,7 +945,7 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
   ])
 
   // Legacy header values are 90D-only (see traderData above).
-  const { t } = await getServerTranslation()
+  const { t, lang } = await getServerTranslation()
   const legacySummary = (
     <TraderServerSummary
       name={traderData.handle}
@@ -958,6 +961,7 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
       }}
       similar={toSummarySimilar(serverTraderData?.similarTraders ?? [])}
       t={t}
+      language={lang}
     />
   )
 

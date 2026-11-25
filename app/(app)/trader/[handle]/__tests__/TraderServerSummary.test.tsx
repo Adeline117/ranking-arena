@@ -3,7 +3,10 @@ import en from '@/lib/i18n/en'
 import ja from '@/lib/i18n/ja'
 import ko from '@/lib/i18n/ko'
 import zh from '@/lib/i18n/zh'
-import TraderServerSummary, { buildTraderSummaryRows } from '../TraderServerSummary'
+import TraderServerSummary, {
+  buildTraderSummaryRows,
+  summaryDataNote,
+} from '../TraderServerSummary'
 
 const dict: Record<string, string> = en
 const t = (key: string) => dict[key] ?? key
@@ -88,6 +91,43 @@ describe('TraderServerSummary', () => {
       expect(language.traderSummaryLead).toContain('{name}')
       expect(language.traderSummaryLead).toContain('{window}')
       expect(language.traderSummaryLead).toContain('{exchange}')
+    }
+  })
+})
+
+describe('summary data note (L1: public leaderboard data)', () => {
+  it('names the data level, the exchange and the capture time in UTC', () => {
+    const note = summaryDataNote({
+      exchange: 'Binance',
+      dataAsOf: '2026-11-24T18:05:00.000Z',
+      language: 'en',
+      t,
+    })
+    expect(note).toMatch(/^Public leaderboard data · Binance · as of /)
+    expect(note).toContain('Nov 24, 2026')
+    expect(note).toContain('UTC')
+  })
+
+  it('leaves the time out when it is unknown instead of inventing one', () => {
+    for (const dataAsOf of [null, undefined, '', 'not-a-date']) {
+      expect(summaryDataNote({ exchange: 'Binance', dataAsOf, language: 'en', t })).toBe(
+        'Public leaderboard data · Binance'
+      )
+    }
+  })
+
+  it('is rendered with the metrics and not on a summary that has none', () => {
+    const withMetrics = html({ metrics: { roi: 12.5 }, dataAsOf: '2026-11-24T18:05:00.000Z' })
+    expect(withMetrics).toContain('data-testid="trader-summary-data-note"')
+    expect(withMetrics).toContain('Public leaderboard data')
+    const linksOnly = html({ similar: [{ name: 'Bob', href: '/trader/bob?platform=okx' }] })
+    expect(linksOnly).not.toContain('trader-summary-data-note')
+  })
+
+  it('has the copy in every language', () => {
+    for (const lang of [en, zh, ja, ko] as Array<Record<string, string>>) {
+      expect(lang.publicLeaderboardData).toBeTruthy()
+      expect(lang.rowDataAsOf).toContain('{time}')
     }
   })
 })
