@@ -206,10 +206,8 @@ export const ScoreBreakdown = memo(function ScoreBreakdown(props: ScoreBreakdown
           {(score_completeness === 'partial' || score_completeness === 'minimal') && (
             <Text size="xs" style={{ color: completenessColor, opacity: 0.85, lineHeight: 1.5 }}>
               {score_completeness === 'minimal'
-                ? t('confidenceMinimalReason') ||
-                  `Score based on limited data: ${[!win_rate && 'win rate', !max_drawdown && 'drawdown'].filter(Boolean).join(' and ')} not available`
-                : t('confidencePartialReason') ||
-                  `Score adjusted: ${[!win_rate && 'win rate', !max_drawdown && 'drawdown'].filter(Boolean).join(' and ')} not available from this exchange`}
+                ? t('scoreConfidenceMinimal')
+                : t('scoreConfidencePartial')}
             </Text>
           )}
         </Box>

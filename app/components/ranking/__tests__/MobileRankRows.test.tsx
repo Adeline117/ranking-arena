@@ -72,6 +72,35 @@ describe('Mobile compact ranking rows (owner 2026-11-13)', () => {
     expect(link.querySelector('.mrow-m-win')).toHaveTextContent('61.2%')
   })
 
+  it.each([
+    ['partial', 'scoreConfidencePartial'],
+    ['minimal', 'scoreConfidenceMinimal'],
+  ] as const)(
+    'marks a %s-data score with a localized, named note and no penalty figure',
+    (confidence, key) => {
+      render(
+        <TraderMobileRow
+          trader={{ ...trader, score_confidence: confidence }}
+          rank={7}
+          language="en"
+          parseSourceInfo={parseSourceInfo}
+        />
+      )
+      // Hidden from the row's own accessible name (the cell is aria-hidden), so
+      // look it up by title: the copy is an i18n key, never inline English.
+      const note = screen.getByTitle(key)
+      expect(note).toHaveAttribute('aria-label', key)
+      expect(note.getAttribute('title')).not.toMatch(/%|\u00d7/)
+    }
+  )
+
+  it('shows no data note on a score with complete data', () => {
+    render(
+      <TraderMobileRow trader={trader} rank={7} language="en" parseSourceInfo={parseSourceInfo} />
+    )
+    expect(screen.queryByTitle(/scoreConfidence/)).toBeNull()
+  })
+
   it('keeps gain/loss color on ROI/PnL only — Win% and MDD are neutral, MDD has no arrow', () => {
     render(
       <TraderMobileRow trader={trader} rank={9} language="en" parseSourceInfo={parseSourceInfo} />

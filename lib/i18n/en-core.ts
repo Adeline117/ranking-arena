@@ -462,6 +462,10 @@ const enCore = {
   idleWindowHide: 'Hide accounts with no trading this period',
   publicLeaderboardData: 'Public leaderboard data',
   rowDataAsOf: 'as of {time}',
+  scoreConfidenceUnknown: 'Score data completeness unknown',
+  scoreConfidencePartial: 'One risk metric is not provided by the exchange — it earns no points',
+  scoreConfidenceMinimal:
+    'Win rate and drawdown are not provided by the exchange — they earn no points',
   noTradingThisPeriod: 'No trading this period',
   arenaScoreUnknownAria: 'Arena Score unknown',
   copyTraderIdAria: 'Copy trader ID',

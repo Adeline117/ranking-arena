@@ -5182,8 +5182,11 @@ const ko = {
   scorePnlLabel: '손익',
   scoreDrawdown: '최대 낙폭',
   scoreStability: '안정성',
-  scoreConfidencePartial: '일부 데이터 부족 (점수 \u00d70.92)',
-  scoreConfidenceMinimal: '승률과 낙폭 부족 (점수 \u00d70.80)',
+  scoreConfidenceUnknown: '점수 데이터 완전성 알 수 없음',
+  scoreConfidencePartial:
+    '거래소가 위험 지표 하나를 제공하지 않습니다. 해당 항목은 점수에 반영되지 않습니다',
+  scoreConfidenceMinimal:
+    '거래소가 승률과 낙폭을 제공하지 않습니다. 두 항목은 점수에 반영되지 않습니다',
   scoreConfidenceMissing: '부족: ',
   scoreConfidenceWinRate: '승률',
   scoreConfidenceDrawdown: '최대 낙폭',

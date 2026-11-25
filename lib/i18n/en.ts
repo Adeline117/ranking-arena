@@ -5290,8 +5290,10 @@ const en = {
   scorePnlLabel: 'PnL',
   scoreDrawdown: 'Drawdown',
   scoreStability: 'Stability',
-  scoreConfidencePartial: 'Partial data \u2014 score \u00d70.92',
-  scoreConfidenceMinimal: 'Win rate & drawdown missing \u2014 score \u00d70.80',
+  scoreConfidenceUnknown: 'Score data completeness unknown',
+  scoreConfidencePartial: 'One risk metric is not provided by the exchange — it earns no points',
+  scoreConfidenceMinimal:
+    'Win rate and drawdown are not provided by the exchange — they earn no points',
   scoreConfidenceMissing: 'Missing: ',
   scoreConfidenceWinRate: 'Win Rate',
   scoreConfidenceDrawdown: 'Drawdown',

@@ -4930,8 +4930,10 @@ const ja = {
   scorePnlLabel: '損益',
   scoreDrawdown: 'ドローダウン',
   scoreStability: '安定性',
-  scoreConfidencePartial: '一部データ不足（スコア \u00d70.92）',
-  scoreConfidenceMinimal: '勝率とドローダウンが不足（スコア \u00d70.80）',
+  scoreConfidenceUnknown: 'スコアのデータ完全性は不明',
+  scoreConfidencePartial: '取引所がリスク指標の一つを提供していません。その項目は加点されません',
+  scoreConfidenceMinimal:
+    '取引所が勝率とドローダウンを提供していません。この二項目は加点されません',
   scoreConfidenceMissing: '不足: ',
   scoreConfidenceWinRate: '勝率',
   scoreConfidenceDrawdown: 'ドローダウン',

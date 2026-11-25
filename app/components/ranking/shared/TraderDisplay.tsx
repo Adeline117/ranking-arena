@@ -275,26 +275,27 @@ function getScoreConfidence(trader: Trader): 'full' | 'partial' | 'minimal' | 'u
   return trader.score_confidence ?? 'unknown'
 }
 
-// Score confidence indicator
+// Score confidence indicator: a small dot on the score saying the exchange did
+// not provide every risk metric. Missing data is not an error, so both levels
+// use the caution colour; the text says what is missing and what that means for
+// the score, without quoting a penalty figure the formula no longer applies.
 export function ScoreConfidenceIndicator({ trader }: { trader: Trader }) {
+  const { t } = useLanguage()
   const confidence = getScoreConfidence(trader)
   if (confidence === 'full') return null
 
-  const isMinimal = confidence === 'minimal'
   const isUnknown = confidence === 'unknown'
   const title = isUnknown
-    ? 'Score confidence unknown'
-    : isMinimal
-      ? 'Limited data: win rate & drawdown unavailable (score -20%)'
-      : 'Partial data: some metrics unavailable (score -8%)'
-  const background = isUnknown
-    ? tokens.colors.text.tertiary
-    : isMinimal
-      ? tokens.colors.accent.error
-      : tokens.colors.accent.warning
+    ? t('scoreConfidenceUnknown')
+    : confidence === 'minimal'
+      ? t('scoreConfidenceMinimal')
+      : t('scoreConfidencePartial')
+  const background = isUnknown ? tokens.colors.text.tertiary : tokens.colors.accent.warning
 
   return (
     <span
+      role="img"
+      aria-label={title}
       title={title}
       style={{
         position: 'absolute',
