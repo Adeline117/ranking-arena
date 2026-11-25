@@ -27,6 +27,7 @@ import {
   PUBLIC_RANKING_REDIS_TAG,
   publicRankingCacheKey,
   isPublicRankingSourceAllowed,
+  publicRankingScoreCompleteness,
   sanitizePublicRankingPayload,
 } from '@/lib/rankings/publication-policy'
 
@@ -91,7 +92,8 @@ export interface InitialTrader {
    */
   source_trader_id: string
   season_id: Period
-  score_completeness: 'full'
+  /** Which optional risk metrics the row carries (see publicRankingScoreCompleteness). */
+  score_completeness: 'full' | 'partial' | 'minimal'
   metrics_estimated: false
   computed_at: string
   is_outlier: false
@@ -111,7 +113,18 @@ function mapUnifiedToInitial(t: UnifiedTrader): InitialTrader | null {
   // this; keeping the guard here makes a malformed proxy/cache response fail
   // closed before the Copin display-only rewrite below can hide its origin.
   if (!isPublicRankingSourceAllowed(t.platform)) return null
-  if (t.scoreCompleteness !== 'full' || t.metricsEstimated !== false || t.isOutlier) return null
+  // Same row policy as the shared public reader (hasConcretePublicRankingMetrics):
+  // a row may lack win rate and/or drawdown, and its completeness must say
+  // exactly which. Requiring 'full' here made ONE partial row fail the whole
+  // server-rendered page ("failed local proof revalidation" → empty first paint).
+  const completeness = t.scoreCompleteness
+  if (completeness !== 'full' && completeness !== 'partial' && completeness !== 'minimal') {
+    return null
+  }
+  if (completeness !== publicRankingScoreCompleteness(t.winRate != null, t.maxDrawdown != null)) {
+    return null
+  }
+  if (t.metricsEstimated !== false || t.isOutlier) return null
 
   const displayPlatform = t.platform
   const displayKey = t.traderKey
@@ -167,7 +180,7 @@ function mapUnifiedToInitial(t: UnifiedTrader): InitialTrader | null {
     // by sanitizePublicRankingPayload on every read.
     source_trader_id: t.traderKey,
     season_id: t.period,
-    score_completeness: t.scoreCompleteness,
+    score_completeness: completeness,
     metrics_estimated: t.metricsEstimated,
     computed_at: t.lastUpdated ?? '',
     is_outlier: t.isOutlier,
