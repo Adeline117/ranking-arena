@@ -4,9 +4,11 @@
  * Shapes come from a read-only public probe (2026-11-15) of all three UTA
  * boards; the sanitized fixtures keep the real envelope (string code "200",
  * data.rows, page-local data.totals, board population data.maxShowSizes).
- * Spot/CFD boards page out to exactly maxShowSizes distinct traders. The
+ * The CFD board pages out to exactly maxShowSizes distinct traders. The
  * futures board's flagged tail ends short of its reported population, which
- * must never bind.
+ * must never bind. The spot board (~5,400 traders, 181 pages) moves while it
+ * is paged, so it is read to its short final page and proven complete by
+ * bounded drift (BITGET_SPOT_LEADERBOARD_EXHAUSTION).
  */
 
 import { readFileSync } from 'fs'
@@ -20,7 +22,7 @@ import {
 import type { FetchSession, ReplayRequestTemplate } from '../../../fetch/types'
 import { validateLeaderboardRows } from '../../../staging/validate'
 import { attemptBoundEvidenceForCapture } from '../../../testing/attempt-bound-evidence'
-import { bitgetAdapter } from '../index'
+import { BITGET_SPOT_LEADERBOARD_EXHAUSTION, bitgetAdapter } from '../index'
 
 type Payload = Record<string, unknown>
 type Row = Record<string, unknown>
@@ -162,7 +164,6 @@ function evidence(src: SourceRow, captured: LeaderboardCapture, timeframe: Ranki
 describe('Bitget UTA leaderboard capture evidence', () => {
   it.each([
     ['bitget_cfd', 'cfd'],
-    ['bitget_spot', 'spot'],
     ['bitget_futures', 'futures'],
   ])('%s binds a board that pages out to its reported population', async (slug, boardKey) => {
     const {
@@ -241,5 +242,208 @@ describe('Bitget UTA leaderboard capture evidence', () => {
     await expect(bitgetAdapter.captureLeaderboard!(session, src, 30)).rejects.toBeInstanceOf(
       LeaderboardCaptureUpstreamError
     )
+  })
+})
+
+/**
+ * bitget_spot as a live board, at its real size: pages of 30, and the board
+ * as it is when each page is read (`ranking(pageNo)`), with its reported total.
+ */
+const SPOT_PAGE_SIZE = 30
+const SPOT_ROWS = Array.from({ length: 5_500 }, (_, index) => boardRow(CFD_TAIL, index + 1))
+const spotBoard = (count: number): Row[] => SPOT_ROWS.slice(0, count)
+
+/**
+ * A trader not yet read climbs above the cursor after page `afterPage`: every
+ * trader between moves down one rank, so the last trader already read is read
+ * again and the climber is never read. The board total does not change.
+ */
+function climbs(initial: Row[], afterPages: number[]): (pageNo: number) => Row[] {
+  const states: Row[][] = [initial]
+  for (const _ of afterPages) {
+    const previous = states[states.length - 1]
+    states.push([previous[previous.length - 1], ...previous.slice(0, -1)])
+  }
+  return (pageNo) => states[afterPages.filter((afterPage) => pageNo > afterPage).length]
+}
+
+async function captureSpot(
+  ranking: (pageNo: number) => Row[],
+  options: {
+    reportedTotal?: (pageNo: number, rows: Row[]) => number
+    emptiedPage?: number
+    slug?: string
+    boardKey?: string
+    registered?: typeof BITGET_SPOT_LEADERBOARD_EXHAUSTION | null
+  } = {}
+) {
+  const slug = options.slug ?? 'bitget_spot'
+  const src = { ...sourceRow(slug, options.boardKey ?? 'spot'), page_size: SPOT_PAGE_SIZE }
+  const pageHandle = { goto: async () => undefined, waitForLoadState: async () => undefined }
+  const session = {
+    sourceSlug: slug,
+    page: async () => pageHandle,
+    pageFetch: async (request: ReplayRequestTemplate) => {
+      const pageNo = (request.body as { pageNo: number }).pageNo
+      const rows = ranking(pageNo)
+      const slice =
+        pageNo === options.emptiedPage
+          ? []
+          : rows.slice((pageNo - 1) * SPOT_PAGE_SIZE, pageNo * SPOT_PAGE_SIZE)
+      const total = options.reportedTotal?.(pageNo, rows) ?? rows.length
+      return { status: 200, json: page(CFD_TAIL, slice, slice.length === SPOT_PAGE_SIZE, total) }
+    },
+    paced: async <T>(fn: () => Promise<T>) => fn(),
+  } as unknown as FetchSession
+  const result = await bitgetAdapter.captureLeaderboard!(session, src, 30)
+  if (isPartitionedNumericLeaderboardCapture(result)) throw new Error('expected identity capture')
+  const captured = result as LeaderboardCapture
+  const ctx = {
+    sourceSlug: src.slug,
+    currency: src.currency,
+    tfLabelMap: src.tf_label_map,
+    scrapedAt: '2026-11-24T12:00:00.000Z',
+    meta: src.meta,
+  }
+  const validated = validateLeaderboardRows(
+    captured.parsePages.flatMap(
+      (rawPage) => bitgetAdapter.parseLeaderboard(rawPage.payload, ctx).rows
+    )
+  )
+  return {
+    captured,
+    bound: attemptBoundEvidenceForCapture({
+      capture: captured,
+      source: src,
+      timeframe: 30,
+      acceptedPopulation: validated.valid.length,
+      rejectedRowCount: validated.rejects.length,
+      registeredExhaustion:
+        options.registered === undefined ? BITGET_SPOT_LEADERBOARD_EXHAUSTION : options.registered,
+    }),
+  }
+}
+
+describe('Bitget spot live board completeness', () => {
+  it('declares 0.35% of the board, never more than 20 rows', () => {
+    expect(BITGET_SPOT_LEADERBOARD_EXHAUSTION).toEqual({
+      completeness_mode: 'exhausted',
+      list_path: ['data', 'rows'],
+      row_key_path: ['traderUid'],
+      end_signal: { kind: 'short_page' },
+      board_version: {
+        kind: 'reported_total_drift',
+        path: ['data', 'maxShowSizes'],
+        max_drift_bps: 35,
+      },
+      max_duplicate_rows: 20,
+    })
+  })
+
+  it('binds a quiet board read to its short final page; the total is drift evidence', async () => {
+    const rows = spotBoard(5_414)
+    const { captured, bound } = await captureSpot(() => rows)
+    expect(captured.terminationReason).toBe('short_page')
+    expect(captured.sourcePages).toHaveLength(181)
+    expect(captured.sourcePages[0].sourceReports.population).toEqual({ state: 'not_reported' })
+    expect(captured.completeness?.row_keys).toEqual({
+      observed: 5_414,
+      distinct: 5_414,
+      duplicate: 0,
+    })
+    expect(captured.completeness?.board_version).toEqual({
+      kind: 'reported_total_drift',
+      reported_totals: { min: 5_414, max: 5_414, last: 5_414 },
+    })
+    expect(bound).toMatchObject({ completenessMode: 'exhausted', trustBound: true })
+  })
+
+  it('binds the measured shape: 5,414 rows read, 5,410 distinct, 4 duplicates', async () => {
+    const { captured, bound } = await captureSpot(climbs(spotBoard(5_414), [20, 61, 97, 150]))
+    expect(captured.terminationReason).toBe('short_page')
+    expect(captured.completeness?.row_keys).toEqual({
+      observed: 5_414,
+      distinct: 5_410,
+      duplicate: 4,
+    })
+    expect(bound).toMatchObject({ completenessMode: 'exhausted', trustBound: true })
+  })
+
+  it('binds a board whose total is a page multiple and ends on an empty page', async () => {
+    const rows = spotBoard(5_400)
+    const { captured, bound } = await captureSpot(() => rows)
+    expect(captured.terminationReason).toBe('empty_page')
+    expect(captured.sourcePages).toHaveLength(181)
+    expect(bound.trustBound).toBe(true)
+  })
+
+  it('binds 18 duplicates (0.35% of 5,414) and refuses 19', async () => {
+    const afterPages = Array.from({ length: 19 }, (_, index) => 10 + index * 9)
+    const atAllowance = await captureSpot(climbs(spotBoard(5_414), afterPages.slice(0, 18)))
+    expect(atAllowance.captured.completeness?.row_keys.duplicate).toBe(18)
+    expect(atAllowance.bound.trustBound).toBe(true)
+
+    const above = await captureSpot(climbs(spotBoard(5_414), afterPages))
+    expect(above.captured.completeness?.row_keys).toEqual({
+      observed: 5_414,
+      distinct: 5_395,
+      duplicate: 19,
+    })
+    expect(above.bound).toMatchObject({ completenessMode: 'exhausted', trustBound: false })
+  })
+
+  it('refuses a board that ends more than the allowance short of its reported total', async () => {
+    // No duplicate at all: the board simply stops before its total. 18 rows
+    // short of 5,432 is within 0.35%; 20 rows short of 5,434 (allowance 19) is not.
+    const rows = spotBoard(5_414)
+    const within = await captureSpot(() => rows, { reportedTotal: () => 5_432 })
+    expect(within.bound.trustBound).toBe(true)
+    const short = await captureSpot(() => rows, { reportedTotal: () => 5_434 })
+    expect(short.captured.completeness?.row_keys.duplicate).toBe(0)
+    expect(short.bound.trustBound).toBe(false)
+  })
+
+  it('refuses a reported total that moved by more than the allowance', async () => {
+    const rows = spotBoard(5_414)
+    const { bound } = await captureSpot(() => rows, {
+      reportedTotal: (pageNo) => (pageNo <= 90 ? 5_395 : 5_414),
+    })
+    expect(bound.trustBound).toBe(false)
+  })
+
+  it('refuses a silently emptied page before the end of the board', async () => {
+    const rows = spotBoard(5_414)
+    const { captured, bound } = await captureSpot(() => rows, { emptiedPage: 90 })
+    expect(captured.terminationReason).toBe('empty_page')
+    expect(bound.trustBound).toBe(false)
+  })
+
+  it('refuses the capture when the source has no registered contract', async () => {
+    const rows = spotBoard(5_414)
+    const { bound } = await captureSpot(() => rows, { registered: null })
+    expect(bound.trustBound).toBe(false)
+  })
+
+  it('leaves bitget_cfd in the total mode: one duplicate still refuses it', async () => {
+    const quiet = await captureSpot(() => spotBoard(208), {
+      slug: 'bitget_cfd',
+      boardKey: 'cfd',
+      registered: null,
+    })
+    expect(quiet.captured.terminationReason).toBe('reported_population_reached')
+    expect(quiet.captured.completeness ?? null).toBeNull()
+    expect(quiet.captured.sourcePages[0].sourceReports.population).toEqual({
+      state: 'reported',
+      value: 208,
+    })
+    expect(quiet.bound).toMatchObject({ completenessMode: 'reported_total', trustBound: true })
+
+    const moved = await captureSpot(climbs(spotBoard(208), [3]), {
+      slug: 'bitget_cfd',
+      boardKey: 'cfd',
+      registered: BITGET_SPOT_LEADERBOARD_EXHAUSTION,
+    })
+    expect(moved.captured.completeness ?? null).toBeNull()
+    expect(moved.bound.trustBound).toBe(false)
   })
 })
