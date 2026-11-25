@@ -9,7 +9,7 @@
 2026-11-13 起，2026-08-04 之后新增的迁移已全部分类，`scripts/qa/launch-inventory-gap.json` 为空列表。`launch-inventory-gap.test.mjs` 保证以后新增的迁移也必须先分类。分类写在 `scripts/maintenance/apply-launch-migrations.sh` 里：
 
 - **predeploy**（161 个）：部署前，按清单顺序逐文件应用。
-- **postdeploy**（40 个）：目标版本上线后才应用。
+- **postdeploy**（42 个）：目标版本上线后才应用。
 - **ADR-023 单文件**（`ADR023_SINGLE_FILE_MIGRATIONS`，2 个）：已分类，但执行脚本不会输出它们，`render-predeploy-one` 也会拒绝。每个都必须走 ADR-023 单文件通道，在下文规定的位置、各自的操作窗口里单独应用。
 - **superseded**：永不重放。
 
