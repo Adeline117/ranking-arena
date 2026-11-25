@@ -48,7 +48,19 @@ describe('parseBinanceLeaderboardPage', () => {
     expect(first.headlineMetricSources?.roi).not.toHaveProperty('provenance')
     expect(first.headlineAum).toBeCloseTo(85079.66905633, 2) // board aum (absolute USD)
     expect(first.raw).toHaveProperty('sharpRatio') // board card extras kept
-    expect(first.raw).toHaveProperty('chartItems')
+  })
+
+  it('keeps every board field except the chart series in the entry raw', () => {
+    for (const name of ['leaderboard-p1.json', 'spot-leaderboard-p1.json']) {
+      const payload = fixture(name) as { data: { list: Array<Record<string, unknown>> } }
+      const page = parseBinanceLeaderboardPage(payload, ctx)
+      expect(page.rows.length).toBe(payload.data.list.length)
+      page.rows.forEach((row, index) => {
+        const { chartItems, ...rest } = payload.data.list[index]
+        expect(Array.isArray(chartItems)).toBe(true)
+        expect(row.raw).toEqual(rest)
+      })
+    }
   })
 
   it('parses the spot home-page-list shape (no winRate on rows)', () => {
