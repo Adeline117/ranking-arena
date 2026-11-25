@@ -493,7 +493,9 @@ assert_equal "a non-core unsupported source does not declare a core source" \
 
 # The bound is the publisher's.
 TS_BOUND="$(cd "$ROOT_DIR" && npx tsx -e "
-  import('./lib/rankings/publication/publish-season.ts').then((m) => {
+  import('./lib/rankings/publication/publish-season.ts').then((loaded) => {
+    // tsx exposes the module's exports directly or under default, by Node version.
+    const m = loaded.RANK_PUBLICATION_CORE_SOURCES ? loaded : loaded.default
     console.log([...m.RANK_PUBLICATION_CORE_SOURCES].join(',') + '|' + m.RANK_PUBLICATION_MAX_ISOLATED_RATIO)
   })")"
 assert_equal "core sources and ratio equal the publisher's TypeScript constants" "$TS_BOUND" \
