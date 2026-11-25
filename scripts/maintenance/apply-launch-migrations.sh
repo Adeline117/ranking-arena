@@ -482,6 +482,12 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # It is independent of 015119 (which leaves blofin_spot unregistered), refuses
 # a replay or an earlier blofin_spot registration, and touches no table 192134
 # guards.
+# 20261124114433 registers bitget_spot as a live board (reported_total_drift,
+# 0.35% of the board, at most 20 rows) in the append-only exhaustion registry.
+# It needs the declaration 114230 makes valid, so it follows it; it takes
+# effect with the worker release that captures bitget_spot in this mode. It
+# refuses a replay or an earlier bitget_spot registration and touches no table
+# 192134 guards.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -516,6 +522,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261122154211_score_bundle_index_only_entry_counts.sql
   20261118134316_raw_retention_backlog_census.sql
   20261120235710_register_blofin_spot_profile_capture_contract.sql
+  20261124114433_register_bitget_spot_live_board_exhaustion_contract.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
