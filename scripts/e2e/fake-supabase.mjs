@@ -190,9 +190,12 @@ export function callRpc(name, args, now = new Date()) {
         rank: 1,
         headlineRoi: 1,
         headlinePnl: null,
-        headlineWinRate: 55,
+        headlineWinRate: 0.55,
         currency: 'USDT',
-        extras: {},
+        // The exchange's raw board row, as FRACTIONS (0.55 / 0.31) — several real
+        // sources do this. The page must show the published percent values from
+        // the ranking row (60 / 12), never these through a percent formatter.
+        extras: { winRate: 0.55, maxDrawdown: 0.31 },
         asOf: now.toISOString(),
       })),
     }
