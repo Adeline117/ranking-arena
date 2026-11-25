@@ -236,14 +236,18 @@ function applyVerifiedLinkedRanking(
   const row = verifiedRows[0]
   const roi = roiOrNull(row.roi)
   const arenaScore = arenaScoreOrNull(row.arena_score)
+  // Win rate and drawdown are optional on a ranked row: null means "not
+  // provided". A value that is present must still be valid.
+  const winRateProvided = row.win_rate !== null && row.win_rate !== undefined
+  const maxDrawdownProvided = row.max_drawdown !== null && row.max_drawdown !== undefined
   const winRate = boundedPercentOrNull(row.win_rate)
   const maxDrawdown = normalizeDrawdownMagnitude(finiteNumberOrNull(row.max_drawdown))
   const rank = positiveRankOrNull(row.rank)
   if (
     roi === null ||
     arenaScore === null ||
-    winRate === null ||
-    maxDrawdown === null ||
+    (winRateProvided && winRate === null) ||
+    (maxDrawdownProvided && maxDrawdown === null) ||
     rank === null
   ) {
     // The sanitizer should make this unreachable, but do not promote a row if

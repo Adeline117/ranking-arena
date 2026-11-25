@@ -19,6 +19,7 @@ import {
   type SourceJobLeaseAuthority,
   type SourceJobLeaseProof,
 } from './source-job-lease'
+import { describeSafeCauseChain } from './safe-error-cause'
 import type { WorkerDbFenceProof, WorkerDbFencedWrite } from './worker-db-fence'
 import { WORKER_OWNER_LEASE_TTL_MS } from './worker-instance-ownership'
 
@@ -336,24 +337,14 @@ function executionError(
  * details), so only fields that cannot are logged: the error class, a
  * SQLSTATE / errno-style code, and whether it was the client's query timeout.
  */
-const SAFE_CAUSE_CODE = /^[A-Z0-9_]{2,40}$/
-
 function logUnclassifiedCause(
   operation: SourceJobExecutionOperation,
   code: SourceJobExecutionFailureCode,
   cause: unknown
 ): void {
-  let detail = `non-error rejection (${typeof cause})`
-  if (cause instanceof Error) {
-    const causeCode = (cause as { code?: unknown }).code
-    detail =
-      (/^[A-Za-z]{1,60}$/.test(cause.name) ? cause.name : 'Error') +
-      (typeof causeCode === 'string' && SAFE_CAUSE_CODE.test(causeCode)
-        ? ` code=${causeCode}`
-        : '') +
-      (cause.message === 'Query read timeout' ? ' query_read_timeout' : '')
-  }
-  console.error(`[ingest-worker] Tier-A execution ${operation} ${code} cause: ${detail}`)
+  console.error(
+    `[ingest-worker] Tier-A execution ${operation} ${code} cause: ${describeSafeCauseChain(cause)}`
+  )
 }
 
 function exactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {

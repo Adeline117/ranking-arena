@@ -26,6 +26,19 @@
  *     POST /uapi/v1/copy/trader/stat/performance    {uid, stat_period, type:"all"}
  *          → roi/pnl time-series (chart)
  *
+ * Spot profile (public probe 2026-11-20 — the detail SPA route is
+ *   /copy-trade/details/{uid}?module=spot; the /uapi/v1/copy endpoints above
+ *   answer a spot uid with its FUTURES copy account, the spot account is):
+ *     POST /sapi/v1/spot_copy/trader/info              {uid}
+ *     POST /sapi/v1/spot_copy/trader/stat/indicators   {uid, stat_period}
+ *          → same fields as futures minus the volume ones; win_ratio_all /
+ *            trades are period values; max_drawdown repeats the board row's
+ *            mdd, which is not always a value of the requested window
+ *     POST /sapi/v1/spot_copy/trader/stat/performance  {uid, stat_period, type:"all"}
+ *          → {performance:{roi,pnl,max_drawdown,win_rate}, roi[], pnl[], symbols[]}
+ *     (stat/symbol_performance answers code 401 on the spot route; the
+ *      per-symbol table is inside stat/performance.)
+ *
  * Records (positions/position_history/copiers) — the detail UI TABS are
  *   login-gated, but the underlying uapi endpoints are PUBLIC + unsigned (probe
  *   2026-07-02, overturning the earlier "hard limit" note):
@@ -70,12 +83,17 @@ import {
   parseBlofinPositions,
   parseBlofinProfile,
 } from './parsers'
-import { BLOFIN_INDICATORS_PATH } from './profile-capture-contract'
+import { BLOFIN_INDICATORS_PATH, BLOFIN_SPOT_INDICATORS_PATH } from './profile-capture-contract'
 
 const ORIGIN = 'https://blofin.com'
 const LIST_PATHS: Record<string, string> = {
   futures: `${ORIGIN}/uapi/v1/copy/v2/trader/list`,
   spot: `${ORIGIN}/sapi/v1/spot_copy/trader/list`,
+}
+/** Per-board profile route: endpoint prefix + the declared capture endpoint. */
+const PROFILE_ROUTES: Record<'futures' | 'spot', { prefix: string; indicatorsPath: string }> = {
+  futures: { prefix: '/uapi/v1/copy/', indicatorsPath: BLOFIN_INDICATORS_PATH },
+  spot: { prefix: '/sapi/v1/spot_copy/', indicatorsPath: BLOFIN_SPOT_INDICATORS_PATH },
 }
 /** Canonical TF → Blofin range_time token. */
 const RANGE_TIME: Record<number, string> = { 7: '1', 30: '2', 90: '3' }
@@ -121,20 +139,6 @@ const blofinAdapter: SourceAdapter = {
     orders: false,
     transfers: false,
     copiers: true,
-  },
-
-  /**
-   * The /uapi/v1/copy profile endpoints describe the trader's FUTURES
-   * copy-trading account (probe 2026-11-17: for spot-board uids trader/info
-   * reports contract_type "linear" and an AUM/followers/drawdown unlike the
-   * spot board row, and stat/indicators reports zero trades). Writing them
-   * into blofin_spot rows would publish futures stats as spot stats, so the
-   * spot board has no profile surface until a spot profile endpoint is
-   * verified. (The record endpoints share that namespace; they are not
-   * narrowed here because they were not probed for spot uids.)
-   */
-  supportsSurface(src, surface) {
-    return !(surface === 'profile' && boardKey(src) === 'spot')
   },
 
   async captureLeaderboard(session, src, timeframe, options) {
@@ -205,6 +209,12 @@ const blofinAdapter: SourceAdapter = {
    * 2026-07-02). One composite payload → parseBlofinProfile. Board-only fields
    * (roi/pnl/mdd/aum) come from the leaderboard crawl; these ADD sharpe/sortino/
    * calmar/volatility/annualized_roi/trading-preferences/chart.
+   *
+   * Each board reads its own account: futures /uapi/v1/copy/trader/*, spot
+   * /sapi/v1/spot_copy/trader/* (the futures route answers a spot uid with the
+   * trader's futures copy account, which must never be stored as spot stats).
+   * The spot route has no symbol_performance response; its stat/performance
+   * carries the per-symbol table.
    */
   async getProfile(
     session: FetchSession,
@@ -216,9 +226,11 @@ const blofinAdapter: SourceAdapter = {
     const tf = (timeframe === 0 ? 90 : timeframe) as RankingTimeframe
     const stat = STAT_PERIOD[tf] ?? 'D30'
     const uid = exchangeTraderId
+    const board = boardKey(src)
+    const route = PROFILE_ROUTES[board]
     const post = (path: string, body: Record<string, unknown>) =>
       replayJson(session, fetcher, {
-        url: `${ORIGIN}/uapi/v1/copy/${path}`,
+        url: `${ORIGIN}${route.prefix}${path}`,
         method: 'POST',
         headers: PROFILE_HEADERS,
         body,
@@ -227,7 +239,9 @@ const blofinAdapter: SourceAdapter = {
     const [info, indicators, symbolPerf, performance] = await Promise.all([
       post('trader/info', { uid }),
       post('trader/stat/indicators', { uid, stat_period: stat }),
-      post('trader/stat/symbol_performance', { uid, stat_period: stat, type: 'all' }),
+      board === 'spot'
+        ? Promise.resolve(null)
+        : post('trader/stat/symbol_performance', { uid, stat_period: stat, type: 'all' }),
       post('trader/stat/performance', { uid, stat_period: stat, type: 'all' }),
     ])
 
@@ -236,7 +250,7 @@ const blofinAdapter: SourceAdapter = {
     // ParsedStats block: the declared profile-capture endpoint, with the POST
     // body's identity (uid, stat_period) as the URL query so the attempt's
     // request projection binds both (./profile-capture-contract.ts).
-    const indicatorsUrl = new URL(`${ORIGIN}${BLOFIN_INDICATORS_PATH}`)
+    const indicatorsUrl = new URL(`${ORIGIN}${route.indicatorsPath}`)
     indicatorsUrl.searchParams.set('uid', uid)
     indicatorsUrl.searchParams.set('stat_period', stat)
     return {

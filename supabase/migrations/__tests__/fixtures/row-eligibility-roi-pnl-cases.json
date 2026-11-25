@@ -1,0 +1,436 @@
+{
+  "contract": "public-rank-row-eligibility-roi-pnl@1",
+  "description": "One row matrix evaluated by every layer that decides row eligibility: arena.leaderboard_rank_row_is_public_eligible (PG17, before and after 20261122201611), the reader predicate isPublicRankingRowEligible, and the writer projection classifyPublishableRow. `before` is the four-metric policy, `after` the ROI + PnL policy. `worker` is 'same' when the writer verdict equals `after`, 'empties_metric' when the writer publishes the row with the offending metric emptied (so the written row is a different, eligible row), and 'not_applicable' when the case is about a column the writer always sets itself (computed_at). `reader` (optional) is the reader verdict where it differs from `after`: the reader predicate has never re-checked the ROI / PnL range (it only reads rows the database view already served), which this change leaves as it is.",
+  "base": {
+    "source": "bybit",
+    "source_trader_id": "trader-1",
+    "score_completeness": "full",
+    "metrics_estimated": false,
+    "is_outlier": false,
+    "arena_score": 42.5,
+    "roi": 12.5,
+    "pnl": 3400,
+    "win_rate": 55,
+    "max_drawdown": 12,
+    "computed_age_hours": 1
+  },
+  "cases": [
+    {
+      "label": "all four metrics",
+      "row": {},
+      "before": true,
+      "after": true,
+      "worker": "same"
+    },
+    {
+      "label": "only ROI and PnL",
+      "row": {
+        "win_rate": null,
+        "max_drawdown": null,
+        "score_completeness": "minimal"
+      },
+      "before": false,
+      "after": true,
+      "worker": "same"
+    },
+    {
+      "label": "no win rate",
+      "row": {
+        "win_rate": null,
+        "score_completeness": "partial"
+      },
+      "before": false,
+      "after": true,
+      "worker": "same"
+    },
+    {
+      "label": "no drawdown",
+      "row": {
+        "max_drawdown": null,
+        "score_completeness": "partial"
+      },
+      "before": false,
+      "after": true,
+      "worker": "same"
+    },
+    {
+      "label": "losing trader, only ROI and PnL, score at the 0.01 floor",
+      "row": {
+        "roi": -64.2,
+        "pnl": -8100,
+        "arena_score": 0.01,
+        "win_rate": null,
+        "max_drawdown": null,
+        "score_completeness": "minimal"
+      },
+      "before": false,
+      "after": true,
+      "worker": "same"
+    },
+    {
+      "label": "losing trader with all four metrics",
+      "row": {
+        "roi": -20,
+        "pnl": -500,
+        "arena_score": 3.1
+      },
+      "before": true,
+      "after": true,
+      "worker": "same"
+    },
+    {
+      "label": "zero return, zero PnL, nothing else",
+      "row": {
+        "roi": 0,
+        "pnl": 0,
+        "arena_score": 0.01,
+        "win_rate": null,
+        "max_drawdown": null,
+        "score_completeness": "minimal"
+      },
+      "before": false,
+      "after": true,
+      "worker": "same"
+    },
+    {
+      "label": "win rate 0 and drawdown 0 are values (full)",
+      "row": {
+        "win_rate": 0,
+        "max_drawdown": 0
+      },
+      "before": true,
+      "after": true,
+      "worker": "same"
+    },
+    {
+      "label": "win rate 0 without drawdown is partial, not minimal",
+      "row": {
+        "win_rate": 0,
+        "max_drawdown": null,
+        "score_completeness": "partial"
+      },
+      "before": false,
+      "after": true,
+      "worker": "same"
+    },
+    {
+      "label": "drawdown 0 without win rate is partial, not minimal",
+      "row": {
+        "win_rate": null,
+        "max_drawdown": 0,
+        "score_completeness": "partial"
+      },
+      "before": false,
+      "after": true,
+      "worker": "same"
+    },
+    {
+      "label": "win rate 100",
+      "row": {
+        "win_rate": 100
+      },
+      "before": true,
+      "after": true,
+      "worker": "same"
+    },
+    {
+      "label": "drawdown 99.99",
+      "row": {
+        "max_drawdown": 99.99
+      },
+      "before": true,
+      "after": true,
+      "worker": "same"
+    },
+    {
+      "label": "missing ROI",
+      "row": {
+        "roi": null
+      },
+      "before": false,
+      "after": false,
+      "worker": "same"
+    },
+    {
+      "label": "missing PnL",
+      "row": {
+        "pnl": null
+      },
+      "before": false,
+      "after": false,
+      "worker": "same"
+    },
+    {
+      "label": "missing ROI, only PnL",
+      "row": {
+        "roi": null,
+        "win_rate": null,
+        "max_drawdown": null,
+        "score_completeness": "minimal"
+      },
+      "before": false,
+      "after": false,
+      "worker": "same"
+    },
+    {
+      "label": "missing PnL, only ROI",
+      "row": {
+        "pnl": null,
+        "win_rate": null,
+        "max_drawdown": null,
+        "score_completeness": "minimal"
+      },
+      "before": false,
+      "after": false,
+      "worker": "same"
+    },
+    {
+      "label": "ROI above the clamp",
+      "row": {
+        "roi": 10000.5
+      },
+      "before": false,
+      "after": false,
+      "worker": "same",
+      "reader": true
+    },
+    {
+      "label": "ROI below the clamp",
+      "row": {
+        "roi": -10000.5
+      },
+      "before": false,
+      "after": false,
+      "worker": "same",
+      "reader": true
+    },
+    {
+      "label": "PnL above the bound",
+      "row": {
+        "pnl": 1000000001
+      },
+      "before": false,
+      "after": false,
+      "worker": "same",
+      "reader": true
+    },
+    {
+      "label": "PnL below the bound",
+      "row": {
+        "pnl": -100000001
+      },
+      "before": false,
+      "after": false,
+      "worker": "same",
+      "reader": true
+    },
+    {
+      "label": "estimated metrics",
+      "row": {
+        "metrics_estimated": true
+      },
+      "before": false,
+      "after": false,
+      "worker": "same"
+    },
+    {
+      "label": "estimated metrics, only ROI and PnL",
+      "row": {
+        "metrics_estimated": true,
+        "win_rate": null,
+        "max_drawdown": null,
+        "score_completeness": "minimal"
+      },
+      "before": false,
+      "after": false,
+      "worker": "same"
+    },
+    {
+      "label": "metrics_estimated unknown",
+      "row": {
+        "metrics_estimated": null
+      },
+      "before": false,
+      "after": false,
+      "worker": "same"
+    },
+    {
+      "label": "outlier",
+      "row": {
+        "is_outlier": true
+      },
+      "before": false,
+      "after": false,
+      "worker": "same"
+    },
+    {
+      "label": "outlier, only ROI and PnL",
+      "row": {
+        "is_outlier": true,
+        "win_rate": null,
+        "max_drawdown": null,
+        "score_completeness": "minimal"
+      },
+      "before": false,
+      "after": false,
+      "worker": "same"
+    },
+    {
+      "label": "score 0",
+      "row": {
+        "arena_score": 0
+      },
+      "before": false,
+      "after": false,
+      "worker": "same"
+    },
+    {
+      "label": "score above 100",
+      "row": {
+        "arena_score": 100.01
+      },
+      "before": false,
+      "after": false,
+      "worker": "same"
+    },
+    {
+      "label": "score missing",
+      "row": {
+        "arena_score": null
+      },
+      "before": false,
+      "after": false,
+      "worker": "same"
+    },
+    {
+      "label": "drawdown 100 (cap sentinel)",
+      "row": {
+        "max_drawdown": 100
+      },
+      "before": false,
+      "after": false,
+      "worker": "empties_metric"
+    },
+    {
+      "label": "win rate 101",
+      "row": {
+        "win_rate": 101
+      },
+      "before": false,
+      "after": false,
+      "worker": "empties_metric"
+    },
+    {
+      "label": "negative win rate",
+      "row": {
+        "win_rate": -1
+      },
+      "before": false,
+      "after": false,
+      "worker": "empties_metric"
+    },
+    {
+      "label": "negative drawdown",
+      "row": {
+        "max_drawdown": -1
+      },
+      "before": false,
+      "after": false,
+      "worker": "same"
+    },
+    {
+      "label": "label says full but the win rate is absent",
+      "row": {
+        "win_rate": null
+      },
+      "before": false,
+      "after": false,
+      "worker": "not_applicable"
+    },
+    {
+      "label": "label says partial but both metrics are present",
+      "row": {
+        "score_completeness": "partial"
+      },
+      "before": false,
+      "after": false,
+      "worker": "not_applicable"
+    },
+    {
+      "label": "label says minimal but a drawdown is present",
+      "row": {
+        "win_rate": null,
+        "score_completeness": "minimal"
+      },
+      "before": false,
+      "after": false,
+      "worker": "not_applicable"
+    },
+    {
+      "label": "unknown completeness label",
+      "row": {
+        "score_completeness": "weird"
+      },
+      "before": false,
+      "after": false,
+      "worker": "same"
+    },
+    {
+      "label": "completeness label missing",
+      "row": {
+        "score_completeness": null
+      },
+      "before": false,
+      "after": false,
+      "worker": "same"
+    },
+    {
+      "label": "untrimmed trader id",
+      "row": {
+        "source_trader_id": " trader-1"
+      },
+      "before": false,
+      "after": false,
+      "worker": "same"
+    },
+    {
+      "label": "non-canonical source",
+      "row": {
+        "source": "Bybit"
+      },
+      "before": false,
+      "after": false,
+      "worker": "same"
+    },
+    {
+      "label": "computed 49 hours ago",
+      "row": {
+        "computed_age_hours": 49
+      },
+      "before": false,
+      "after": false,
+      "worker": "not_applicable"
+    },
+    {
+      "label": "computed 47 hours ago, only ROI and PnL",
+      "row": {
+        "computed_age_hours": 47,
+        "win_rate": null,
+        "max_drawdown": null,
+        "score_completeness": "minimal"
+      },
+      "before": false,
+      "after": true,
+      "worker": "not_applicable"
+    },
+    {
+      "label": "computed 10 minutes in the future",
+      "row": {
+        "computed_age_hours": -0.2
+      },
+      "before": false,
+      "after": false,
+      "worker": "not_applicable"
+    }
+  ]
+}

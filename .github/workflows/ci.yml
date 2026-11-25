@@ -585,6 +585,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:blofin-profile-capture-pg17
 
+      - name: Prove the blofin_spot profile contract registration and a recorded spot capture
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:blofin-spot-profile-capture-pg17
+
       - name: Prove retention keeps metric-trust evidence
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
@@ -615,6 +620,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:public-source-exhaustion-capture-pg17
 
+      - name: Prove the bitget_spot live board registration and its drift allowance
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:bitget-spot-live-board-pg17
+
       - name: Prove exhausted-completeness evidence (end signal, pages, dups, version)
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
@@ -635,6 +645,10 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:visible-sources-pg17
 
+      - name: Prove a stale source hides only its own rows
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:stale-source-row-scope-pg17
       - name: Prove the trader resolver returns an unambiguous public source name
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
@@ -645,10 +659,30 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:observation-lineage-statement-pg17
 
+      - name: Prove the readiness count over failing runs equals the per-row count
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:readiness-run-level-count-pg17
+
+      - name: Prove artifact RAW integrity per statement keeps every per-row outcome
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:artifact-integrity-statement-pg17
+
       - name: Prove the score bundle's index-only entry counts keep its output
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:score-bundle-entry-counts-pg17
+
+      - name: Prove the row policy requires ROI and PnL only
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:row-eligibility-roi-pnl-pg17
+
+      - name: Prove the public view exposes the idle-window and refused-drawdown flags
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:ranked-view-window-flags-pg17
 
       - name: Prove metric source contract retirement (binance_web3_bsc v2)
         env:

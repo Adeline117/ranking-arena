@@ -10,6 +10,8 @@
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
 import { BASE_URL } from '@/lib/constants/urls'
+import { resolveServingTrader } from '@/lib/data/serving/resolve'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import {
   isPublicRankingSourceAllowed,
   sanitizePublicRankingPayload,
@@ -24,6 +26,7 @@ import {
 // 在 handler return 之后抛,try/catch 和 302 兜底全够不着,~1412 个 trader 分享卡
 // 全部 500(隔离验证:唯一 nodejs 的 OG 路由 500,edge 的 rank/homepage/compare 全
 // 200)。edge 无 pg,故 DB 查询改为 Supabase REST fetch。
+// (getSupabaseAdmin 本身基于 fetch，在 edge 可用；这里只用它调 arena_resolve_trader。)
 export const runtime = 'edge'
 
 const PUBLIC_RANKING_COLUMNS =
@@ -175,8 +178,13 @@ type PublishedTraderCard = {
   rank: number
   roi: number
   score: number
-  winRate: number
-  maxDrawdown: number
+  // Optional on a ranked row: null means the source did not provide it.
+  winRate: number | null
+  maxDrawdown: number | null
+}
+
+function optionalFiniteNumber(value: unknown): value is number | null {
+  return value === null || (typeof value === 'number' && Number.isFinite(value))
 }
 
 function verifiedTraderCard(
@@ -202,10 +210,8 @@ function verifiedTraderCard(
     !Number.isFinite(row.roi) ||
     typeof row.arena_score !== 'number' ||
     !Number.isFinite(row.arena_score) ||
-    typeof row.win_rate !== 'number' ||
-    !Number.isFinite(row.win_rate) ||
-    typeof row.max_drawdown !== 'number' ||
-    !Number.isFinite(row.max_drawdown)
+    !optionalFiniteNumber(row.win_rate) ||
+    !optionalFiniteNumber(row.max_drawdown)
   ) {
     return null
   }
@@ -215,6 +221,36 @@ function verifiedTraderCard(
     score: row.arena_score,
     winRate: row.win_rate,
     maxDrawdown: row.max_drawdown,
+  }
+}
+
+/**
+ * A trader that exists only in the serving layer has no trader_sources row,
+ * and the public ranking may name its source by an alias (`blofin`) while the
+ * serving layer uses the slug (`blofin_futures`). arena_resolve_trader accepts
+ * either name for the same account, so the name the request used is the public
+ * one unless the resolver reports the public name itself (same rule as
+ * /api/traders/[handle]/first-screen).
+ *
+ * Only with a source in the request: without one the resolver would pick a
+ * single account for a name several sources share, which is the arbitrary
+ * binding restSelectOne refuses.
+ */
+async function resolveServingOnlyIdentity(
+  decoded: string,
+  sourceHint: string | null
+): Promise<TraderIdentity | null> {
+  if (sourceHint === null) return null
+  const resolved = await resolveServingTrader(getSupabaseAdmin(), {
+    handle: decoded,
+    source: sourceHint,
+  })
+  if (!resolved) return null
+  return {
+    handle: resolved.nickname && resolved.nickname.trim().length > 0 ? resolved.nickname : decoded,
+    avatarUrl: resolved.avatarMirrorUrl,
+    source: resolved.publicSource ?? sourceHint,
+    sourceTraderId: resolved.exchangeTraderId,
   }
 }
 
@@ -236,7 +272,7 @@ async function resolveTraderIdentity(
       'trader_sources',
       `select=${cols}&source_trader_id=eq.${enc(decoded)}${sourceFilter}`
     ))
-  if (!source) return null
+  if (!source) return resolveServingOnlyIdentity(decoded, sourceHint)
 
   const sourceName = typeof source.source === 'string' ? source.source : ''
   const sourceTraderId = typeof source.source_trader_id === 'string' ? source.source_trader_id : ''

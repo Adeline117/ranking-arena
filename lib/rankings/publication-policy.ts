@@ -10,6 +10,15 @@
 
 import { parsePublicActiveRankingSource } from '@/lib/constants/exchanges'
 
+// The epoch is NOT rotated for the ROI + PnL row policy (20261122201611).
+// Merging that change must not alter a running deployment, and an epoch the
+// website has but an older scoring worker does not would leave the new keys
+// outside whatever that worker invalidates. It is not needed for correctness
+// either: pages cached under the four-metric policy hold only complete rows,
+// which the relaxed reader accepts unchanged, and the fixed launch order
+// (database -> website -> scoring worker) means no reader ever truncates a
+// page of the larger cohort. If a rotation is wanted at launch it is a
+// one-line change deployed to the website and the scoring worker together.
 // v7: BingX ranking quarantine. Rotate every ranking key so orphaned v6
 // payloads whose legacy tag TTL expired cannot bypass the
 // new atomic generation invalidation contract.
@@ -26,6 +35,78 @@ export const PUBLIC_RANKING_REDIS_TAG = `rankings:${PUBLIC_RANKING_CACHE_EPOCH}`
  */
 export const PUBLIC_RANKING_CACHE_WRITE_FENCE_KEY = 'public-rankings:write-fence:v1'
 export const PUBLIC_RANKING_MAX_COMPUTED_AGE_MS = 48 * 60 * 60 * 1000
+
+/**
+ * Row-level eligibility the rank publication WRITER applies.
+ *
+ *   'four_metrics' THE DEFAULT: the rule in force before the "everyone with
+ *                  ROI and PnL is ranked" decision. All four metrics required,
+ *                  historical v4 scoring (computeArenaScoresV4). A build
+ *                  without the environment variable publishes exactly what it
+ *                  published before this switch existed.
+ *   'roi_pnl'      owner decision 2026-11-22. ROI and PnL are required; win
+ *                  rate and max drawdown are shown and range-checked when
+ *                  present and left empty when absent. Only null is missing, a
+ *                  missing dimension scores 0, idle-window rows are not scored,
+ *                  a 0% drawdown on a losing window is refused.
+ *
+ * One switch for every writer-side consequence (required evidence metrics,
+ * cohort admission, row classification, score options, score floors, idle and
+ * contradiction rules, write order). It is turned on only by setting
+ * PUBLIC_RANKING_ROW_ELIGIBILITY=roi_pnl in the scoring worker's environment,
+ * AFTER migration 20261122201611 and the website are deployed; removing the
+ * variable and redeploying the worker is the rollback. Readers and the
+ * database row policy accept the relaxed superset and never consult it.
+ */
+export type PublicRankingRowEligibility = 'roi_pnl' | 'four_metrics'
+
+export const PUBLIC_RANKING_ROW_ELIGIBILITY_ENV = 'PUBLIC_RANKING_ROW_ELIGIBILITY'
+export const DEFAULT_PUBLIC_RANKING_ROW_ELIGIBILITY: PublicRankingRowEligibility = 'four_metrics'
+
+export interface ResolvedPublicRankingRowEligibility {
+  value: PublicRankingRowEligibility
+  /** 'set' = a recognized value; otherwise the default was used. */
+  source: 'set' | 'unset' | 'unrecognized'
+  /** One line for the worker log. Never echoes an unrecognized value's content beyond 40 chars. */
+  description: string
+}
+
+/**
+ * Resolve the writer switch from an environment value. Unset, empty or
+ * unrecognized all fall back to the default ('four_metrics'): a typo must
+ * never turn the new rule on, and must never turn publication off.
+ */
+export function resolvePublicRankingRowEligibility(
+  raw: string | undefined = typeof process === 'undefined'
+    ? undefined
+    : process.env[PUBLIC_RANKING_ROW_ELIGIBILITY_ENV]
+): ResolvedPublicRankingRowEligibility {
+  const fallback = DEFAULT_PUBLIC_RANKING_ROW_ELIGIBILITY
+  if (raw === undefined || raw.trim() === '') {
+    return {
+      value: fallback,
+      source: 'unset',
+      description: `row eligibility: ${fallback} (${PUBLIC_RANKING_ROW_ELIGIBILITY_ENV} is not set; default)`,
+    }
+  }
+  if (raw === 'roi_pnl' || raw === 'four_metrics') {
+    return {
+      value: raw,
+      source: 'set',
+      description: `row eligibility: ${raw} (${PUBLIC_RANKING_ROW_ELIGIBILITY_ENV})`,
+    }
+  }
+  return {
+    value: fallback,
+    source: 'unrecognized',
+    description: `row eligibility: ${fallback} (${PUBLIC_RANKING_ROW_ELIGIBILITY_ENV}=${JSON.stringify(raw.slice(0, 40))} is not recognized; expected roi_pnl or four_metrics; default)`,
+  }
+}
+
+/** The writer eligibility in force for this process. */
+export function publicRankingRowEligibility(): PublicRankingRowEligibility {
+  return resolvePublicRankingRowEligibility().value
+}
 export const PUBLIC_RANKING_FUTURE_TOLERANCE_MS = 5 * 60 * 1000
 
 export const PUBLIC_RANKING_SOURCE_QUARANTINES = [
@@ -119,13 +200,29 @@ export interface SanitizePublicRankingPayloadOptions {
   sourceOf?: (row: unknown) => unknown
 }
 
+export interface ConcretePublicRankingMetricsOptions {
+  /**
+   * Writer-only: require win rate and max drawdown as well (the
+   * 'four_metrics' rollback rule). Readers never set this.
+   */
+  requireWinRateAndDrawdown?: boolean
+}
+
 /**
  * Concrete source/identity/metric basis required before a row may participate
  * in the Arena Score percentile cohort. This deliberately excludes score and
  * computation-time checks because those values do not exist until after the
  * cohort has been scored.
+ *
+ * ROI and PnL are required. Win rate and max drawdown are optional: null (or
+ * an absent key) means "not provided"; a present value must be in range, and
+ * 0 is a value. score_completeness must describe exactly which of the two are
+ * present. The same rule is arena.leaderboard_rank_row_is_public_eligible.
  */
-export function hasConcretePublicRankingMetrics(row: unknown): boolean {
+export function hasConcretePublicRankingMetrics(
+  row: unknown,
+  options: ConcretePublicRankingMetricsOptions = {}
+): boolean {
   if (typeof row !== 'object' || row === null || Array.isArray(row)) return false
   const record = row as Record<string, unknown>
 
@@ -150,7 +247,11 @@ export function hasConcretePublicRankingMetrics(row: unknown): boolean {
   ])
   if (traderIdentity === null) return false
 
-  if (firstDefined(record, 'score_completeness', 'scoreConfidence') !== 'full') return false
+  const completeness = firstDefined(record, 'score_completeness', 'scoreConfidence')
+  if (completeness !== 'full' && completeness !== 'partial' && completeness !== 'minimal') {
+    return false
+  }
+  if (options.requireWinRateAndDrawdown === true && completeness !== 'full') return false
   if (firstDefined(record, 'metrics_estimated', 'metricsEstimated') !== false) return false
   if (firstDefined(record, 'is_outlier', 'isOutlier') === true) return false
 
@@ -158,27 +259,38 @@ export function hasConcretePublicRankingMetrics(row: unknown): boolean {
   const pnl = record.pnl
   const winRate = firstDefined(record, 'win_rate', 'winRate')
   const maxDrawdown = firstDefined(record, 'max_drawdown', 'maxDrawdown')
-  return (
-    finiteNumber(roi) &&
-    finiteNumber(pnl) &&
-    finiteNumber(winRate) &&
-    winRate >= 0 &&
-    winRate <= 100 &&
-    finiteNumber(maxDrawdown) &&
-    maxDrawdown >= 0 &&
-    // 100 is commonly an upstream cap/sentinel, not proof of a measured
-    // full-loss drawdown. Keep it profile-visible but outside ranking.
-    maxDrawdown < 100
-  )
+  if (!finiteNumber(roi) || !finiteNumber(pnl)) return false
+
+  // Only null/absent is "not provided". Anything else must be a real in-range
+  // observation; a malformed or out-of-range value is not silently read as
+  // missing here (the scorer nulls those before a row gets this far).
+  const hasWinRate = winRate !== null && winRate !== undefined
+  const hasMaxDrawdown = maxDrawdown !== null && maxDrawdown !== undefined
+  if (hasWinRate && !(finiteNumber(winRate) && winRate >= 0 && winRate <= 100)) return false
+  // 100 is commonly an upstream cap/sentinel, not proof of a measured
+  // full-loss drawdown, so the upper bound is exclusive.
+  if (hasMaxDrawdown && !(finiteNumber(maxDrawdown) && maxDrawdown >= 0 && maxDrawdown < 100)) {
+    return false
+  }
+  return completeness === publicRankingScoreCompleteness(hasWinRate, hasMaxDrawdown)
+}
+
+/** score_completeness is a statement about which optional risk metrics exist. */
+export function publicRankingScoreCompleteness(
+  hasWinRate: boolean,
+  hasMaxDrawdown: boolean
+): 'full' | 'partial' | 'minimal' {
+  if (hasWinRate && hasMaxDrawdown) return 'full'
+  return hasWinRate || hasMaxDrawdown ? 'partial' : 'minimal'
 }
 
 /**
  * Minimum row-level proof required for public ranking publication.
  *
  * Raw/profile observations remain visible when this returns false. A row may
- * enter a public ranking only when its identity is canonical, required score
- * inputs are concrete (not partial/estimated), and its score computation is
- * current. Source-level history/price/cost-basis authority remains a separate
+ * enter a public ranking only when its identity is canonical, ROI and PnL are
+ * concrete (not estimated), any win rate / drawdown it carries is in range,
+ * and its score computation is current. Source-level history/price/cost-basis authority remains a separate
  * reviewed contract and quarantine gate.
  */
 export function isPublicRankingRowEligible(

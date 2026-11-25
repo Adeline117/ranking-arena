@@ -157,7 +157,7 @@ describe('ingest worker metric-trust startup gate', () => {
     ).resolves.toEqual(readyPayload())
     expect(queries).toEqual([
       'BEGIN TRANSACTION READ ONLY',
-      "SET LOCAL statement_timeout = '25s'",
+      "SET LOCAL statement_timeout = '90s'",
       'SELECT public.arena_metric_trust_release_readiness() AS readiness',
       'COMMIT',
     ])

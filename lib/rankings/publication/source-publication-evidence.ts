@@ -1,7 +1,32 @@
 import { z } from 'zod'
 
+import {
+  publicRankingRowEligibility,
+  type PublicRankingRowEligibility,
+} from '@/lib/rankings/publication-policy'
+
 export const SOURCE_PUBLICATION_FUTURE_TOLERANCE_MS = 5 * 60 * 1000
-export const DEFAULT_SOURCE_PUBLICATION_MAX_AGE_HOURS = 48
+/**
+ * Read side: arena.public_ranked_leaderboard_serving_seasons hides a whole
+ * season as soon as any of its serving sources is older than this
+ * (migration 20260816184500, `interval '48 hours'`).
+ */
+export const PUBLIC_SERVING_SOURCE_MAX_AGE_HOURS = 48
+/** The scoring worker seals each season on this cadence (worker/src/scheduler.ts). */
+export const RANK_PUBLICATION_INTERVAL_HOURS = 2
+/** Slack for a late or retried publication round. */
+export const SOURCE_PUBLICATION_FRESHNESS_MARGIN_HOURS = 2
+/**
+ * Publish side: a source whose board is older than this is isolated at
+ * publication time. It must expire on the read side only after the next
+ * round has had the chance to isolate it; with the same 48h on both sides a
+ * source sealed at 47.3h hid the whole 7D season 43 minutes later
+ * (2026-11-24 18:44Z, bitget_spot, zero ranked rows).
+ */
+export const DEFAULT_SOURCE_PUBLICATION_MAX_AGE_HOURS =
+  PUBLIC_SERVING_SOURCE_MAX_AGE_HOURS -
+  RANK_PUBLICATION_INTERVAL_HOURS -
+  SOURCE_PUBLICATION_FRESHNESS_MARGIN_HOURS
 
 const publicationWindowSchema = z.enum(['7D', '30D', '90D'])
 const identifierSchema = z
@@ -31,13 +56,22 @@ export const SCORE_INPUT_METRICS = [
 ] as const
 export type ScoreInputMetric = (typeof SCORE_INPUT_METRICS)[number]
 
-/** Metrics without which no row can be ranked (public eligibility policy). */
-export const RANK_REQUIRED_SCORE_INPUT_METRICS: readonly ScoreInputMetric[] = [
-  'roi_pct',
-  'pnl_usd',
-  'win_rate',
-  'max_drawdown',
-]
+/**
+ * Metrics without which no row can be ranked, per writer eligibility policy.
+ * 'roi_pnl': only ROI and PnL. A win rate or drawdown the bundle refused for
+ * lack of board evidence arrives as null and is scored as missing; the
+ * unattested trader_stats value is never read.
+ */
+export const RANK_REQUIRED_SCORE_INPUT_METRICS_BY_ELIGIBILITY: Readonly<
+  Record<PublicRankingRowEligibility, readonly ScoreInputMetric[]>
+> = {
+  roi_pnl: ['roi_pct', 'pnl_usd'],
+  four_metrics: ['roi_pct', 'pnl_usd', 'win_rate', 'max_drawdown'],
+}
+
+/** The required metrics under the default rule ('four_metrics'), as before the switch existed. */
+export const RANK_REQUIRED_SCORE_INPUT_METRICS: readonly ScoreInputMetric[] =
+  RANK_REQUIRED_SCORE_INPUT_METRICS_BY_ELIGIBILITY.four_metrics
 
 const scoreRowSchema = z
   .object({
@@ -139,9 +173,12 @@ export type SourcePublicationEvidenceErrorCode =
  * for lack of board evidence: the value is null in the row and the bundle says
  * trader_stats held one.
  */
-export function lacksRequiredMetricEvidence(row: SourcePublicationScoreRow): boolean {
+export function lacksRequiredMetricEvidence(
+  row: SourcePublicationScoreRow,
+  rowEligibility: PublicRankingRowEligibility = publicRankingRowEligibility()
+): boolean {
   const unevidenced = row.unevidenced_metrics ?? []
-  return RANK_REQUIRED_SCORE_INPUT_METRICS.some(
+  return RANK_REQUIRED_SCORE_INPUT_METRICS_BY_ELIGIBILITY[rowEligibility].some(
     (metric) => row[metric] === null && unevidenced.includes(metric)
   )
 }

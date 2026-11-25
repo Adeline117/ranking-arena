@@ -56,8 +56,14 @@ describe('claimed trader routing contract', () => {
   it('does not issue an ISR server redirect that can discard an explicit platform variant', () => {
     expect(page).not.toMatch(/\bredirect\s*\(/)
     expect(client).toContain('claimedTraderCanonicalHref({')
+    // A differing ?platform= counts as validated by a client override, or when
+    // it is the source / a server-verified alias of the account already rendered.
+    expect(client).toMatch(
+      /requestedPlatformValidated: Boolean\(\s*override \|\| legacyPlatformOverride \|\| urlPlatformMatchesServerAccount\s*\)/
+    )
+    // The predicate itself is behavior-tested in lib/identity/__tests__/claimed-trader.test.ts.
     expect(client).toContain(
-      'requestedPlatformValidated: Boolean(override || legacyPlatformOverride)'
+      'const urlPlatformMatchesServerAccount = urlPlatformIsServerAccount(urlPlatform, serverData)'
     )
     expect(client).toContain('linkedAccountsReady &&')
     expect(client).toContain("searchParams.getAll('account').length === 0")

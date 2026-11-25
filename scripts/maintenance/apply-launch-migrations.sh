@@ -474,6 +474,52 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # entry counts come from index-only scans instead of fetching every entry row
 # from the 53 GB heap (5.5 s of a 9.9 s warm run; first 7D attempt timing out
 # at 30 s when cold). Output is unchanged. Independent of the other entries.
+# 20261120235710 registers the blofin_spot profile capture contract
+# (win_rate, total_positions from the spot detail endpoints) in the registry of
+# predeploy 20261116215328. It is only meaningful to the worker release that
+# carries the same contract document and crawls the spot detail route, so it
+# follows that release; an older worker opens no blofin_spot profile attempt.
+# It is independent of 015119 (which leaves blofin_spot unregistered), refuses
+# a replay or an earlier blofin_spot registration, and touches no table 192134
+# guards.
+# 20261123020207 checks a RAW object's integrity metadata once per statement
+# instead of once per metric_trust_artifacts row; the per-row trigger
+# decompressed the capture's whole meta document (434 kB for a 2,042-page
+# bybit_mt5 window) for each of ~130,600 rows. Independent of other entries.
+# 20261122201611 replaces only the body of
+# arena.leaderboard_rank_row_is_public_eligible: a ranked row needs ROI and
+# PnL; win rate and max drawdown may be NULL (range-checked when present). It
+# is a superset of the previous policy, so it depends on no worker or website
+# version and the cohorts being served stay valid. It refuses unless the
+# installed body is the 20261111140053 one (or its own, on replay), so it runs
+# after predeploy. Order that matters is on the other side: the scoring worker
+# that publishes rows without a win rate or drawdown must be deployed AFTER
+# this migration (seal rejects such rows under the previous body). It touches
+# no table 192134 guards.
+# 20261123021904 appends two boolean columns, idle_window and
+# mdd_contradiction, to public.public_ranked_leaderboard, read from
+# leaderboard_ranks.score_factors (false unless the JSON boolean true is
+# there). It refuses unless the view is the 20260816184500 definition (or its
+# own, on replay) and changes no existing column, option, owner or grant. No
+# release depends on it and both columns are false until the scoring worker
+# publishes with roi_pnl; it follows 201611 only to keep the two together.
+# 20261124114140 makes a serving source whose sealed watermark leaves the
+# 48-hour window hide only its own rows instead of the whole season, and
+# applies the publisher's isolation bound at read time. It replaces the
+# 20261121201553 body of arena_visible_sources, so it follows it.
+# 20261124114433 registers bitget_spot as a live board (reported_total_drift,
+# 0.35% of the board, at most 20 rows) in the append-only exhaustion registry.
+# It needs the declaration 114230 makes valid, so it follows it; it takes
+# effect with the worker release that captures bitget_spot in this mode. It
+# refuses a replay or an earlier bitget_spot registration and touches no table
+# 192134 guards.
+# 20261125035803 re-creates the readiness RPC (20261122152622 body) so a run's
+# page metadata is derived once per run instead of once per parser ordinal
+# (one bybit_mt5 run re-read its 434 kB RAW meta 2,042 times; the RPC took
+# about 20 s against the worker startup gate), and so its last query reads
+# observations only for runs whose lineage fails. It refuses unless the
+# 152622 statement trigger is installed and enabled, so it follows it.
+# Independent of the other entries.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -507,6 +553,13 @@ POSTDEPLOY_MIGRATIONS=(
   20261122152622_metric_trust_observation_lineage_per_statement.sql
   20261122154211_score_bundle_index_only_entry_counts.sql
   20261118134316_raw_retention_backlog_census.sql
+  20261120235710_register_blofin_spot_profile_capture_contract.sql
+  20261123020207_metric_trust_artifact_raw_integrity_per_statement.sql
+  20261122201611_row_eligibility_roi_pnl_only.sql
+  20261123021904_public_ranked_leaderboard_window_flags.sql
+  20261124114140_stale_source_hides_only_its_own_rows.sql
+  20261124114433_register_bitget_spot_live_board_exhaustion_contract.sql
+  20261125035803_readiness_reads_run_metadata_once.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS

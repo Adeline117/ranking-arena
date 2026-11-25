@@ -22,6 +22,7 @@ import type {
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { pageFetcher, replayJson } from '../../fetch/capture'
+import type { LeaderboardExhaustionDeclaration } from '../../acquisition-exhaustion'
 import {
   captureReplayLeaderboard,
   collectionMeta,
@@ -82,6 +83,44 @@ const bitgetLeaderboardMeta = collectionMeta({
   assertSuccess: requireEnvelopeValue('bitget', ['code'], ['200']),
   list: ['data', 'rows'],
   total: ['data', 'maxShowSizes'],
+})
+
+/**
+ * Exhausted-completeness contract for bitget_spot (registered in
+ * arena.leaderboard_exhaustion_contracts). The board is ~5,400 traders in 181
+ * pages of 30, about eight minutes per window at the paced budget, and its
+ * ranks move while it is paged: a trader crossing the cursor is read twice and
+ * another slides past unread, so the total mode (accepted rows = maxShowSizes,
+ * no duplicate) refused every capture (production 2026-11: 5,414 reported,
+ * 5,410-5,412 distinct, 2-4 duplicates). Public probe 2026-11-24, eight full
+ * reads over 7/30/90 days at the paced interval: every read ends on a real
+ * short page (181, 15 rows) followed by an empty page; the reported total
+ * moved by 0-1; 1-6 rows were read twice and as many were missing.
+ *
+ * The capture therefore reads to the short (or empty) final page, and the
+ * proof bounds how far the board moved: the totals the pages report, the
+ * distinct rows against the last total and the duplicate rows each stay
+ * within 0.35% of the last reported total (18 rows at 5,415, three times the
+ * largest measured drift), and never above 20 rows.
+ *
+ * The allowance is also the most rows a capture judged complete may be
+ * missing, so it is a few times the measured drift, not the 1% ceiling.
+ *
+ * bitget_cfd (about 200 rows, seven pages) stays in the total mode: it is read
+ * in seconds and reaches its reported total exactly. bitget_futures has no
+ * completeness proof (see bitgetLeaderboardMeta).
+ */
+export const BITGET_SPOT_LEADERBOARD_EXHAUSTION: LeaderboardExhaustionDeclaration = Object.freeze({
+  completeness_mode: 'exhausted' as const,
+  list_path: ['data', 'rows'],
+  row_key_path: ['traderUid'],
+  end_signal: { kind: 'short_page' as const },
+  board_version: {
+    kind: 'reported_total_drift' as const,
+    path: ['data', 'maxShowSizes'],
+    max_drift_bps: 35,
+  },
+  max_duplicate_rows: 20,
 })
 
 function endpoint(src: SourceRow, key: string, fallback: string): string {
@@ -212,6 +251,9 @@ const bitgetAdapter: SourceAdapter = {
         pageBinding: { location: 'body', path: ['pageNo'] },
         extractMeta: bitgetLeaderboardMeta,
         pageSize,
+        // Only the registered source: bitget_cfd and bitget_futures keep the
+        // total mode.
+        exhaustion: src.slug === 'bitget_spot' ? BITGET_SPOT_LEADERBOARD_EXHAUSTION : undefined,
       }
     )
   },

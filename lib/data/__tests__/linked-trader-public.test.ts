@@ -150,6 +150,67 @@ describe('linked aggregate public DTO', () => {
     expect(result.aggregated).toEqual({ combinedPnl: null, bestRoi: null, weightedScore: null })
   })
 
+  it('keeps a verified account whose ranked row has no win rate or drawdown', () => {
+    const parsed = parsePublicLinkedAggregate({
+      subject: SUBJECT,
+      aggregated: { combinedPnl: null, bestRoi: null, weightedScore: null },
+      accounts: [
+        verifiedAccount({ winRate: null }),
+        verifiedAccount({ traderKey: 'trader-2', isPrimary: false, maxDrawdown: null }),
+        verifiedAccount({
+          traderKey: 'trader-3',
+          isPrimary: false,
+          winRate: null,
+          maxDrawdown: null,
+          roi: -31.5,
+        }),
+      ],
+      totalAccounts: 3,
+    })
+
+    expect(parsed?.accounts).toEqual([
+      expect.objectContaining({
+        rankingVisibility: 'verified',
+        roi: 12.5,
+        arenaScore: 88,
+        winRate: null,
+        maxDrawdown: 12,
+        rank: 7,
+      }),
+      expect.objectContaining({ rankingVisibility: 'verified', winRate: 64, maxDrawdown: null }),
+      expect.objectContaining({
+        rankingVisibility: 'verified',
+        roi: -31.5,
+        winRate: null,
+        maxDrawdown: null,
+      }),
+    ])
+  })
+
+  it.each([
+    ['win rate out of range', { winRate: 101 }],
+    ['non-numeric win rate', { winRate: '64' }],
+    ['drawdown out of range', { maxDrawdown: 250 }],
+    ['non-finite drawdown', { maxDrawdown: Number.NaN }],
+    ['missing ROI', { roi: null }],
+    ['missing score', { arenaScore: null }],
+  ])('still fails a verified account closed on %s', (_label, overrides) => {
+    const parsed = parsePublicLinkedAggregate({
+      subject: SUBJECT,
+      aggregated: null,
+      accounts: [verifiedAccount(overrides)],
+      totalAccounts: 1,
+    })
+    expect(parsed?.accounts[0]).toMatchObject({
+      rankingVisibility: 'partial',
+      rankingVisibilityReason: 'public_cohort_unverified',
+      roi: null,
+      winRate: null,
+      maxDrawdown: null,
+      rank: null,
+    })
+  })
+
   it('fails forged verified status closed when its public ranking shape is incomplete', () => {
     const parsed = parsePublicLinkedAggregate({
       subject: SUBJECT,

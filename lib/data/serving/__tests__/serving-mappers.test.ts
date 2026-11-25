@@ -30,14 +30,13 @@ describe('projectBoardExtras', () => {
         { showColumnCode: 'max_retracement', comparedValue: '4.83' },
         { showColumnCode: 'winning_rate', comparedValue: '58.33' },
       ],
-      klineProfit: [1, 2.5, 3],
+      // The real board shape; entries no longer store it and it was never an array.
+      klineProfit: { rows: [{ amount: '-14.76', dataTime: 1787760000000 }] },
     }
     expect(projectBoardExtras('bitget_futures', raw)).toEqual({
       win_rate: 58.33,
       mdd: 4.83,
-      copier_pnl: 1209.79,
       copier_count: 72,
-      sparkline: [1, 2.5, 3],
     })
   })
 
@@ -193,6 +192,36 @@ describe('getPublicFirstScreen', () => {
       headlineRoi: null,
       headlinePnl: null,
     })
+  })
+
+  it('reads the public cohort under the public alias while the RPC keeps the slug', async () => {
+    mockFetchPublicProfileRankingRows.mockResolvedValue({
+      rows: [
+        {
+          source: 'bitget',
+          source_trader_id: 'beb24d718eb23b54ac91',
+          season_id: '30D',
+          rank: 4,
+          roi: 12.34,
+        },
+      ],
+      rankingVisibility: 'partial',
+      rankingVisibilityReason: 'public_period_not_published',
+    })
+
+    const fs = await getPublicFirstScreen(
+      rpcClient(rpcPayload),
+      'bitget_futures',
+      'beb24d718eb23b54ac91',
+      'bitget'
+    )
+
+    expect(mockFetchPublicProfileRankingRows).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ source: 'bitget', sourceTraderId: 'beb24d718eb23b54ac91' })
+    )
+    expect(fs?.source).toBe('bitget_futures')
+    expect(fs?.entries[0]).toMatchObject({ rank: 4, headlineRoi: 12.34 })
   })
 
   it('returns null on RPC null (unknown trader) and on error', async () => {

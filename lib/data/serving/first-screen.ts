@@ -38,13 +38,41 @@ function finiteOrNull(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
+/**
+ * Win rate and max drawdown on the first screen are the PUBLISHED ranking
+ * values (percent, the numbers the board shows) or nothing.
+ *
+ * The board extras are the exchange's raw row. Sources disagree on the unit —
+ * htx / gate / blofin / xt / bitunix send fractions (0.66), bitget / binance /
+ * btcc / lbank send percents (66) — and every consumer reads `extras.mdd` and
+ * `headlineWinRate ?? extras.win_rate` through one percent formatter, so the
+ * fractional sources rendered 100x too small (in server HTML and JSON-LD too).
+ * Replacing them here fixes every consumer at once and removes the raw values,
+ * so nothing can fall back to them: not published means not shown.
+ */
+function withPublishedRiskMetrics(
+  entry: TraderFirstScreen['entries'][number],
+  published: { winRate: number | null; maxDrawdown: number | null }
+): TraderFirstScreen['entries'][number] {
+  const { win_rate: _rawWinRate, mdd: _rawMdd, ...extras } = entry.extras
+  return {
+    ...entry,
+    headlineWinRate: published.winRate,
+    extras: {
+      ...extras,
+      ...(published.winRate !== null ? { win_rate: published.winRate } : {}),
+      ...(published.maxDrawdown !== null ? { mdd: published.maxDrawdown } : {}),
+    },
+  }
+}
+
 function unknownRankingEntry(
   entry: TraderFirstScreen['entries'][number],
   visibility: TraderFirstScreen['entries'][number]['rankingVisibility'],
   reason: string | null
 ): TraderFirstScreen['entries'][number] {
   return {
-    ...entry,
+    ...withPublishedRiskMetrics(entry, { winRate: null, maxDrawdown: null }),
     rank: null,
     rankingVisibility: visibility,
     rankingVisibilityReason: reason,
@@ -59,7 +87,7 @@ function unknownRankingEntry(
  * Apply the narrow, already-sanitized public ranking projection to an arena
  * first-screen observation. Missing/malformed/currently-withdrawn cohort rows
  * fail closed per timeframe: identity/extras can remain visible, but rank,
- * ROI and PnL cannot leak from the board RPC.
+ * ROI, PnL, win rate and max drawdown cannot leak from the board RPC.
  */
 export function overlayPublicFirstScreenRanking(
   firstScreen: TraderFirstScreen,
@@ -85,7 +113,10 @@ export function overlayPublicFirstScreenRanking(
       }
 
       return {
-        ...entry,
+        ...withPublishedRiskMetrics(entry, {
+          winRate: finiteOrNull(row.win_rate),
+          maxDrawdown: finiteOrNull(row.max_drawdown),
+        }),
         rank: row.rank,
         rankingVisibility: 'verified',
         rankingVisibilityReason: null,
@@ -155,12 +186,18 @@ async function getArenaFirstScreen(
 export async function getPublicFirstScreen(
   supabase: SupabaseClient,
   source: string,
-  exchangeTraderId: string
+  exchangeTraderId: string,
+  /**
+   * The same account's source as the public ranking names it. Some sources are
+   * published under an alias (public `blofin`, serving slug `blofin_futures`);
+   * reading the cohort by the slug finds no rank at all. Defaults to `source`.
+   */
+  publicSource: string = source
 ): Promise<TraderFirstScreen | null> {
   const [firstScreen, cohort] = await Promise.all([
     getArenaFirstScreen(supabase, source, exchangeTraderId),
     fetchPublicProfileRankingRows(supabase, {
-      source,
+      source: publicSource,
       sourceTraderId: exchangeTraderId,
       periods: PUBLIC_PROFILE_RANKING_PERIODS,
     }),

@@ -1,6 +1,7 @@
 import { ImageResponse } from 'next/og'
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { resolveServingTraderOutcome, SERVING_RESOLVE_ERRORED } from '@/lib/data/serving/resolve'
 import {
   isPublicRankingSourceAllowed,
   sanitizePublicRankingPayload,
@@ -56,8 +57,12 @@ const PLAT_L: Record<string, string> = {
   etoro: 'eToro',
 }
 
+// Every column the shared row check (isPublicRankingRowEligible) reads must be
+// selected, including ones the card never draws: pnl is required, and
+// max_drawdown is compared against score_completeness. Leaving either out makes
+// the check reject every row and the card renders no numbers at all.
 const PUBLIC_RANK_CARD_COLUMNS =
-  'rank,roi,win_rate,arena_score,source,source_trader_id,score_completeness,metrics_estimated,is_outlier,computed_at,season_id'
+  'rank,roi,pnl,win_rate,max_drawdown,arena_score,source,source_trader_id,score_completeness,metrics_estimated,is_outlier,computed_at,season_id'
 
 type VerifiedRankCardRow = {
   rank: number
@@ -142,7 +147,35 @@ export async function GET(request: NextRequest) {
     .or(`handle.eq.${safeHandle},source_trader_id.eq.${safeHandle}`)
     .limit(1)
   if (platform) q = q.eq('source', platform)
-  const { data: tr } = await q.maybeSingle()
+  const { data: legacy } = await q.maybeSingle()
+  let tr: { handle: string | null; source: string; source_trader_id: string } | null = legacy
+  // trader_sources is the legacy identity table. A trader that exists only in
+  // the serving layer has no row there, and the public ranking may name its
+  // source by an alias (`blofin`) while the serving layer uses the slug
+  // (`blofin_futures`). arena_resolve_trader accepts either name for the same
+  // account, so the name the request used is the public one unless the
+  // resolver reports the public name itself (same rule as /first-screen).
+  const servingOnly = !tr
+  if (!tr) {
+    const resolved = await resolveServingTraderOutcome(sb, {
+      handle,
+      source: platform || undefined,
+    })
+    if (resolved === SERVING_RESOLVE_ERRORED) {
+      // No answer is not "no such trader": do not let a 404 be cached for it.
+      return NextResponse.json(
+        { error: 'Trader lookup unavailable' },
+        { status: 503, headers: publicRankingResponseRejectionHeaders() }
+      )
+    }
+    if (resolved) {
+      tr = {
+        handle: resolved.nickname,
+        source: resolved.publicSource ?? (platform || resolved.source),
+        source_trader_id: resolved.exchangeTraderId,
+      }
+    }
+  }
   if (!tr) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (!isPublicRankingSourceAllowed(tr.source)) {
     return NextResponse.json(
@@ -162,6 +195,14 @@ export async function GET(request: NextRequest) {
   // is available on this image path. Deliberately omit “Top X%” rather than
   // infer it from a raw or stale count cache.
   const lr = verifiedRankCardRow(candidate, tr.source, tr.source_trader_id, sId)
+  // A serving-only trader's public identity IS its public ranking row. Without
+  // one there is nothing this card may show for it.
+  if (servingOnly && !lr) {
+    return NextResponse.json(
+      { error: 'Not found' },
+      { status: 404, headers: publicRankingResponseRejectionHeaders() }
+    )
+  }
   const name = tr.handle || handle,
     rank = lr?.rank ?? 0,
     roi = lr?.roi ?? null,
@@ -414,7 +455,9 @@ export async function GET(request: NextRequest) {
                 display: 'flex',
               }}
             >
-              {wv ? winRate.toFixed(0) + '%' : '--'}
+              {/* Win rate is optional on the public board: null means the
+                  source did not provide it, which is not the same as 0%. */}
+              {wv ? winRate.toFixed(0) + '%' : '—'}
             </span>
           </div>
         </div>

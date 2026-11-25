@@ -74,4 +74,48 @@ test.describe('trader profile server summary', () => {
       await expect(page.getByRole('region', { name: '概览' })).toBeVisible()
     })
   })
+
+  // The public ranking publishes some sources under an alias (`bybit`) while
+  // the serving resolver returns the arena slug (`bybit_copytrade`). Whichever
+  // name the URL uses, the page must read the ranking by the alias and declare
+  // the alias URL — the one the sitemap and every ranking link use.
+  for (const requested of ['bybit', 'bybit_copytrade']) {
+    test(`an alias-source trader requested as ${requested} is ranked and canonical`, async ({
+      request,
+      isMobile,
+    }) => {
+      test.skip(isMobile, 'a raw request does not depend on the viewport')
+      const response = await request.get(`/trader/e2e-alias?platform=${requested}`, {
+        headers: { 'user-agent': GOOGLEBOT },
+      })
+      expect(response.status()).toBe(200)
+      const html = await response.text()
+      const head = html.slice(0, html.indexOf('</head>'))
+      const canonical = head.match(/<link[^>]*rel="canonical"[^>]*>/)?.[0] ?? ''
+      expect(canonical).toContain('/trader/e2e-alias?platform=bybit"')
+      expect(head).not.toMatch(/<meta[^>]*name="robots"[^>]*noindex/)
+
+      const start = html.indexOf('aria-labelledby="trader-summary-heading"')
+      expect(start, 'summary section present in server HTML').toBeGreaterThan(-1)
+      const summary = html.slice(start, html.indexOf('</section>', start))
+      expect(summary).toContain('#33') // the alias row's public rank
+      expect(summary).toContain('+140.0%') // its public 90D ROI, not the RPC's
+      // Win rate and drawdown are the published ranking values (60 / 12). The
+      // exchange's raw board row carries them as fractions (0.55 / 0.31), which
+      // a percent formatter would print as 0.6% / 0.3%.
+      const text = summary.replace(/<[^>]+>/g, ' ')
+      expect(text).toContain('60.0%')
+      expect(text).toContain('-12.0%')
+      expect(text).not.toMatch(/(^|[^\d.])0\.[0-9]%/)
+    })
+  }
+
+  test('the sitemap lists the alias-source trader under its public name', async ({
+    request,
+    isMobile,
+  }) => {
+    test.skip(isMobile, 'a raw request does not depend on the viewport')
+    const shard = await request.get('/api/sitemap-xml?shard=1')
+    expect(await shard.text()).toContain('/trader/e2e-alias?platform=bybit<')
+  })
 })

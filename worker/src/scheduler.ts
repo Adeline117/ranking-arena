@@ -8,9 +8,11 @@
  */
 
 import { isV1RankingCommandChainPublished } from '../../lib/cron/v1-ranking-command-chain-publication'
+import { RANK_PUBLICATION_INTERVAL_HOURS } from '../../lib/rankings/publication/source-publication-evidence'
 import type { ComputeLeaderboardData } from './queues'
 
-const SCORE_INTERVALS_MS = 2 * 3600_000 // every 2h
+// The publish-side freshness margin is derived from this cadence.
+const SCORE_INTERVALS_MS = RANK_PUBLICATION_INTERVAL_HOURS * 3600_000
 
 /**
  * Register all repeatable jobs. Idempotent — BullMQ deduplicates by scheduler ID.

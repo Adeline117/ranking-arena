@@ -256,7 +256,37 @@ describe('GET /api/traders/[handle]/first-screen boundary contract', () => {
     expect(mockGetPublicFirstScreen).toHaveBeenCalledWith(
       mockSupabase,
       'bitunix_futures',
-      'canonical-account-id'
+      'canonical-account-id',
+      // The public cohort is keyed by the alias the request named.
+      'bitunix'
+    )
+  })
+
+  it('normalizes a request by slug to the public name the resolver reports', async () => {
+    mockResolveServingTrader.mockResolvedValueOnce({
+      source: 'bitunix_futures',
+      exchangeTraderId: 'canonical-account-id',
+      nickname: 'Alias Trader',
+      avatarMirrorUrl: null,
+      avatarOriginUrl: null,
+      publicSource: 'bitunix',
+    })
+    mockGetPublicFirstScreen.mockResolvedValueOnce(null)
+    mockGetSourceCapabilities.mockResolvedValueOnce({})
+
+    const response = await GET(
+      new NextRequest(
+        'http://localhost/api/traders/canonical-account-id/first-screen?source=bitunix_futures'
+      ),
+      { params: Promise.resolve({ handle: 'canonical-account-id' }) }
+    )
+
+    expect(response.status).toBe(200)
+    expect(mockGetPublicFirstScreen).toHaveBeenCalledWith(
+      mockSupabase,
+      'bitunix_futures',
+      'canonical-account-id',
+      'bitunix'
     )
   })
 })

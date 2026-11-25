@@ -820,6 +820,9 @@ function parsePublishedProfile(
   const arenaScore = publicProfileFiniteNumber(value.arena_score)
   const roi = publicProfileFiniteNumber(value.roi)
   const pnl = publicProfileFiniteNumber(value.pnl)
+  // Win rate and drawdown are optional on a ranked row: null means "not
+  // provided". A value that is present must still parse; the sanitizer below
+  // range-checks it.
   const winRate = publicProfileFiniteNumber(value.win_rate)
   const maxDrawdown = publicProfileFiniteNumber(value.max_drawdown)
   if (
@@ -829,8 +832,8 @@ function parsePublishedProfile(
     arenaScore === null ||
     roi === null ||
     pnl === null ||
-    winRate === null ||
-    maxDrawdown === null ||
+    (value.win_rate !== null && winRate === null) ||
+    (value.max_drawdown !== null && maxDrawdown === null) ||
     !SOURCE_PATTERN.test(source) ||
     sourceTraderId.length === 0 ||
     sourceTraderId !== sourceTraderId.trim()
