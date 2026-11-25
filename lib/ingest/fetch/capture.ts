@@ -472,6 +472,13 @@ export interface CaptureNumericLeaderboardOptions {
   /** Test hook; production uses canonical UTC timestamps from Date. */
   now?: () => string
   /**
+   * Waits before re-issuing a page request whose transport failed before any
+   * HTTP response (see TRANSPORT_RETRY_DELAYS_MS). Pass [] to disable.
+   */
+  transportRetryDelaysMs?: readonly number[]
+  /** Test hook for the wait between transport retries. */
+  sleep?: (ms: number) => Promise<void>
+  /**
    * Exhausted completeness: the source reports no population, so the board is
    * proven complete by its declared end signal, row identity, and stability.
    * Must equal the source's registered arena.leaderboard_exhaustion_contracts row.
@@ -481,7 +488,14 @@ export interface CaptureNumericLeaderboardOptions {
 
 export type CapturePartitionedNumericLeaderboardPartition = Omit<
   CaptureNumericLeaderboardOptions,
-  'session' | 'fetcher' | 'now' | 'pageSize' | 'signal' | 'exhaustion'
+  | 'session'
+  | 'fetcher'
+  | 'now'
+  | 'pageSize'
+  | 'signal'
+  | 'exhaustion'
+  | 'transportRetryDelaysMs'
+  | 'sleep'
 > & {
   partitionId: string
   /** V4 parser bindings require one positive page size shared by every partition. */
@@ -496,7 +510,21 @@ export interface CapturePartitionedNumericLeaderboardOptions {
   partitions: readonly CapturePartitionedNumericLeaderboardPartition[]
   /** Test hook; shared so timestamps remain one monotonic capture sequence. */
   now?: () => string
+  /** Forwarded to every partition (see CaptureNumericLeaderboardOptions). */
+  transportRetryDelaysMs?: readonly number[]
+  /** Test hook for the wait between transport retries. */
+  sleep?: (ms: number) => Promise<void>
 }
+
+/**
+ * A page request that fails before any HTTP response (socket reset, DNS, TLS,
+ * fetch timeout) is re-issued after these waits. Such a failure leaves nothing
+ * to record, and without a retry one of them voids the whole capture: on
+ * 2026-11-22 a 2,039-page bybit_mt5 scan was lost at page 1,221 after 107
+ * minutes. HTTP responses (blocked, 4xx, 5xx) are evidence and are never
+ * retried here; an open circuit is not retried either.
+ */
+export const TRANSPORT_RETRY_DELAYS_MS: readonly number[] = [1_000, 5_000]
 
 function assertSafeInteger(value: number, label: string, minimum: number): void {
   if (!Number.isSafeInteger(value) || Object.is(value, -0) || value < minimum) {
@@ -893,6 +921,10 @@ export async function captureNumericLeaderboard(
   const pageSize = opts.pageSize
   const pageBinding = canonicalFrozenSnapshot(opts.pageBinding) as LeaderboardNumericPageBinding
   const now = opts.now ?? (() => new Date().toISOString())
+  const transportRetryDelaysMs = opts.transportRetryDelaysMs ?? TRANSPORT_RETRY_DELAYS_MS
+  for (const delay of transportRetryDelaysMs) assertSafeInteger(delay, 'transport retry delay', 0)
+  const sleep =
+    opts.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
   const exhaustion =
     opts.exhaustion === undefined || opts.exhaustion === null
       ? null
@@ -1046,37 +1078,60 @@ export async function captureNumericLeaderboard(
       cause: undefined,
     }
     try {
-      const response = await session.paced(async () => {
-        throwIfCaptureCancelled(opts.signal)
-        let fetched: JsonResponse
-        try {
-          fetched = await fetcher(template)
+      const requestPage = () =>
+        session.paced(async () => {
           throwIfCaptureCancelled(opts.signal)
-        } catch (cause) {
-          // Remember the exact rejected value without wrapping it inside the
-          // paced callback. Rate/circuit accounting must observe the original
-          // transport failure; the durable capture wrapper is added outside.
-          fetcherFailure.caught = true
-          fetcherFailure.cause = cause
-          throw cause
-        }
-        assertSafeInteger(fetched.status, 'HTTP status', 1)
-        if (fetched.status < 100 || fetched.status > 599) {
-          throw new TypeError('[ingest] HTTP status must be between 100 and 599')
-        }
-        const responseJson = canonicalFrozenSnapshot(fetched.json)
-        if (isBlockedStatus(fetched.status)) {
-          throw new CapturedBlockedHttpResponseError(
-            fetched.status,
-            responseJson,
-            publicRequest.url
+          let fetched: JsonResponse
+          try {
+            fetched = await fetcher(template)
+            throwIfCaptureCancelled(opts.signal)
+          } catch (cause) {
+            // Remember the exact rejected value without wrapping it inside the
+            // paced callback. Rate/circuit accounting must observe the original
+            // transport failure; the durable capture wrapper is added outside.
+            fetcherFailure.caught = true
+            fetcherFailure.cause = cause
+            throw cause
+          }
+          assertSafeInteger(fetched.status, 'HTTP status', 1)
+          if (fetched.status < 100 || fetched.status > 599) {
+            throw new TypeError('[ingest] HTTP status must be between 100 and 599')
+          }
+          const responseJson = canonicalFrozenSnapshot(fetched.json)
+          if (isBlockedStatus(fetched.status)) {
+            throw new CapturedBlockedHttpResponseError(
+              fetched.status,
+              responseJson,
+              publicRequest.url
+            )
+          }
+          if (fetched.status < 200 || fetched.status >= 300) {
+            throw new CapturedHttpResponseError(fetched.status, responseJson, publicRequest.url)
+          }
+          return { status: fetched.status, payload: responseJson }
+        })
+      let response: Awaited<ReturnType<typeof requestPage>>
+      for (let transportAttempt = 0; ; transportAttempt += 1) {
+        fetcherFailure.caught = false
+        fetcherFailure.cause = undefined
+        try {
+          response = await requestPage()
+          break
+        } catch (error) {
+          throwIfCaptureCancelled(opts.signal)
+          // Only the fetcher's own rejection: no HTTP response exists, so
+          // nothing was captured for this page position.
+          const transportRejected = fetcherFailure.caught && error === fetcherFailure.cause
+          if (!transportRejected || transportAttempt >= transportRetryDelaysMs.length) throw error
+          console.warn(
+            `[ingest] leaderboard page ${pageIndex} transport failure, retry ` +
+              `${transportAttempt + 1}/${transportRetryDelaysMs.length}: ` +
+              (error instanceof Error ? error.message : String(error))
           )
+          await sleep(transportRetryDelaysMs[transportAttempt])
+          throwIfCaptureCancelled(opts.signal)
         }
-        if (fetched.status < 200 || fetched.status >= 300) {
-          throw new CapturedHttpResponseError(fetched.status, responseJson, publicRequest.url)
-        }
-        return { status: fetched.status, payload: responseJson }
-      })
+      }
       throwIfCaptureCancelled(opts.signal)
       status = response.status
       payload = response.payload
@@ -1628,6 +1683,8 @@ export async function capturePartitionedNumericLeaderboard(
         session: opts.session,
         fetcher: opts.fetcher,
         now: opts.now,
+        transportRetryDelaysMs: opts.transportRetryDelaysMs,
+        sleep: opts.sleep,
         signal: opts.signal,
       })
       throwIfCaptureCancelled(opts.signal)

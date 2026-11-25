@@ -1,0 +1,87 @@
+{
+  "uid": "16199513701",
+  "captured": "2026-11-21 public probe of https://blofin.com/sapi/v1/spot_copy/trader/stat/indicators (verbatim responses)",
+  "responses": {
+    "trader/stat/indicators|D7": {
+      "code": 200,
+      "msg": "succeed",
+      "data": {
+        "rio_d7": "0",
+        "pnl_d7": "0",
+        "pnl_all": "0",
+        "max_drawdown_all": "0.64328180737217598",
+        "win_ratio_all": "0",
+        "trades": 0,
+        "winning_trades": 0,
+        "roi": "0",
+        "annualized_roi": "0",
+        "max_drawdown": "0.64328180737217598",
+        "sharpe_ratio": "0",
+        "volatility": "0",
+        "down_risk": "13.2745",
+        "calmar_ratio": "0",
+        "sortino_ratio": "0",
+        "update_time": 1795305610188,
+        "total_copiers": 0,
+        "copier_pnl": null,
+        "last_trade_at": 0,
+        "real_pnl": "0"
+      },
+      "alert": null
+    },
+    "trader/stat/indicators|D30": {
+      "code": 200,
+      "msg": "succeed",
+      "data": {
+        "rio_d7": "0",
+        "pnl_d7": "0",
+        "pnl_all": "0",
+        "max_drawdown_all": "0.64328180737217598",
+        "win_ratio_all": "0",
+        "trades": 0,
+        "winning_trades": 0,
+        "roi": "0",
+        "annualized_roi": "0",
+        "max_drawdown": "0.64328180737217598",
+        "sharpe_ratio": "0",
+        "volatility": "0",
+        "down_risk": "12.4999",
+        "calmar_ratio": "0",
+        "sortino_ratio": "0",
+        "update_time": 1795305610188,
+        "total_copiers": 0,
+        "copier_pnl": null,
+        "last_trade_at": 0,
+        "real_pnl": "0"
+      },
+      "alert": null
+    },
+    "trader/stat/indicators|D90": {
+      "code": 200,
+      "msg": "succeed",
+      "data": {
+        "rio_d7": "0",
+        "pnl_d7": "0",
+        "pnl_all": "0",
+        "max_drawdown_all": "0.64328180737217598",
+        "win_ratio_all": "0",
+        "trades": 0,
+        "winning_trades": 0,
+        "roi": "0",
+        "annualized_roi": "0",
+        "max_drawdown": "0.64328180737217598",
+        "sharpe_ratio": "0",
+        "volatility": "0",
+        "down_risk": "12.3587",
+        "calmar_ratio": "0",
+        "sortino_ratio": "0",
+        "update_time": 1795305610188,
+        "total_copiers": 0,
+        "copier_pnl": null,
+        "last_trade_at": 0,
+        "real_pnl": "0"
+      },
+      "alert": null
+    }
+  }
+}

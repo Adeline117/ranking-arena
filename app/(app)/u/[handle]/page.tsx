@@ -351,6 +351,8 @@ async function resolveServingForUser(profile: {
   nickname: string | null
   avatarMirrorUrl: string | null
   avatarOriginUrl: string | null
+  /** The source's name in the public ranking (alias-aware). */
+  publicSource: string
 } | null> {
   // arena_resolve_trader matches exchange_trader_id first (exact), so the bound
   // UID works even when no legacy trader_sources handle exists.
@@ -369,7 +371,9 @@ async function resolveServingForUser(profile: {
     ])
     if (!resolved) return null
     if ((await getDataMode(resolved.source)) !== 'serving') return null
-    return resolved
+    // Public ranking rows are keyed by the alias for some sources; the hint is
+    // a name the resolver accepted for this account.
+    return { ...resolved, publicSource: resolved.publicSource ?? hint ?? resolved.source }
   } catch (err) {
     logger.error('[u/page] serving resolve failed:', err instanceof Error ? err.message : err)
     return null
@@ -390,7 +394,8 @@ export default async function UserHomePage({ params }: { params: Promise<{ handl
           getPublicFirstScreen(
             getReadReplica(),
             servingResolved.source,
-            servingResolved.exchangeTraderId
+            servingResolved.exchangeTraderId,
+            servingResolved.publicSource
           ),
           new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_TIMEOUT_MS)),
         ]).catch(() => null),

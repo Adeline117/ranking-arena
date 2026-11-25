@@ -391,6 +391,11 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # It reads the 20261118135918 audit table, so it follows it. A source whose
 # boards carry outcomes but no metric-trust run becomes untrusted (isolated)
 # at the next publication; it touches no table 192134 guards.
+# 20261118134316 (RAW retention backlog census) adds a switch table (off),
+# an orphan GC queue and count-only census/scan functions; the worker release
+# that calls them treats a missing function as not_installed, so it follows
+# that release. It reads storage.objects, deletes nothing, and touches no
+# table 192134 guards.
 # 040440 forward replacement. V1_EXECUTION_STATUS requires the RAW-only
 # bridge SHA to be deployed and legacy callers drained before the legacy
 # position-history relations are frozen. Current main never reads or writes
@@ -460,6 +465,27 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # public view serves instead of reading leaderboard_count_cache, which the
 # sealed publication path never refreshes (zero visible sources in production
 # while 3,546 ranks were served). Independent of every other entry.
+# 20261122152622 validates an observation batch's source-page lineage once per
+# acquisition run (AFTER INSERT ... FOR EACH STATEMENT) instead of once per
+# row; the per-row trigger re-verified the run's exhaustion proof for every
+# observation (63.5 ms x 12,900 rows for binance_futures against a 300 s
+# query timeout). It replaces the 112703 trigger function, so it follows it.
+# 20261122154211 re-creates the score bundle (204006 body) so its per-snapshot
+# entry counts come from index-only scans instead of fetching every entry row
+# from the 53 GB heap (5.5 s of a 9.9 s warm run; first 7D attempt timing out
+# at 30 s when cold). Output is unchanged. Independent of the other entries.
+# 20261120235710 registers the blofin_spot profile capture contract
+# (win_rate, total_positions from the spot detail endpoints) in the registry of
+# predeploy 20261116215328. It is only meaningful to the worker release that
+# carries the same contract document and crawls the spot detail route, so it
+# follows that release; an older worker opens no blofin_spot profile attempt.
+# It is independent of 015119 (which leaves blofin_spot unregistered), refuses
+# a replay or an earlier blofin_spot registration, and touches no table 192134
+# guards.
+# 20261123020207 checks a RAW object's integrity metadata once per statement
+# instead of once per metric_trust_artifacts row; the per-row trigger
+# decompressed the capture's whole meta document (434 kB for a 2,042-page
+# bybit_mt5 window) for each of ~130,600 rows. Independent of other entries.
 # 20261122201611 replaces only the body of
 # arena.leaderboard_rank_row_is_public_eligible: a ranked row needs ROI and
 # PnL; win rate and max drawdown may be NULL (range-checked when present). It
@@ -507,6 +533,11 @@ POSTDEPLOY_MIGRATIONS=(
   20261118135918_trust_evidence_retention.sql
   20261118144144_rank_publication_trust_requires_run.sql
   20261121201553_visible_sources_from_served_ranks.sql
+  20261122152622_metric_trust_observation_lineage_per_statement.sql
+  20261122154211_score_bundle_index_only_entry_counts.sql
+  20261118134316_raw_retention_backlog_census.sql
+  20261120235710_register_blofin_spot_profile_capture_contract.sql
+  20261123020207_metric_trust_artifact_raw_integrity_per_statement.sql
   20261122201611_row_eligibility_roi_pnl_only.sql
   20261123021904_public_ranked_leaderboard_window_flags.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql

@@ -119,7 +119,19 @@ export async function GET(
       const [firstScreenRaw, capabilities, verifiedKeys] = await Promise.all([
         // The helper reads the current sealed public cohort before publishing
         // rank/ROI/PnL; raw arena_first_screen values remain identity/extras only.
-        getPublicFirstScreen(supabase, resolved.source, resolved.exchangeTraderId),
+        // `source` is the name the request used for this account. The resolver
+        // accepted it as the slug or as the public alias (legacy_platform), and
+        // the public ranking is keyed by that alias — reading the cohort by the
+        // slug found no rank for alias sources (bybit/bitunix/blofin/xt).
+        getPublicFirstScreen(
+          supabase,
+          resolved.source,
+          resolved.exchangeTraderId,
+          // The resolver's own public name wins, so a request by slug is
+          // normalized on the server; until the deployed resolver reports it,
+          // fall back to the name the request used.
+          resolved.publicSource ?? source
+        ),
         cachedCapabilities(),
         getVerifiedTraderKeys(supabase),
       ])

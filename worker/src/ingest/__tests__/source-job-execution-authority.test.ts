@@ -823,6 +823,31 @@ describe('Tier-A source job execution authority', () => {
     expect(h.query).toHaveBeenCalledTimes(queriesBeforeClose)
   })
 
+  it('logs only the class and code of a failure it reports under a fixed code', async () => {
+    const logged = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const h = harness()
+      const authority = await claim(h)
+      h.behavior.queryFailure = {
+        error: Object.assign(
+          new Error('lease expired for postgres://user:secret@db.internal/arena SELECT secret_sql'),
+          { code: '57014' }
+        ),
+        sql: SOURCE_JOB_EXECUTION_ASSERT_SQL,
+      }
+      await expect(authority.withClaimedWrite(async () => undefined)).rejects.toMatchObject({
+        code: 'region_lost',
+        operation: 'assert',
+      })
+      expect(logged).toHaveBeenCalledTimes(1)
+      expect(logged).toHaveBeenCalledWith(
+        '[ingest-worker] Tier-A execution assert region_lost cause: Error code=57014'
+      )
+    } finally {
+      logged.mockRestore()
+    }
+  })
+
   it('sanitizes a claim query failure containing SQL and connection secrets', async () => {
     const h = harness()
     const raw = new Error(

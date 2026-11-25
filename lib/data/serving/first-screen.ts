@@ -155,12 +155,18 @@ async function getArenaFirstScreen(
 export async function getPublicFirstScreen(
   supabase: SupabaseClient,
   source: string,
-  exchangeTraderId: string
+  exchangeTraderId: string,
+  /**
+   * The same account's source as the public ranking names it. Some sources are
+   * published under an alias (public `blofin`, serving slug `blofin_futures`);
+   * reading the cohort by the slug finds no rank at all. Defaults to `source`.
+   */
+  publicSource: string = source
 ): Promise<TraderFirstScreen | null> {
   const [firstScreen, cohort] = await Promise.all([
     getArenaFirstScreen(supabase, source, exchangeTraderId),
     fetchPublicProfileRankingRows(supabase, {
-      source,
+      source: publicSource,
       sourceTraderId: exchangeTraderId,
       periods: PUBLIC_PROFILE_RANKING_PERIODS,
     }),

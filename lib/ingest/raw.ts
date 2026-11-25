@@ -3043,6 +3043,22 @@ export async function withVerifiedPositionHistoryRawArtifactV2<T>(
   })
 }
 
+/**
+ * Remove already-detached objects from the raw-snapshots bucket. Callers must
+ * only pass paths taken from a durable GC queue row (pointer outbox or the
+ * orphan queue of 20261118134316); this never decides what is garbage.
+ */
+export async function removeRawStorageObjects(
+  storagePaths: readonly string[]
+): Promise<{ error: string | null }> {
+  if (storagePaths.length === 0) return { error: null }
+  const { error } = await getStorageClient()
+    .storage.from(RAW_BUCKET)
+    .remove([...storagePaths])
+  if (!error) return { error: null }
+  return { error: error.message?.trim() || 'unknown Storage error' }
+}
+
 async function readRawObjectGcBatch(client: PoolClient): Promise<RawObjectGcPointer[]> {
   const { rows } = await client.query<RawObjectGcPointer>(
     `SELECT storage_path
