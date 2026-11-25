@@ -36,7 +36,6 @@ describe('projectBoardExtras', () => {
     expect(projectBoardExtras('bitget_futures', raw)).toEqual({
       win_rate: 58.33,
       mdd: 4.83,
-      copier_pnl: 1209.79,
       copier_count: 72,
     })
   })

@@ -100,6 +100,13 @@ test.describe('trader profile server summary', () => {
       const summary = html.slice(start, html.indexOf('</section>', start))
       expect(summary).toContain('#33') // the alias row's public rank
       expect(summary).toContain('+140.0%') // its public 90D ROI, not the RPC's
+      // Win rate and drawdown are the published ranking values (60 / 12). The
+      // exchange's raw board row carries them as fractions (0.55 / 0.31), which
+      // a percent formatter would print as 0.6% / 0.3%.
+      const text = summary.replace(/<[^>]+>/g, ' ')
+      expect(text).toContain('60.0%')
+      expect(text).toContain('-12.0%')
+      expect(text).not.toMatch(/(^|[^\d.])0\.[0-9]%/)
     })
   }
 

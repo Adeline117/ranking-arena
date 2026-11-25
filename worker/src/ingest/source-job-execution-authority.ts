@@ -19,6 +19,7 @@ import {
   type SourceJobLeaseAuthority,
   type SourceJobLeaseProof,
 } from './source-job-lease'
+import { describeSafeCauseChain } from './safe-error-cause'
 import type { WorkerDbFenceProof, WorkerDbFencedWrite } from './worker-db-fence'
 import { WORKER_OWNER_LEASE_TTL_MS } from './worker-instance-ownership'
 
@@ -336,37 +337,14 @@ function executionError(
  * details), so only fields that cannot are logged: the error class, a
  * SQLSTATE / errno-style code, and whether it was the client's query timeout.
  */
-const SAFE_CAUSE_TOKEN = /^[A-Za-z0-9_]{2,40}$/
-
-/** `Name code=… operation=…` built only from fixed-vocabulary fields. */
-function describeCause(cause: Error): string {
-  const fields = cause as { code?: unknown; operation?: unknown; retryPolicy?: unknown }
-  const safe = (label: string, value: unknown) =>
-    typeof value === 'string' && SAFE_CAUSE_TOKEN.test(value) ? ` ${label}=${value}` : ''
-  return (
-    (/^[A-Za-z]{1,60}$/.test(cause.name) ? cause.name : 'Error') +
-    // SQLSTATE / errno (57014, ECONNRESET) or a fence code (write_deadline_exceeded).
-    safe('code', fields.code) +
-    safe('operation', fields.operation) +
-    safe('retry', fields.retryPolicy) +
-    (cause.message === 'Query read timeout' ? ' query_read_timeout' : '')
-  )
-}
-
 function logUnclassifiedCause(
   operation: SourceJobExecutionOperation,
   code: SourceJobExecutionFailureCode,
   cause: unknown
 ): void {
-  const chain: string[] = []
-  // Outermost first; a wrapper's own cause may carry the driver's code.
-  for (let current: unknown = cause, depth = 0; depth < 4; depth += 1) {
-    if (!(current instanceof Error)) break
-    chain.push(describeCause(current))
-    current = (current as { cause?: unknown }).cause
-  }
-  const detail = chain.length > 0 ? chain.join(' <- ') : `non-error rejection (${typeof cause})`
-  console.error(`[ingest-worker] Tier-A execution ${operation} ${code} cause: ${detail}`)
+  console.error(
+    `[ingest-worker] Tier-A execution ${operation} ${code} cause: ${describeSafeCauseChain(cause)}`
+  )
 }
 
 function exactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {

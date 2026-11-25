@@ -71,8 +71,9 @@ export interface TraderFirstScreen {
      */
     headlinePnl: Money | null
     headlineWinRate: number | null
-    /** Board-card extras the source exposed (sparkline, MDD, copiers…) —
-     *  projected from leaderboard_entries.raw via sources.meta.board_fields. */
+    /** Board-card extras (lib/data/serving/board-extras.ts). `win_rate` / `mdd`
+     *  here are the PUBLISHED ranking values in percent (or absent) — the
+     *  exchange's raw values are replaced in overlayPublicFirstScreenRanking. */
     extras: Record<string, unknown>
     provenance: Provenance
   }>

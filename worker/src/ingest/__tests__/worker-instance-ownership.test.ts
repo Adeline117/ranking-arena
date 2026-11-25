@@ -372,6 +372,27 @@ describe('worker instance ownership protocol', () => {
     }
   })
 
+  it('logs the class and code of a Redis client error, never its message', async () => {
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const failure = Object.assign(new Error(`raw command ${TOKEN}`), {
+        name: 'ReplyError',
+        code: 'ECONNRESET',
+      })
+      await acquireWorkerOwnership({
+        heartbeat: heartbeat(),
+        identity: identity(),
+        redis: { eval: jest.fn().mockRejectedValue(failure) },
+      }).catch(() => undefined)
+
+      expect(errors.mock.calls.map(([line]) => line)).toEqual([
+        '[ingest-worker] worker ownership acquire Redis command failed cause: ReplyError code=ECONNRESET',
+      ])
+    } finally {
+      errors.mockRestore()
+    }
+  })
+
   it('sanitizes Redis client errors before they can expose the private token', async () => {
     const acquireEval = jest.fn().mockRejectedValue(new Error(`raw command ${TOKEN}`))
     const acquireError = await acquireWorkerOwnership({

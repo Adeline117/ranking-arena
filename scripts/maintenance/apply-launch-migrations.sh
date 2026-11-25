@@ -503,6 +503,10 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # own, on replay) and changes no existing column, option, owner or grant. No
 # release depends on it and both columns are false until the scoring worker
 # publishes with roi_pnl; it follows 201611 only to keep the two together.
+# 20261124114140 makes a serving source whose sealed watermark leaves the
+# 48-hour window hide only its own rows instead of the whole season, and
+# applies the publisher's isolation bound at read time. It replaces the
+# 20261121201553 body of arena_visible_sources, so it follows it.
 # 20261124224208 re-creates the readiness RPC (20261122152622 body) so its
 # last query counts the rankable observations of runs whose lineage fails
 # instead of re-validating every observation's page ordinal on every call
@@ -546,6 +550,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261123020207_metric_trust_artifact_raw_integrity_per_statement.sql
   20261122201611_row_eligibility_roi_pnl_only.sql
   20261123021904_public_ranked_leaderboard_window_flags.sql
+  20261124114140_stale_source_hides_only_its_own_rows.sql
   20261124224208_readiness_counts_untrusted_runs_not_rows.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
