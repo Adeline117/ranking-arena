@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
+const NUMBER_LOCALE: Record<string, string> = { en: 'en-US', zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' }
+
 interface IdleWindowTailProps {
   timeRange: string
   /** Single-exchange board, when the list is scoped to one. */
@@ -55,7 +57,7 @@ export default function IdleWindowTail({
   expanded,
   onChange,
 }: IdleWindowTailProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const count = useIdleWindowCount(timeRange, exchange, category)
   if (!expanded && (count === null || count === 0)) return null
 
@@ -74,7 +76,12 @@ export default function IdleWindowTail({
       }}
     >
       {!expanded && count !== null && (
-        <span>{t('idleWindowTailHidden').replace('{count}', count.toLocaleString('en-US'))}</span>
+        <span>
+          {t('idleWindowTailHidden').replace(
+            '{count}',
+            count.toLocaleString(NUMBER_LOCALE[language] ?? 'en-US')
+          )}
+        </span>
       )}
       <button
         type="button"

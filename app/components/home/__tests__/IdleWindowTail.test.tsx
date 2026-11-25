@@ -3,6 +3,7 @@ import IdleWindowTail from '../IdleWindowTail'
 
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
   useLanguage: () => ({
+    language: 'en',
     t: (key: string) =>
       (
         ({
