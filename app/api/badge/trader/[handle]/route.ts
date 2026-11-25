@@ -30,7 +30,7 @@ import {
 export const runtime = 'edge'
 
 const PUBLIC_RANKING_COLUMNS =
-  'season_id,source,source_trader_id,handle,rank,arena_score,roi,pnl,win_rate,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at'
+  'season_id,source,source_trader_id,handle,rank,arena_score,roi,pnl,win_rate,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at,idle_window'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -79,7 +79,8 @@ async function restSelectOne(
 
 type PublishedBadgeRow = {
   rank: number
-  score: number
+  /** Null for an idle-window row: it is ranked but was not scored. */
+  score: number | null
 }
 
 /**
@@ -111,7 +112,9 @@ function verifiedBadgeRow(
   ) {
     return null
   }
-  return { rank: row.rank, score: row.arena_score }
+  // An idle-window row (no ROI and no PnL in the period) carries a placeholder
+  // score that means "not scored". Show its rank, not a score.
+  return { rank: row.rank, score: row.idle_window === true ? null : row.arena_score }
 }
 
 async function fetchRank(handle: string) {
@@ -189,6 +192,8 @@ function buildSvg(opts: {
   const H = 64
   const displayName = esc(truncate(name, 18))
   const rankText = rank != null ? `#${rank.toLocaleString('en-US')}` : '—'
+  // Escaped where it is written: a small score formats as "<1", and a raw "<"
+  // inside <text> makes the whole SVG invalid.
   const scoreText = score != null ? formatScoreWhole(score) : '—'
   // Dark, brand-consistent (matches OG card palette). System font stack so no
   // external font fetch (CSP-safe, instant render).
@@ -217,7 +222,7 @@ function buildSvg(opts: {
   <text x="166" y="24" font-family="${FONT}" font-size="9" font-weight="700" letter-spacing="1" fill="rgba(255,255,255,0.45)">RANK</text>
   <text x="166" y="46" font-family="${FONT}" font-size="20" font-weight="800" fill="#F0D060">${rankText}</text>
   <text x="224" y="24" font-family="${FONT}" font-size="9" font-weight="700" letter-spacing="1" fill="rgba(255,255,255,0.45)">SCORE</text>
-  <text x="224" y="46" font-family="${FONT}" font-size="20" font-weight="800" fill="#EDEDED">${scoreText}</text>
+  <text x="224" y="46" font-family="${FONT}" font-size="20" font-weight="800" fill="#EDEDED">${esc(scoreText)}</text>
 </svg>`
 }
 
