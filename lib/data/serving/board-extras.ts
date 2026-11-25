@@ -59,7 +59,6 @@ function bitgetProjection(raw: Dict): Dict {
     copier_pnl: cols.total_follow_profit ?? num(raw.copyTraderProfit ?? raw.traceProfit),
     aum: cols.total_follow_trade_amount ?? num(raw.totalFollowAssets),
     copier_count: num(raw.followCount ?? raw.copyTraderNum ?? raw.traceUserNum),
-    sparkline: sparklineOf(raw.klineProfit),
   }
 }
 
