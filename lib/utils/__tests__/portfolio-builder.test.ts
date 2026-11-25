@@ -1,4 +1,5 @@
 import {
+  countTradersMissingRiskData,
   generatePortfolioSuggestion,
   generateAllPortfolioSuggestions,
   type TraderForPortfolio,
@@ -172,3 +173,196 @@ describe('generateAllPortfolioSuggestions', () => {
     expect(generateAllPortfolioSuggestions([])).toEqual([])
   })
 })
+
+/**
+ * Missing risk data must never be read as zero risk.
+ *
+ * The expected value below was recorded from the builder BEFORE its internal
+ * types were tightened and the `|| 0` fallbacks on drawdown / win rate were
+ * removed, for this exact input (which includes traders with a missing
+ * drawdown and with a missing win rate). The refactor must not change who is
+ * picked, their allocations, or the expected metrics.
+ */
+describe('missing risk data', () => {
+  const fixture: TraderForPortfolio[] = Array.from({ length: 24 }, (_, i) => ({
+    trader_id: `t${i}`,
+    source: ['binance_futures', 'bybit', 'okx_spot', 'hyperliquid_web3'][i % 4],
+    handle: `Trader ${i}`,
+    roi: 15 + ((i * 37) % 180),
+    max_drawdown: i % 7 === 3 ? null : 4 + ((i * 11) % 45),
+    win_rate: i % 9 === 5 ? null : 40 + ((i * 13) % 45),
+    arena_score: 30 + ((i * 17) % 65),
+    followers: i * 10,
+    source_type: (['futures', 'futures', 'spot', 'web3'] as const)[i % 4],
+  }))
+  const incomplete = fixture.filter((t) => t.max_drawdown === null || t.win_rate === null)
+
+  it('produces exactly what it produced before the fallbacks were removed', () => {
+    const result = generateAllPortfolioSuggestions(fixture).map(
+      ({ id: _id, created_at: _createdAt, ...rest }) => rest
+    )
+    expect(result).toEqual(RECORDED_BEFORE_REFACTOR)
+  })
+
+  it('never selects a trader whose drawdown or win rate is missing', () => {
+    expect(incomplete.length).toBeGreaterThan(0)
+    const picked = new Set(
+      generateAllPortfolioSuggestions(fixture).flatMap((s) => s.traders.map((t) => t.trader_id))
+    )
+    for (const trader of incomplete) expect(picked.has(trader.trader_id)).toBe(false)
+  })
+
+  it('counts the traders it had to leave out, so the caller can say so', () => {
+    expect(countTradersMissingRiskData(fixture)).toBe(incomplete.length)
+    expect(countTradersMissingRiskData(fixture.filter((t) => !incomplete.includes(t)))).toBe(0)
+  })
+
+  it('never selects an idle-window account (no ROI, no PnL, no metrics, unscored)', () => {
+    const idle: TraderForPortfolio = {
+      trader_id: 'idle',
+      source: 'binance_futures',
+      handle: 'Idle',
+      roi: 0,
+      max_drawdown: null,
+      win_rate: null,
+      arena_score: 0,
+      followers: 999_999,
+      source_type: 'futures',
+    }
+    // Even with usable-looking metrics, an unscored account has no allocation weight.
+    const idleWithMetrics = { ...idle, trader_id: 'idle-metrics', max_drawdown: 0, win_rate: 100 }
+    const picked = new Set(
+      generateAllPortfolioSuggestions([...fixture, idle, idleWithMetrics]).flatMap((s) =>
+        s.traders.map((t) => t.trader_id)
+      )
+    )
+    expect(picked.has('idle')).toBe(false)
+    expect(picked.has('idle-metrics')).toBe(false)
+    expect(countTradersMissingRiskData([idle])).toBe(1)
+  })
+})
+
+const RECORDED_BEFORE_REFACTOR = [
+  {
+    name: '均衡型组合',
+    description: '平衡收益与风险，适合大多数投资者',
+    risk_level: 'balanced',
+    traders: [
+      {
+        trader_id: 't22',
+        source: 'okx_spot',
+        handle: 'Trader 22',
+        allocation_pct: 31,
+        reason: 'Arena Score 优秀、现货交易风险较低',
+        risk_level: 'medium',
+        expected_contribution: {
+          roi: 33.8,
+          drawdown: 6.5,
+        },
+      },
+      {
+        trader_id: 't13',
+        source: 'bybit',
+        handle: 'Trader 13',
+        allocation_pct: 22,
+        reason: '风险控制良好、高胜率',
+        risk_level: 'medium',
+        expected_contribution: {
+          roi: 29.9,
+          drawdown: 2.6,
+        },
+      },
+      {
+        trader_id: 't6',
+        source: 'okx_spot',
+        handle: 'Trader 6',
+        allocation_pct: 26,
+        reason: 'Arena Score 优秀、高胜率、现货交易风险较低',
+        risk_level: 'high',
+        expected_contribution: {
+          roi: 14.8,
+          drawdown: 6.5,
+        },
+      },
+      {
+        trader_id: 't9',
+        source: 'bybit',
+        handle: 'Trader 9',
+        allocation_pct: 21,
+        reason: '风险控制良好、高胜率',
+        risk_level: 'medium',
+        expected_contribution: {
+          roi: 35.3,
+          drawdown: 2.7,
+        },
+      },
+    ],
+    expected_metrics: {
+      roi: 113.8,
+      max_drawdown: 18.4,
+      sharpe_ratio: 12.17,
+    },
+    diversification_score: 73,
+  },
+  {
+    name: '进取型组合',
+    description: '追求高收益，接受较高波动',
+    risk_level: 'aggressive',
+    traders: [
+      {
+        trader_id: 't19',
+        source: 'hyperliquid_web3',
+        handle: 'Trader 19',
+        allocation_pct: 36,
+        reason: 'Arena Score 优秀、风险控制良好、高胜率、链上交易透明',
+        risk_level: 'high',
+        expected_contribution: {
+          roi: 64.1,
+          drawdown: 11.9,
+        },
+      },
+      {
+        trader_id: 't9',
+        source: 'bybit',
+        handle: 'Trader 9',
+        allocation_pct: 18,
+        reason: '风险控制良好、高胜率',
+        risk_level: 'medium',
+        expected_contribution: {
+          roi: 30.2,
+          drawdown: 2.3,
+        },
+      },
+      {
+        trader_id: 't18',
+        source: 'okx_spot',
+        handle: 'Trader 18',
+        allocation_pct: 26,
+        reason: 'Arena Score 优秀、风险控制良好、现货交易风险较低',
+        risk_level: 'medium',
+        expected_contribution: {
+          roi: 36.7,
+          drawdown: 5.7,
+        },
+      },
+      {
+        trader_id: 't13',
+        source: 'bybit',
+        handle: 'Trader 13',
+        allocation_pct: 19,
+        reason: '风险控制良好、高胜率',
+        risk_level: 'medium',
+        expected_contribution: {
+          roi: 25.8,
+          drawdown: 2.3,
+        },
+      },
+    ],
+    expected_metrics: {
+      roi: 156.8,
+      max_drawdown: 22.2,
+      sharpe_ratio: 13.94,
+    },
+    diversification_score: 82,
+  },
+]

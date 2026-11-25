@@ -15,6 +15,7 @@ import {
 } from '@/lib/api'
 import { getLeaderboard } from '@/lib/data/unified'
 import {
+  countTradersMissingRiskData,
   generatePortfolioSuggestion,
   generateAllPortfolioSuggestions,
   type RiskPreference,
@@ -120,9 +121,19 @@ export async function GET(request: NextRequest) {
       suggestions = generateAllPortfolioSuggestions(traders)
     }
 
+    // Traders without usable risk data are excluded from every portfolio. Say
+    // how many, so the exclusion is visible instead of silent.
+    const missingRiskData = countTradersMissingRiskData(traders)
+
     return success({
       suggestions,
       trader_pool_size: traders.length,
+      excluded_missing_risk_data: missingRiskData,
+      ...(missingRiskData > 0
+        ? {
+            excluded_note: `${missingRiskData} trader(s) lack risk data (drawdown or win rate) and were not considered.`,
+          }
+        : {}),
       generated_at: new Date().toISOString(),
     })
   } catch (error: unknown) {
