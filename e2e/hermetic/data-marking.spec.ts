@@ -50,6 +50,12 @@ test.describe('rows with missing metrics and idle-window rows', () => {
     })
     expect(withIdle.length).toBe(listed.length + 1)
 
+    // Idle rows belong at the tail of the default order only: under another
+    // sort or a filter the request for them is ignored.
+    for (const query of ['&idle=1&sortBy=roi&page=0', '&idle=1&min_score=1']) {
+      expect(byHandle(await listTraders(request, query), 'E2E Idle Trader')).toBeUndefined()
+    }
+
     const count = await request.get('/api/traders/idle-count?timeRange=90D')
     expect(count.status()).toBe(200)
     expect(((await count.json()) as { data: { count: number } }).data.count).toBe(1)
@@ -69,6 +75,19 @@ test.describe('rows with missing metrics and idle-window rows', () => {
       return html.match(/<meta[^>]*name="robots"[^>]*>/)?.[0] ?? ''
     }
     expect(await robots('/trader/e2e-idle?platform=binance_futures')).toContain('noindex')
+
+    // Its own profile says there was no trading and shows no score anywhere in
+    // the server HTML — not in the summary and not in the page description.
+    const idlePage = await (await request.get('/trader/e2e-idle?platform=binance_futures')).text()
+    expect(idlePage).toContain('data-testid="trader-summary-idle"')
+    expect(idlePage).toContain('No trading this period')
+    const description = idlePage.match(/<meta name="description" content="([^"]*)"/)?.[1] ?? ''
+    expect(description).toContain('no trading in the current 90-day ranking period')
+    expect(description).not.toMatch(/Arena Score|ROI/)
+    const start = idlePage.indexOf('aria-labelledby="trader-summary-heading"')
+    const summary = idlePage.slice(start, idlePage.indexOf('</section>', start))
+    expect(summary).not.toContain('Arena Score')
+    expect(summary).not.toContain('&lt;1')
     // Missing metrics alone do not make a profile unindexable.
     expect(await robots('/trader/e2e-partial?platform=binance_futures')).not.toContain('noindex')
   })
