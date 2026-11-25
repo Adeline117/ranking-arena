@@ -583,6 +583,27 @@ describe('worker database fence lifecycle', () => {
     expect(database.clients[1].release).toHaveBeenCalledWith(false)
   })
 
+  it('logs the driver code of a failed control RPC, never its message', async () => {
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const redis = redisHarness([
+        scriptResult(1, INITIAL_CONTROL_TIME),
+        scriptResult(1, INITIAL_CONTROL_TIME, INITIAL_CONTROL_TIME, 0),
+      ])
+      const database = databaseHarness([{ connectError: connectionError() }])
+
+      await expect(
+        acquireWorkerDbFenceAuthority({ connect: database.connect, heartbeat: heartbeat(), redis })
+      ).rejects.toMatchObject({ code: 'control_plane_unavailable', operation: 'activate' })
+
+      expect(errors.mock.calls.map(([line]) => line)).toEqual([
+        '[ingest-worker] DB fence control RPC activate failed: kind=unavailable code=08006 outcome_unknown=false',
+      ])
+    } finally {
+      errors.mockRestore()
+    }
+  })
+
   it('classifies a connection failure before BEGIN as known-no-effect', async () => {
     const redis = redisHarness([
       scriptResult(1, INITIAL_CONTROL_TIME),
@@ -1283,6 +1304,66 @@ describe('worker database fenced writes', () => {
 
     await fence.release()
     expect(database.remainingBehaviors).toHaveLength(0)
+  })
+
+  it('logs the step and the safe cause when a write control failure fences the authority', async () => {
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const database = databaseHarness(
+        [
+          { operation: 'activate' },
+          { operation: 'renew' },
+          {
+            operation: 'write',
+            timeoutConfigurationError: connectionError(
+              '42501',
+              'timeout configuration was denied with private database detail'
+            ),
+          },
+          { operation: 'release' },
+        ],
+        [],
+        true
+      )
+      const { fence } = await acquireActiveFence(database)
+
+      await expect(fence.withFencedWrite(async () => 'must-not-run')).rejects.toMatchObject({
+        code: 'control_plane_unavailable',
+      })
+
+      expect(errors.mock.calls.map(([line]) => line)).toEqual([
+        '[ingest-worker] DB fence lost on write at timeouts (control_plane_unavailable) cause: Error code=42501',
+      ])
+    } finally {
+      errors.mockRestore()
+    }
+  })
+
+  it('logs which plane failed when a renewal fences the authority', async () => {
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const database = databaseHarness(
+        [{ operation: 'activate' }, { operation: 'renew' }, { operation: 'release' }],
+        [],
+        true
+      )
+      const { fence } = await acquireActiveFence(database)
+      // The Redis harness has no further scripted reply: the next renewal's
+      // control-plane call rejects.
+      await expect(fence.renewAndPublish(heartbeat(43))).rejects.toMatchObject({
+        operation: 'renew',
+      })
+
+      const lines = errors.mock.calls.map(([line]) => String(line))
+      expect(lines.filter((line) => line.includes('DB fence lost'))).toEqual([
+        expect.stringMatching(
+          /^\[ingest-worker\] DB fence lost on renew at redis \([a-z_]+\) cause: [A-Za-z]+/
+        ),
+      ])
+      expect(fence.state).not.toBe('active')
+    } finally {
+      errors.mockRestore()
+    }
   })
 
   it('rolls back and self-fences before authority assertion when timeout configuration fails', async () => {
