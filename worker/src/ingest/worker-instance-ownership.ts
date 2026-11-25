@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { performance } from 'node:perf_hooks'
+import { describeSafeCauseChain } from './safe-error-cause'
 
 /**
  * Redis control-plane ownership for one region authority scope.
@@ -829,9 +830,13 @@ async function runOwnershipScript(
 ): Promise<unknown> {
   try {
     return await redis.eval(script, 6, ...args)
-  } catch {
+  } catch (error) {
     // Some Redis clients attach the complete failed command (including ARGV)
-    // to their error. Never let the private owner token cross this boundary.
+    // to their error. Never let the private owner token cross this boundary:
+    // the log line carries the error class and code only, never its message.
+    console.error(
+      `[ingest-worker] worker ownership ${operation} Redis command failed cause: ${describeSafeCauseChain(error)}`
+    )
     throw new Error(`[ingest-worker] worker ownership ${operation} Redis command failed`)
   }
 }

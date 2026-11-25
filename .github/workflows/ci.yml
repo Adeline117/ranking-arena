@@ -620,6 +620,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:public-source-exhaustion-capture-pg17
 
+      - name: Prove the bitget_spot live board registration and its drift allowance
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:bitget-spot-live-board-pg17
+
       - name: Prove exhausted-completeness evidence (end signal, pages, dups, version)
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
@@ -640,10 +645,20 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:visible-sources-pg17
 
+      - name: Prove a stale source hides only its own rows
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:stale-source-row-scope-pg17
+
       - name: Prove observation lineage per statement keeps every per-row outcome
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:observation-lineage-statement-pg17
+
+      - name: Prove the readiness count over failing runs equals the per-row count
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:readiness-run-level-count-pg17
 
       - name: Prove artifact RAW integrity per statement keeps every per-row outcome
         env:

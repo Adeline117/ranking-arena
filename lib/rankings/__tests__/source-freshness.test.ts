@@ -316,6 +316,22 @@ describe('registry-closed source-window freshness', () => {
     expect(result[0]?.updated_at).toBeNull()
   })
 
+  it('reports the age of a window the public view left out for being stale', () => {
+    const staleAt = new Date(NOW - 49 * 60 * 60 * 1000).toISOString()
+    const sealed = watermarks({ '90D': staleAt }).map((row) =>
+      row.season_id === '90D' ? { ...row, published_rank_count: 80 } : row
+    )
+    const result = buildRegistrySourceFreshnessStatuses(
+      expectedWindows,
+      visibleWindows.slice(0, 2),
+      sealed,
+      NOW
+    )
+
+    expect(result[0]).toMatchObject({ source: 'binance_futures', record_count: 190, issues: [] })
+    expect(result[0]?.updated_at).toBe(staleAt)
+  })
+
   it('rejects empty, conflicting, extra, duplicate, or inconsistent authorities', () => {
     expect(() => buildRegistrySourceFreshnessStatuses([], [], [], NOW)).toThrow(
       'returned no windows'

@@ -275,6 +275,24 @@ export function buildRegistrySourceFreshnessStatuses(
     }
   }
 
+  // The public view stops serving a source once its sealed watermark is older
+  // than the stale cutoff (20261124114140). Such a window is absent from the
+  // visible list because it is stale, and its age is known: report that age
+  // instead of an unknown "not visible".
+  const staleSealedWindows = new Set<string>()
+  for (const row of watermarkRows) {
+    if (
+      (row.season_id !== '7D' && row.season_id !== '30D' && row.season_id !== '90D') ||
+      typeof row.source !== 'string'
+    ) {
+      continue
+    }
+    const observed = timestampState(row.source_as_of, nowMs)
+    if (observed.state === 'valid' && nowMs - observed.timestamp > RANKING_SOURCE_STALE_MS) {
+      staleSealedWindows.add(sourceWindowKey(row.season_id, row.source))
+    }
+  }
+
   const visibilityIssues = new Map<string, SourceWindowFreshnessIssue[]>()
   for (const window of expectedPhysicalWindows.values()) {
     const physicalKey = physicalWindowKey(window.season_id, window.registry_slug)
@@ -282,6 +300,7 @@ export function buildRegistrySourceFreshnessStatuses(
     const aliasKey = sourceWindowKey(window.season_id, window.source)
     // Sealed with zero rows: nothing to see, and nothing is missing.
     if (sealedEmptyWindows.has(aliasKey)) continue
+    if (staleSealedWindows.has(aliasKey)) continue
     const issues = visibilityIssues.get(aliasKey) ?? []
     issues.push({
       season_id: window.season_id,
