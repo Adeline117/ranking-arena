@@ -7,6 +7,7 @@
  * Dimensions: 1200 x 630 (Twitter/X recommended).
  */
 
+import { formatScoreWhole } from '@/lib/utils/format'
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
 import { safeParseInt } from '@/lib/utils/safe-parse'
@@ -379,7 +380,7 @@ export async function GET(request: NextRequest) {
                   display: 'flex',
                 }}
               >
-                {scoreValid ? Math.round(score).toString() : '--'}
+                {scoreValid ? formatScoreWhole(score) : '--'}
               </span>
             </div>
 

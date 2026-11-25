@@ -1,5 +1,6 @@
 'use client'
 
+import { formatScoreWhole } from '@/lib/utils/format'
 import React, { memo } from 'react'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
@@ -114,7 +115,7 @@ export const TraderInfoCell = memo(function TraderInfoCell({
                 style={MOBILE_BADGE_STYLE}
                 aria-label={i18nT('arenaScoreAria').replace(
                   '{score}',
-                  Number(trader.arena_score).toFixed(0)
+                  formatScoreWhole(Number(trader.arena_score))
                 )}
               >
                 <span
@@ -126,7 +127,9 @@ export const TraderInfoCell = memo(function TraderInfoCell({
                     background: getScoreColor(trader.arena_score),
                   }}
                 />
-                <span style={MOBILE_BADGE_TEXT_STYLE}>{Number(trader.arena_score).toFixed(0)}</span>
+                <span style={MOBILE_BADGE_TEXT_STYLE}>
+                  {formatScoreWhole(Number(trader.arena_score))}
+                </span>
               </span>
             )}
         </Box>

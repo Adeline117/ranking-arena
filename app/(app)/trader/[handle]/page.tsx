@@ -1,3 +1,4 @@
+import { formatScoreWhole } from '@/lib/utils/format'
 import type { Metadata } from 'next'
 import { cache } from 'react'
 import { unstable_cache } from 'next/cache'
@@ -507,7 +508,7 @@ export async function generateMetadata({
 
   const parts = [
     roi != null ? `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}% ROI` : null,
-    score != null ? `Arena Score ${score.toFixed(0)}` : null,
+    score != null ? `Arena Score ${formatScoreWhole(score)}` : null,
     rank != null ? `Ranked ${rank}` : null,
   ].filter(Boolean)
 

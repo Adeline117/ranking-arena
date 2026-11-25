@@ -7,6 +7,7 @@
  * Edge runtime compatible.
  */
 
+import { formatScoreWhole } from '@/lib/utils/format'
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
 import { BASE_URL } from '@/lib/constants/urls'
@@ -606,7 +607,7 @@ export async function GET(request: NextRequest) {
                   display: 'flex',
                 }}
               >
-                {score != null ? Math.round(score).toString() : '--'}
+                {score != null ? formatScoreWhole(score) : '--'}
               </span>
             </div>
 

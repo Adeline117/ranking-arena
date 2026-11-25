@@ -1,5 +1,6 @@
 'use client'
 
+import { formatScoreWhole } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { Box, Text } from '../base'
@@ -101,7 +102,7 @@ function MoverRow({ mover, type }: { mover: Mover; type: 'riser' | 'faller' }) {
         </span>
         {mover.arena_score != null && (
           <Text size="xs" color="tertiary" style={{ display: 'block' }}>
-            {Number(mover.arena_score).toFixed(0)}
+            {formatScoreWhole(Number(mover.arena_score))}
           </Text>
         )}
       </Box>

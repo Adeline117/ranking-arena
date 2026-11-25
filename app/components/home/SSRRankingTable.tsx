@@ -11,7 +11,7 @@ import type { CSSProperties } from 'react'
 import type { InitialTrader } from '@/lib/getInitialTraders'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import { getScoreColor } from '@/lib/utils/score-colors'
-import { formatDrawdown } from '@/lib/utils/format'
+import { formatDrawdown, formatScoreWhole } from '@/lib/utils/format'
 import Metric from '@/app/components/ui/Metric'
 import ScoreMiniBar from '@/app/components/ranking/ScoreMiniBar'
 import { getStaticTranslation } from '@/lib/i18n/server'
@@ -122,7 +122,7 @@ export default async function SSRRankingTable({ traders }: Props) {
                 .replace(
                   '{score}',
                   score != null
-                    ? t('arenaScoreAria').replace('{score}', score.toFixed(0))
+                    ? t('arenaScoreAria').replace('{score}', formatScoreWhole(score))
                     : t('arenaScoreUnknownAria')
                 )
                 .replace(
@@ -183,7 +183,7 @@ export default async function SSRRankingTable({ traders }: Props) {
                 }
               >
                 <span className="ssr-score-badge mrow-score">
-                  {score != null ? score.toFixed(0) : '—'}
+                  {score != null ? formatScoreWhole(score) : '—'}
                 </span>
                 {score != null && (
                   <ScoreMiniBar
@@ -192,7 +192,7 @@ export default async function SSRRankingTable({ traders }: Props) {
                     height={4}
                     ariaLabel={t('arenaScoreOfHundredAria').replace(
                       '{score}',
-                      String(Math.round(score))
+                      formatScoreWhole(score)
                     )}
                   />
                 )}

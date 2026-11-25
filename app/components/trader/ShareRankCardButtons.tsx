@@ -8,6 +8,7 @@
  * 2. Share on X button (opens X compose with rank card link + OG image)
  */
 
+import { formatScoreWhole } from '@/lib/utils/format'
 import { useState, useCallback } from 'react'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -148,7 +149,7 @@ export default function ShareRankCardButtons({
     }
     if (roi != null) {
       lines.push(
-        `${formatRoiShort(roi)} ROI${arenaScore != null ? ` | Score: ${Math.round(arenaScore)}` : ''}`
+        `${formatRoiShort(roi)} ROI${arenaScore != null ? ` | Score: ${formatScoreWhole(arenaScore)}` : ''}`
       )
     }
     lines.push('')

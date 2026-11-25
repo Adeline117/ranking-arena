@@ -12,6 +12,7 @@
  * Pure presentation — zero state. All behavior is prop-driven.
  */
 
+import { formatScoreWhole } from '@/lib/utils/format'
 import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
@@ -196,7 +197,7 @@ export function TraderHeaderBadges({
               letterSpacing: '-0.02em',
             }}
           >
-            {arenaScore.toFixed(0)}
+            {formatScoreWhole(arenaScore)}
           </Text>
         </Badge>
       )}

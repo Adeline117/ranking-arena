@@ -1,5 +1,6 @@
 'use client'
 
+import { formatScoreWhole } from '@/lib/utils/format'
 import Image from 'next/image'
 import Link from 'next/link'
 import type { PersonalityType, RecommendedTrader } from '../../components/types'
@@ -226,7 +227,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                         fontVariantNumeric: 'tabular-nums',
                       }}
                     >
-                      {Math.round(trader.arena_score)}
+                      {formatScoreWhole(trader.arena_score)}
                     </div>
                     <div
                       style={{

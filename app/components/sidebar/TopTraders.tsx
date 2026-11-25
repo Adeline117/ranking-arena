@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import { STALE_STATIC } from '@/lib/hooks/cache-presets'
 import { getScoreColor } from '@/lib/utils/score-colors'
-import { formatROI } from '@/lib/utils/format'
+import { formatROI, formatScoreWhole } from '@/lib/utils/format'
 import { tokens, RANK_COLORS_ARRAY } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
@@ -294,7 +294,7 @@ export default function TopTraders() {
                         : {}),
                     }}
                   >
-                    {trader.arena_score.toFixed(0)}
+                    {formatScoreWhole(trader.arena_score)}
                   </span>
                 )}
               </Link>

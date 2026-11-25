@@ -16,6 +16,7 @@
  * - "Did you mean" suggestions for low-result queries
  */
 
+import { formatScoreWhole } from '@/lib/utils/format'
 import { z } from 'zod'
 import { withPublic } from '@/lib/api/middleware'
 import { success, badRequest } from '@/lib/api/response'
@@ -109,7 +110,7 @@ function materializeSearchTraderResults(
       exchangeName,
       rankStr,
       roiStr,
-      trader.arenaScore != null ? `Score ${Math.round(trader.arenaScore)}` : null,
+      trader.arenaScore != null ? `Score ${formatScoreWhole(trader.arenaScore)}` : null,
     ]
       .filter(Boolean)
       .join(' \u00B7 ')

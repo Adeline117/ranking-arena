@@ -1,6 +1,22 @@
 /** Unified null/missing data display symbol. Use instead of 'N/A', '--', or '-'. */
 export const NULL_DISPLAY = '—'
 
+/**
+ * A score shown as a whole number.
+ *
+ * A ranked trader's Arena Score can be a small positive number (the lowest
+ * scored row is 0.02). Rounding that to "0" reads as "not scored", so anything
+ * strictly between 0 and 0.5 is shown as "<1". Unknown stays unknown.
+ */
+export function formatScoreWhole(
+  score: number | null | undefined,
+  nullDisplay: string = NULL_DISPLAY
+): string {
+  if (score == null || !Number.isFinite(score)) return nullDisplay
+  if (score > 0 && score < 0.5) return '<1'
+  return String(Math.round(score))
+}
+
 export function formatNumber(
   num: number | string | null | undefined,
   decimals = 0,

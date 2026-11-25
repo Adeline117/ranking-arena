@@ -1,5 +1,6 @@
 'use client'
 
+import { formatScoreWhole } from '@/lib/utils/format'
 import React, { memo, useCallback, useRef, useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -374,7 +375,7 @@ export const TraderRow = memo(
                       height={4}
                       ariaLabel={t('arenaScoreOfHundredAria').replace(
                         '{score}',
-                        String(Math.round(presentationScore))
+                        formatScoreWhole(presentationScore)
                       )}
                     />
                   )}

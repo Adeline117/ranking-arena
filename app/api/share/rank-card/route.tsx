@@ -1,3 +1,4 @@
+import { formatScoreWhole } from '@/lib/utils/format'
 import { ImageResponse } from 'next/og'
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
@@ -339,7 +340,7 @@ export async function GET(request: NextRequest) {
                 display: 'flex',
               }}
             >
-              {sv ? Math.round(score).toString() : '--'}
+              {sv ? formatScoreWhole(score) : '--'}
             </span>
           </div>
           <div

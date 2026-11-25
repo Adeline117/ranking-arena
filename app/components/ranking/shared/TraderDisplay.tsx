@@ -1,5 +1,6 @@
 'use client'
 
+import { formatScoreWhole } from '@/lib/utils/format'
 import React, { useState, useRef, useEffect, useMemo, memo } from 'react'
 import { createPortal } from 'react-dom'
 import Image from 'next/image'
@@ -562,7 +563,7 @@ export const ArenaScoreCircle = memo(
         >
           {t('scoreTotal')}:{' '}
           <span style={{ color: ringColor, fontVariantNumeric: 'tabular-nums' }}>
-            {Number(finiteScore).toFixed(0)}
+            {formatScoreWhole(Number(finiteScore))}
           </span>
           <span style={{ color: tokens.colors.text.tertiary }}> / 100</span>
         </div>
@@ -615,7 +616,7 @@ export const ArenaScoreCircle = memo(
               letterSpacing: '-0.02em',
             }}
           >
-            {Number(finiteScore).toFixed(0)}
+            {formatScoreWhole(Number(finiteScore))}
           </span>
         </div>
 

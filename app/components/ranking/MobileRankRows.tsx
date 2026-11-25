@@ -31,7 +31,7 @@ import { describeRowProvenance } from './row-provenance'
 import type { Trader } from './RankingTable'
 import { normalizeFiniteScore, type SortColumn, type SortDir } from './RankingTableTypes'
 import { getScoreColor } from '@/lib/utils/score-colors'
-import { formatDrawdown, NULL_DISPLAY } from '@/lib/utils/format'
+import { formatDrawdown, NULL_DISPLAY, formatScoreWhole } from '@/lib/utils/format'
 import { useComparisonStore } from '@/lib/stores/comparisonStore'
 import type { CompareAccountRef } from '@/lib/compare/identity'
 import {
@@ -250,7 +250,7 @@ export const TraderMobileRow = memo(
     const scoreAria = isIdleWindow
       ? t('noTradingThisPeriod')
       : score != null
-        ? t('arenaScoreAria').replace('{score}', score.toFixed(0))
+        ? t('arenaScoreAria').replace('{score}', formatScoreWhole(score))
         : t('arenaScoreUnknownAria')
 
     return (
@@ -318,7 +318,7 @@ export const TraderMobileRow = memo(
                 className="mrow-score"
                 style={{ '--mrow-score-ring': getScoreColor(score) } as React.CSSProperties}
               >
-                {score.toFixed(0)}
+                {formatScoreWhole(score)}
                 <ScoreConfidenceIndicator trader={trader} />
               </span>
             ) : (

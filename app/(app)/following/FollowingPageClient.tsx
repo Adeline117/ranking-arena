@@ -1,5 +1,6 @@
 'use client'
 
+import { formatScoreWhole } from '@/lib/utils/format'
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -875,7 +876,7 @@ export default function FollowingPageClient() {
                             weight="bold"
                             style={{ color: tokens.colors.accent.brand }}
                           >
-                            {item.arena_score.toFixed(0)}
+                            {formatScoreWhole(item.arena_score)}
                           </Text>
                         </Box>
                       )}

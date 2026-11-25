@@ -16,6 +16,7 @@
  * image.
  */
 
+import { formatScoreWhole } from '@/lib/utils/format'
 import type { NextRequest } from 'next/server'
 import {
   isPublicRankingSourceAllowed,
@@ -188,7 +189,7 @@ function buildSvg(opts: {
   const H = 64
   const displayName = esc(truncate(name, 18))
   const rankText = rank != null ? `#${rank.toLocaleString('en-US')}` : '—'
-  const scoreText = score != null ? Math.round(score).toString() : '—'
+  const scoreText = score != null ? formatScoreWhole(score) : '—'
   // Dark, brand-consistent (matches OG card palette). System font stack so no
   // external font fetch (CSP-safe, instant render).
   const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
