@@ -73,7 +73,8 @@ type VerifiedQuizTrader = Record<string, unknown> & {
   rank: number
   roi: number
   arena_score: number
-  win_rate: number
+  // Optional on a ranked row: null means the source did not provide it.
+  win_rate: number | null
   pnl: number
 }
 
@@ -97,7 +98,7 @@ function isVerifiedQuizTrader(row: unknown): row is VerifiedQuizTrader {
     row.rank > 0 &&
     finiteNumber(row.roi) &&
     finiteNumber(row.arena_score) &&
-    finiteNumber(row.win_rate) &&
+    (row.win_rate === null || finiteNumber(row.win_rate)) &&
     finiteNumber(row.pnl)
   )
 }

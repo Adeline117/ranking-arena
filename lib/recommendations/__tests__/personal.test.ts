@@ -111,6 +111,46 @@ describe('personal recommendation publication boundary', () => {
     expect(mockFrom).not.toHaveBeenCalledWith('leaderboard_ranks')
   })
 
+  it('materializes a ranked trader that has no win rate instead of failing the cohort', async () => {
+    queue('public_ranked_leaderboard', {
+      data: [
+        ranked('top-1'),
+        ranked('no-win-rate', 'bybit', {
+          rank: 2,
+          win_rate: null,
+          score_completeness: 'partial',
+        }),
+        ranked('roi-pnl-only', 'bybit', {
+          rank: 3,
+          roi: -9,
+          pnl: -40,
+          arena_score: 0.01,
+          win_rate: null,
+          max_drawdown: null,
+          score_completeness: 'minimal',
+        }),
+      ],
+    })
+
+    const result = await materializePersonalRecommendations(
+      [
+        { source: 'bybit', source_trader_id: 'top-1', reason: 'top_performer' },
+        { source: 'bybit', source_trader_id: 'no-win-rate', reason: 'top_performer' },
+        { source: 'bybit', source_trader_id: 'roi-pnl-only', reason: 'top_performer' },
+      ],
+      10
+    )
+
+    expect(result.rankingVisibility).toBe('verified')
+    expect(
+      result.recommendations.map((row) => [row.source_trader_id, row.win_rate, row.roi])
+    ).toEqual([
+      ['top-1', 60, 50],
+      ['no-win-rate', null, 50],
+      ['roi-pnl-only', null, -9],
+    ])
+  })
+
   it('derives similar and preferred-exchange candidates only from verified seed and candidate rows', async () => {
     queue('user_follows', { data: [{ following_id: 'followed-1' }] })
     queue(

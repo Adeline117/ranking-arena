@@ -170,6 +170,10 @@ function parseAccount(value: unknown): PublicLinkedAccount | null {
     )
   }
 
+  // Win rate and drawdown are optional on a ranked row: null/absent means
+  // "not provided". A value that is present must still be valid.
+  const winRateProvided = record.winRate !== null && record.winRate !== undefined
+  const maxDrawdownProvided = record.maxDrawdown !== null && record.maxDrawdown !== undefined
   const rawDrawdown =
     typeof record.maxDrawdown === 'number' && Number.isFinite(record.maxDrawdown)
       ? record.maxDrawdown
@@ -184,8 +188,8 @@ function parseAccount(value: unknown): PublicLinkedAccount | null {
     rankingVisibilityReason !== null ||
     roi === null ||
     arenaScore === null ||
-    winRate === null ||
-    maxDrawdown === null ||
+    (winRateProvided && winRate === null) ||
+    (maxDrawdownProvided && maxDrawdown === null) ||
     rank === null
   ) {
     return unknownAccountRanking(identity, 'partial', 'public_cohort_unverified')

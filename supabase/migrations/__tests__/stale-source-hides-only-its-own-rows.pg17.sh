@@ -26,6 +26,7 @@ MIGRATIONS="$ROOT_DIR/supabase/migrations"
 GATE_MIGRATION="$MIGRATIONS/20260816184500_public_ranked_leaderboard_source_freshness_gate.sql"
 SEALED_READERS_MIGRATION="$MIGRATIONS/20261113012028_public_snapshot_readers_sealed_freshness.sql"
 EVIDENCE_MIGRATION="$MIGRATIONS/20261113110430_rank_publication_source_evidence_binding.sql"
+WINDOW_FLAGS_MIGRATION="$MIGRATIONS/20261123021904_public_ranked_leaderboard_window_flags.sql"
 VISIBLE_MIGRATION="$MIGRATIONS/20261121201553_visible_sources_from_served_ranks.sql"
 NEW_MIGRATION="$MIGRATIONS/20261124114140_stale_source_hides_only_its_own_rows.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
@@ -137,7 +138,7 @@ CREATE TABLE public.leaderboard_ranks (
   avg_holding_hours numeric, style_confidence numeric, sharpe_ratio numeric,
   sortino_ratio numeric, profit_factor numeric, calmar_ratio numeric, trader_type text,
   is_outlier boolean, metrics_estimated boolean, rank_change integer, is_new boolean,
-  rank_publication_id uuid
+  rank_publication_id uuid, score_factors jsonb
 );
 -- Row eligibility is not under test: every fixture row is eligible.
 CREATE FUNCTION arena.public_ranked_leaderboard_row_is_eligible(
@@ -301,9 +302,10 @@ SQL
   statement_of "$GATE_MIGRATION" \
     'CREATE FUNCTION arena.public_ranked_leaderboard_serving_seasons(' \
     '  TO anon, authenticated, service_role;'
-  statement_of "$GATE_MIGRATION" \
+  statement_of "$WINDOW_FLAGS_MIGRATION" \
     'CREATE OR REPLACE VIEW public.public_ranked_leaderboard' \
-    'ALTER VIEW public.public_ranked_leaderboard OWNER TO postgres;'
+    '  );'
+  echo "ALTER VIEW public.public_ranked_leaderboard OWNER TO postgres;"
   echo "GRANT SELECT ON public.public_ranked_leaderboard TO anon, authenticated, service_role;"
   statement_of "$SEALED_READERS_MIGRATION" \
     'CREATE OR REPLACE FUNCTION arena.public_sealed_rank_sources()' \

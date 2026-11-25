@@ -34,7 +34,9 @@
 --     (lib/rankings/publication/publish-season.ts); the PostgreSQL 17 proof
 --     compares both pairs.
 --
--- POSTDEPLOY; no application or worker release depends on it.
+-- POSTDEPLOY, after 20261123021904 (whose view body it restates with the two
+--   window-flag columns) and 20261121201553 (whose arena_visible_sources body
+--   it replaces). No application or worker release depends on it.
 -- Generated only; not applied to any environment.
 
 BEGIN;
@@ -65,6 +67,25 @@ BEGIN
      OR pg_catalog.to_regclass('arena.leaderboard_publication_unsupported_sources') IS NULL
      OR pg_catalog.to_regclass('arena.leaderboard_rank_publication_source_evidence') IS NULL THEN
     RAISE EXCEPTION 'serving authority, isolation and evidence relations are required';
+  END IF;
+
+  -- The view is restated below; it must already be the 37-column
+  -- 20261123021904 shape, or replacing it would drop or reorder columns.
+  IF (
+       SELECT pg_catalog.array_agg(attribute.attname::text ORDER BY attribute.attnum)
+         FROM pg_catalog.pg_attribute AS attribute
+        WHERE attribute.attrelid = 'public.public_ranked_leaderboard'::pg_catalog.regclass
+          AND attribute.attnum > 0
+          AND NOT attribute.attisdropped
+     )[36:37] IS DISTINCT FROM ARRAY['idle_window', 'mdd_contradiction']::pg_catalog.text[]
+     OR (
+       SELECT pg_catalog.count(*)
+         FROM pg_catalog.pg_attribute AS attribute
+        WHERE attribute.attrelid = 'public.public_ranked_leaderboard'::pg_catalog.regclass
+          AND attribute.attnum > 0
+          AND NOT attribute.attisdropped
+     ) <> 37 THEN
+    RAISE EXCEPTION 'public.public_ranked_leaderboard is not the 20261123021904 view (37 columns ending in idle_window, mdd_contradiction)';
   END IF;
 END
 $preflight$;
@@ -350,7 +371,8 @@ REVOKE ALL ON FUNCTION arena.public_ranked_leaderboard_served_sources(timestampt
 GRANT EXECUTE ON FUNCTION arena.public_ranked_leaderboard_served_sources(timestamptz)
   TO anon, authenticated, service_role;
 
--- Same columns, options and owner; the rank rows now join the served sources.
+-- The 20261123021904 view (37 columns, same options and owner); the rank rows
+-- now join the served sources instead of the served seasons.
 CREATE OR REPLACE VIEW public.public_ranked_leaderboard
 WITH (security_barrier = true, security_invoker = false)
 AS
@@ -399,7 +421,15 @@ SELECT
   rank_row.is_outlier,
   rank_row.metrics_estimated,
   rank_row.rank_change,
-  rank_row.is_new
+  rank_row.is_new,
+  COALESCE(
+    (rank_row.score_factors -> 'idle_window') = 'true'::pg_catalog.jsonb,
+    false
+  ) AS idle_window,
+  COALESCE(
+    (rank_row.score_factors -> 'mdd_contradiction') = 'true'::pg_catalog.jsonb,
+    false
+  ) AS mdd_contradiction
 FROM public.leaderboard_ranks AS rank_row
 JOIN served_sources AS served
   ON served.season_id = rank_row.season_id

@@ -30,10 +30,12 @@ const pool = new Pool({
 })
 
 const alerts: Array<{ severity: string; code: string }> = []
+const logs: string[] = []
 
 try {
   const result = await publishLeaderboardSeason(season, {
     alert: (alert) => void alerts.push({ severity: alert.severity, code: alert.code }),
+    log: (message) => void logs.push(message),
     database: pgRankPublicationDatabase(async () => {
       const client = await pool.connect()
       return {
@@ -47,7 +49,7 @@ try {
     // (RANK_PUBLICATION_MIN_EXPECTED_SOURCES) has its own unit tests.
     minExpectedSources: 1,
   })
-  process.stdout.write(`RESULT ${JSON.stringify({ ok: true, result, alerts })}\n`)
+  process.stdout.write(`RESULT ${JSON.stringify({ ok: true, result, alerts, logs })}\n`)
 } catch (error) {
   const code =
     error instanceof RankPublicationError
