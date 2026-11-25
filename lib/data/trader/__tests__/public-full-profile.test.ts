@@ -123,6 +123,39 @@ describe('legacy user-full public ranking projection', () => {
     expect(result.followers90D).toBeNull()
   })
 
+  it('passes score_completeness through for full, partial and minimal rows', () => {
+    const completenessOf = (overrides: Record<string, unknown>) => {
+      const result = projectPublicFullProfileRanking(
+        sanitizePublicProfileRankingRows([row(overrides)], SCOPE)
+      )
+      return (result.performance as Record<string, unknown> | null)?.score_completeness
+    }
+
+    // Old rule: only full rows exist, and they read 'full' as before.
+    expect(completenessOf({})).toBe('full')
+    expect(completenessOf({ win_rate: null, score_completeness: 'partial' })).toBe('partial')
+    expect(completenessOf({ max_drawdown: null, score_completeness: 'partial' })).toBe('partial')
+    expect(
+      completenessOf({ win_rate: null, max_drawdown: null, score_completeness: 'minimal' })
+    ).toBe('minimal')
+  })
+
+  it("leaves a full row's projection exactly as it was (old rule)", () => {
+    const result = projectPublicFullProfileRanking(sanitizePublicProfileRankingRows([row()], SCOPE))
+
+    expect(result.rankingVisibility).toBe('partial')
+    expect(result.performance).toMatchObject({
+      roi_90d: 12.5,
+      pnl: 5000,
+      win_rate: 62,
+      max_drawdown: 9,
+      rank: 4,
+      arena_score: 88,
+      score_completeness: 'full',
+      metrics_estimated: false,
+    })
+  })
+
   it('collapses unproven core metrics to unknown instead of a zero-valued performance object', () => {
     const cohort = sanitizePublicProfileRankingRows([row({ metrics_estimated: true })], SCOPE)
 
