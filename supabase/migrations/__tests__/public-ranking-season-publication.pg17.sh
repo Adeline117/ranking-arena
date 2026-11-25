@@ -50,6 +50,11 @@ CHAIN=(
   20261113110430_rank_publication_source_evidence_binding.sql
   20261114193017_rank_publication_requires_attempt_bound_evidence.sql
   20261116210657_rank_publication_evidence_score_input_digest.sql
+  # Row policy requires ROI and PnL only: a row without a win rate or drawdown
+  # is sealed and served (by-flux below).
+  20261122201611_row_eligibility_roi_pnl_only.sql
+  # The public view exposes the idle-window and refused-drawdown marks.
+  20261123021904_public_ranked_leaderboard_window_flags.sql
 )
 
 for executable in initdb pg_ctl psql; do
@@ -102,7 +107,9 @@ assert_equal() {
 
 publish() {
   # The orchestrator logs to stdout; the driver's verdict is its RESULT line.
-  (cd "$ROOT_DIR" && PGHOST="$SOCKET_DIR" PGPORT="$PORT" npx --no-install tsx "$DRIVER" "$1") \
+  # The scoring worker's switch, set the way production sets it at launch.
+  (cd "$ROOT_DIR" && PUBLIC_RANKING_ROW_ELIGIBILITY=roi_pnl PGHOST="$SOCKET_DIR" PGPORT="$PORT" \
+    npx --no-install tsx "$DRIVER" "$1") \
     | sed -n 's/^RESULT //p' | tail -1
 }
 
@@ -331,7 +338,8 @@ INSERT INTO arena.fixture_trader_metrics (
   (13, 'bn-cove',  'Cove',    40.2,  6100,   55.5, 22.0, 60,  1.1, 1.5),
   (21, 'by-dune',  'Dune',   130.0, 41000,   68.0, 15.0, 120, 2.0, 2.6),
   (22, 'by-echo',  'Echo',    20.0,  2500,   51.0, 30.0, 45,  0.7, 0.9),
-  -- Missing win rate: scored as partial and never published.
+  -- Missing win rate: published as a partial row with the column empty
+  -- (20261122201611: the row policy requires ROI and PnL only).
   (23, 'by-flux',  'Flux',    75.0, 15000,   NULL, 20.0, 80,  1.5, 1.9),
   (31, 'hl-gale',  'Gale',   210.0, 99000,   74.0, 10.0, 200, 2.9, 3.6),
   (32, 'hl-haze',  'Haze',    60.0,  9000,   58.0, 25.0, 70,  1.3, 1.6),
@@ -526,16 +534,31 @@ psql_db -qc "SELECT public.fixture_bind(202)" >/dev/null
 OUT="$(publish 90D)"
 assert_equal "fresh season publishes" "true" "$(json_field "$OUT" ok)"
 COHORT_ONE="$(json_field "$OUT" result.scoreCohortId)"
-assert_equal "published rank count (partial by-flux excluded)" "7" \
+assert_equal "published rank count (partial by-flux included)" "8" \
   "$(json_field "$OUT" result.publishedRankCount)"
 assert_equal "bybit is reported restored" '["bybit"]' "$(json_field "$OUT" result.restoredSources)"
-assert_equal "exclusion reasons are reported" '{"filtered_by_scorer":1}' \
+assert_equal "no row is excluded for a missing win rate" '{}' \
   "$(json_field "$OUT" result.exclusions.byReason)"
+assert_equal "the worker logs the rule it resolved from the environment" \
+  "[90D] row eligibility: roi_pnl (PUBLIC_RANKING_ROW_ELIGIBILITY)" \
+  "$(node -e 'console.log(JSON.parse(process.argv[1]).logs[0])' "$OUT")"
+# One timing line per stage, in order, each with its row count and whole ms.
+assert_equal "stage timing lines name every stage and its row count" \
+  "read=8,score=8,write=8,cleanup=0,rerank=8,seal=8" \
+  "$(node -e '
+    const logs = JSON.parse(process.argv[1]).logs
+    const stages = logs
+      .map((line) => /^\[90D\] stage=([a-z]+) rows=(\d+) ms=(\d+)$/.exec(line))
+      .filter(Boolean)
+    console.log(stages.map((match) => match[1] + "=" + match[2]).join(","))
+  ' "$OUT")"
+assert_equal "published rows are counted by completeness" '{"full":7,"partial":1,"minimal":0}' \
+  "$(json_field "$OUT" result.exclusions.completeness)"
 assert_equal "isolation rows cleared, restore event recorded" "0|1" "$(psql_db -Atqc "
   SELECT (SELECT pg_catalog.count(*) FROM arena.leaderboard_publication_source_isolations) || '|' ||
          (SELECT pg_catalog.count(*) FROM arena.leaderboard_publication_source_isolation_events
            WHERE filter_source = 'bybit' AND action = 'restored')")"
-assert_equal "public view row count" "7" "$(view_count)"
+assert_equal "public view row count" "8" "$(view_count)"
 assert_equal "every source is bound with its evidence grade" \
   '{"bybit":"attempt_bound","hyperliquid":"attempt_bound","binance_futures":"attempt_bound"}' \
   "$(json_field "$OUT" result.evidenceGrades)"
@@ -618,21 +641,25 @@ assert_equal "neither refused seal left a receipt" "0" "$(psql_db -Atqc "
 # Ranks are 1..N, follow arena_score DESC, and every row carries the cohort.
 assert_equal "view rank order matches arena_score" "t" "$(psql_db -Atqc "
   SELECT pg_catalog.bool_and(view_row.rank = expected.expected_rank)
-     AND pg_catalog.count(*) = 7
-     AND pg_catalog.min(view_row.rank) = 1 AND pg_catalog.max(view_row.rank) = 7
+     AND pg_catalog.count(*) = 8
+     AND pg_catalog.min(view_row.rank) = 1 AND pg_catalog.max(view_row.rank) = 8
   FROM public.public_ranked_leaderboard AS view_row
   JOIN (
     SELECT id, pg_catalog.row_number() OVER (ORDER BY arena_score DESC, id) AS expected_rank
     FROM public.leaderboard_ranks WHERE season_id = '90D'
   ) AS expected ON expected.id = view_row.id
   WHERE view_row.season_id = '90D'")"
-assert_equal "every 90D row carries the sealed cohort" "7" "$(psql_db -Atqc "
+assert_equal "every 90D row carries the sealed cohort" "8" "$(psql_db -Atqc "
   SELECT pg_catalog.count(*) FROM public.leaderboard_ranks
   WHERE season_id = '90D' AND rank_publication_id = '$COHORT_ONE'")"
-assert_equal "partial-metric trader is not public" "0" "$(psql_db -Atqc "
-  SELECT pg_catalog.count(*) FROM public.public_ranked_leaderboard
+assert_equal "the trader without a win rate is public, ranked, with the column empty" \
+  "1|true|partial|20.00|true" "$(psql_db -Atqc "
+  SELECT pg_catalog.count(*) || '|' || pg_catalog.bool_and(win_rate IS NULL) || '|' ||
+         pg_catalog.min(score_completeness) || '|' || pg_catalog.min(max_drawdown) || '|' ||
+         pg_catalog.bool_and(rank BETWEEN 1 AND 8 AND arena_score > 0)
+  FROM public.public_ranked_leaderboard
   WHERE source_trader_id = 'by-flux'")"
-assert_equal "anon reads the same served season" "7" "$(psql_db -Atqc "
+assert_equal "anon reads the same served season" "8" "$(psql_db -Atqc "
   SET ROLE anon; SELECT pg_catalog.count(*) FROM public.public_ranked_leaderboard")"
 
 # computed_at is the publication clock (now), and source watermarks equal the
@@ -693,11 +720,11 @@ assert_equal "refusal wrote no claim, receipt, isolation or event" "$COUNTS_BEFO
 # The registry change alone invalidates the old head (expected set changed),
 # which is the database's own rule; restoring it re-serves the unchanged
 # previous cohort because the refusal wrote nothing.
-assert_equal "hero stats count nothing while no head is valid, despite raw ranks" "0|0|7" \
+assert_equal "hero stats count nothing while no head is valid, despite raw ranks" "0|0|8" \
   "$(hero_stats)|$(psql_db -Atqc "SELECT pg_catalog.count(*) FROM public.leaderboard_ranks WHERE season_id = '90D'")"
 psql_db -qc "UPDATE arena.sources SET serving_mode = 'shadow' WHERE id IN (5, 6, 7, 8)"
 assert_equal "previous cohort still served after refusal" "$FIRST_VIEW" "$(anon_view)"
-assert_equal "hero stats count the served cohort" "3|7" "$(hero_stats)"
+assert_equal "hero stats count the served cohort" "3|8" "$(hero_stats)"
 
 # ---------------------------------------------------------------------------
 # Negative 3 (database side): even if a caller skipped the orchestrator's gate,
@@ -778,12 +805,12 @@ assert_equal "second cycle publishes" "true" "$(json_field "$OUT" ok)"
 COHORT_TWO="$(json_field "$OUT" result.scoreCohortId)"
 [[ "$COHORT_TWO" != "$COHORT_ONE" ]] || { echo "second cycle reused the cohort" >&2; exit 1; }
 assert_equal "second cycle deleted the departed trader" "1" "$(json_field "$OUT" result.deletedRankCount)"
-assert_equal "view serves only the new cohort" "7|0|1" "$(psql_db -Atqc "
+assert_equal "view serves only the new cohort" "8|0|1" "$(psql_db -Atqc "
   SELECT pg_catalog.count(*) || '|' ||
          pg_catalog.count(*) FILTER (WHERE source_trader_id = 'bn-cove') || '|' ||
          pg_catalog.count(*) FILTER (WHERE source_trader_id = 'bn-dawn')
   FROM public.public_ranked_leaderboard WHERE season_id = '90D'")"
-assert_equal "every served row is the new cohort" "7" "$(psql_db -Atqc "
+assert_equal "every served row is the new cohort" "8" "$(psql_db -Atqc "
   SELECT pg_catalog.count(*) FROM public.leaderboard_ranks
   WHERE season_id = '90D' AND rank_publication_id = '$COHORT_TWO'")"
 assert_equal "generation sequence advanced past the foreign claim" "5" \
@@ -803,14 +830,15 @@ assert_equal "attempt-bound source is graded and traceable to run/manifest/RAW" 
 OUT="$(publish 90D)"
 assert_equal "immediate re-publication succeeds" "true" "$(json_field "$OUT" ok)"
 assert_equal "immediate re-publication is generation 6" "6" "$(json_field "$OUT" result.generationSeq)"
-assert_equal "view still serves 7 rows" "7" "$(view_count)"
+assert_equal "view still serves 8 rows" "8" "$(view_count)"
 
 # ---------------------------------------------------------------------------
 # Positive 4: a fresh, attempt-bound source whose every row is unpublishable
-# (bybit's profile capture failed closed: no win rate) contributes zero rows.
+# (bybit's capture failed closed: no ROI; a missing win rate alone no longer
+# makes a row unpublishable) contributes zero rows.
 # Only that source's rows leave the board; the season still seals.
 # ---------------------------------------------------------------------------
-psql_db -qc "UPDATE arena.fixture_trader_metrics SET win_rate = NULL WHERE trader_id IN (21, 22)" >/dev/null
+psql_db -qc "UPDATE arena.fixture_trader_metrics SET roi_pct = NULL WHERE trader_id IN (21, 22, 23)" >/dev/null
 OUT="$(publish 90D)"
 assert_equal "season with a zero-row source publishes" "true" "$(json_field "$OUT" ok)"
 assert_equal "only the other sources' rows are published" "5" \
@@ -821,12 +849,55 @@ assert_equal "view serves the other sources and no bybit row" "5|0" "$(psql_db -
   FROM public.public_ranked_leaderboard WHERE season_id = '90D'")"
 # Its rows return with the next cohort once the metric is back.
 psql_db -q >/dev/null <<'SQL'
-UPDATE arena.fixture_trader_metrics SET win_rate = 68.0 WHERE trader_id = 21;
-UPDATE arena.fixture_trader_metrics SET win_rate = 51.0 WHERE trader_id = 22;
+UPDATE arena.fixture_trader_metrics SET roi_pct = 130.0 WHERE trader_id = 21;
+UPDATE arena.fixture_trader_metrics SET roi_pct = 20.0 WHERE trader_id = 22;
+UPDATE arena.fixture_trader_metrics SET roi_pct = 75.0 WHERE trader_id = 23;
 SQL
 OUT="$(publish 90D)"
-assert_equal "the source's rows return with the next cohort" "true|7" \
+assert_equal "the source's rows return with the next cohort" "true|8" \
   "$(json_field "$OUT" ok)|$(view_count)"
+
+# ---------------------------------------------------------------------------
+# Positive 5: the marks the scorer records reach the public view
+# (20261123021904). by-echo closes the window with ROI 0 and PnL 0: idle, not
+# scored, last, its own win rate and drawdown kept. by-dune closes at a loss
+# with a 0% max drawdown: the drawdown is refused and served NULL.
+# ---------------------------------------------------------------------------
+assert_equal "before any marked row, both flags are false on every served row" "false|false|8" \
+  "$(psql_db -Atqc "SELECT pg_catalog.bool_or(idle_window) || '|' || pg_catalog.bool_or(mdd_contradiction)
+       || '|' || pg_catalog.count(*) FROM public.public_ranked_leaderboard WHERE season_id = '90D'")"
+psql_db -q >/dev/null <<'SQL'
+UPDATE arena.fixture_trader_metrics SET roi_pct = 0, pnl_usd = 0 WHERE trader_id = 22;
+UPDATE arena.fixture_trader_metrics SET roi_pct = -5, pnl_usd = -300, max_drawdown = 0 WHERE trader_id = 21;
+SQL
+OUT="$(publish 90D)"
+assert_equal "season with an idle row and a refused drawdown publishes" "true|8" \
+  "$(json_field "$OUT" ok)|$(view_count)"
+assert_equal "the idle row is served last at 0.01 with its own metrics, marked" \
+  "by-echo|0.01|8|51.00|30.00|full|t|f" \
+  "$(psql_db -Atqc "SET ROLE anon; SELECT pg_catalog.concat_ws('|', source_trader_id, arena_score, rank,
+       win_rate, max_drawdown, score_completeness, idle_window, mdd_contradiction)
+     FROM public.public_ranked_leaderboard WHERE source_trader_id = 'by-echo'" | tail -1)"
+assert_equal "the refused drawdown is served NULL, marked, the row still ranked" \
+  "by-dune|null|68.00|partial|f|t|t" \
+  "$(psql_db -Atqc "SET ROLE anon; SELECT pg_catalog.concat_ws('|', source_trader_id,
+       COALESCE(max_drawdown::text, 'null'), win_rate, score_completeness, idle_window,
+       mdd_contradiction, rank BETWEEN 1 AND 7 AND arena_score >= 0.02)
+     FROM public.public_ranked_leaderboard WHERE source_trader_id = 'by-dune'" | tail -1)"
+assert_equal "no other row is marked, and ranks stay 1..8" "6|8|8" \
+  "$(psql_db -Atqc "SELECT pg_catalog.count(*) FILTER (WHERE NOT idle_window AND NOT mdd_contradiction)
+       || '|' || pg_catalog.count(DISTINCT rank) || '|' || pg_catalog.max(rank)
+     FROM public.public_ranked_leaderboard WHERE season_id = '90D'")"
+# Back to the previous metrics: the marks leave with the next cohort.
+psql_db -q >/dev/null <<'SQL'
+UPDATE arena.fixture_trader_metrics SET roi_pct = 20.0, pnl_usd = 2500 WHERE trader_id = 22;
+UPDATE arena.fixture_trader_metrics SET roi_pct = 130.0, pnl_usd = 41000, max_drawdown = 15.0 WHERE trader_id = 21;
+SQL
+OUT="$(publish 90D)"
+assert_equal "the marks leave with the next cohort" "true|false|false|8" \
+  "$(json_field "$OUT" ok)|$(psql_db -Atqc "SELECT pg_catalog.bool_or(idle_window) || '|' ||
+       pg_catalog.bool_or(mdd_contradiction) || '|' || pg_catalog.count(*)
+     FROM public.public_ranked_leaderboard WHERE season_id = '90D'")"
 
 # ---------------------------------------------------------------------------
 # Public snapshot readers (20261113012028): anon RPCs serve only sealed, fresh

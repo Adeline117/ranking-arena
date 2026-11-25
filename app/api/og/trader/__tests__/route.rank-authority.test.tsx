@@ -30,7 +30,9 @@ jest.mock('@/lib/rankings/publication-policy', () => ({
               (row as Record<string, unknown>).source === 'okx_futures') &&
             (row as Record<string, unknown>).season_id === period &&
             expectedPeriod === period &&
-            (row as Record<string, unknown>).score_completeness === 'full' &&
+            ['full', 'partial', 'minimal'].includes(
+              (row as Record<string, unknown>).score_completeness as string
+            ) &&
             (row as Record<string, unknown>).metrics_estimated === false &&
             (row as Record<string, unknown>).is_outlier === false
         )
@@ -150,6 +152,38 @@ describe('trader OG public rank authority', () => {
     expect(viewRequest).toContain('source=eq.binance_futures')
     expect(viewRequest).toContain('source_trader_id=eq.trader-1')
     expect(viewRequest).toContain('season_id=eq.90D')
+  })
+
+  it.each([
+    ['no win rate', { win_rate: null, score_completeness: 'partial' }],
+    ['no drawdown', { max_drawdown: null, score_completeness: 'partial' }],
+    ['ROI and PnL only', { win_rate: null, max_drawdown: null, score_completeness: 'minimal' }],
+  ])('renders rank, ROI and score for a ranked row with %s', async (_label, overrides) => {
+    mockFetch
+      .mockResolvedValueOnce(
+        restResponse([
+          {
+            handle: 'Target Trader',
+            avatar_url: null,
+            source: 'binance_futures',
+            source_trader_id: 'trader-1',
+          },
+        ])
+      )
+      .mockResolvedValueOnce(restResponse([publicRow(overrides)]))
+
+    await GET({ url: 'https://arenafi.org/api/og/trader?handle=Target' } as never)
+    const text = collectText(mockImageTree)
+    const rendered = text.join('')
+
+    expect(text).toContain('Target Trader')
+    expect(rendered).toContain('#3')
+    expect(text).toContain('+12.5%')
+    expect(text).toContain('92')
+    // The missing metric has no card at all: never a 0% or NaN%.
+    expect(rendered).not.toContain('NaN')
+    if (overrides.win_rate === null) expect(text).not.toContain('65%')
+    if (overrides.max_drawdown === null) expect(text).not.toContain('-20%')
   })
 
   it('keeps identity but renders metrics as unknown when the view row is not publishable', async () => {

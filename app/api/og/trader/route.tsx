@@ -175,8 +175,13 @@ type PublishedTraderCard = {
   rank: number
   roi: number
   score: number
-  winRate: number
-  maxDrawdown: number
+  // Optional on a ranked row: null means the source did not provide it.
+  winRate: number | null
+  maxDrawdown: number | null
+}
+
+function optionalFiniteNumber(value: unknown): value is number | null {
+  return value === null || (typeof value === 'number' && Number.isFinite(value))
 }
 
 function verifiedTraderCard(
@@ -202,10 +207,8 @@ function verifiedTraderCard(
     !Number.isFinite(row.roi) ||
     typeof row.arena_score !== 'number' ||
     !Number.isFinite(row.arena_score) ||
-    typeof row.win_rate !== 'number' ||
-    !Number.isFinite(row.win_rate) ||
-    typeof row.max_drawdown !== 'number' ||
-    !Number.isFinite(row.max_drawdown)
+    !optionalFiniteNumber(row.win_rate) ||
+    !optionalFiniteNumber(row.max_drawdown)
   ) {
     return null
   }

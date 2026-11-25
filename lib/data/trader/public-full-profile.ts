@@ -315,6 +315,11 @@ export function sanitizePublicFullSimilarTraders(
     const arenaScore = finiteOrNull(candidate.arenaScore)
     const roi = finiteOrNull(candidate.roi)
     const pnl = finiteOrNull(candidate.pnl)
+    // Win rate and drawdown are optional on a ranked row: null/absent means
+    // "not provided". A value that is present must still be a finite number.
+    const winRateProvided = candidate.winRate !== null && candidate.winRate !== undefined
+    const maxDrawdownProvided =
+      candidate.maxDrawdown !== null && candidate.maxDrawdown !== undefined
     const winRate = finiteOrNull(candidate.winRate)
     const maxDrawdown = finiteOrNull(candidate.maxDrawdown)
 
@@ -328,8 +333,8 @@ export function sanitizePublicFullSimilarTraders(
       arenaScore === null ||
       roi === null ||
       pnl === null ||
-      winRate === null ||
-      maxDrawdown === null
+      (winRateProvided && winRate === null) ||
+      (maxDrawdownProvided && maxDrawdown === null)
     ) {
       // Similar cards are an ordered recommendation slice. Do not omit a bad
       // member and shift a later candidate upward as though it were verified.

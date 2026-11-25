@@ -83,9 +83,36 @@ fence / claim / seal 相关 RPC 只对 owner 和 `service_role` 开放。
 
 - 算分：现有 Arena Score v4 路径 `scoreTraders`（`lib/rankings/publication/score-traders.ts`），取 `scoredFiltered`。
 - 行级政策：`arena.leaderboard_rank_row_is_public_eligible`
-  （`20260724235000…:155-191`，`20261111140053_leaderboard_ranks_codec_layout_rebuild.sql` 原样重建）：
-  `score_completeness='full'`、非估算、非离群、`0 < arena_score <= 100`、`|roi| <= 10000`、
-  `-1e8 <= pnl <= 1e9`、`0 <= win_rate <= 100`、`0 <= max_drawdown < 100`、`computed_at` 在 48 小时内。
+  （函数体由 `20261122201611_row_eligibility_roi_pnl_only.sql` 替换；之前是 `20260724235000…:155-191`，
+  `20261111140053_leaderboard_ranks_codec_layout_rebuild.sql` 原样重建的四项齐全版本）：
+  ROI 和 PnL 必须有；非估算、非离群、`0 < arena_score <= 100`、`|roi| <= 10000`、
+  `-1e8 <= pnl <= 1e9`、`computed_at` 在 48 小时内。胜率、回撤可以为空；有值时
+  `0 <= win_rate <= 100`、`0 <= max_drawdown < 100`。`score_completeness` 必须与两列一致：
+  两项都有为 `full`，有一项为 `partial`，都没有为 `minimal`。只有 NULL 算缺失，0 是真实值。
+- 写入侧开关：算分 worker 的环境变量 `PUBLIC_RANKING_ROW_ELIGIBILITY`（解析在 `lib/rankings/publication-policy.ts`
+  的 `resolvePublicRankingRowEligibility`）。**代码默认值是 `four_metrics`（旧规则）**：没设、设成空、设成认不出的值，
+  都回到 `four_metrics`，发布结果与引入开关之前逐值相同（走签名的 `computeArenaScoresV4`、四项齐全、
+  0 当缺失、没有下限、写入顺序不变）。只有显式设成 `roi_pnl` 才启用新规则：必需证据指标只有 ROI、PnL；
+  缺失的回撤、一致性两维按 0 计且权重留在分母（空值不抬分）；只有 null 算缺失，0 是真实值；越界的胜率、
+  ≥ 100 的回撤置空并计数进日志，不排除整行。每次发布的第一行日志是解析结果（`row eligibility: …`）。
+  读取端和数据库不看这个开关。
+- 空窗行（`'roi_pnl'` 下，`isIdleWindowRow`）：窗口内 ROI 为 0 且 PnL 为 0（按入库精度判断：ROI 四位小数、PnL 两位小数）的行没有可排名的表现，不进百分位队列、
+  不参与任何维度打分，`arena_score` 直接取 0.01，`score_factors` 带 `idle_window: true`（界面可显示“本周期无交易”）。
+  它自己的胜率、回撤照常保留和显示，包括 0。有盈亏的行显示分下限是 0.02，比空窗行高一档：重排同分按 id，
+  已在表里的行保留旧 id，同分会让老的空窗行排到新上榜的交易员前面。数据库没有新列，行级资格函数和重排不需要改
+  （0.01 在 `(0, 100]` 内，空窗行的完整度标签照常与两列一致）。
+- 矛盾回撤（`'roi_pnl'` 下，`hasContradictoryDrawdown`）：ROI < 0 或 PnL < 0、且回撤为 0（都按入库精度）的行，回撤按不可信处理：
+  该维按缺失计分，`max_drawdown` 写空，`score_factors` 带 `mdd_contradiction: true`，发布日志计数。窗口内亏损必然有回撤，
+  0 是占位值或口径不同的迹象。这是拒收自相矛盾的值，和越界值置空留痕同一类，不推算替代值。空窗行不适用。
+- 符号矛盾（`'roi_pnl'` 下，`hasSignMismatch`）：ROI 和 PnL 一正一负（按入库精度）的行，只在发布日志里按来源计数 `sign_mismatch`，
+  不改变上榜和打分。幅度大的符号相反（`markOutliers` 的既有规则）仍按异常值排除，不计入这里。
+- 公开视图的标记列（`20261123021904`）：`public.public_ranked_leaderboard.idle_window`、`.mdd_contradiction`，布尔、不为空，
+  取自 `score_factors` 里同名的键。界面只读这两列，不自己复算规则。空窗行在视图里 `arena_score` 是 0.01、`rank` 连续排在榜尾，
+  `score_completeness` 按它自己的胜率、回撤是否有值取 `full` / `partial` / `minimal`，与是否空窗无关；`mdd_contradiction` 的行
+  `max_drawdown` 为 NULL。
+- 写入顺序（仅 `roi_pnl`）：按显示分、ROI、PnL、来源、交易员编号降序写入（`orderRowsForWrite`）。重排按
+  `arena_score DESC NULLS LAST, id`，新行按到达顺序取 id，所以同分的新行按这个顺序排名；已有行保留 id。
+- 分阶段耗时：每季发布输出六行 `[季] stage=<read|score|write|cleanup|rerank|seal> rows=<行数> ms=<毫秒>`。
 - 列精度（`20261111140053…:344-382`）：先按列的 `numeric(p,s)` 四舍五入再判断。可选比率
   `sharpe_ratio / sortino_ratio / profit_factor / calmar_ratio` 为 `numeric(10,4)`（上限 999999.9999），
   超出时写 `NULL`，不让一个异常值把整季打挂；必填指标越界的行直接不发布。

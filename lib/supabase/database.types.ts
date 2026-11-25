@@ -9314,10 +9314,12 @@ export type Database = {
           execution_score: number | null
           followers: number | null
           handle: string | null
+          idle_window: boolean | null
           id: number | null
           is_new: boolean | null
           is_outlier: boolean | null
           max_drawdown: number | null
+          mdd_contradiction: boolean | null
           metrics_estimated: boolean | null
           pnl: number | null
           profit_factor: number | null
