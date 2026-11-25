@@ -30,14 +30,13 @@ describe('projectBoardExtras', () => {
         { showColumnCode: 'max_retracement', comparedValue: '4.83' },
         { showColumnCode: 'winning_rate', comparedValue: '58.33' },
       ],
-      klineProfit: [1, 2.5, 3],
+      // The real board shape; entries no longer store it and it was never an array.
+      klineProfit: { rows: [{ amount: '-14.76', dataTime: 1787760000000 }] },
     }
     expect(projectBoardExtras('bitget_futures', raw)).toEqual({
       win_rate: 58.33,
       mdd: 4.83,
-      copier_pnl: 1209.79,
       copier_count: 72,
-      sparkline: [1, 2.5, 3],
     })
   })
 
