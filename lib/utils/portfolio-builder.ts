@@ -118,7 +118,10 @@ function hasCompletePortfolioMetrics(
  * 计算两个交易员之间的相关性（简化版）
  * 基于来源类型和收益率相似度
  */
-function calculateCorrelation(trader1: TraderForPortfolio, trader2: TraderForPortfolio): number {
+function calculateCorrelation(
+  trader1: CompletePortfolioTrader,
+  trader2: CompletePortfolioTrader
+): number {
   let correlation = 0
 
   // 相同交易所增加相关性
@@ -140,8 +143,8 @@ function calculateCorrelation(trader1: TraderForPortfolio, trader2: TraderForPor
   }
 
   // 风险相似度增加相关性
-  const dd1 = Math.abs(trader1.max_drawdown || 0)
-  const dd2 = Math.abs(trader2.max_drawdown || 0)
+  const dd1 = Math.abs(trader1.max_drawdown)
+  const dd2 = Math.abs(trader2.max_drawdown)
   const ddDiff = Math.abs(dd1 - dd2)
   if (ddDiff < 5) {
     correlation += 0.2
@@ -155,7 +158,7 @@ function calculateCorrelation(trader1: TraderForPortfolio, trader2: TraderForPor
 /**
  * 计算组合的多元化得分
  */
-function calculateDiversificationScore(traders: TraderForPortfolio[]): number {
+function calculateDiversificationScore(traders: CompletePortfolioTrader[]): number {
   if (traders.length < 2) return 0
 
   let totalCorrelation = 0
@@ -176,12 +179,12 @@ function calculateDiversificationScore(traders: TraderForPortfolio[]): number {
 /**
  * 判断交易员风险等级
  */
-function getTraderRiskLevel(trader: TraderForPortfolio): 'low' | 'medium' | 'high' {
-  const drawdown = Math.abs(trader.max_drawdown || 0)
+function getTraderRiskLevel(trader: CompletePortfolioTrader): 'low' | 'medium' | 'high' {
+  const drawdown = Math.abs(trader.max_drawdown)
 
-  if (drawdown < 10 && (trader.win_rate || 0) >= 55) {
+  if (drawdown < 10 && trader.win_rate >= 55) {
     return 'low'
-  } else if (drawdown < 25 && (trader.win_rate || 0) >= 45) {
+  } else if (drawdown < 25 && trader.win_rate >= 45) {
     return 'medium'
   } else {
     return 'high'
@@ -192,7 +195,7 @@ function getTraderRiskLevel(trader: TraderForPortfolio): 'low' | 'medium' | 'hig
  * 生成推荐理由
  */
 function generateReason(
-  trader: TraderForPortfolio,
+  trader: CompletePortfolioTrader,
   config: typeof PORTFOLIO_CONFIG.balanced
 ): string {
   const reasons: string[] = []
@@ -201,14 +204,14 @@ function generateReason(
     reasons.push('Arena Score 优秀')
   }
 
-  const drawdown = Math.abs(trader.max_drawdown || 0)
+  const drawdown = Math.abs(trader.max_drawdown)
   if (drawdown < 10) {
     reasons.push('回撤控制出色')
   } else if (drawdown < config.maxDrawdownThreshold * 0.6) {
     reasons.push('风险控制良好')
   }
 
-  if ((trader.win_rate || 0) >= 60) {
+  if (trader.win_rate >= 60) {
     reasons.push('高胜率')
   }
 
@@ -235,10 +238,13 @@ function generateReason(
 function filterCandidates(
   traders: TraderForPortfolio[],
   preference: RiskPreference
-): TraderForPortfolio[] {
+): CompletePortfolioTrader[] {
   const config = PORTFOLIO_CONFIG[preference]
 
-  return traders.filter((trader) => {
+  // The ONLY way into the builder: everything downstream takes
+  // CompletePortfolioTrader, so a missing drawdown or win rate cannot be read
+  // as zero risk anywhere below — the type rules it out, not call order.
+  return traders.filter((trader): trader is CompletePortfolioTrader => {
     if (!hasCompletePortfolioMetrics(trader)) return false
 
     const drawdown = Math.abs(trader.max_drawdown)
@@ -256,11 +262,11 @@ function filterCandidates(
  * 选择最优组合（贪心算法 + 多元化约束）
  */
 function selectOptimalTraders(
-  candidates: TraderForPortfolio[],
+  candidates: CompletePortfolioTrader[],
   preference: RiskPreference
-): TraderForPortfolio[] {
+): CompletePortfolioTrader[] {
   const config = PORTFOLIO_CONFIG[preference]
-  const selected: TraderForPortfolio[] = []
+  const selected: CompletePortfolioTrader[] = []
   const usedSources = new Set<string>()
   const usedSourceTypes = new Set<string>()
 
@@ -311,7 +317,7 @@ function selectOptimalTraders(
  * 计算配比（基于 Arena Score 加权）
  */
 function calculateAllocations(
-  traders: TraderForPortfolio[],
+  traders: CompletePortfolioTrader[],
   preference: RiskPreference
 ): Map<string, number> {
   const config = PORTFOLIO_CONFIG[preference]
@@ -351,7 +357,7 @@ function calculateAllocations(
  * 计算组合预期指标
  */
 function calculateExpectedMetrics(
-  traders: TraderForPortfolio[],
+  traders: CompletePortfolioTrader[],
   allocations: Map<string, number>
 ): { roi: number; max_drawdown: number; sharpe_ratio: number } {
   let weightedRoi = 0
@@ -360,7 +366,7 @@ function calculateExpectedMetrics(
   for (const trader of traders) {
     const weight = (allocations.get(trader.trader_id) || 0) / 100
     weightedRoi += trader.roi * weight
-    weightedDrawdown += Math.abs(trader.max_drawdown || 0) * weight
+    weightedDrawdown += Math.abs(trader.max_drawdown) * weight
   }
 
   // 简化的夏普率计算（假设无风险利率为 2%）
@@ -415,7 +421,7 @@ export function generatePortfolioSuggestion(
     expected_contribution: {
       roi: round1(moneyMul(trader.roi, (allocations.get(trader.trader_id) || 0) / 100)),
       drawdown: round1(
-        moneyMul(Math.abs(trader.max_drawdown || 0), (allocations.get(trader.trader_id) || 0) / 100)
+        moneyMul(Math.abs(trader.max_drawdown), (allocations.get(trader.trader_id) || 0) / 100)
       ),
     },
   }))
@@ -445,6 +451,16 @@ export function generatePortfolioSuggestion(
     diversification_score: diversificationScore,
     created_at: new Date().toISOString(),
   }
+}
+
+/**
+ * How many of these traders cannot be considered for ANY portfolio because
+ * their risk data is missing or unusable (no drawdown, no win rate, or values
+ * out of range). They are left out, never counted as zero risk — and the
+ * caller tells the user so instead of dropping them silently.
+ */
+export function countTradersMissingRiskData(traders: TraderForPortfolio[]): number {
+  return traders.filter((trader) => !hasCompletePortfolioMetrics(trader)).length
 }
 
 /**

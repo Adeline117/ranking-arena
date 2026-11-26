@@ -167,6 +167,12 @@ export interface UnregisteredTraderData {
   source: string
   source_trader_id: string
   /**
+   * Periods ('7D' | '30D' | '90D') in which this account is ranked but idle
+   * (no trading, not scored); null when the ranking could not be read. See
+   * ./idle-window.
+   */
+  idle_windows?: readonly string[] | null
+  /**
    * Other names the SERVER verified for this same account's source — the public
    * alias of a serving slug (public `bybit`, slug `bybit_copytrade`). A
    * `?platform=` equal to one of them is the account already rendered, not a
@@ -198,6 +204,7 @@ export interface UnregisteredTraderData {
 // TraderTabKey moved to ./hooks/useTraderTabs
 import { useTraderPeriodSync } from './hooks/useTraderPeriodSync'
 import { applyHeaderPeriod, ninetyDayHeadline, resolveHeadline } from './header-period'
+import { scoreDisplayState, withoutScores } from './idle-window'
 import { useTraderActiveAccount } from './hooks/useTraderActiveAccount'
 import { useTraderTabs } from './hooks/useTraderTabs'
 import { useServingTabData } from './hooks/useServingTabData'
@@ -300,6 +307,8 @@ export interface ServingScoreRow {
   trading_style: string | null
   style_confidence: number | null
   avg_holding_hours: number | null
+  /** Ranked but unscored in this period (no ROI and no PnL): scores are null. */
+  idle_window?: boolean
 }
 
 export default function TraderProfileClient({
@@ -1160,6 +1169,14 @@ export default function TraderProfileClient({
       }
     )
   )
+  // Score state for the period on screen, from the server's ranking read (see
+  // ./idle-window). Only the server-resolved account carries it: a selected or
+  // overridden linked account keeps its own first-screen numbers.
+  const headerScoreState =
+    isPrimaryAccount && !override && !validatedActiveAccount
+      ? scoreDisplayState(serverData.idle_windows, selectedPeriod)
+      : 'scored'
+  const headerIdleWindow = headerScoreState === 'idle'
 
   // P4 three-tab unification (spec §4): every serving source renders the SAME
   // Overview/Stats/Portfolio tabs as legacy (fed via legacy-adapter), instead of
@@ -1242,7 +1259,16 @@ export default function TraderProfileClient({
 
   // Effective tab props: serving-derived under the flag, legacy otherwise.
   const effProfile = useThreeTab ? servingTab.traderProfile : traderProfile
-  const effPerformance = useThreeTab ? servingTab.traderPerformance : traderPerformance
+  // Score fields stay empty while the period on screen is idle or unknown — the
+  // client re-reads this payload, so the server-side stripping alone is not
+  // enough to keep a placeholder score out of the breakdown.
+  const effPerformanceRaw = useThreeTab ? servingTab.traderPerformance : traderPerformance
+  const effPerformance: typeof effPerformanceRaw =
+    headerScoreState === 'scored' || !effPerformanceRaw
+      ? effPerformanceRaw
+      : (withoutScores(
+          effPerformanceRaw as unknown as Record<string, unknown>
+        ) as unknown as typeof effPerformanceRaw)
   const effStats = useThreeTab ? servingTab.traderStats : traderStats
   const effPortfolio = useThreeTab ? servingTab.traderPortfolio : traderPortfolio
   const effPositionHistory = useThreeTab
@@ -1257,11 +1283,13 @@ export default function TraderProfileClient({
   // omits them) → OverviewTab's `traderSimilar.length > 0` guard hid the module.
   // Under three-tab (serving default) use the server-computed list; legacy keeps
   // its React-Query-derived traderSimilar untouched.
-  const effSimilar = useThreeTab
-    ? validatedActiveAccount || override
-      ? EMPTY_SIMILAR_TRADERS
-      : (serverSimilarTraders ?? EMPTY_SIMILAR_TRADERS)
-    : traderSimilar
+  const effSimilar = headerIdleWindow
+    ? EMPTY_SIMILAR_TRADERS
+    : useThreeTab
+      ? validatedActiveAccount || override
+        ? EMPTY_SIMILAR_TRADERS
+        : (serverSimilarTraders ?? EMPTY_SIMILAR_TRADERS)
+      : traderSimilar
 
   // Loading state: only when SWR is loading AND no server fallback
   const isInitialLoading = isPrimaryAccount && traderLoading && !serverTraderData
@@ -1485,10 +1513,11 @@ export default function TraderProfileClient({
             source={visibleSource}
             roi90d={headerAccountMetrics.roi90d}
             headlineWindow={headerAccountMetrics.headlineWindow}
-            arenaScore={headerAccountMetrics.arenaScore}
+            arenaScore={headerScoreState === 'scored' ? headerAccountMetrics.arenaScore : null}
+            idleWindow={headerIdleWindow}
             scoreConfidence={headerAccountMetrics.scoreConfidence}
             tradesCount={headerAccountMetrics.tradesCount}
-            rank={headerAccountMetrics.rank}
+            rank={headerIdleWindow ? null : headerAccountMetrics.rank}
             currentUserId={currentUserId}
             isVerifiedTrader={isVerifiedTrader}
             isBot={headerAccountMetrics.isBot}

@@ -21,7 +21,7 @@ export const PUBLIC_PROFILE_RANKING_PERIODS = [
 ] as const satisfies readonly TradingPeriod[]
 
 export const PUBLIC_PROFILE_RANKING_COLUMNS =
-  'season_id,source,source_trader_id,handle,avatar_url,rank,arena_score,arena_score_v3,roi,pnl,win_rate,max_drawdown,trades_count,followers,copiers,profitability_score,risk_control_score,execution_score,score_completeness,metrics_estimated,is_outlier,computed_at,trading_style,style_confidence,avg_holding_hours,sharpe_ratio,sortino_ratio,profit_factor,calmar_ratio,trader_type,source_type,rank_change,is_new'
+  'season_id,source,source_trader_id,handle,avatar_url,rank,arena_score,arena_score_v3,roi,pnl,win_rate,max_drawdown,trades_count,followers,copiers,profitability_score,risk_control_score,execution_score,score_completeness,metrics_estimated,is_outlier,computed_at,trading_style,style_confidence,avg_holding_hours,sharpe_ratio,sortino_ratio,profit_factor,calmar_ratio,trader_type,source_type,rank_change,is_new,idle_window,mdd_contradiction'
 
 export interface PublicProfileRankingScope {
   source: string
@@ -270,4 +270,14 @@ export function isProvenUnrankedProfile(
     ranking.rankingVisibilityReason === 'public_rank_unavailable' &&
     sourceCohortPublished === true
   )
+}
+
+/**
+ * A ranked account whose every published period is an idle window (no ROI and
+ * no PnL): its profile has no performance to show. Such a page stays reachable
+ * and followable but is kept out of the index, and returns to it on its own as
+ * soon as any period shows trading. An unranked trader is not this case.
+ */
+export function isIdleOnlyProfile(ranking: Pick<PublicProfileRankingResult, 'rows'>): boolean {
+  return ranking.rows.length > 0 && ranking.rows.every((row) => row.idle_window === true)
 }

@@ -41,6 +41,13 @@ export function normalizeWinRate(wr: number | null | undefined): number | null {
   return Math.max(0, Math.min(100, pct))
 }
 
+/** A published win rate, already in percent: kept as is, or null when unusable. */
+export function publishedWinRatePercent(value: unknown): number | null {
+  if (value == null) return null
+  const n = Number(value)
+  return Number.isFinite(n) && n >= 0 && n <= 100 ? n : null
+}
+
 export type NormalizedScoreConfidence = 'full' | 'partial' | 'minimal' | 'insufficient'
 
 /** Normalize legacy numeric completeness and current labels without inventing confidence. */
@@ -148,7 +155,12 @@ export function mapLeaderboardRow(row: Record<string, unknown>): UnifiedTrader {
     // Performance — leaderboard_ranks stores roi as percentage already
     roi: row.roi != null ? Number(row.roi) : null,
     pnl: row.pnl != null ? Number(row.pnl) : null,
-    winRate: normalizeWinRate(row.win_rate as number | null),
+    // Ranking rows publish win rate in PERCENT (the publication policy checks
+    // 0–100), exactly like /api/traders serves it. Do not run it through
+    // normalizeWinRate: that treats anything <= 1 as a ratio, so a real 0.5%
+    // win rate was shown as 50% and 1% as 100% on the first-paint board and
+    // trader profile, while the client list showed 0.5%.
+    winRate: publishedWinRatePercent(row.win_rate),
     maxDrawdown: row.max_drawdown != null ? Number(row.max_drawdown) : null,
     tradesCount: row.trades_count != null ? Number(row.trades_count) : null,
     followers: row.followers != null ? Number(row.followers) : null,
@@ -185,6 +197,8 @@ export function mapLeaderboardRow(row: Record<string, unknown>): UnifiedTrader {
     // Metadata
     traderType: (row.trader_type as string) || (platform === 'web3_bot' ? 'bot' : null),
     isOutlier: row.is_outlier === true,
+    idleWindow: row.idle_window === true,
+    mddContradiction: row.mdd_contradiction === true,
     lastUpdated: (row.computed_at as string) || null,
   }
 }

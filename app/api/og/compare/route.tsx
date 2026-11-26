@@ -8,6 +8,7 @@
  */
 
 import { ImageResponse } from 'next/og'
+import { formatScoreWhole } from '@/lib/utils/format'
 import { NextRequest } from 'next/server'
 import { isPublicRankingSourceAllowed } from '@/lib/rankings/publication-policy'
 import {
@@ -91,135 +92,220 @@ export async function GET(request: NextRequest) {
   const cardWidth = traders.length === 1 ? 900 : traders.length === 2 ? 440 : 280
 
   return new ImageResponse(
-    (
+    <div
+      style={{
+        width: 1200,
+        height: 630,
+        display: 'flex',
+        flexDirection: 'column',
+        background: 'linear-gradient(180deg, #0A0A0F 0%, #1A1A2E 100%)',
+        fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, system-ui, sans-serif',
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Background blobs */}
       <div
         style={{
-          width: 1200,
-          height: 630,
-          display: 'flex',
-          flexDirection: 'column',
-          background: 'linear-gradient(180deg, #0A0A0F 0%, #1A1A2E 100%)',
-          fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, system-ui, sans-serif',
-          position: 'relative',
-          overflow: 'hidden',
-        }}
-      >
-        {/* Background blobs */}
-        <div style={{
-          position: 'absolute', top: -100, left: -60, width: 400, height: 400,
+          position: 'absolute',
+          top: -100,
+          left: -60,
+          width: 400,
+          height: 400,
           background: 'radial-gradient(circle, rgba(139,92,246,0.15) 0%, transparent 70%)',
           display: 'flex',
-        }} />
-        <div style={{
-          position: 'absolute', bottom: -80, right: -40, width: 350, height: 350,
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          bottom: -80,
+          right: -40,
+          width: 350,
+          height: 350,
           background: 'radial-gradient(circle, rgba(212,175,55,0.10) 0%, transparent 70%)',
           display: 'flex',
-        }} />
+        }}
+      />
 
-        {/* Top accent bar */}
-        <div style={{
-          position: 'absolute', top: 0, left: 0, right: 0, height: 3,
+      {/* Top accent bar */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 3,
           background: 'linear-gradient(90deg, #8B5CF6 0%, #D4AF37 50%, #8B5CF6 100%)',
           display: 'flex',
-        }} />
+        }}
+      />
 
-        {/* Content */}
-        <div style={{
-          position: 'relative', display: 'flex', flexDirection: 'column',
-          height: '100%', padding: '40px 56px 36px', zIndex: 1,
-        }}>
-          {/* Header */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 8, height: 8, borderRadius: 999, background: C.gold, display: 'flex' }} />
-              <span style={{ fontSize: 16, fontWeight: 800, color: C.gold, letterSpacing: '1.5px' }}>
-                ARENA
-              </span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: C.purpleLight, marginLeft: 8 }}>
-                TRADER COMPARISON
-              </span>
-            </div>
-            <span style={{ fontSize: 13, color: C.dimmer }}>arenafi.org</span>
-          </div>
-
-          {/* Trader cards */}
-          <div style={{
-            display: 'flex', gap: 20, flex: 1, justifyContent: 'center', alignItems: 'stretch',
-          }}>
-            {traders.map((trader, i) => {
-              const roiColor = trader.roi >= 0 ? C.success : C.error
-              return (
-                <div
-                  key={i}
-                  style={{
-                    width: cardWidth,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    padding: '28px 24px',
-                    borderRadius: 16,
-                    background: 'rgba(255,255,255,0.03)',
-                    border: i === 0 ? '1px solid ' + C.borderGold : '1px solid rgba(255,255,255,0.08)',
-                    gap: 20,
-                  }}
-                >
-                  {/* Name */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <span style={{
-                      fontSize: traders.length <= 2 ? 24 : 18,
-                      fontWeight: 900, color: C.white, letterSpacing: '-0.5px',
-                      overflow: 'hidden', display: 'flex',
-                    }}>
-                      {trader.name.length > 16 ? trader.name.slice(0, 16) + '...' : trader.name}
-                    </span>
-                    {trader.platform && (
-                      <span style={{ fontSize: 12, fontWeight: 600, color: C.dim }}>
-                        {trader.platform}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Score */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: C.goldLight, letterSpacing: '2px', display: 'flex' }}>
-                      SCORE
-                    </span>
-                    <span style={{
-                      fontSize: traders.length <= 2 ? 40 : 32,
-                      fontWeight: 900, color: C.goldLight, letterSpacing: '-1px', lineHeight: 1, display: 'flex',
-                    }}>
-                      {!isNaN(trader.score) && trader.score > 0 ? Math.round(trader.score).toString() : '--'}
-                    </span>
-                  </div>
-
-                  {/* ROI */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: C.dimmer, letterSpacing: '2px', display: 'flex' }}>
-                      ROI
-                    </span>
-                    <span style={{
-                      fontSize: traders.length <= 2 ? 36 : 28,
-                      fontWeight: 900, color: roiColor, letterSpacing: '-1px', lineHeight: 1, display: 'flex',
-                    }}>
-                      {formatRoi(trader.roi)}
-                    </span>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Bottom CTA */}
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            marginTop: 20, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.06)',
-          }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: C.dim }}>
-              Compare traders at arenafi.org/compare
+      {/* Content */}
+      <div
+        style={{
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
+          padding: '40px 56px 36px',
+          zIndex: 1,
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 32,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 999,
+                background: C.gold,
+                display: 'flex',
+              }}
+            />
+            <span style={{ fontSize: 16, fontWeight: 800, color: C.gold, letterSpacing: '1.5px' }}>
+              ARENA
+            </span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: C.purpleLight, marginLeft: 8 }}>
+              TRADER COMPARISON
             </span>
           </div>
+          <span style={{ fontSize: 13, color: C.dimmer }}>arenafi.org</span>
+        </div>
+
+        {/* Trader cards */}
+        <div
+          style={{
+            display: 'flex',
+            gap: 20,
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'stretch',
+          }}
+        >
+          {traders.map((trader, i) => {
+            const roiColor = trader.roi >= 0 ? C.success : C.error
+            return (
+              <div
+                key={i}
+                style={{
+                  width: cardWidth,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  padding: '28px 24px',
+                  borderRadius: 16,
+                  background: 'rgba(255,255,255,0.03)',
+                  border:
+                    i === 0 ? '1px solid ' + C.borderGold : '1px solid rgba(255,255,255,0.08)',
+                  gap: 20,
+                }}
+              >
+                {/* Name */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <span
+                    style={{
+                      fontSize: traders.length <= 2 ? 24 : 18,
+                      fontWeight: 900,
+                      color: C.white,
+                      letterSpacing: '-0.5px',
+                      overflow: 'hidden',
+                      display: 'flex',
+                    }}
+                  >
+                    {trader.name.length > 16 ? trader.name.slice(0, 16) + '...' : trader.name}
+                  </span>
+                  {trader.platform && (
+                    <span style={{ fontSize: 12, fontWeight: 600, color: C.dim }}>
+                      {trader.platform}
+                    </span>
+                  )}
+                </div>
+
+                {/* Score */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color: C.goldLight,
+                      letterSpacing: '2px',
+                      display: 'flex',
+                    }}
+                  >
+                    SCORE
+                  </span>
+                  <span
+                    style={{
+                      fontSize: traders.length <= 2 ? 40 : 32,
+                      fontWeight: 900,
+                      color: C.goldLight,
+                      letterSpacing: '-1px',
+                      lineHeight: 1,
+                      display: 'flex',
+                    }}
+                  >
+                    {!isNaN(trader.score) && trader.score > 0
+                      ? formatScoreWhole(trader.score)
+                      : '--'}
+                  </span>
+                </div>
+
+                {/* ROI */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color: C.dimmer,
+                      letterSpacing: '2px',
+                      display: 'flex',
+                    }}
+                  >
+                    ROI
+                  </span>
+                  <span
+                    style={{
+                      fontSize: traders.length <= 2 ? 36 : 28,
+                      fontWeight: 900,
+                      color: roiColor,
+                      letterSpacing: '-1px',
+                      lineHeight: 1,
+                      display: 'flex',
+                    }}
+                  >
+                    {formatRoi(trader.roi)}
+                  </span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Bottom CTA */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginTop: 20,
+            paddingTop: 16,
+            borderTop: '1px solid rgba(255,255,255,0.06)',
+          }}
+        >
+          <span style={{ fontSize: 14, fontWeight: 600, color: C.dim }}>
+            Compare traders at arenafi.org/compare
+          </span>
         </div>
       </div>
-    ),
+    </div>,
     {
       width: 1200,
       height: 630,

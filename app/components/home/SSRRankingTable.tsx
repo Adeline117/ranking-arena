@@ -11,7 +11,7 @@ import type { CSSProperties } from 'react'
 import type { InitialTrader } from '@/lib/getInitialTraders'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import { getScoreColor } from '@/lib/utils/score-colors'
-import { formatDrawdown } from '@/lib/utils/format'
+import { formatDrawdown, formatScoreWhole } from '@/lib/utils/format'
 import Metric from '@/app/components/ui/Metric'
 import ScoreMiniBar from '@/app/components/ranking/ScoreMiniBar'
 import { getStaticTranslation } from '@/lib/i18n/server'
@@ -93,8 +93,12 @@ export default async function SSRRankingTable({ traders }: Props) {
         {traders.map((trader) => {
           const rank = trader.rank
           const roi = trader.roi != null && Number.isFinite(trader.roi) ? trader.roi : null
+          // Idle-window rows were not scored: no score, and the label says why.
+          const isIdleWindow = trader.idle_window === true
           const score =
-            trader.arena_score != null && Number.isFinite(Number(trader.arena_score))
+            !isIdleWindow &&
+            trader.arena_score != null &&
+            Number.isFinite(Number(trader.arena_score))
               ? Number(trader.arena_score)
               : null
           const scoreColor = score != null ? getScoreColor(score) : null
@@ -118,7 +122,7 @@ export default async function SSRRankingTable({ traders }: Props) {
                 .replace(
                   '{score}',
                   score != null
-                    ? t('arenaScoreAria').replace('{score}', score.toFixed(0))
+                    ? t('arenaScoreAria').replace('{score}', formatScoreWhole(score))
                     : t('arenaScoreUnknownAria')
                 )
                 .replace(
@@ -154,6 +158,12 @@ export default async function SSRRankingTable({ traders }: Props) {
                   <span className="ssr-trader-name mrow-name">{trader.handle}</span>
                   <span className="ssr-source-tag mrow-tag">
                     {getSourceTypeLabel(trader.source_type)}
+                    {isIdleWindow && (
+                      <span className="rank-idle-window" data-testid="idle-window-label">
+                        {' · '}
+                        {t('noTradingThisPeriod')}
+                      </span>
+                    )}
                   </span>
                 </span>
               </div>
@@ -173,7 +183,7 @@ export default async function SSRRankingTable({ traders }: Props) {
                 }
               >
                 <span className="ssr-score-badge mrow-score">
-                  {score != null ? score.toFixed(0) : '—'}
+                  {score != null ? formatScoreWhole(score) : '—'}
                 </span>
                 {score != null && (
                   <ScoreMiniBar
@@ -182,7 +192,7 @@ export default async function SSRRankingTable({ traders }: Props) {
                     height={4}
                     ariaLabel={t('arenaScoreOfHundredAria').replace(
                       '{score}',
-                      String(Math.round(score))
+                      formatScoreWhole(score)
                     )}
                   />
                 )}

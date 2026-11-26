@@ -1,5 +1,6 @@
 'use client'
 
+import { formatScoreWhole } from '@/lib/utils/format'
 import React, { memo, useCallback, useRef, useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -59,6 +60,13 @@ const SCORE_CELL_STACK_STYLE: React.CSSProperties = {
   alignItems: 'center',
   gap: 3,
 }
+// "No trading this period" under the (empty) score: a quiet, single-line note.
+const IDLE_WINDOW_LABEL_STYLE: React.CSSProperties = {
+  fontSize: 'var(--font-size-xs, 12px)',
+  color: 'var(--color-text-tertiary)',
+  whiteSpace: 'nowrap',
+  lineHeight: 1.2,
+}
 const SCORE_CELL_ROW_STYLE: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
@@ -110,13 +118,19 @@ export const TraderRow = memo(
     const { t } = useLanguage()
     // A row can also be rendered outside RankingTable, so keep the score
     // boundary here as well before handing props to visual score components.
-    const presentationTrader = normalizeTraderArenaScoreForPresentation(trader)
+    // An idle-window row (no ROI and no PnL in the period) is ranked at the
+    // tail and was not scored: show the label, never a score or its breakdown.
+    const isIdleWindow = trader.idle_window === true
+    const presentationTrader = normalizeTraderArenaScoreForPresentation(
+      isIdleWindow ? { ...trader, arena_score: null } : trader
+    )
     const presentationScore = presentationTrader.arena_score
     const profitabilityScore = normalizeFiniteScore(trader.profitability_score)
     const riskControlScore = normalizeFiniteScore(trader.risk_control_score)
     const executionScore = normalizeFiniteScore(trader.execution_score)
     const hasFiniteBreakdownScore =
-      profitabilityScore != null || riskControlScore != null || executionScore != null
+      !isIdleWindow &&
+      (profitabilityScore != null || riskControlScore != null || executionScore != null)
     const traderHandle = trader.handle || trader.id
     const href = `/trader/${encodeURIComponent(trader.id)}${trader.source ? `?platform=${encodeURIComponent(trader.source)}` : ''}`
     const displayName =
@@ -341,8 +355,19 @@ export const TraderRow = memo(
                       showConfidence
                       trader={presentationTrader}
                     />
-                    <ScoreBreakdownTooltip trader={presentationTrader} language={language} />
+                    {!isIdleWindow && (
+                      <ScoreBreakdownTooltip trader={presentationTrader} language={language} />
+                    )}
                   </div>
+                  {isIdleWindow && (
+                    <span
+                      className="rank-idle-window"
+                      data-testid="idle-window-label"
+                      style={IDLE_WINDOW_LABEL_STYLE}
+                    >
+                      {t('noTradingThisPeriod')}
+                    </span>
+                  )}
                   {presentationScore != null && (
                     <ScoreMiniBar
                       score={presentationScore}
@@ -350,7 +375,7 @@ export const TraderRow = memo(
                       height={4}
                       ariaLabel={t('arenaScoreOfHundredAria').replace(
                         '{score}',
-                        String(Math.round(presentationScore))
+                        formatScoreWhole(presentationScore)
                       )}
                     />
                   )}
@@ -402,7 +427,7 @@ export const TraderRow = memo(
           )}
 
           {/* Expanded Score Breakdown */}
-          {isExpanded && (
+          {isExpanded && !isIdleWindow && (
             <ScoreBreakdownLazy
               profitability_score={profitabilityScore}
               risk_control_score={riskControlScore}

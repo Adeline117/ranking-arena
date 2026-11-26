@@ -25,6 +25,7 @@ import { computeAntiGamingFlags } from '@/lib/scoring/anti-gaming'
 import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
 import {
   applyPublicCohortFilters,
+  excludeIdleWindowRows,
   cachedRowsStillInPublicCohort,
   isInPublicCohort,
 } from '@/lib/rankings/public-cohort'
@@ -37,6 +38,7 @@ import {
   toLeaderboardSourceType,
   type LeaderboardFilters,
   type LeaderboardSourceType,
+  listsIdleRows,
 } from '@/lib/rankings/leaderboard-filters'
 import { validateTradersResponse } from '@/lib/api/traders-response-schema'
 import { attachAvatarMirrors } from '@/lib/data/avatar-mirrors'
@@ -135,6 +137,9 @@ const tradersQuerySchema = z.object({
   fex: z.string().max(2_000).optional(),
   fcat: z.string().max(64).optional(),
   preset: z.enum(LEADERBOARD_PRESET_IDS).optional(),
+  // `idle=1` also lists idle-window rows (hidden by default). Part of the
+  // cohort, so it travels with the filters and is never cached.
+  idle: z.enum(['1']).optional(),
 })
 
 type ParsedTradersQuery = z.infer<typeof tradersQuerySchema>
@@ -151,6 +156,7 @@ function leaderboardFiltersFromQuery(query: ParsedTradersQuery): LeaderboardFilt
   if (query.min_wr !== undefined) filters.minWinRate = query.min_wr
   if (query.grade !== undefined) filters.grade = query.grade
   if (query.preset !== undefined) filters.preset = query.preset
+  if (query.idle === '1') filters.includeIdle = true
   if (query.fex !== undefined) {
     const sources = [...new Set(query.fex.split(','))]
     // Exact canonical ids only, like `exchange`: an alias or unknown string
@@ -179,7 +185,7 @@ function leaderboardFiltersFromQuery(query: ParsedTradersQuery): LeaderboardFilt
 // Select only the response fields plus row-level publication proof required to
 // validate Redis payloads at read time. These proof fields never leave the API.
 const PUBLIC_RANKED_LEADERBOARD_COLUMNS =
-  'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, rank_change, is_new, profitability_score, risk_control_score, execution_score, score_completeness, metrics_estimated, trading_style, avg_holding_hours, style_confidence, computed_at, season_id, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type, is_outlier'
+  'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, rank_change, is_new, profitability_score, risk_control_score, execution_score, score_completeness, metrics_estimated, trading_style, avg_holding_hours, style_confidence, computed_at, season_id, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type, is_outlier, idle_window, mdd_contradiction'
 
 interface TradersCacheKeyParams {
   timeRange: Period
@@ -251,7 +257,7 @@ function tradersResponseCacheKey(params: TradersCacheKeyParams): string {
   // particular, JSON preserves `null` for an omitted exchange while retaining
   // the literal string for `exchange=all`.
   const scope = encodeURIComponent(JSON.stringify(publicRankedCohortCacheScope(params)))
-  return publicRankingCacheKey(`leaderboard:v5:public-cohort:${scope}`)
+  return publicRankingCacheKey(`leaderboard:v6:public-cohort:${scope}`)
 }
 
 type PublicRankedLeaderboardRow = Record<string, unknown>
@@ -572,6 +578,13 @@ async function fetchPublicRankedCohort(
     query = query.eq('source', exchangeFilter)
   }
 
+  // Idle-window rows stay out of the list unless the request asks for them.
+  // Only the plain board (default order, no other filter) can list them: under
+  // another sort or a filter they would not stay at the tail (listsIdleRows).
+  if (!listsIdleRows(params.filters, sortBy, order)) {
+    query = excludeIdleWindowRows(query)
+  }
+
   // Advanced filters / presets, in SQL before ordering and paging so every
   // page and `hasMore` describe the filtered cohort.
   if (params.filters) {
@@ -698,6 +711,8 @@ async function buildPublicTradersResponse(
       row.source === 'web3_bot' || row.trader_type === 'bot' || row.trader_type === 'suspected_bot',
     trader_type: (row.trader_type as string) || (row.source === 'web3_bot' ? 'bot' : null),
     is_outlier: row.is_outlier === true,
+    idle_window: row.idle_window === true,
+    mdd_contradiction: row.mdd_contradiction === true,
     computed_at: (row.computed_at as string) || null,
     // Trust-facing anti-gaming flags — derived at read time from serving-row
     // fields (no pipeline/migration change). Empty [] for the ~97% of rows

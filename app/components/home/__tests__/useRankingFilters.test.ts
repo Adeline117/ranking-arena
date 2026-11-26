@@ -389,6 +389,95 @@ describe('server-side filters (audit P2-5)', () => {
     expect(result.current.currentPage).toBe(1)
   })
 
+  describe('idle-window tail', () => {
+    it('expands in place: same page, now with idle rows requested, and collapses back to it', async () => {
+      const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+      await act(async () => {
+        result.current.handlePageChange(81)
+        await Promise.resolve()
+      })
+      mockFetchPage.mockClear()
+
+      await act(async () => {
+        result.current.handleShowIdle(true)
+        await Promise.resolve()
+      })
+      // Page 81 (index 80) again — not page 1 — with idle rows included.
+      expect(mockFetchPage).toHaveBeenLastCalledWith(80, {
+        category: undefined,
+        sortBy: 'arena_score',
+        sortDir: 'desc',
+        filters: 'idle=1',
+      })
+      expect(result.current.showIdle).toBe(true)
+      expect(result.current.currentPage).toBe(81)
+
+      // Read on into the idle rows, then collapse: back to where it was expanded.
+      await act(async () => {
+        result.current.handlePageChange(120)
+        await Promise.resolve()
+      })
+      await act(async () => {
+        result.current.handleShowIdle(false)
+        await Promise.resolve()
+      })
+      expect(mockFetchPage).toHaveBeenLastCalledWith(80, {
+        category: undefined,
+        sortBy: 'arena_score',
+        sortDir: 'desc',
+        filters: null,
+      })
+      expect(result.current.currentPage).toBe(81)
+    })
+
+    it('collapses to page 1 when the reader moved to another board since expanding', async () => {
+      const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+      await act(async () => {
+        result.current.handlePageChange(81)
+        await Promise.resolve()
+      })
+      await act(async () => {
+        result.current.handleShowIdle(true)
+        await Promise.resolve()
+      })
+      // Another board: the remembered page 81 belonged to the previous one.
+      await act(async () => {
+        result.current.setCategory('spot')
+        await Promise.resolve()
+      })
+      await act(async () => {
+        result.current.handleShowIdle(false)
+        await Promise.resolve()
+      })
+      expect(mockFetchPage.mock.calls.at(-1)?.[0]).toBe(0)
+      expect(result.current.currentPage).toBe(1)
+    })
+
+    it('does not request idle rows while a filter or another sort is active', async () => {
+      const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+      await act(async () => {
+        result.current.handleShowIdle(true)
+        await Promise.resolve()
+      })
+      await act(async () => {
+        result.current.handleSortChange('roi', 'desc')
+        await Promise.resolve()
+      })
+      expect(mockFetchPage.mock.calls.at(-1)?.[1]).toMatchObject({ sortBy: 'roi', filters: null })
+
+      await act(async () => {
+        result.current.handleSortChange('score', 'desc')
+        await Promise.resolve()
+      })
+      act(() => result.current.handleFilterChange({ min_win_rate: 55 }))
+      await act(async () => {
+        jest.advanceTimersByTime(400)
+        await Promise.resolve()
+      })
+      expect(mockFetchPage.mock.calls.at(-1)?.[1]).toMatchObject({ filters: 'min_wr=55' })
+    })
+  })
+
   it('keeps the filters on sort and page requests so later pages stay filtered', async () => {
     const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
     act(() => result.current.handleFilterChange({ min_win_rate: 55 }))

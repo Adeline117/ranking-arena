@@ -41,6 +41,16 @@ function serverFilterQuery(config: FilterConfig, preset: PresetId | null): strin
   })
 }
 
+/**
+ * Idle-window rows (no ROI and no PnL in the period) are hidden by the API
+ * unless asked for. Kept apart from FilterConfig on purpose: it is not a saved
+ * or "active" filter, only whether the tail of the board is expanded.
+ */
+function withIdleRows(query: string | null, showIdle: boolean): string | null {
+  if (!showIdle) return query
+  return query ? `${query}&idle=1` : 'idle=1'
+}
+
 const URL_SORT_COLUMNS: readonly SortColumn[] = ['score', 'roi', 'pnl', 'winrate', 'mdd', 'sortino']
 const SORT_BY: Record<SortColumn, string> = {
   score: 'arena_score',
@@ -261,6 +271,7 @@ export function useRankingFilters({
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false)
   const [showMobileFilter, setShowMobileFilter] = useState(false)
   const [filterConfig, setFilterConfig] = useState<FilterConfig>({})
+  const [showIdle, setShowIdle] = useState(false)
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([])
   const [activePreset, setActivePreset] = useState<PresetId | null>(null)
   const [sortColumn, setSortColumn] = useState<SortColumn>('score')
@@ -383,6 +394,8 @@ export function useRankingFilters({
     const urlQ = searchParams.get('q')
     const urlPreset = searchParams.get('preset') as PresetId | null
     const urlEx = searchParams.get('ex')
+    const urlShowIdle = searchParams.get('idle') === '1'
+    if (urlShowIdle) setShowIdle(true)
     const urlCategory = categoryFromUrl(searchParams.get('category'))
     const legacyExchange = searchParams.get('exchange')
     const requestedSort = urlSortColumn(urlSortRaw)
@@ -464,7 +477,10 @@ export function useRankingFilters({
     // `?preset=` link and drop the legacy stored preference.
     const restoredPreset = urlPreset && isValidPresetId(urlPreset) ? urlPreset : null
     if (restoredPreset) setActivePreset(restoredPreset)
-    const initialFilters = serverFilterQuery(restoredConfig, restoredPreset)
+    const initialFilters = withIdleRows(
+      serverFilterQuery(restoredConfig, restoredPreset),
+      urlShowIdle
+    )
     try {
       localStorage.removeItem(LS_KEY_PRESET)
     } catch {
@@ -524,6 +540,7 @@ export function useRankingFilters({
     searchQuery,
     activePreset,
     selectedExchange,
+    showIdle,
   })
   useEffect(() => {
     stateRef.current = {
@@ -535,6 +552,7 @@ export function useRankingFilters({
       searchQuery,
       activePreset,
       selectedExchange,
+      showIdle,
     }
   })
 
@@ -550,6 +568,7 @@ export function useRankingFilters({
         q?: string
         preset?: string | null
         ex?: string | null
+        idle?: boolean
       } = {}
     ) => {
       if (syncTimeoutRef.current) {
@@ -578,6 +597,7 @@ export function useRankingFilters({
           'q',
           'preset',
           'ex',
+          'idle',
         ].forEach((k) => params.delete(k))
 
         if (config.roi_min != null) params.set('roi_min', String(config.roi_min))
@@ -612,6 +632,7 @@ export function useRankingFilters({
 
         const ex = overrides.ex !== undefined ? overrides.ex : s.selectedExchange
         if (ex) params.set('ex', ex)
+        if (overrides.idle ?? s.showIdle) params.set('idle', '1')
 
         const qs = params.toString()
         const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname
@@ -623,10 +644,21 @@ export function useRankingFilters({
 
   // Current filter params for a server request, read from the latest state so
   // a sort/page/category request never drops a just-changed filter.
-  const currentFilterQuery = useCallback(
-    () => serverFilterQuery(stateRef.current.filterConfig, stateRef.current.activePreset),
-    []
-  )
+  // Idle rows are requested only on the plain board: default order, no filter,
+  // no search (the API enforces the same rule — see listsIdleRows). With a sort
+  // or a filter active the switch simply has no effect, so it can never leave
+  // the reader with idle rows they cannot collapse.
+  // `next` names the order the request is FOR when it differs from the order
+  // currently on screen (a sort change commits its state only after the fetch).
+  const currentFilterQuery = useCallback((next?: { sortColumn: SortColumn; sortDir: SortDir }) => {
+    const state = stateRef.current
+    const filters = serverFilterQuery(state.filterConfig, state.activePreset)
+    const sortColumn = next?.sortColumn ?? state.sortColumn
+    const sortDir = next?.sortDir ?? state.sortDir
+    const plainBoard =
+      filters === null && sortColumn === 'score' && sortDir === 'desc' && !state.searchQuery
+    return withIdleRows(filters, state.showIdle && plainBoard)
+  }, [])
 
   const commitFilterConfig = useCallback(
     (config: FilterConfig) => {
@@ -644,6 +676,42 @@ export function useRankingFilters({
       }
     },
     [syncStateToUrl]
+  )
+
+  // Expand / collapse the idle-window tail IN PLACE.
+  //
+  // Idle rows rank after every trading account, so the expanded board is the
+  // same list with more rows appended: the page the reader is on (the last
+  // page, where the note is) keeps its rows and the idle ones follow. Jumping
+  // back to page 1 would put them some eighty pages away. Collapsing returns to
+  // the page where the tail was expanded, which always exists in the short list.
+  // The anchor remembers which board it belongs to (period, category,
+  // exchange). Collapsing after the reader moved to another board must not
+  // return to a page number of the old one — that page may not exist there.
+  const idleAnchorRef = useRef<{ page: number; board: string } | null>(null)
+  const handleShowIdle = useCallback(
+    (next: boolean) => {
+      const board = `${activeTimeRange}|${stateRef.current.category}|${stateRef.current.selectedExchange ?? ''}`
+      const currentIndex = Math.max(0, (stateRef.current.currentPage || 1) - 1)
+      const anchor = idleAnchorRef.current
+      const targetIndex = next ? currentIndex : anchor && anchor.board === board ? anchor.page : 0
+      idleAnchorRef.current = next ? { page: currentIndex, board } : null
+      setShowIdle(next)
+      stateRef.current = { ...stateRef.current, showIdle: next }
+      syncStateToUrl({ idle: next })
+      if (!fetchPage) return
+      void fetchPage(targetIndex, {
+        category: apiCategoryFor(category),
+        sortBy: SORT_BY[sortColumn],
+        sortDir: sortDir,
+        filters: currentFilterQuery(),
+      }).then((succeeded) => {
+        if (!succeeded) return
+        setCurrentPage(targetIndex + 1)
+        syncStateToUrl({ page: targetIndex + 1, idle: next })
+      })
+    },
+    [activeTimeRange, category, currentFilterQuery, fetchPage, sortColumn, sortDir, syncStateToUrl]
   )
 
   const filterFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -689,7 +757,7 @@ export function useRankingFilters({
           category: apiCategoryFor(category),
           sortBy: SORT_BY[col],
           sortDir: dir,
-          filters: currentFilterQuery(),
+          filters: currentFilterQuery({ sortColumn: col, sortDir: dir }),
         }).then((succeeded) => {
           if (!succeeded) return
           setSortColumn(col)
@@ -1057,6 +1125,8 @@ export function useRankingFilters({
     showMobileFilter,
     setShowMobileFilter,
     filterConfig,
+    showIdle,
+    handleShowIdle,
     savedFilters,
     hasActiveFilters,
     hasCohortFilters,

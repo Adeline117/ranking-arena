@@ -1,5 +1,6 @@
 'use client'
 
+import { formatScoreWhole } from '@/lib/utils/format'
 import { useState, useCallback, useMemo, memo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -294,7 +295,7 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
                         fontFamily: tokens.typography.fontFamily.mono.join(', '),
                       }}
                     >
-                      {trader.arena_score.toFixed(0)}
+                      {formatScoreWhole(trader.arena_score)}
                     </Text>
                   )}
                 </Box>

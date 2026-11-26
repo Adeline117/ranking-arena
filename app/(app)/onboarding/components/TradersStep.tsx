@@ -1,5 +1,6 @@
 'use client'
 
+import { formatScoreWhole } from '@/lib/utils/format'
 import Image from 'next/image'
 import { Box, Button, Text } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
@@ -204,7 +205,7 @@ export default function TradersStep({
                   </Text>
                   <Text size="xs" style={{ color: theme.textSecondary }}>
                     {t.arena_score != null
-                      ? `${tr('scoreLabel')} ${t.arena_score.toFixed(0)}`
+                      ? `${tr('scoreLabel')} ${formatScoreWhole(t.arena_score)}`
                       : t.source}
                   </Text>
                 </Box>

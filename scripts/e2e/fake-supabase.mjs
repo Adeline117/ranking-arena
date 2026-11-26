@@ -127,6 +127,69 @@ function buildNullMetricsRow(period, nowIso) {
   }
 }
 
+// A ranked trader the exchange publishes no win rate for, and whose reported
+// drawdown was refused (a loss with 0% drawdown): both metrics are EMPTY, not
+// zero. Every surface must show "—" for them.
+export const PARTIAL_TRADER = { id: 'e2e-partial', handle: 'E2E Partial Trader' }
+
+function buildPartialRow(period, nowIso) {
+  return {
+    ...buildRow(period, TRADERS_PER_PERIOD + 3, nowIso),
+    source: 'binance_futures',
+    source_type: 'futures',
+    source_trader_id: PARTIAL_TRADER.id,
+    handle: PARTIAL_TRADER.handle,
+    roi: -12.5,
+    pnl: -4_000,
+    win_rate: null,
+    max_drawdown: null,
+    score_completeness: 'minimal',
+    mdd_contradiction: true,
+  }
+}
+
+// One optional risk metric missing each (score_completeness 'partial'): the
+// present one is shown, the missing one renders as "—".
+export const NO_WIN_RATE_TRADER = { id: 'e2e-no-winrate', handle: 'E2E No WinRate Trader' }
+export const NO_DRAWDOWN_TRADER = { id: 'e2e-no-drawdown', handle: 'E2E No Drawdown Trader' }
+
+function buildOneMetricMissingRow(period, nowIso, trader, offset, missing) {
+  return {
+    ...buildRow(period, TRADERS_PER_PERIOD + offset, nowIso),
+    source: 'binance_futures',
+    source_type: 'futures',
+    source_trader_id: trader.id,
+    handle: trader.handle,
+    [missing]: null,
+    score_completeness: 'partial',
+  }
+}
+
+// An account with no ROI and no PnL in the period: published, ranked last, not
+// scored. Lists hide it by default, the sitemap leaves it out and its profile
+// is noindex.
+export const IDLE_TRADER = { id: 'e2e-idle', handle: 'E2E Idle Trader' }
+
+function buildIdleRow(period, nowIso) {
+  return {
+    ...buildRow(period, TRADERS_PER_PERIOD + 6, nowIso),
+    source: 'binance_futures',
+    source_type: 'futures',
+    source_trader_id: IDLE_TRADER.id,
+    handle: IDLE_TRADER.handle,
+    arena_score: 0.01,
+    roi: 0,
+    pnl: 0,
+    win_rate: null,
+    max_drawdown: null,
+    profitability_score: null,
+    risk_control_score: null,
+    execution_score: null,
+    score_completeness: 'minimal',
+    idle_window: true,
+  }
+}
+
 // One trader on a source the public ranking publishes under an ALIAS. The
 // ranking row says `bybit`; the serving resolver (arena_resolve_trader) knows
 // the same account as the arena slug `bybit_copytrade` and accepts either name
@@ -249,6 +312,10 @@ export function buildFixtures(now = new Date(), scenario = 'normal') {
           ),
           buildSharedRow(period, computedIso),
           buildNullMetricsRow(period, computedIso),
+          buildPartialRow(period, computedIso),
+          buildOneMetricMissingRow(period, computedIso, NO_WIN_RATE_TRADER, 4, 'win_rate'),
+          buildOneMetricMissingRow(period, computedIso, NO_DRAWDOWN_TRADER, 5, 'max_drawdown'),
+          buildIdleRow(period, computedIso),
           buildAliasRow(period, computedIso),
         ])
   const freshness = PERIODS.flatMap((season_id) =>

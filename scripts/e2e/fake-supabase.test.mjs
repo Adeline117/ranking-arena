@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   ALIAS_TRADER,
+  IDLE_TRADER,
+  PARTIAL_TRADER,
   STALE_AGE_MS,
   TEST_USER,
   buildFixtures,
@@ -44,7 +46,7 @@ test('orders and pages like PostgREST range requests', () => {
   const page = query('season_id=eq.90D&order=rank.desc&offset=2&limit=2')
   assert.deepEqual(
     page.map((row) => row.rank),
-    [31, 30]
+    [35, 34]
   )
 })
 
@@ -168,6 +170,25 @@ test('has a ranked trader whose source published no optional metrics', () => {
   for (const column of ['trades_count', 'followers', 'copiers', 'sharpe_ratio']) {
     assert.equal(nulls[0][column], null, column)
   }
+})
+
+test('partial and idle rows: empty metrics, flags, and the default list predicate', () => {
+  const partial = query('season_id=eq.90D&source_trader_id=eq.e2e-partial')[0]
+  assert.equal(partial.win_rate, null)
+  assert.equal(partial.max_drawdown, null)
+  assert.equal(partial.mdd_contradiction, true)
+  assert.equal(partial.idle_window, false)
+
+  const idle = query('season_id=eq.90D&idle_window=eq.true')
+  assert.deepEqual(
+    idle.map((row) => row.source_trader_id),
+    [IDLE_TRADER.id]
+  )
+  // What the list readers send: every ordinary row carries idle_window=false.
+  const listed = query('season_id=eq.90D&idle_window=eq.false')
+  assert.equal(listed.length, query('season_id=eq.90D').length - 1)
+  assert.ok(!listed.some((row) => row.source_trader_id === IDLE_TRADER.id))
+  assert.ok(listed.some((row) => row.source_trader_id === PARTIAL_TRADER.id))
 })
 
 test('an alias-source trader: ranked under the alias, resolved to the slug by either name', () => {

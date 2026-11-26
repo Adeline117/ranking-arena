@@ -52,6 +52,22 @@ export function applyPublicCohortFilters<Q extends PublicCohortFilterable<Q>>(
 }
 
 /**
+ * Ranking LISTS hide idle-window rows by default.
+ *
+ * An idle-window row (public_ranked_leaderboard.idle_window) had no ROI and no
+ * PnL in the period: it is published and ranked at the tail, but it is not
+ * scored, and on a full board more than half of all rows are of this kind.
+ * Lists leave them out unless the reader explicitly asks to see them
+ * (`/api/traders?idle=1`); a trader's own profile and `/api/rankings` are not
+ * lists in this sense and still serve them.
+ */
+export function excludeIdleWindowRows<Q extends { eq(column: string, value: boolean): Q }>(
+  query: Q
+): Q {
+  return query.eq('idle_window', false)
+}
+
+/**
  * The same predicate for rows read back from a cache. A cached row that no
  * longer satisfies it (aged out, or written under an older predicate) must
  * not be served.
@@ -104,11 +120,15 @@ function isCohortMembershipClient(value: unknown): value is CohortMembershipClie
  * it. One indexed membership read per cache hit makes the withdrawal visible
  * at once instead of after the cache TTL. Throws when the read fails: an
  * unverifiable cached page must not be served as current.
+ *
+ * The idle-window flag is part of membership: a row that became idle after
+ * the page was cached would otherwise keep being shown as a scored trader for
+ * the rest of the TTL. A cached row without the flag counts as not idle.
  */
 export async function cachedRowsStillInPublicCohort(
   supabase: unknown,
   season: string,
-  rows: ReadonlyArray<{ source?: unknown; source_trader_id?: unknown }>
+  rows: ReadonlyArray<{ source?: unknown; source_trader_id?: unknown; idle_window?: unknown }>
 ): Promise<boolean> {
   if (rows.length === 0) return true
   if (!isCohortMembershipClient(supabase)) {
@@ -119,17 +139,25 @@ export async function cachedRowsStillInPublicCohort(
   const { data, error } = await applyPublicCohortFilters(
     supabase
       .from('public_ranked_leaderboard')
-      .select('source, source_trader_id')
+      .select('source, source_trader_id, idle_window')
       .eq('season_id', season)
       .in('source_trader_id', ids)
   )
   if (error) throw new Error(`public cohort membership read failed: ${error.message}`)
-  const live = new Set(
+  const live = new Map<string, boolean>(
     (data ?? []).flatMap((row) =>
       typeof row === 'object' && row !== null && 'source' in row && 'source_trader_id' in row
-        ? [key(row.source, row.source_trader_id)]
+        ? [
+            [
+              key(row.source, row.source_trader_id),
+              (row as { idle_window?: unknown }).idle_window === true,
+            ] as const,
+          ]
         : []
     )
   )
-  return rows.every((row) => live.has(key(row.source, row.source_trader_id)))
+  return rows.every((row) => {
+    const liveIdle = live.get(key(row.source, row.source_trader_id))
+    return liveIdle !== undefined && liveIdle === (row.idle_window === true)
+  })
 }

@@ -195,7 +195,7 @@ describe('/wrapped/[handle] fail-soft data loading', () => {
     expect(from).toHaveBeenCalledWith('public_ranked_leaderboard')
     expect(from).not.toHaveBeenCalledWith('leaderboard_ranks')
     expect(query.select).toHaveBeenCalledWith(
-      'rank,rank_change,roi,pnl,win_rate,arena_score,max_drawdown,source,source_trader_id,score_completeness,metrics_estimated,is_outlier,computed_at,season_id'
+      'rank,rank_change,roi,pnl,win_rate,arena_score,max_drawdown,source,source_trader_id,score_completeness,metrics_estimated,is_outlier,computed_at,season_id,idle_window'
     )
     expect(query.eq).toHaveBeenCalledWith('source', 'bybit')
     expect(query.eq).toHaveBeenCalledWith('source_trader_id', 'wrapped-rank-authority-id')

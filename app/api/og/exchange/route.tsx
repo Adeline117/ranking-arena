@@ -7,6 +7,7 @@
  * Edge runtime compatible.
  */
 
+import { formatScoreWhole } from '@/lib/utils/format'
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
@@ -520,9 +521,7 @@ export async function GET(request: NextRequest) {
                           display: 'flex',
                         }}
                       >
-                        {trader.arena_score != null
-                          ? Math.round(trader.arena_score).toString()
-                          : '--'}
+                        {trader.arena_score != null ? formatScoreWhole(trader.arena_score) : '--'}
                       </span>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

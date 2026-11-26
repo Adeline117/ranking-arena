@@ -101,6 +101,9 @@ export function toUiTrader(row: UiTraderInput): Trader {
       traderType === 'suspected_bot',
     is_verified: row.is_verified === true,
     is_verified_data: row.is_verified_data === true,
+    source_as_of: stringOrNull(row.updated_at),
+    idle_window: row.idle_window === true,
+    mdd_contradiction: row.mdd_contradiction === true,
     // /api/traders derives these at read time; SSR rows carry the same inputs,
     // so derive them identically when absent instead of silently showing none.
     anti_gaming_flags:

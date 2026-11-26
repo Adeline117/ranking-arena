@@ -27,6 +27,7 @@ import {
   PUBLIC_RANKING_REDIS_TAG,
   publicRankingCacheKey,
   isPublicRankingSourceAllowed,
+  publicRankingScoreCompleteness,
   sanitizePublicRankingPayload,
 } from '@/lib/rankings/publication-policy'
 
@@ -91,10 +92,15 @@ export interface InitialTrader {
    */
   source_trader_id: string
   season_id: Period
-  score_completeness: 'full'
+  /** Which optional risk metrics the row carries (see publicRankingScoreCompleteness). */
+  score_completeness: 'full' | 'partial' | 'minimal'
   metrics_estimated: false
   computed_at: string
   is_outlier: false
+  /** No ROI and no PnL in this window: ranked at the tail, not scored. */
+  idle_window: boolean
+  /** The reported drawdown was refused; max_drawdown is null. */
+  mdd_contradiction: boolean
 }
 
 /**
@@ -107,7 +113,18 @@ function mapUnifiedToInitial(t: UnifiedTrader): InitialTrader | null {
   // this; keeping the guard here makes a malformed proxy/cache response fail
   // closed before the Copin display-only rewrite below can hide its origin.
   if (!isPublicRankingSourceAllowed(t.platform)) return null
-  if (t.scoreCompleteness !== 'full' || t.metricsEstimated !== false || t.isOutlier) return null
+  // Same row policy as the shared public reader (hasConcretePublicRankingMetrics):
+  // a row may lack win rate and/or drawdown, and its completeness must say
+  // exactly which. Requiring 'full' here made ONE partial row fail the whole
+  // server-rendered page ("failed local proof revalidation" → empty first paint).
+  const completeness = t.scoreCompleteness
+  if (completeness !== 'full' && completeness !== 'partial' && completeness !== 'minimal') {
+    return null
+  }
+  if (completeness !== publicRankingScoreCompleteness(t.winRate != null, t.maxDrawdown != null)) {
+    return null
+  }
+  if (t.metricsEstimated !== false || t.isOutlier) return null
 
   const displayPlatform = t.platform
   const displayKey = t.traderKey
@@ -163,10 +180,12 @@ function mapUnifiedToInitial(t: UnifiedTrader): InitialTrader | null {
     // by sanitizePublicRankingPayload on every read.
     source_trader_id: t.traderKey,
     season_id: t.period,
-    score_completeness: t.scoreCompleteness,
+    score_completeness: completeness,
     metrics_estimated: t.metricsEstimated,
     computed_at: t.lastUpdated ?? '',
     is_outlier: t.isOutlier,
+    idle_window: t.idleWindow,
+    mdd_contradiction: t.mddContradiction,
   }
 }
 
@@ -233,7 +252,9 @@ function hasPublishedInitialRank(value: unknown): value is InitialTrader {
 }
 
 function isCurrentHomepageCohortRow(value: InitialTrader, nowMs = Date.now()): boolean {
-  return isInPublicCohort(value, nowMs)
+  // The first-paint list never contains idle-window rows (the reader excludes
+  // them in SQL). A cached page that does was written under another predicate.
+  return value.idle_window !== true && isInPublicCohort(value, nowMs)
 }
 
 /**
@@ -387,7 +408,7 @@ export function homeInitialTradersCacheKeys(timeRange: Period, page: number, lim
   const safeLimit = normalizeInitialPageLimit(limit)
   return {
     cacheKey: publicRankingCacheKey(
-      `home-initial-traders-v7:${timeRange}:n${safeLimit}:p${safePage}`
+      `home-initial-traders-v8:${timeRange}:n${safeLimit}:p${safePage}`
     ),
   }
 }
@@ -628,8 +649,18 @@ async function fetchInitialLeaderboardPage(
   const traders = result.traders
     .map(mapUnifiedToInitial)
     .filter((trader): trader is InitialTrader => trader !== null)
-  if (traders.length !== result.traders.length) {
-    throw new Error('public cohort response failed local proof revalidation')
+  // A row that fails the local proof is DROPPED, not allowed to take the page
+  // down with it. Throwing here turned one unexpected row (an unknown
+  // completeness value, an estimated metric, …) into an empty first paint for
+  // every reader of that page. The drop is logged with a count so it is visible.
+  const dropped = result.traders.length - traders.length
+  if (dropped > 0) {
+    logger.warn('[getInitialTraders] dropped rows that failed local proof revalidation', {
+      period: timeRange,
+      page,
+      dropped,
+      kept: traders.length,
+    })
   }
   // The witness is kept only as cache proof; an unmappable witness simply
   // means a later cache hit cannot re-prove `hasMore` (fails closed).

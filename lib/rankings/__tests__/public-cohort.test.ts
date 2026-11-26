@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  cachedRowsStillInPublicCohort,
   applyPublicCohortFilters,
   isInPublicCohort,
   PUBLIC_COHORT_MAX_ABS_ROI,
@@ -71,5 +72,45 @@ describe('shared public cohort predicate', () => {
   it('the homepage SSR page no longer narrows the cohort with its own score floor', () => {
     const source = readFileSync(join(process.cwd(), 'lib/getInitialTraders.ts'), 'utf8')
     expect(source).not.toMatch(/minScore:\s*\d/)
+  })
+})
+
+describe('cachedRowsStillInPublicCohort', () => {
+  function client(live: Array<Record<string, unknown>> | null, error: string | null = null) {
+    const query: Record<string, jest.Mock> & PromiseLike<unknown> = {
+      then: (resolve: (value: unknown) => unknown) =>
+        Promise.resolve({ data: live, error: error ? { message: error } : null }).then(resolve),
+    } as never
+    for (const method of ['select', 'eq', 'in', 'gt', 'gte', 'lte']) {
+      query[method] = jest.fn(() => query)
+    }
+    return { client: { from: jest.fn(() => query) }, query }
+  }
+  const row = (id: string, idle?: boolean) => ({
+    source: 'binance_futures',
+    source_trader_id: id,
+    ...(idle === undefined ? {} : { idle_window: idle }),
+  })
+
+  it('accepts a cached page whose rows are all still live with the same idle flag', async () => {
+    const { client: c, query } = client([row('a', false), row('b', true)])
+    await expect(
+      cachedRowsStillInPublicCohort(c, '90D', [row('a', false), row('b', true)])
+    ).resolves.toBe(true)
+    expect(query.select).toHaveBeenCalledWith('source, source_trader_id, idle_window')
+  })
+
+  it('rejects a cached page in which a row has become idle since it was cached', async () => {
+    const { client: c } = client([row('a', true)])
+    await expect(cachedRowsStillInPublicCohort(c, '90D', [row('a', false)])).resolves.toBe(false)
+    // An older cache entry without the flag counts as "not idle".
+    await expect(cachedRowsStillInPublicCohort(c, '90D', [row('a')])).resolves.toBe(false)
+  })
+
+  it('rejects a cached page with a withdrawn row, and throws when it cannot check', async () => {
+    const { client: c } = client([])
+    await expect(cachedRowsStillInPublicCohort(c, '90D', [row('a', false)])).resolves.toBe(false)
+    const failing = client(null, 'boom').client
+    await expect(cachedRowsStillInPublicCohort(failing, '90D', [row('a')])).rejects.toThrow('boom')
   })
 })

@@ -56,7 +56,7 @@ describe('SSR leaderboard source freshness', () => {
 
   it('epochs the SSR cache key with the verified view proof shape', () => {
     expect(homeInitialTradersCacheKeys('90D', 2)).toEqual({
-      cacheKey: 'public-rank-policy-v7:home-initial-traders-v7:90D:n50:p2',
+      cacheKey: 'public-rank-policy-v7:home-initial-traders-v8:90D:n50:p2',
     })
   })
 })

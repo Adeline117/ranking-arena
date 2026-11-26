@@ -100,12 +100,14 @@ export interface TraderStats {
     trendingStocks: Array<{ symbol: string; yield: number; icon?: string }>
   }
   trading?: {
-    totalTrades12M: number
+    /** Null when the source did not publish it — never a made-up 0. */
+    totalTrades12M: number | null
     // U2-5: nullable so the UI can show "—" instead of a misleading "0.00%"
     // when the source never provided avg win/loss (missing ≠ literal zero).
     avgProfit: number | null
     avgLoss: number | null
-    profitableTradesPct: number
+    /** Null when the source did not publish a win rate — never a made-up 0. */
+    profitableTradesPct: number | null
   }
   frequentlyTraded?: Array<{
     symbol: string

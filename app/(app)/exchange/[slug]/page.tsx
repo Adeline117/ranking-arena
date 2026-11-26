@@ -1,3 +1,4 @@
+import { formatScoreWhole } from '@/lib/utils/format'
 import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
@@ -469,7 +470,7 @@ export default async function ExchangeLandingPage({
                           fontWeight: 700,
                         }}
                       >
-                        {trader.arena_score != null ? Math.round(trader.arena_score) : '--'}
+                        {trader.arena_score != null ? formatScoreWhole(trader.arena_score) : '--'}
                       </td>
                       <td
                         style={{

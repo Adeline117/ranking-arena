@@ -7,6 +7,7 @@
  * Provides download PNG, share on X, and view full profile actions.
  */
 
+import { formatScoreWhole } from '@/lib/utils/format'
 import { useState, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import type { WrappedTraderData } from './page'
@@ -285,7 +286,7 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
                     lineHeight: 1,
                   }}
                 >
-                  {score != null ? Math.round(score).toLocaleString('en-US') : '--'}
+                  {score != null ? formatScoreWhole(score) : '--'}
                 </div>
               </div>
 

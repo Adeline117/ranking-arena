@@ -16,6 +16,7 @@
  * image.
  */
 
+import { formatScoreWhole } from '@/lib/utils/format'
 import type { NextRequest } from 'next/server'
 import {
   isPublicRankingSourceAllowed,
@@ -29,7 +30,7 @@ import {
 export const runtime = 'edge'
 
 const PUBLIC_RANKING_COLUMNS =
-  'season_id,source,source_trader_id,handle,rank,arena_score,roi,pnl,win_rate,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at'
+  'season_id,source,source_trader_id,handle,rank,arena_score,roi,pnl,win_rate,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at,idle_window'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -77,8 +78,11 @@ async function restSelectOne(
 }
 
 type PublishedBadgeRow = {
-  rank: number
-  score: number
+  /** Null for an idle-window row: ranked, but no trading — no rank shown. */
+  rank: number | null
+  /** Null for an idle-window row: it is ranked but was not scored. */
+  score: number | null
+  idle: boolean
 }
 
 /**
@@ -110,7 +114,11 @@ function verifiedBadgeRow(
   ) {
     return null
   }
-  return { rank: row.rank, score: row.arena_score }
+  // An idle-window row (no ROI and no PnL in the period) carries a placeholder
+  // score that means "not scored". Like every other surface, the badge says
+  // "no trading" for it and shows neither a rank nor a score.
+  if (row.idle_window === true) return { rank: null, score: null, idle: true }
+  return { rank: row.rank, score: row.arena_score, idle: false }
 }
 
 async function fetchRank(handle: string) {
@@ -159,6 +167,7 @@ async function fetchRank(handle: string) {
     handle: identityHandle,
     rank: published.rank,
     score: published.score,
+    idle: published.idle,
     verified,
   }
 }
@@ -182,13 +191,16 @@ function buildSvg(opts: {
   rank: number | null
   score: number | null
   verified?: boolean
+  idle?: boolean
 }): string {
-  const { name, rank, score, verified } = opts
+  const { name, rank, score, verified, idle = false } = opts
   const W = 268
   const H = 64
   const displayName = esc(truncate(name, 18))
   const rankText = rank != null ? `#${rank.toLocaleString('en-US')}` : '—'
-  const scoreText = score != null ? Math.round(score).toString() : '—'
+  // Escaped where it is written: a small score formats as "<1", and a raw "<"
+  // inside <text> makes the whole SVG invalid.
+  const scoreText = score != null ? formatScoreWhole(score) : '—'
   // Dark, brand-consistent (matches OG card palette). System font stack so no
   // external font fetch (CSP-safe, instant render).
   const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
@@ -201,7 +213,7 @@ function buildSvg(opts: {
     <text x="14" y="8" font-family="${FONT}" font-size="9" font-weight="800" letter-spacing="1" fill="#2FE57D">VERIFIED</text>
   </g>`
     : ''
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${displayName} — Arena rank ${rankText}${verified ? ' (Verified)' : ''}">
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${displayName} — ${idle ? 'Arena: no trading this period' : `Arena rank ${rankText}`}${verified ? ' (Verified)' : ''}">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#14131A"/>
@@ -213,10 +225,15 @@ function buildSvg(opts: {
   ${verifiedMark}
   <text x="16" y="46" font-family="${FONT}" font-size="12" font-weight="500" fill="#9A9A9A">${displayName}</text>
   <line x1="150" y1="14" x2="150" y2="50" stroke="rgba(255,255,255,0.12)"/>
-  <text x="166" y="24" font-family="${FONT}" font-size="9" font-weight="700" letter-spacing="1" fill="rgba(255,255,255,0.45)">RANK</text>
+  ${
+    idle
+      ? `<text x="166" y="38" font-family="${FONT}" font-size="12" font-weight="700" fill="rgba(255,255,255,0.6)">No trading</text>
+  <text x="166" y="52" font-family="${FONT}" font-size="10" font-weight="500" fill="rgba(255,255,255,0.45)">this period</text>`
+      : `<text x="166" y="24" font-family="${FONT}" font-size="9" font-weight="700" letter-spacing="1" fill="rgba(255,255,255,0.45)">RANK</text>
   <text x="166" y="46" font-family="${FONT}" font-size="20" font-weight="800" fill="#F0D060">${rankText}</text>
   <text x="224" y="24" font-family="${FONT}" font-size="9" font-weight="700" letter-spacing="1" fill="rgba(255,255,255,0.45)">SCORE</text>
-  <text x="224" y="46" font-family="${FONT}" font-size="20" font-weight="800" fill="#EDEDED">${scoreText}</text>
+  <text x="224" y="46" font-family="${FONT}" font-size="20" font-weight="800" fill="#EDEDED">${esc(scoreText)}</text>`
+  }
 </svg>`
 }
 
@@ -234,15 +251,17 @@ export async function GET(
   let rank: number | null = null
   let score: number | null = null
   let verified = false
+  let idle = false
   const data = await fetchRank(handle)
   if (data) {
     name = data.handle
     rank = data.rank
     score = data.score
     verified = !!data.verified
+    idle = 'idle' in data && data.idle === true
   }
 
-  const svg = buildSvg({ name, rank, score, verified })
+  const svg = buildSvg({ name, rank, score, verified, idle })
   return new Response(svg, {
     status: 200,
     headers: {

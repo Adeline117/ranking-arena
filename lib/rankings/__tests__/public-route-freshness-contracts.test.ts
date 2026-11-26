@@ -81,7 +81,7 @@ describe('public ranking freshness route contracts', () => {
     expect(ssr).toContain("select('source,source_as_of')")
     expect(ssr).toContain('sanitizePublicRankingPayload')
     expect(ssr).toContain('lastUpdated: freshness.asOf')
-    expect(ssr).toContain('home-initial-traders-v7')
+    expect(ssr).toContain('home-initial-traders-v8')
     expect(ssr).not.toMatch(rawLeaderboardRankRead)
     expect(ssr).not.toMatch(rawLeaderboardCountRead)
   })

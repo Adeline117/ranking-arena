@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import type { Trader } from '../ranking/RankingTableTypes'
 import type { TimeRange } from './hooks/useTraderData'
@@ -25,6 +25,7 @@ const ProUpsellModal = dynamic(
   { ssr: false }
 )
 const RankingFooter = dynamic(() => import('./RankingFooter'), { ssr: false })
+const IdleWindowTail = dynamic(() => import('./IdleWindowTail'), { ssr: false })
 
 interface RankingSectionProps {
   traders: Trader[]
@@ -118,6 +119,8 @@ export default function RankingSection({
     filteredTraders,
     searchMatchesElsewhere,
     handleFilterChange,
+    showIdle,
+    handleShowIdle,
     handleSortChange,
     handlePageChange,
     handleSearchChange,
@@ -139,6 +142,20 @@ export default function RankingSection({
     onInitialCohortSettled,
     fetchPage,
   })
+
+  // First-paint rows come from the server shell without a per-source capture
+  // time. Until the client list replaces them, they carry the board's own
+  // "data as of" — the OLDEST source watermark on the page, so it never claims
+  // a row is fresher than it is.
+  const rowsWithDataTime = useMemo(
+    () =>
+      lastUpdated
+        ? filteredTraders.map((trader) =>
+            trader.source_as_of ? trader : { ...trader, source_as_of: lastUpdated }
+          )
+        : filteredTraders,
+    [filteredTraders, lastUpdated]
+  )
 
   // Unified paywall: callback-style gates (locked tabs, export) open the
   // shared upsell modal instead of a dead-end toast.
@@ -240,7 +257,7 @@ export default function RankingSection({
           previously duplicated here, producing two messages / two retry
           buttons and contradictory stale copy). */}
       <RankingTable
-        traders={filteredTraders}
+        traders={rowsWithDataTime}
         loading={loading || premiumLoading}
         isRefreshing={isRefreshing}
         loggedIn={isLoggedIn}
@@ -269,6 +286,27 @@ export default function RankingSection({
         isStale={isStale}
         onResetFilters={handleResetFilters}
       />
+
+      {/* End of the list: the idle-window tail is hidden by default. Shown once
+          the reader has reached the last page of the board (or has expanded it),
+          and only for the plain board — a filtered or searched list is not the
+          place to offer rows the filter may not match, and under another sort
+          order idle rows would not stay at the tail, so they are not listed. */}
+      {!loading &&
+        !error &&
+        !hasCohortFilters &&
+        !searchQuery &&
+        sortColumn === 'score' &&
+        sortDir === 'desc' &&
+        (showIdle || hasMore === false) && (
+          <IdleWindowTail
+            timeRange={activeTimeRange}
+            exchange={selectedExchange}
+            category={category}
+            expanded={showIdle}
+            onChange={handleShowIdle}
+          />
+        )}
 
       <ProUpsellModal
         open={proUpsellOpen}
