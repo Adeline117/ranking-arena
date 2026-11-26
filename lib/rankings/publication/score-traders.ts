@@ -124,25 +124,25 @@ export function hasContradictoryDrawdown(row: {
 
 /**
  * Unverified zero drawdown ('roi_pnl' only): the drawdown is 0 at stored
- * precision (numeric(5,2)) and the win rate is unknown or below 100% at stored
- * precision (numeric(5,2)). Checked after hasContradictoryDrawdown, so a
- * losing window never gets here (its drawdown is already refused).
+ * precision (numeric(5,2)), whatever the win rate. Checked after
+ * hasContradictoryDrawdown, so a losing window never gets here (its drawdown
+ * is already refused); idle rows are never scored and never flagged.
  *
  * Binance futures computes its window drawdown on the daily ROI curve, so an
- * account whose daily equity only rose reports 0 even with losing trades
- * inside a day. The 0 is the exchange's real value, not a placeholder and not
- * an error, but it does not show the account never lost: the value is kept,
- * written and shown as it is; only the score treats the drawdown dimension as
- * neutral (no factor, no weight). A 100% win rate with a 0 drawdown is
- * self-consistent and scored as a real value. An idle row is never scored and
- * never flagged.
+ * account whose daily equity only rose reports 0 even with losing trades or
+ * an open loss inside a day. The 0 is the exchange's real value, not a
+ * placeholder and not an error, but it cannot be verified as "never lost":
+ * the value is kept, written and shown as it is; only the score treats the
+ * drawdown dimension as neutral (no factor, no weight, not counted for
+ * confidence).
+ *
+ * The win rate does not change this. It only counts closed trades, so even a
+ * 100% win rate says nothing about the floating loss while a position was
+ * open, and on a daily curve a 0 drawdown is just as unverifiable for it:
+ * "consistent" is not "verifiable".
  */
-export function hasUnverifiedZeroDrawdown(row: {
-  max_drawdown: number | null
-  win_rate: number | null
-}): boolean {
-  if (row.max_drawdown === null || Math.round(row.max_drawdown * 1e2) !== 0) return false
-  return row.win_rate === null || Math.round(row.win_rate * 1e2) < 10_000
+export function hasUnverifiedZeroDrawdown(row: { max_drawdown: number | null }): boolean {
+  return row.max_drawdown !== null && Math.round(row.max_drawdown * 1e2) === 0
 }
 
 /**
@@ -412,9 +412,9 @@ export async function scoreTraders(
   const idleSet = new Set(idleRows)
   const scoredRows =
     idleSet.size > 0 ? scoredFiltered.filter((t) => !idleSet.has(t)) : scoredFiltered
-  // 'roi_pnl': a 0% drawdown that a win rate below 100% (or unknown) does not
-  // corroborate is scored neutrally. Contradictory drawdowns were emptied above
-  // and never match (max_drawdown is null).
+  // 'roi_pnl': every 0% drawdown of a scored row is scored neutrally, whatever
+  // the win rate. Contradictory drawdowns were emptied above and never match
+  // (max_drawdown is null).
   const neutralDrawdownRows = new Set(
     rowEligibility === 'roi_pnl' ? scoredRows.filter((t) => hasUnverifiedZeroDrawdown(t)) : []
   )
@@ -495,7 +495,7 @@ export async function scoreTraders(
       Object.entries(neutralBySource).sort(([left], [right]) => (left < right ? -1 : 1))
     )
     logger.info(
-      `[${season}] mdd_zero_unverified (0% drawdown with a win rate below 100% or unknown; value kept, drawdown scored neutrally): ${neutralDrawdownRows.size} ${JSON.stringify(bySource)}`
+      `[${season}] mdd_zero_unverified (0% drawdown, any win rate; value kept, drawdown scored neutrally): ${neutralDrawdownRows.size} ${JSON.stringify(bySource)}`
     )
   }
   if (rowEligibility === 'roi_pnl') {
