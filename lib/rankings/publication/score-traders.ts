@@ -92,10 +92,13 @@ export const MIN_ACTIVE_ARENA_SCORE = 0.02
  * `mdd_contradiction: true` marks a scored row whose reported drawdown was
  * refused (see hasContradictoryDrawdown): its max_drawdown is written empty
  * and the drawdown dimension scored nothing.
+ * `mdd_zero_unverified: true` marks a scored row whose 0% drawdown was kept
+ * and shown but scored neutrally (see hasUnverifiedZeroDrawdown).
  */
 export type RankScoreFactors = ArenaScoreV4Result['factors'] & {
   idle_window?: true
   mdd_contradiction?: true
+  mdd_zero_unverified?: true
 }
 
 /**
@@ -117,6 +120,29 @@ export function hasContradictoryDrawdown(row: {
 }): boolean {
   if (row.max_drawdown === null || Math.round(row.max_drawdown * 1e2) !== 0) return false
   return Math.round(row.roi * 1e4) < 0 || (row.pnl !== null && Math.round(row.pnl * 1e2) < 0)
+}
+
+/**
+ * Unverified zero drawdown ('roi_pnl' only): the drawdown is 0 at stored
+ * precision (numeric(5,2)) and the win rate is unknown or below 100% at stored
+ * precision (numeric(5,2)). Checked after hasContradictoryDrawdown, so a
+ * losing window never gets here (its drawdown is already refused).
+ *
+ * Binance futures computes its window drawdown on the daily ROI curve, so an
+ * account whose daily equity only rose reports 0 even with losing trades
+ * inside a day. The 0 is the exchange's real value, not a placeholder and not
+ * an error, but it does not show the account never lost: the value is kept,
+ * written and shown as it is; only the score treats the drawdown dimension as
+ * neutral (no factor, no weight). A 100% win rate with a 0 drawdown is
+ * self-consistent and scored as a real value. An idle row is never scored and
+ * never flagged.
+ */
+export function hasUnverifiedZeroDrawdown(row: {
+  max_drawdown: number | null
+  win_rate: number | null
+}): boolean {
+  if (row.max_drawdown === null || Math.round(row.max_drawdown * 1e2) !== 0) return false
+  return row.win_rate === null || Math.round(row.win_rate * 1e2) < 10_000
 }
 
 /**
@@ -176,7 +202,7 @@ export function arenaScoreOptionsForRowEligibility(
   rowEligibility: PublicRankingRowEligibility
 ): ArenaScoreV4Options {
   return rowEligibility === 'roi_pnl'
-    ? { zeroRiskMetricsAreKnown: true, missingRiskPolicy: 'zero' }
+    ? { zeroRiskMetricsAreKnown: true, missingRiskPolicy: 'zero', neutralDrawdownInputs: true }
     : { zeroRiskMetricsAreKnown: false, missingRiskPolicy: 'renormalize' }
 }
 
@@ -386,6 +412,12 @@ export async function scoreTraders(
   const idleSet = new Set(idleRows)
   const scoredRows =
     idleSet.size > 0 ? scoredFiltered.filter((t) => !idleSet.has(t)) : scoredFiltered
+  // 'roi_pnl': a 0% drawdown that a win rate below 100% (or unknown) does not
+  // corroborate is scored neutrally. Contradictory drawdowns were emptied above
+  // and never match (max_drawdown is null).
+  const neutralDrawdownRows = new Set(
+    rowEligibility === 'roi_pnl' ? scoredRows.filter((t) => hasUnverifiedZeroDrawdown(t)) : []
+  )
   const v4Inputs = scoredRows.map((t) => ({
     roi: t.roi,
     pnl: t.pnl,
@@ -395,6 +427,7 @@ export async function scoreTraders(
     profitFactor: t.profit_factor,
     tradesCount: t.trades_count,
     source: t.source,
+    ...(neutralDrawdownRows.has(t) ? { maxDrawdownNeutral: true } : {}),
   }))
   // 'four_metrics' calls the signed historical contract itself, the same call
   // this module made before the switch existed.
@@ -422,7 +455,9 @@ export async function scoreTraders(
     t.score_factors = r
       ? contradictoryDrawdownKeys.has(`${t.source}\u0000${t.source_trader_id}`)
         ? { ...r.factors, mdd_contradiction: true }
-        : r.factors
+        : neutralDrawdownRows.has(t)
+          ? { ...r.factors, mdd_zero_unverified: true }
+          : r.factors
       : null
     // Repopulate the 3 existing breakdown sub-scores from v4 factors so the
     // radar/bars UI stays v4-consistent (0-100), no frontend plumbing change:
@@ -449,6 +484,18 @@ export async function scoreTraders(
   if (rowEligibility === 'roi_pnl') {
     logger.info(
       `[${season}] Idle-window rows (ROI 0 and PnL 0, not scored, score ${MIN_RANKED_ARENA_SCORE}): ${idleRows.length} of ${scoredFiltered.length}`
+    )
+  }
+  if (rowEligibility === 'roi_pnl' && neutralDrawdownRows.size > 0) {
+    const neutralBySource: Record<string, number> = {}
+    for (const t of neutralDrawdownRows) {
+      neutralBySource[t.source] = (neutralBySource[t.source] ?? 0) + 1
+    }
+    const bySource = Object.fromEntries(
+      Object.entries(neutralBySource).sort(([left], [right]) => (left < right ? -1 : 1))
+    )
+    logger.info(
+      `[${season}] mdd_zero_unverified (0% drawdown with a win rate below 100% or unknown; value kept, drawdown scored neutrally): ${neutralDrawdownRows.size} ${JSON.stringify(bySource)}`
     )
   }
   if (rowEligibility === 'roi_pnl') {

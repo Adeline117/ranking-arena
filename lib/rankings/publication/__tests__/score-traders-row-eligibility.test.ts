@@ -24,12 +24,14 @@ import {
   MIN_RANKED_ARENA_SCORE,
   hasContradictoryDrawdown,
   hasSignMismatch,
+  hasUnverifiedZeroDrawdown,
   isIdleWindowRow,
   scoreTraders,
   type ScoredTrader,
 } from '../score-traders'
 import { classifyPublishableRow, orderRowsForWrite } from '../publish-season'
 import type { TraderRow } from '../trader-row'
+import { computeArenaScoresV4 } from '@/lib/utils/arena-score'
 import type { PublicRankingRowEligibility } from '@/lib/rankings/publication-policy'
 
 function traderRow(id: string, overrides: Partial<TraderRow> = {}): TraderRow {
@@ -256,12 +258,14 @@ describe('null and 0 are different through the publication scorer', () => {
     traderRow('o4', { roi: -60, pnl: -9_000, win_rate: 10, max_drawdown: 80 }),
   ]
 
+  // A 100% win rate corroborates the 0% drawdown (see the mdd_zero_unverified
+  // block for a 0 with a lower win rate).
   it('a 0% drawdown is the best drawdown; a missing one scores nothing', async () => {
     const rows = byId(
       await publishedCohort(
         [
           ...others(),
-          traderRow('dd-zero', { max_drawdown: 0 }),
+          traderRow('dd-zero', { max_drawdown: 0, win_rate: 100 }),
           traderRow('dd-missing', { max_drawdown: null }),
         ],
         'roi_pnl'
@@ -636,8 +640,9 @@ describe('contradictory drawdown: a losing window with a 0% max drawdown', () =>
     traderRow('p3', { roi: 6, pnl: 900, win_rate: 48, max_drawdown: 35 }),
     traderRow('l1', { roi: -9, pnl: -300, win_rate: 41, max_drawdown: 44 }),
     traderRow('l2', { roi: -30, pnl: -4_000, win_rate: 30, max_drawdown: 60 }),
-    // A profit with no drawdown in the window is possible: a real value.
-    traderRow('profit-zero-dd', { roi: 12, pnl: 1_500, win_rate: 60, max_drawdown: 0 }),
+    // A profit with no drawdown in the window is possible: a real value (a 100%
+    // win rate corroborates it; see the mdd_zero_unverified block otherwise).
+    traderRow('profit-zero-dd', { roi: 12, pnl: 1_500, win_rate: 100, max_drawdown: 0 }),
     // A loss with no drawdown is not.
     traderRow('loss-zero-dd', { roi: -12, pnl: -1_500, win_rate: 60, max_drawdown: 0 }),
     // ROI is positive but the account lost money: still a losing window.
@@ -864,5 +869,111 @@ describe('sign_mismatch: ROI and PnL with opposite signs are counted, nothing el
   it("'four_metrics' logs nothing about it", async () => {
     await publishedCohort([...base(), ...mismatched()], 'four_metrics')
     expect(signMismatchLogs()).toEqual([])
+  })
+})
+
+describe('mdd_zero_unverified: a 0% drawdown that the win rate does not corroborate', () => {
+  const cohort = () => [
+    traderRow('p1', { roi: 80, pnl: 500_000, win_rate: 70, max_drawdown: 5 }),
+    traderRow('p2', { roi: 20, pnl: 20_000, win_rate: 55, max_drawdown: 15 }),
+    traderRow('p3', { roi: 6, pnl: 900, win_rate: 48, max_drawdown: 35 }),
+    traderRow('l1', { roi: -9, pnl: -300, win_rate: 41, max_drawdown: 44 }),
+    // Same ROI, PnL and win rate; only the drawdown differs.
+    traderRow('zero-wr-below', { roi: 40, pnl: 60_000, win_rate: 92.56, max_drawdown: 0 }),
+    traderRow('null-dd', { roi: 40, pnl: 60_000, win_rate: 92.56, max_drawdown: null }),
+    traderRow('small-real-dd', { roi: 40, pnl: 60_000, win_rate: 92.56, max_drawdown: 0.5 }),
+    traderRow('zero-wr-null', { roi: 40, pnl: 60_000, win_rate: null, max_drawdown: 0 }),
+    traderRow('zero-wr-100', { roi: 40, pnl: 60_000, win_rate: 100, max_drawdown: 0 }),
+    // Stored as 0.00 drawdown, so it is a zero.
+    traderRow('rounds-to-zero', {
+      source: 'binance_futures',
+      roi: 40,
+      pnl: 60_000,
+      win_rate: 86.49,
+      max_drawdown: 0.004,
+    }),
+    traderRow('loss-zero-dd', { roi: -12, pnl: -1_500, win_rate: 60, max_drawdown: 0 }),
+    traderRow('idle-zero-dd', { roi: 0, pnl: 0, win_rate: 50, max_drawdown: 0 }),
+  ]
+
+  it('keeps and shows the value, scores the drawdown neutrally, marks the row', async () => {
+    const rows = byId(await publishedCohort(cohort(), 'roi_pnl'))
+    for (const id of ['zero-wr-below', 'zero-wr-null', 'rounds-to-zero']) {
+      const row = rows.get(id)!
+      expect(row.max_drawdown).not.toBeNull()
+      expect(row.score_factors).toMatchObject({ drawdown: null, mdd_zero_unverified: true })
+      expect(row.score_factors).not.toHaveProperty('mdd_contradiction')
+    }
+    expect(rows.get('zero-wr-below')).toMatchObject({ max_drawdown: 0, score_completeness: 'full' })
+    expect(rows.get('zero-wr-null')).toMatchObject({
+      max_drawdown: 0,
+      score_completeness: 'partial',
+    })
+    expect(rows.get('rounds-to-zero')!.max_drawdown).toBe(0.004)
+  })
+
+  it('invariant: null drawdown <= neutral zero <= real small drawdown', async () => {
+    const rows = byId(await publishedCohort(cohort(), 'roi_pnl'))
+    const missing = rows.get('null-dd')!.arena_score!
+    const neutral = rows.get('zero-wr-below')!.arena_score!
+    const real = rows.get('small-real-dd')!.arena_score!
+    expect(missing).toBeLessThan(neutral)
+    expect(neutral).toBeLessThan(real)
+  })
+
+  it('scores a zero with a 100% win rate as the real best drawdown', async () => {
+    const rows = byId(await publishedCohort(cohort(), 'roi_pnl'))
+    const row = rows.get('zero-wr-100')!
+    expect(row.score_factors).toMatchObject({ drawdown: 1 })
+    expect(row.score_factors).not.toHaveProperty('mdd_zero_unverified')
+  })
+
+  it('leaves the contradictory-drawdown rule first and idle rows unflagged', async () => {
+    const rows = byId(await publishedCohort(cohort(), 'roi_pnl'))
+    expect(rows.get('loss-zero-dd')!.max_drawdown).toBeNull()
+    expect(rows.get('loss-zero-dd')!.score_factors).toMatchObject({ mdd_contradiction: true })
+    expect(rows.get('loss-zero-dd')!.score_factors).not.toHaveProperty('mdd_zero_unverified')
+    expect(rows.get('idle-zero-dd')!.score_factors).toMatchObject({ idle_window: true })
+    expect(rows.get('idle-zero-dd')!.score_factors).not.toHaveProperty('mdd_zero_unverified')
+  })
+
+  it('logs the count per source', async () => {
+    await publishedCohort(cohort(), 'roi_pnl')
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      '[30D] mdd_zero_unverified (0% drawdown with a win rate below 100% or unknown; value kept, drawdown scored neutrally): 3 {"binance_futures":1,"bybit":2}'
+    )
+  })
+
+  it('reads both sides at the stored precision', () => {
+    expect(hasUnverifiedZeroDrawdown({ max_drawdown: 0.004, win_rate: 50 })).toBe(true)
+    expect(hasUnverifiedZeroDrawdown({ max_drawdown: 0.005, win_rate: 50 })).toBe(false)
+    expect(hasUnverifiedZeroDrawdown({ max_drawdown: 0, win_rate: 99.994 })).toBe(true)
+    // 99.996 is stored as 100.00: self-consistent.
+    expect(hasUnverifiedZeroDrawdown({ max_drawdown: 0, win_rate: 99.996 })).toBe(false)
+    expect(hasUnverifiedZeroDrawdown({ max_drawdown: 0, win_rate: null })).toBe(true)
+    expect(hasUnverifiedZeroDrawdown({ max_drawdown: null, win_rate: 50 })).toBe(false)
+  })
+
+  it("'four_metrics' output is unchanged by the rule", async () => {
+    const rows = await publishedCohort(cohort(), 'four_metrics')
+    // Exactly the signed historical contract over the same inputs, bit for bit.
+    const expected = computeArenaScoresV4(
+      rows.map((t) => ({
+        roi: t.roi,
+        pnl: t.pnl,
+        maxDrawdown: t.max_drawdown,
+        winRate: t.win_rate,
+        sharpeRatio: t.sharpe_ratio,
+        profitFactor: t.profit_factor,
+        tradesCount: t.trades_count,
+        source: t.source,
+      })),
+      '30D'
+    )
+    expect(rows.map((t) => [t.arena_score, t.score_factors])).toEqual(
+      expected.map((r) => [r.totalScore, r.factors])
+    )
+    for (const row of rows) expect(row.score_factors).not.toHaveProperty('mdd_zero_unverified')
+    expect(mockLogger.info).not.toHaveBeenCalledWith(expect.stringContaining('mdd_zero_unverified'))
   })
 })
