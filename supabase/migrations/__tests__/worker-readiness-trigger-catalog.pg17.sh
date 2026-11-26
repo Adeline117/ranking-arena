@@ -11,11 +11,19 @@
 # deferred) on stub tables and stub functions, then runs the worker's own
 # trigger_rows/trigger_contract SQL, extracted verbatim from
 # worker/src/ingest/attempt-bound-capture-readiness.ts.
+#
+# It also proves the exclusion of the arena.sources name-uniqueness trigger
+# (20261122204058) is by exact identity: the trigger exactly as that migration
+# installs it leaves the catalog exact, while the same trigger name with a
+# replaced function body, a different UPDATE OF column list, or a WHEN
+# condition makes it drift. arena.sources carries columns at the production
+# attnums (2 slug, 25 serving_mode, 26 status, 27 meta) so tgattr matches.
 
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 REPLACEMENT="$ROOT_DIR/supabase/migrations/20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql"
+NAME_GUARD="$ROOT_DIR/supabase/migrations/20261122204058_resolve_trader_public_source.sql"
 ORIGINAL="$ROOT_DIR/supabase/migrations/20260729061000_tier_a_execution_claim_enforcement.sql"
 WORKER_SOURCE="$ROOT_DIR/worker/src/ingest/attempt-bound-capture-readiness.ts"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
@@ -32,7 +40,7 @@ if [[ "$("$PG_BIN/psql" --version)" != psql\ \(PostgreSQL\)\ 17.* ]]; then
   exit 1
 fi
 command -v node >/dev/null || { echo "node is required" >&2; exit 1; }
-for file in "$REPLACEMENT" "$ORIGINAL" "$WORKER_SOURCE"; do
+for file in "$REPLACEMENT" "$ORIGINAL" "$WORKER_SOURCE" "$NAME_GUARD"; do
   [[ -f "$file" ]] || { echo "Missing input: $file" >&2; exit 1; }
 done
 
@@ -63,9 +71,9 @@ psql_cmd() {
 }
 
 # Render one fixture database per manifest plus the worker check query.
-node - "$REPLACEMENT" "$ORIGINAL" "$WORKER_SOURCE" "$TMP_ROOT" <<'NODE'
+node - "$REPLACEMENT" "$ORIGINAL" "$WORKER_SOURCE" "$TMP_ROOT" "$NAME_GUARD" <<'NODE'
 const { readFileSync, writeFileSync } = require('node:fs')
-const [replacement, original, workerSource, out] = process.argv.slice(2)
+const [replacement, original, workerSource, out, nameGuard] = process.argv.slice(2)
 
 function manifest(path) {
   const sql = readFileSync(path, 'utf8')
@@ -118,7 +126,18 @@ const workerTables = [
 
 function fixture(rows) {
   const lines = ['CREATE SCHEMA arena;']
-  for (const table of workerTables) lines.push(`CREATE TABLE arena.${table} (id bigint);`)
+  for (const table of workerTables) {
+    if (table !== 'sources') {
+      lines.push(`CREATE TABLE arena.${table} (id bigint);`)
+      continue
+    }
+    // Production attnums of the columns the name guard's UPDATE OF lists:
+    // 2 slug, 25 serving_mode, 26 status, 27 meta (fetch_region at 28).
+    const columns = ['id bigint', 'slug text']
+    for (let n = 3; n <= 24; n += 1) columns.push(`filler_${n} text`)
+    columns.push('serving_mode text', 'status text', 'meta jsonb', 'fetch_region text')
+    lines.push(`CREATE TABLE arena.sources (${columns.join(', ')});`)
+  }
   for (const fn of new Set(rows.map((r) => r.fn))) {
     lines.push(
       `CREATE FUNCTION arena.${fn}() RETURNS trigger LANGUAGE plpgsql AS $f$ BEGIN RETURN NULL; END $f$;`
@@ -133,6 +152,23 @@ const originalRows = manifest(original)
 writeFileSync(`${out}/replacement.sql`, fixture(replacementRows))
 writeFileSync(`${out}/original.sql`, fixture(originalRows))
 writeFileSync(`${out}/counts`, `${replacementRows.length} ${originalRows.length}\n`)
+
+// The name guard exactly as 20261122204058 installs it (function + trigger).
+const guardSql = readFileSync(nameGuard, 'utf8')
+const fnStart = guardSql.indexOf('CREATE FUNCTION arena.reject_ambiguous_serving_source_name()')
+const fnEnd = guardSql.indexOf('$function$;', guardSql.indexOf('$function$', fnStart) + 10)
+const trStart = guardSql.indexOf('CREATE TRIGGER sources_reject_ambiguous_serving_name')
+const trEnd = guardSql.indexOf(';', trStart)
+if (fnStart < 0 || fnEnd < fnStart || trStart < 0 || trEnd < trStart) {
+  throw new Error('name guard function or trigger not found in 20261122204058')
+}
+const guardFunction = guardSql.slice(fnStart, fnEnd + '$function$;'.length)
+const guardTrigger = guardSql.slice(trStart, trEnd + 1)
+writeFileSync(`${out}/name-guard.sql`, `${guardFunction}\n${guardTrigger}\n`)
+writeFileSync(
+  `${out}/name-guard-trigger.sql`,
+  `DROP TRIGGER IF EXISTS sources_reject_ambiguous_serving_name ON arena.sources;\n${guardTrigger}\n`
+)
 
 // Extract the worker's live trigger catalog check verbatim from its source.
 const source = readFileSync(workerSource, 'utf8')
@@ -181,3 +217,54 @@ if [[ "$original_result" != drifted ]]; then
 fi
 
 echo "[$LABEL] worker readiness accepts the 24-row launch trigger catalog and rejects the superseded 21-row catalog"
+
+# The arena.sources name-uniqueness guard. Each case runs in its own
+# transaction on the launch catalog and is rolled back.
+check_with() {
+  local output
+  if output="$(psql_cmd -d launch_replacement -At -c 'BEGIN' -f "$TMP_ROOT/name-guard.sql" -c "$1" \
+    -f "$TMP_ROOT/worker-check.sql" -c 'ROLLBACK' 2>/dev/null)"; then
+    grep -E '^(exact|drifted)$' <<<"$output"
+  else
+    # The worker runs this query inside its startup gate; an error there
+    # propagates and fails the gate closed.
+    echo error
+  fi
+}
+expect_check() {
+  local label="$1" expected="$2" actual="$3"
+  if [[ "$actual" != "$expected" ]]; then
+    echo "[$LABEL] $label: expected $expected, got ${actual:-<nothing>}" >&2
+    exit 1
+  fi
+  echo "[$LABEL] ok: $label -> $expected"
+}
+
+expect_check "the name guard exactly as 20261122204058 installs it is excluded" exact \
+  "$(check_with 'SELECT 1')"
+expect_check "the same trigger with a replaced function body counts" drifted \
+  "$(check_with "CREATE OR REPLACE FUNCTION arena.reject_ambiguous_serving_source_name()
+     RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp
+     AS \$f\$ BEGIN NEW.fetch_region := 'elsewhere'; RETURN NEW; END \$f\$")"
+expect_check "the same trigger on UPDATE OF fetch_region counts" drifted \
+  "$(check_with "DROP TRIGGER sources_reject_ambiguous_serving_name ON arena.sources;
+     CREATE TRIGGER sources_reject_ambiguous_serving_name
+       BEFORE INSERT OR UPDATE OF fetch_region ON arena.sources
+       FOR EACH ROW EXECUTE FUNCTION arena.reject_ambiguous_serving_source_name()")"
+# A WHEN condition on a pinned table makes the catalog query itself fail:
+# pg_get_expr cannot deparse a trigger qual (it references NEW/OLD). The
+# worker's gate does not catch it, so startup still fails closed.
+expect_check "the same trigger with a WHEN condition fails the gate (query error)" error \
+  "$(check_with "DROP TRIGGER sources_reject_ambiguous_serving_name ON arena.sources;
+     CREATE TRIGGER sources_reject_ambiguous_serving_name
+       BEFORE INSERT OR UPDATE OF slug, meta, status, serving_mode ON arena.sources
+       FOR EACH ROW WHEN (NEW.status = 'active')
+       EXECUTE FUNCTION arena.reject_ambiguous_serving_source_name()")"
+expect_check "the same trigger made SECURITY DEFINER counts" drifted \
+  "$(check_with 'ALTER FUNCTION arena.reject_ambiguous_serving_source_name() SECURITY DEFINER')"
+expect_check "the same trigger disabled counts" drifted \
+  "$(check_with 'ALTER TABLE arena.sources DISABLE TRIGGER sources_reject_ambiguous_serving_name')"
+expect_check "re-creating it exactly is still excluded" exact \
+  "$(check_with "$(cat "$TMP_ROOT/name-guard-trigger.sql")")"
+
+echo "[$LABEL] the arena.sources name guard is excluded only by its exact identity"
