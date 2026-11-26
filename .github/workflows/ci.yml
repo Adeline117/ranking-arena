@@ -654,6 +654,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:resolve-trader-public-source-pg17
 
+      - name: Prove the worker startup trigger catalog accepts the launch catalog and only the exact name guard
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:worker-readiness-trigger-catalog-pg17
+
       - name: Prove observation lineage per statement keeps every per-row outcome
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
