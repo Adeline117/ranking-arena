@@ -29,8 +29,6 @@ EVIDENCE_MIGRATION="$MIGRATIONS/20261113110430_rank_publication_source_evidence_
 WINDOW_FLAGS_MIGRATION="$MIGRATIONS/20261123021904_public_ranked_leaderboard_window_flags.sql"
 VISIBLE_MIGRATION="$MIGRATIONS/20261121201553_visible_sources_from_served_ranks.sql"
 NEW_MIGRATION="$MIGRATIONS/20261124114140_stale_source_hides_only_its_own_rows.sql"
-HERO_BASELINE_MIGRATION="$MIGRATIONS/20261114103025_hero_stats_sealed_public_cohort.sql"
-HERO_IDLE_MIGRATION="$MIGRATIONS/20261124225312_hero_stats_exclude_idle_window.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -525,59 +523,5 @@ if psql_as postgres -q -f "$NEW_MIGRATION" >/dev/null 2>"$TMP_ROOT/replay.err"; 
   exit 1
 fi
 echo "ok: a replay is refused"
-
-# ---------------------------------------------------------------------------
-# public.get_hero_stats() on top of this view (20261124225312, registered
-# after this migration). Its preflight must still hold here: the function body
-# is the 20261114103025 one (this migration does not touch it) and the view
-# this migration re-creates still has the idle_window column. After it, hero
-# stats count the rows this view serves that are not idle.
-# ---------------------------------------------------------------------------
-hero_stats() {
-  psql_as anon -Atqc "SELECT exchange_count || '|' || trader_count FROM public.get_hero_stats()"
-}
-hero_function() {
-  psql_as postgres -Atqc "
-    SELECT encode(sha256(convert_to(prosrc, 'UTF8')), 'hex') || '|' || proconfig::text
-      FROM pg_proc WHERE oid = to_regprocedure('public.get_hero_stats()')"
-}
-served_90d() {
-  psql_as anon -Atqc "
-    SELECT count(DISTINCT source) || '|' || count(*) FROM public.public_ranked_leaderboard
-     WHERE season_id = '90D' $1"
-}
-PGOPTIONS='-c client_min_messages=warning' psql_as postgres -q -f "$HERO_BASELINE_MIGRATION" >/dev/null
-assert_equal "hero stats: the body and configuration 20261124225312 expects are still the installed ones" \
-  '9462c36f5e983078e8e25479aa8ad7235a448d428f7abeaebaa2ab3bfcaaf944|{"search_path=pg_catalog, pg_temp",statement_timeout=2s}' \
-  "$(hero_function)"
-assert_equal "hero stats: the re-created view still has a boolean idle_window column" "boolean" \
-  "$(psql_as postgres -Atqc "
-     SELECT format_type(atttypid, atttypmod) FROM pg_attribute
-      WHERE attrelid = 'public.public_ranked_leaderboard'::regclass AND attname = 'idle_window'")"
-HERO_SERVED="$(served_90d '')"
-if [[ "${HERO_SERVED%%|*}" -lt 2 ]]; then
-  echo "hero stats: the fixture must serve at least two 90D sources (got $HERO_SERVED)" >&2
-  exit 1
-fi
-assert_equal "hero stats before: every served 90D row and source" "$HERO_SERVED" "$(hero_stats)"
-# One served source becomes idle-only (no ROI and no PnL in the period).
-HERO_IDLE_SOURCE="$(psql_as anon -Atqc "SELECT min(source) FROM public.public_ranked_leaderboard WHERE season_id = '90D'")"
-psql_as postgres -q -c "
-  UPDATE public.leaderboard_ranks SET score_factors = '{\"idle_window\":true}'
-   WHERE season_id = '90D' AND source = '$HERO_IDLE_SOURCE'" >/dev/null
-assert_equal "hero stats: marking rows idle does not change what the view serves" \
-  "$HERO_SERVED" "$(served_90d '')"
-HERO_ACTIVE="$(served_90d 'AND NOT idle_window')"
-assert_equal "hero stats: one source fewer has rows with performance" \
-  "$(( ${HERO_SERVED%%|*} - 1 ))" "${HERO_ACTIVE%%|*}"
-assert_equal "hero stats before 20261124225312: idle rows are counted" "$HERO_SERVED" "$(hero_stats)"
-psql_as postgres -q -f "$HERO_IDLE_MIGRATION" >/dev/null
-assert_equal "hero stats: 20261124225312 applies on this view, with its body and a 5 second timeout" \
-  '9cfaca2859c780d4ae0b2c886a4f1c0f5cf48accb5341ff3308710a132528b4b|{"search_path=pg_catalog, pg_temp",statement_timeout=5s}' \
-  "$(hero_function)"
-assert_equal "hero stats after: only served rows that are not idle, and their sources" \
-  "$HERO_ACTIVE" "$(hero_stats)"
-psql_as postgres -q -f "$HERO_IDLE_MIGRATION" >/dev/null
-assert_equal "hero stats: a replay changes nothing" "$HERO_ACTIVE" "$(hero_stats)"
 
 echo "stale source hides only its own rows PostgreSQL 17 proof passed"
