@@ -649,6 +649,10 @@ jobs:
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:stale-source-row-scope-pg17
+      - name: Prove the trader resolver returns an unambiguous public source name
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:resolve-trader-public-source-pg17
 
       - name: Prove observation lineage per statement keeps every per-row outcome
         env:

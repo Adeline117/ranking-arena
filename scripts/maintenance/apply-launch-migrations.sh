@@ -520,6 +520,12 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # observations only for runs whose lineage fails. It refuses unless the
 # 152622 statement trigger is installed and enabled, so it follows it.
 # Independent of the other entries.
+# 20261122204058 makes public.arena_resolve_trader() also return the source's
+# public name (meta.legacy_platform when set, else the slug) and adds the
+# index and trigger that keep that name unambiguous among active serving
+# sources. The website already reads the optional publicSource field, so no
+# release depends on it; it refuses if a duplicate name exists. Independent of
+# the other entries.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -560,6 +566,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261124114140_stale_source_hides_only_its_own_rows.sql
   20261124114433_register_bitget_spot_live_board_exhaustion_contract.sql
   20261125035803_readiness_reads_run_metadata_once.sql
+  20261122204058_resolve_trader_public_source.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
