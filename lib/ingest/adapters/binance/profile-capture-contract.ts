@@ -10,8 +10,13 @@
  * Attested metrics, checked against public performance responses for 7D/30D/
  * 90D (2026-11-16 probe):
  *   - mdd: performance.data.mdd, already percent, non-negative, differs per
- *     window on both boards. The futures board only carries a 0 placeholder,
- *     so this is the only exchange-provided drawdown.
+ *     window on both boards. The futures board's data.list[].mdd is a real
+ *     value too, not a placeholder (lifted as headlineMdd, see parsers.ts;
+ *     the board fixture carries 0, 0.0116843, 13.556168, 38.776595 ...).
+ *     The window drawdown is computed on the daily equity (ROI) curve, so 0
+ *     means daily equity never fell in the window, intraday losses included
+ *     (fixtures performance-7 / chart-roi-7: mdd 11.839176 equals the
+ *     drawdown of the daily ROI points, 11.8392%).
  *   - total_positions (futures): performance.data.totalOrder, per window;
  *     sometimes null upstream, which the parser keeps as an honest absence.
  * Deliberately NOT attested:
