@@ -689,6 +689,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:hero-stats-exclude-idle-pg17
 
+      - name: Prove hero stats migration applies on the latest public view chain
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:hero-stats-latest-view-chain-pg17
+
       - name: Prove metric source contract retirement (binance_web3_bsc v2)
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
