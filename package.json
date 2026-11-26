@@ -133,6 +133,7 @@
     "qa:visible-sources-pg17": "bash supabase/migrations/__tests__/visible-sources-from-served-ranks.pg17.sh",
     "qa:stale-source-row-scope-pg17": "bash supabase/migrations/__tests__/stale-source-hides-only-its-own-rows.pg17.sh",
     "qa:readiness-run-level-count-pg17": "bash supabase/migrations/__tests__/metric-trust-readiness-run-level-count.pg17.sh",
+    "qa:resolve-trader-public-source-pg17": "bash supabase/migrations/__tests__/resolve-trader-public-source.pg17.sh",
     "qa:observation-lineage-statement-pg17": "bash supabase/migrations/__tests__/metric-trust-observation-lineage-per-statement.pg17.sh",
     "qa:artifact-integrity-statement-pg17": "bash supabase/migrations/__tests__/metric-trust-artifact-raw-integrity-per-statement.pg17.sh",
     "qa:score-bundle-entry-counts-pg17": "bash supabase/migrations/__tests__/score-bundle-index-only-entry-counts.pg17.sh",

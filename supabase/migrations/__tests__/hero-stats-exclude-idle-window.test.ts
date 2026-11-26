@@ -119,7 +119,7 @@ describe('get_hero_stats excludes idle-window rows (20261124225312)', () => {
     )
     const entries = list.match(/^ {2}\d{14}_\S+\.sql$/gm)?.map((entry) => entry.trim()) ?? []
     expect(entries.slice(-3)).toEqual([
-      '20261125035803_readiness_reads_run_metadata_once.sql',
+      '20261122204058_resolve_trader_public_source.sql',
       MIGRATION_NAME,
       '20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql',
     ])
