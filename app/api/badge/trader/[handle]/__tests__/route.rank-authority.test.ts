@@ -1,27 +1,7 @@
 const mockFetch = jest.fn()
 
-jest.mock('@/lib/rankings/publication-policy', () => ({
-  isPublicRankingSourceAllowed: (source: unknown) => source === 'binance_futures',
-  sanitizePublicRankingPayload: (
-    { traders, period }: { traders: unknown; period: string },
-    { expectedPeriod }: { expectedPeriod?: string }
-  ) => ({
-    traders: Array.isArray(traders)
-      ? traders.filter(
-          (row) =>
-            typeof row === 'object' &&
-            row !== null &&
-            (row as Record<string, unknown>).source === 'binance_futures' &&
-            (row as Record<string, unknown>).season_id === period &&
-            expectedPeriod === period &&
-            (row as Record<string, unknown>).score_completeness === 'full' &&
-            (row as Record<string, unknown>).metrics_estimated === false &&
-            (row as Record<string, unknown>).is_outlier === false
-        )
-      : [],
-  }),
-}))
-
+// The real shared row policy, not a stand-in: a mock of it once hid that a
+// route selected too few columns for the real check to pass.
 jest.mock('@/lib/rankings/public-response-cache', () => ({
   publicRankingResponseRejectionHeaders: () => ({
     'Cache-Control': 'private, no-store, max-age=0',
@@ -152,11 +132,23 @@ describe('trader badge public rank authority', () => {
     expect(strayLessThan(svg)).toBe(false)
   })
 
-  it('shows the rank but no score for an idle-window account', async () => {
-    const svg = await badgeFor(publicRow({ arena_score: 0.01, idle_window: true }))
-    expect(svg).toContain('#3')
+  it('says "no trading" and shows neither rank nor score for an idle-window account', async () => {
+    const svg = await badgeFor(
+      publicRow({
+        arena_score: 0.01,
+        roi: 0,
+        pnl: 0,
+        win_rate: null,
+        max_drawdown: null,
+        score_completeness: 'minimal',
+        idle_window: true,
+      })
+    )
+    expect(svg).toContain('No trading')
+    expect(svg).toContain('no trading this period')
+    expect(svg).not.toContain('#3')
+    expect(svg).not.toContain('SCORE')
     expect(svg).not.toContain('&lt;1')
-    expect(svg).toMatch(/fill="#EDEDED">—<\/text>/)
     expect(strayLessThan(svg)).toBe(false)
     expect(urls().find((url) => url.includes('/public_ranked_leaderboard?'))).toContain(
       'idle_window'
