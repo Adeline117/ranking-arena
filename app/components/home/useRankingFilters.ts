@@ -680,12 +680,17 @@ export function useRankingFilters({
   // page, where the note is) keeps its rows and the idle ones follow. Jumping
   // back to page 1 would put them some eighty pages away. Collapsing returns to
   // the page where the tail was expanded, which always exists in the short list.
-  const idleAnchorPageRef = useRef<number | null>(null)
+  // The anchor remembers which board it belongs to (period, category,
+  // exchange). Collapsing after the reader moved to another board must not
+  // return to a page number of the old one — that page may not exist there.
+  const idleAnchorRef = useRef<{ page: number; board: string } | null>(null)
   const handleShowIdle = useCallback(
     (next: boolean) => {
+      const board = `${activeTimeRange}|${stateRef.current.category}|${stateRef.current.selectedExchange ?? ''}`
       const currentIndex = Math.max(0, (stateRef.current.currentPage || 1) - 1)
-      const targetIndex = next ? currentIndex : (idleAnchorPageRef.current ?? 0)
-      if (next) idleAnchorPageRef.current = currentIndex
+      const anchor = idleAnchorRef.current
+      const targetIndex = next ? currentIndex : anchor && anchor.board === board ? anchor.page : 0
+      idleAnchorRef.current = next ? { page: currentIndex, board } : null
       setShowIdle(next)
       stateRef.current = { ...stateRef.current, showIdle: next }
       syncStateToUrl({ idle: next })
@@ -701,7 +706,7 @@ export function useRankingFilters({
         syncStateToUrl({ page: targetIndex + 1, idle: next })
       })
     },
-    [category, currentFilterQuery, fetchPage, sortColumn, sortDir, syncStateToUrl]
+    [activeTimeRange, category, currentFilterQuery, fetchPage, sortColumn, sortDir, syncStateToUrl]
   )
 
   const filterFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)

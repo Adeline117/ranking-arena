@@ -430,6 +430,29 @@ describe('server-side filters (audit P2-5)', () => {
       expect(result.current.currentPage).toBe(81)
     })
 
+    it('collapses to page 1 when the reader moved to another board since expanding', async () => {
+      const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+      await act(async () => {
+        result.current.handlePageChange(81)
+        await Promise.resolve()
+      })
+      await act(async () => {
+        result.current.handleShowIdle(true)
+        await Promise.resolve()
+      })
+      // Another board: the remembered page 81 belonged to the previous one.
+      await act(async () => {
+        result.current.setCategory('spot')
+        await Promise.resolve()
+      })
+      await act(async () => {
+        result.current.handleShowIdle(false)
+        await Promise.resolve()
+      })
+      expect(mockFetchPage.mock.calls.at(-1)?.[0]).toBe(0)
+      expect(result.current.currentPage).toBe(1)
+    })
+
     it('does not request idle rows while a filter or another sort is active', async () => {
       const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
       await act(async () => {
