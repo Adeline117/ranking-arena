@@ -45,6 +45,8 @@ interface TraderHeaderProps {
   headlineWindow?: string
   /** Arena Score for display in header */
   arenaScore?: number | null
+  /** Ranked but no trading in the period on screen: shown instead of a score. */
+  idleWindow?: boolean
   /** Score confidence level — 'full', 'partial', or 'minimal' */
   scoreConfidence?: string | null
   /** Total trades count — shown as warning when very low */
@@ -105,6 +107,7 @@ export default function TraderHeader({
   roi90d,
   headlineWindow,
   arenaScore,
+  idleWindow = false,
   scoreConfidence,
   tradesCount,
   rank,
@@ -361,6 +364,7 @@ export default function TraderHeader({
               isVerifiedTrader={isVerifiedTrader}
               isBot={isBot}
               arenaScore={arenaScore}
+              idleWindow={idleWindow}
               scoreConfidence={scoreConfidence}
               tradesCount={tradesCount}
               rank={rank}

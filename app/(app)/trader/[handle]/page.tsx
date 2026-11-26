@@ -33,6 +33,7 @@ import {
   type Unavailable,
 } from './profile-identity'
 import { traderCanonicalPath } from '@/lib/seo/trader-url'
+import { scoreDisplayState, withoutScores, type IdleWindows } from './idle-window'
 import { BASE_URL } from '@/lib/constants/urls'
 import {
   generateTraderProfilePageSchema,
@@ -414,6 +415,23 @@ const getCurrentPublicLeaderboardMeta = cache(async (platform: string, traderKey
   }
 })
 
+/**
+ * The periods in which this account is ranked but idle, or null when the
+ * ranking could not be read. A failed read is logged and reported as UNKNOWN:
+ * the page then withholds the score instead of showing a placeholder as one.
+ */
+async function getIdleWindows(platform: string, traderKey: string): Promise<IdleWindows> {
+  try {
+    return (await getCurrentPublicLeaderboardMeta(platform, traderKey)).idleSeasons
+  } catch (err) {
+    logger.error('[trader/page] idle-window read failed; score withheld', {
+      platform,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    return null
+  }
+}
+
 // Request-deduplicated but never persistently cached: claimed ownership is an
 // authorization/privacy projection. Unlink must remove owner routing on the
 // next request instead of waiting for an ISR cache entry to expire.
@@ -754,10 +772,15 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
     const similarArenaScore = typeof similarScoreExtra === 'number' ? similarScoreExtra : null
     // An idle account has no score or return to compare by: matching on its
     // zero ROI would only list other idle accounts. No similar traders for it.
-    const idle90d = servingScores.find((row) => row.season_id === '90D')?.idle_window === true
+    // Judged for the window the profile DISPLAYS (the headline window), which
+    // is not always 90D.
+    const idleWindows = await getIdleWindows(publicSource, servingResolved.exchangeTraderId)
+    const displaySeason = (servingTraderData.headline_window ?? '90d').toUpperCase()
+    const displayScoreState = scoreDisplayState(idleWindows, displaySeason)
+    servingTraderData.idle_windows = idleWindows
     const serverSimilarTraders = (
       await (
-        idle90d
+        displayScoreState === 'idle'
           ? Promise.resolve([])
           : fetchSimilarTraders(
               getReadReplica(),
@@ -820,7 +843,9 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
         windowLabel={t(SUMMARY_WINDOW_KEY[summaryWindow])}
         metrics={{
           rank: servingTraderData.rank,
-          arenaScore: summaryRow?.arena_score,
+          // Withheld when the account is idle in this window, or when the
+          // ranking read failed and that is not known.
+          arenaScore: displayScoreState === 'scored' ? summaryRow?.arena_score : null,
           roi: servingTraderData.roi,
           pnl: servingTraderData.pnl,
           winRate: servingTraderData.win_rate,
@@ -831,7 +856,7 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
         language={lang}
         // Board capture time of the headline entry (not Arena's re-score time).
         dataAsOf={best?.provenance?.asOf ?? null}
-        idleWindow={summaryRow?.idle_window === true}
+        idleWindow={displayScoreState === 'idle'}
       />
     )
 
@@ -973,13 +998,28 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
     { name: traderData.handle, url: legacyCanonicalUrl },
   ])
 
-  // Legacy header values are 90D-only (see traderData above). An idle 90D
-  // window means the account is ranked but unscored: no score, no breakdown and
-  // no similar traders. Same request-cached read the metadata used.
-  const legacyIdle90d = await getCurrentPublicLeaderboardMeta(resolved.platform, resolved.traderKey)
-    .then((meta) => meta.row?.idle === true)
-    .catch(() => false)
-  if (legacyIdle90d) {
+  // Legacy header values are 90D-only (see traderData above). In an idle 90D
+  // window the account is ranked but unscored: no score, no breakdown, no
+  // similar traders. When the ranking read failed the state is unknown and the
+  // score is withheld as well. Same request-cached read the metadata used.
+  const legacyIdleWindows = await getIdleWindows(resolved.platform, resolved.traderKey)
+  const legacyScoreState = scoreDisplayState(legacyIdleWindows, '90D')
+  const legacyIdle90d = legacyScoreState === 'idle'
+  traderData.idle_windows = legacyIdleWindows
+  // The detail payload is what the client header and Overview tab read, so it
+  // is stripped too — emptying `traderData` alone left the placeholder score,
+  // the breakdown and the similar traders on screen.
+  const legacyDetail =
+    serverTraderData && legacyScoreState !== 'scored'
+      ? {
+          ...serverTraderData,
+          performance: withoutScores(
+            serverTraderData.performance as Record<string, unknown> | null | undefined
+          ),
+          ...(legacyIdle90d ? { similarTraders: [] } : {}),
+        }
+      : serverTraderData
+  if (legacyScoreState !== 'scored') {
     traderData.arena_score = null
     traderData.profitability_score = null
     traderData.risk_control_score = null
@@ -1014,9 +1054,7 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
         <TraderProfileClient
           data={traderData}
           serverTraderData={
-            serverTraderData as
-              | import('@/app/(app)/u/[handle]/components/types').TraderPageData
-              | null
+            legacyDetail as import('@/app/(app)/u/[handle]/components/types').TraderPageData | null
           }
           claimedUser={claimedUserProfile}
           serverSummary={legacySummary}

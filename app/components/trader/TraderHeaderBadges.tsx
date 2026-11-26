@@ -38,6 +38,8 @@ export interface TraderHeaderBadgesProps {
   isVerifiedTrader?: boolean
   isBot?: boolean
   arenaScore?: number | null
+  /** Ranked but no trading in the period on screen: say so, show no score. */
+  idleWindow?: boolean
   scoreConfidence?: string | null
   tradesCount?: number | null
   rank?: number | null
@@ -71,6 +73,7 @@ export function TraderHeaderBadges({
   isVerifiedTrader = false,
   isBot = false,
   arenaScore,
+  idleWindow = false,
   scoreConfidence,
   rank,
   headlineWindow,
@@ -167,8 +170,25 @@ export function TraderHeaderBadges({
         </Badge>
       )}
 
+      {/* Ranked, but no trading in this period: no score to show. */}
+      {idleWindow && (
+        <Badge color={tokens.colors.text.tertiary}>
+          <Text
+            data-testid="header-idle-window"
+            size="xs"
+            style={{
+              fontSize: tokens.typography.fontSize.xs,
+              color: tokens.colors.text.secondary,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {t('noTradingThisPeriod')}
+          </Text>
+        </Badge>
+      )}
+
       {/* Arena score */}
-      {hasArenaScore && (
+      {!idleWindow && hasArenaScore && (
         <Badge
           key="score"
           color={getScoreColor(arenaScore)}
@@ -203,7 +223,7 @@ export function TraderHeaderBadges({
       )}
 
       {/* Low confidence warning */}
-      {hasArenaScore && confidenceState !== 'full' && (
+      {!idleWindow && hasArenaScore && confidenceState !== 'full' && (
         <Badge
           key="confidence"
           color={confidenceColor}
