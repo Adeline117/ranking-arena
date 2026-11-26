@@ -13,8 +13,8 @@ const migration = read(`supabase/migrations/${MIGRATION_NAME}`)
 const baseline = read(`supabase/migrations/${BASELINE_NAME}`)
 const proof = read('supabase/migrations/__tests__/hero-stats-exclude-idle-window.pg17.sh')
 const seasonProof = read('supabase/migrations/__tests__/public-ranking-season-publication.pg17.sh')
-const staleSourceProof = read(
-  'supabase/migrations/__tests__/stale-source-hides-only-its-own-rows.pg17.sh'
+const latestChainProof = read(
+  'supabase/migrations/__tests__/hero-stats-on-latest-view-chain.pg17.sh'
 )
 const launchRunner = read('scripts/maintenance/apply-launch-migrations.sh')
 const packageJson = read('package.json')
@@ -156,10 +156,16 @@ describe('get_hero_stats excludes idle-window rows (20261124225312)', () => {
     // The real orchestrator publishes an idle row and the hero count leaves it out.
     expect(seasonProof).toContain(MIGRATION_NAME)
     expect(seasonProof).toContain('hero stats count the 7 rows with performance, not the idle one')
-    // ...and on the view as the later migration 20261124114140 re-creates it.
-    expect(staleSourceProof).toContain(MIGRATION_NAME)
-    expect(staleSourceProof).toContain(
+    // ...and on the view as the later migration 20261124114140 re-creates it,
+    // in its own script (the stale-source proof stays single-purpose).
+    expect(latestChainProof).toContain(MIGRATION_NAME)
+    expect(latestChainProof).toContain('stale-source-hides-only-its-own-rows.pg17.sh')
+    expect(latestChainProof).toContain(
       'hero stats after: only served rows that are not idle, and their sources'
     )
+    expect(packageJson).toContain(
+      '"qa:hero-stats-latest-view-chain-pg17": "bash supabase/migrations/__tests__/hero-stats-on-latest-view-chain.pg17.sh"'
+    )
+    expect(ciWorkflow).toContain('run: npm run qa:hero-stats-latest-view-chain-pg17')
   })
 })
