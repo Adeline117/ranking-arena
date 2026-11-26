@@ -63,6 +63,10 @@ async function fetchSimilarTradersUncached(
     // The view is the ranking authority. It seals source freshness and complete
     // metrics before this range filter, so a profile's recommendation card
     // cannot promote a raw/partial row merely because it looks similar.
+    //
+    // Idle-window rows (no ROI and no PnL in the period) are never a
+    // comparable: their ROI 0 and 0.01 score are placeholders, and a
+    // low-score trader's range would otherwise fill up with them.
     if (arenaScore != null) {
       const scoreRange = Math.max(arenaScore * 0.25, 10)
       const result = await supabase
@@ -72,6 +76,7 @@ async function fetchSimilarTradersUncached(
         .eq(LR.season_id, '90D')
         .neq(LR.source_trader_id, traderKey)
         .not('rank', 'is', null)
+        .eq('idle_window', false)
         .not(LR.arena_score, 'is', null)
         .gte(LR.arena_score, arenaScore - scoreRange)
         .lte(LR.arena_score, arenaScore + scoreRange)
@@ -90,6 +95,7 @@ async function fetchSimilarTradersUncached(
         .eq(LR.season_id, '90D')
         .neq(LR.source_trader_id, traderKey)
         .not('rank', 'is', null)
+        .eq('idle_window', false)
         .gte(LR.roi, roi - roiRange)
         .lte(LR.roi, roi + roiRange)
         .order(LR.roi, { ascending: false })

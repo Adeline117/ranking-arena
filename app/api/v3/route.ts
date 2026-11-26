@@ -93,9 +93,9 @@ function sanitizePublicSearchRows(value: unknown): {
     ? sanitized.traders.filter(isPositivePublishedRank)
     : []
 
-  // A fresh database read from the security-barrier view must be an all-safe
-  // cohort. Returning a shorter result on any mismatch could look like a
-  // complete search result, so make the entire ranking portion unavailable.
+  // A fresh database read from the security-barrier view should be an all-safe
+  // cohort; `integrityCompromised` reports any mismatch. Each caller decides
+  // what a mismatch means for its response (see handleSearch, handlePlatforms).
   return {
     rows,
     integrityCompromised: rows.length !== value.length,
@@ -474,13 +474,25 @@ async function handleSearch(params: URLSearchParams) {
     }
 
     const cohort = sanitizePublicSearchRows(data)
-    // A row that fails the public-ranking proof is dropped and the rest of the
-    // search result is still returned, marked partial. One unexpected row used
-    // to empty the whole result. (The platform count map below still fails as a
-    // whole: a shortened count would be a wrong number, not a shorter list.)
-    if (cohort.integrityCompromised) {
+    // Search is a bounded candidate page with no total, so one row that fails
+    // the public-ranking proof is dropped (and counted in the log) and the
+    // verified matches are still returned; emptying the whole response for it
+    // hid every valid match. When no row at all passes there is no verified
+    // result to return, and the response stays unverified as before.
+    // (handlePlatforms keeps failing closed: a count map built from fewer rows
+    // would be a wrong number, not a shorter list.)
+    const droppedRows = data.length - cohort.rows.length
+    if (droppedRows > 0 && cohort.rows.length === 0) {
+      return {
+        data: [],
+        totalCountIsExact: false,
+        rankingVisibility: 'partial' as const,
+        rankingVisibilityReason: 'public_cohort_unverified',
+      }
+    }
+    if (droppedRows > 0) {
       log.warn('public search dropped rows that failed public-ranking proof', {
-        dropped: Array.isArray(data) ? data.length - cohort.rows.length : null,
+        dropped: droppedRows,
         kept: cohort.rows.length,
       })
     }
@@ -497,16 +509,7 @@ async function handleSearch(params: URLSearchParams) {
     // This is a bounded candidate page, not a same-predicate total. Omitting
     // `total` is intentional: a visible page length must not masquerade as
     // the total number of public matching traders.
-    return {
-      data: cleaned,
-      totalCountIsExact: false,
-      ...(cohort.integrityCompromised
-        ? {
-            rankingVisibility: 'partial' as const,
-            rankingVisibilityReason: 'public_cohort_unverified',
-          }
-        : {}),
-    }
+    return { data: cleaned, totalCountIsExact: false }
   } catch (err) {
     log.warn('public search cohort unavailable', {
       error: err instanceof Error ? err.message : String(err),
@@ -533,6 +536,9 @@ async function handlePlatforms() {
       .select(PUBLIC_V3_PLATFORM_COUNT_COLUMNS)
       .eq('season_id', V3_PLATFORM_COUNT_PERIOD)
       .not('rank', 'is', null)
+      // Per-platform trader counts are traders with performance in the
+      // period, as in get_hero_stats: idle-window rows are not counted.
+      .eq('idle_window', false)
 
     if (error || !Array.isArray(data)) {
       return {

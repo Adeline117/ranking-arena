@@ -411,6 +411,11 @@ done
 # Hero stats (20261114103025) count the sealed public cohort only.
 PGOPTIONS='-c client_min_messages=warning' psql_db -q \
   -f "$MIGRATIONS/20261114103025_hero_stats_sealed_public_cohort.sql" >/dev/null
+# ...and of it only the rows with performance (20261124225312): an idle-window
+# row is not counted (Positive 5). Every count below that has no idle row is
+# what 20261114103025 alone returned.
+PGOPTIONS='-c client_min_messages=warning' psql_db -q \
+  -f "$MIGRATIONS/20261124225312_hero_stats_exclude_idle_window.sql" >/dev/null
 hero_stats() {
   psql_db -Atqc "SET ROLE anon; SELECT exchange_count || '|' || trader_count FROM public.get_hero_stats()"
 }
@@ -888,6 +893,10 @@ assert_equal "no other row is marked, and ranks stay 1..8" "6|8|8" \
   "$(psql_db -Atqc "SELECT pg_catalog.count(*) FILTER (WHERE NOT idle_window AND NOT mdd_contradiction)
        || '|' || pg_catalog.count(DISTINCT rank) || '|' || pg_catalog.max(rank)
      FROM public.public_ranked_leaderboard WHERE season_id = '90D'")"
+# Hero stats (20261124225312) leave the idle row out; the refused-drawdown row
+# has performance and stays in. by-echo's source still has scored rows.
+assert_equal "hero stats count the 7 rows with performance, not the idle one" "3|7|8" \
+  "$(hero_stats)|$(view_count)"
 # Back to the previous metrics: the marks leave with the next cohort.
 psql_db -q >/dev/null <<'SQL'
 UPDATE arena.fixture_trader_metrics SET roi_pct = 20.0, pnl_usd = 2500 WHERE trader_id = 22;

@@ -154,8 +154,8 @@ function getStoredPreferences() {
   }
 }
 
-// Client-side advanced filter
-function applyAdvancedFilter(list: Trader[], config: FilterConfig): Trader[] {
+// Client-side advanced filter (exported for the server-parity test)
+export function applyAdvancedFilter(list: Trader[], config: FilterConfig): Trader[] {
   return list.filter((trader) => {
     if (config.exchange?.length) {
       const src = (trader.source || '').toLowerCase()
@@ -177,16 +177,21 @@ function applyAdvancedFilter(list: Trader[], config: FilterConfig): Trader[] {
       (trader.roi == null || !Number.isFinite(trader.roi) || trader.roi > config.roi_max)
     )
       return false
+    // Same rule as the SQL predicate (applyLeaderboardFilters): once a drawdown
+    // bound is set, a row that publishes no max drawdown does not match it.
+    // With no bound set, such rows are not excluded.
     if (
       config.drawdown_min != null &&
-      trader.max_drawdown != null &&
-      Math.abs(trader.max_drawdown) < config.drawdown_min
+      (trader.max_drawdown == null ||
+        !Number.isFinite(trader.max_drawdown) ||
+        Math.abs(trader.max_drawdown) < config.drawdown_min)
     )
       return false
     if (
       config.drawdown_max != null &&
-      trader.max_drawdown != null &&
-      Math.abs(trader.max_drawdown) > config.drawdown_max
+      (trader.max_drawdown == null ||
+        !Number.isFinite(trader.max_drawdown) ||
+        Math.abs(trader.max_drawdown) > config.drawdown_max)
     )
       return false
     if (config.min_pnl != null && (trader.pnl == null || trader.pnl < config.min_pnl)) return false

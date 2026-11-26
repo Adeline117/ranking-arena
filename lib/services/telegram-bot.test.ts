@@ -126,4 +126,25 @@ describe('Telegram /stats public ranking authority', () => {
     expect(payload.text).toContain('Active Exchanges: Unknown (published cohort unavailable)')
     expect(payload.text).not.toContain('untrusted_alias')
   })
+
+  it('counts ranked traders and active exchanges without idle-window rows', async () => {
+    const countQuery = query({ data: null, error: null, count: 2 })
+    const sourceQuery = query({
+      data: [{ source: 'binance_futures' }, { source: 'bybit' }],
+      error: null,
+    })
+    const from = jest.fn().mockReturnValueOnce(countQuery).mockReturnValueOnce(sourceQuery)
+    mockedGetSupabaseAdmin.mockReturnValue({ from } as never)
+
+    await handleTelegramUpdate(statsUpdate())
+
+    // Both queries share the predicate: the source list is only trusted when
+    // it has exactly as many rows as the count.
+    expect(countQuery.eq).toHaveBeenCalledWith('idle_window', false)
+    expect(sourceQuery.eq).toHaveBeenCalledWith('idle_window', false)
+    // Old rule (no idle row): the predicate removes nothing, same message.
+    const payload = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as { text: string }
+    expect(payload.text).toContain('Ranked Traders: 2')
+    expect(payload.text).toContain('Active Exchanges: 2')
+  })
 })
