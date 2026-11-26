@@ -1,4 +1,9 @@
-import { validateLeaderboardRows, validateStats, roiCrossCheckOk } from '../validate'
+import {
+  validateLeaderboardRows,
+  validateStats,
+  roiCrossCheckComparable,
+  roiCrossCheckOk,
+} from '../validate'
 import type { ParsedLeaderboardRow, ParsedStats } from '../../core/types'
 
 function row(overrides: Partial<ParsedLeaderboardRow> = {}): ParsedLeaderboardRow {
@@ -221,6 +226,25 @@ describe('validateStats', () => {
   it('winPositions ≤ totalPositions → 原样保留', () => {
     const { valid } = validateStats([stats({ winPositions: 6, totalPositions: 10 })])
     expect(valid[0].winPositions).toBe(6)
+  })
+})
+
+describe('roiCrossCheckComparable', () => {
+  const profile = '2026-11-25T12:00:00.000Z'
+  it('compares reads up to 30 minutes apart, in either order', () => {
+    expect(roiCrossCheckComparable('2026-11-25T11:30:00.000Z', profile)).toBe(true)
+    expect(roiCrossCheckComparable('2026-11-25T12:29:59.000Z', profile)).toBe(true)
+  })
+  it('does not compare reads further apart (a live ROI moves in between)', () => {
+    expect(roiCrossCheckComparable('2026-11-25T11:29:59.000Z', profile)).toBe(false)
+    expect(roiCrossCheckComparable('2026-11-23T12:00:00.000Z', profile)).toBe(false)
+  })
+  it('does not compare without a usable board time', () => {
+    expect(roiCrossCheckComparable(undefined, profile)).toBe(false)
+    expect(roiCrossCheckComparable('not a time', profile)).toBe(false)
+  })
+  it('accepts the database text form of a timestamp', () => {
+    expect(roiCrossCheckComparable('2026-11-25 11:50:00.123456+00', profile)).toBe(true)
   })
 })
 

@@ -478,6 +478,7 @@ describe('Tier-B profile coverage accounting', () => {
       rejects: 0,
       errors: 0,
       crossCheckFails: 0,
+      crossCheckSkipped: 0,
       remaining: 0,
     })
 
@@ -1503,6 +1504,7 @@ describe('Tier-B profile coverage accounting', () => {
       rejects: 1,
       errors: 0,
       crossCheckFails: 0,
+      crossCheckSkipped: 0,
     })
 
     expect(mockWriteRawObject).toHaveBeenCalledTimes(1)

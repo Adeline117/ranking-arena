@@ -13,6 +13,7 @@ type NativeTimeframe = 7 | 30 | 90
 interface NativeSnapshotRow {
   snapshot_id: number
   timeframe: NativeTimeframe
+  scraped_at: string
 }
 
 interface NativeMembershipRow {
@@ -36,6 +37,8 @@ export interface NativeCohortResult {
   nativeTimeframes: NativeTimeframe[]
   foundTimeframes: NativeTimeframe[]
   missingTimeframes: NativeTimeframe[]
+  /** Native timeframe -> scrape time of the board the headline ROIs come from. */
+  snapshotScrapedAt: Record<string, string>
 }
 
 export interface NativeCohortOptions {
@@ -74,11 +77,18 @@ export async function getLatestPassedNativeCohort(
 ): Promise<NativeCohortResult> {
   const nativeTimeframes = normalizedNativeTimeframes(src)
   if (nativeTimeframes.length === 0) {
-    return { traders: [], nativeTimeframes, foundTimeframes: [], missingTimeframes: [] }
+    return {
+      traders: [],
+      nativeTimeframes,
+      foundTimeframes: [],
+      missingTimeframes: [],
+      snapshotScrapedAt: {},
+    }
   }
 
   const { rows: snapshotRows } = await getIngestPool().query<NativeSnapshotRow>(
-    `SELECT DISTINCT ON (timeframe) id AS snapshot_id, timeframe
+    `SELECT DISTINCT ON (timeframe) id AS snapshot_id, timeframe,
+            scraped_at::text AS scraped_at
        FROM arena.leaderboard_snapshots
       WHERE source_id = $1
         AND timeframe = ANY($2::int[])
@@ -92,9 +102,11 @@ export async function getLatestPassedNativeCohort(
   const foundSet = new Set(snapshotRows.map((row) => row.timeframe))
   const foundTimeframes = nativeTimeframes.filter((timeframe) => foundSet.has(timeframe))
   const missingTimeframes = nativeTimeframes.filter((timeframe) => !foundSet.has(timeframe))
+  const snapshotScrapedAt: Record<string, string> = {}
+  for (const row of snapshotRows) snapshotScrapedAt[String(row.timeframe)] = row.scraped_at
 
   if (snapshotRows.length === 0) {
-    return { traders: [], nativeTimeframes, foundTimeframes, missingTimeframes }
+    return { traders: [], nativeTimeframes, foundTimeframes, missingTimeframes, snapshotScrapedAt }
   }
 
   const cursorKind = options.profileCursor?.kind ?? null
@@ -136,5 +148,6 @@ export async function getLatestPassedNativeCohort(
     nativeTimeframes,
     foundTimeframes,
     missingTimeframes,
+    snapshotScrapedAt,
   }
 }
