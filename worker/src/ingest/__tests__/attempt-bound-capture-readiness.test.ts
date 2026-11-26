@@ -372,6 +372,11 @@ describe('partitioned V4 worker startup readiness', () => {
     expect(queries[4]).toContain(TIER_A_EXECUTION_TRIGGER_CATALOG_SHA256)
     expect(queries[4]).toContain('pg_catalog.count(*) = 65')
     expect(queries[4]).toContain('pg_catalog.count(*) = 24')
+    // The arena.sources name guard (20261122204058) is outside the Tier-A
+    // contract and is excluded only by its exact identity.
+    expect(queries[4]).toContain("trigger_row.tgname = 'sources_reject_ambiguous_serving_name'")
+    expect(queries[4]).toContain("function_row.proname = 'reject_ambiguous_serving_source_name'")
+    expect(queries[4]).toContain('trigger_row.tgtype = 23')
     expect(queries[4]).toContain('pg_catalog.count(attribute.attrelid) = 33')
     expect(queries[4]).toContain('pg_catalog.count(function_row.oid) = 17')
     expect(queries[4]).toContain("'verification_round'::name")

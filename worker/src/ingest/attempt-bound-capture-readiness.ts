@@ -933,6 +933,20 @@ export const TIER_A_EXECUTION_ENFORCEMENT_CATALOG_SQL = `WITH marker_identity AS
       ON function_row.oid = trigger_row.tgfoid
     JOIN pg_catalog.pg_namespace AS function_namespace
       ON function_namespace.oid = function_row.pronamespace
+    -- 20261122204058 added a name-uniqueness guard on arena.sources. It does
+    -- not take part in Tier-A execution writes, so it is outside this
+    -- contract. Excluded by exact identity (name, function, tgtype): any
+    -- other trigger on these tables, or a changed copy of this one, still
+    -- counts and still fails the gate closed.
+    WHERE NOT (
+      table_namespace.nspname = 'arena'
+      AND table_row.relname = 'sources'
+      AND trigger_row.tgname = 'sources_reject_ambiguous_serving_name'
+      AND function_namespace.nspname = 'arena'
+      AND function_row.proname = 'reject_ambiguous_serving_source_name'
+      AND pg_catalog.pg_get_function_identity_arguments(function_row.oid) = ''
+      AND trigger_row.tgtype = 23
+    )
   ),
   trigger_contract AS (
     SELECT
