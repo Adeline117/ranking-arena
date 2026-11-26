@@ -48,11 +48,12 @@ export const EXPECTED_METRICS_BY_SOURCE: Record<string, ExpectedMetrics> = {
     'profit_share_rate',
   ],
   // cfd variant has no volume surface (prod 0/10523)
+  // no mdd: the meaning of copy_tradfi's max_drawdown is not established (the
+  // parser keeps it as extras.max_drawdown_unverified)
   gate_cfd: [
     'roi',
     'pnl',
     'sharpe',
-    'mdd',
     'win_rate',
     'win_positions',
     'total_positions',

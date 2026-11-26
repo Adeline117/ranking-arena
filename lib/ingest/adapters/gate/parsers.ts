@@ -75,6 +75,7 @@ export function parseGateLeaderboardPage(payload: unknown, _ctx: ParseCtx): Pars
   const items = (data.list ?? data.lists ?? []) as Dict[]
   // Futures rows live under data.list, CFD rows under data.lists.
   const collection = data.list === null || data.list === undefined ? 'lists' : 'list'
+  const cfd = collection === 'lists'
   const reportedTotal = int(data.totalcount)
 
   const rows: ParsedLeaderboardRow[] = []
@@ -101,10 +102,22 @@ export function parseGateLeaderboardPage(payload: unknown, _ctx: ParseCtx): Pars
         ...(headlinePnl === null ? {} : { pnl: { fieldPath: `data.${collection}[].profit` } }),
       },
       headlineWinRate: pct(item.win_rate),
-      // The board row carries max_drawdown (a decimal, like profit_rate/win_rate —
-      // 0.297 = 29.7%), so extract it to headlineMdd (publish writes trader_stats.mdd).
-      // Was raw-only → gate captured MDD only for top-N profiles (~36-65%).
-      headlineMdd: pct(item.max_drawdown),
+      // The futures board row carries max_drawdown (a decimal, like
+      // profit_rate/win_rate — 0.297 = 29.7%), so extract it to headlineMdd
+      // (publish writes trader_stats.mdd). Was raw-only → gate captured MDD only
+      // for top-N profiles (~36-65%).
+      //
+      // Not on the CFD board: what copy_tradfi's max_drawdown means is not
+      // established. Every row of the CFD fixture reports "0" (a +38.6%, a
+      // -27.8% and a +47.8% window alike, with sharp_ratio "0" too), and in
+      // production on 2026-11-25 a 7D window that lost 74.9% carried 0 while
+      // 9% of gate_cfd rows had a drawdown smaller than their loss. Until the
+      // field is understood it is not a metric: the value stays in raw and is
+      // kept as an unverified extra.
+      headlineMdd: cfd ? null : pct(item.max_drawdown),
+      ...(cfd && num(item.max_drawdown) !== null
+        ? { headlineExtras: { max_drawdown_unverified: num(item.max_drawdown) } }
+        : {}),
       // The board row ALSO carries sharp_ratio (gate exposes Sharpe — verified
       // against the doc screenshot 夏普率; fixture sharp_ratio=-1.31). Was
       // profile-only (deep-crawl), so Sharpe dashed for every non-top-N gate
@@ -289,6 +302,9 @@ function parseGateCfdProfile(bundle: Dict, ctx: ParseCtx): ParsedProfile {
     if (lead?.unrealized_pnl !== undefined) extras.unrealized_pnl = num(lead.unrealized_pnl)
     if (info.profit_loss_ratio !== undefined) extras.pl_ratio = num(info.profit_loss_ratio)
     if (info.net_asset_value !== undefined) extras.net_asset_value = num(info.net_asset_value)
+    if (num(info.max_draw_down) !== null) {
+      extras.max_drawdown_unverified = num(info.max_draw_down)
+    }
     const lastTrade = isoSecs(info.latest_trade_at)
     if (lastTrade !== null) extras.last_trade_at = lastTrade
     if (lead) {
@@ -302,7 +318,9 @@ function parseGateCfdProfile(bundle: Dict, ctx: ParseCtx): ParsedProfile {
       roi: pct(info.profit_rate),
       pnl: num(info.profit),
       sharpe: num(info.sharp_rate),
-      mdd: pct(info.max_draw_down),
+      // Same doubt as the CFD board's max_drawdown (see parseGateLeaderboardPage):
+      // the fixture's trade/info reports "0" for a +38.6% window.
+      mdd: null,
       winRate: pct(info.win_rate),
       winPositions: int(info.win_count),
       totalPositions: int(info.trade_count),

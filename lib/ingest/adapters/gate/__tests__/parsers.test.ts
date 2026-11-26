@@ -64,6 +64,21 @@ describe('parseGateLeaderboardPage', () => {
     expect(first.headlineWinRate).toBeCloseTo(73.33, 2)
   })
 
+  it('does not claim a drawdown from the tradfi list; the reported value stays an unverified extra', () => {
+    const page = parseGateLeaderboardPage(fixture('leaderboard-cfd-p1.json'), cfdCtx)
+    // The fixture reports max_drawdown "0" for a +38.6%, a -27.8% and a +47.8% window.
+    expect(page.rows.map((row) => row.headlineRoi! > 0)).toEqual([true, false, true])
+    for (const row of page.rows) {
+      expect(row.headlineMdd).toBeNull()
+      expect(row.headlineExtras).toEqual({ max_drawdown_unverified: 0 })
+      expect(row.raw).toHaveProperty('max_drawdown', '0')
+    }
+    // The futures list keeps its drawdown.
+    const futures = parseGateLeaderboardPage(fixture('leaderboard-fut-p1.json'), ctx)
+    expect(futures.rows[0].headlineMdd).toBeCloseTo(29.7, 1)
+    expect(futures.rows[0].headlineExtras).toBeUndefined()
+  })
+
   it('returns empty on malformed payloads', () => {
     expect(parseGateLeaderboardPage({}, ctx).rows).toHaveLength(0)
     expect(parseGateLeaderboardPage({ data: { list: 'nope' } }, ctx).rows).toHaveLength(0)
@@ -158,6 +173,9 @@ describe('parseGateProfile (cfd)', () => {
     expect(s.extras.trading_frequency).toBeCloseTo(0.8824, 4)
     expect(s.extras.trade_frequency).toBeCloseTo(6.18, 2)
     expect(s.extras.unrealized_pnl).toBe(0) // lead-info "0.00"
+    // trade/info max_draw_down "0" on a +38.6% window: kept, not claimed.
+    expect(s.mdd).toBeNull()
+    expect(s.extras.max_drawdown_unverified).toBe(0)
     expect(profile.nickname).toBe('1000X带单')
     const metrics = profile.series.map((x) => x.metric).sort()
     expect(metrics).toEqual(['pnl', 'roi'])
