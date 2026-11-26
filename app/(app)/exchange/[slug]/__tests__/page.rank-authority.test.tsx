@@ -195,3 +195,54 @@ describe('exchange landing page public rank authority', () => {
     expect(metadata.description).not.toEqual(expect.stringContaining('ranked BingX traders'))
   })
 })
+
+describe('exchange landing page counts traders with performance', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  const idleFilter = (calls: QueryCall[]) =>
+    calls.filter(({ method, args }) => method === 'eq' && args[0] === 'idle_window')
+
+  it('leaves idle-window rows out of the count and of the top list alike', async () => {
+    const topQueryCalls: QueryCall[] = []
+    const countQueryCalls: QueryCall[] = []
+    mockFrom
+      .mockReturnValueOnce(
+        makeQuery(
+          {
+            data: [publicRankedRow({ handle: 'Rank One', source_trader_id: 'rank-one' })],
+            error: null,
+          },
+          topQueryCalls
+        )
+      )
+      .mockReturnValueOnce(makeQuery({ count: 42, error: null }, countQueryCalls))
+
+    const metadata = await generateMetadata({ params: Promise.resolve({ slug: 'binance' }) })
+
+    // One predicate on both queries: a count below the rows shown would be
+    // read as unknown.
+    expect(idleFilter(topQueryCalls).map(({ args }) => args)).toEqual([['idle_window', false]])
+    expect(idleFilter(countQueryCalls).map(({ args }) => args)).toEqual([['idle_window', false]])
+    // Old rule (full rows, none idle): the predicate removes nothing and the
+    // page says what it said before.
+    expect(metadata.description).toEqual(expect.stringContaining('42 ranked Binance traders'))
+    expect(metadata.description).toEqual(
+      expect.stringContaining('Top trader: Rank One (+30.0% ROI)')
+    )
+  })
+
+  it('shows no published ranking for an exchange served only through idle rows', async () => {
+    // With the predicate both queries come back empty for such an exchange.
+    mockFrom
+      .mockReturnValueOnce(makeQuery({ data: [], error: null }))
+      .mockReturnValueOnce(makeQuery({ count: 0, error: null }))
+
+    const page = await ExchangeLandingPage({ params: Promise.resolve({ slug: 'binance' }) })
+    const subtitle = (findElementByType(page, 'page-header')?.props as ElementProps | undefined)
+      ?.subtitle
+
+    expect(subtitle).toContain('no published ranking')
+  })
+})

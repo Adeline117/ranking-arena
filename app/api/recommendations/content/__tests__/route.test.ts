@@ -410,3 +410,60 @@ describe('GET /api/recommendations/content trader identity boundary', () => {
     expect(mockFrom).not.toHaveBeenCalledWith('leaderboard_ranks')
   })
 })
+
+describe('GET /api/recommendations/content leaves idle-window rows out', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockGetAuthUser.mockResolvedValue(null)
+    mockRpc.mockResolvedValue({ data: [], error: null })
+  })
+
+  it('asks the view for non-idle rows in the top-performer fallback', async () => {
+    const trader = rankedTrader()
+    const topQuery = makeQuery({ data: [trader], error: null })
+    mockFrom.mockReturnValueOnce(topQuery)
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/recommendations/content?type=trader&limit=1')
+    )
+    const body = await response.json()
+
+    expect(topQuery.eq).toHaveBeenCalledWith('idle_window', false)
+    // Old rule (full rows, none idle): the predicate removes nothing and the
+    // response is the one this route produced before.
+    expect(body).toEqual({
+      success: true,
+      data: {
+        recommendations: [{ ...trader, recommendation_reason: 'top_performer' }],
+        type: 'trader',
+        personalized: false,
+      },
+    })
+  })
+
+  it('asks the view for non-idle rows when materializing collaborative candidates', async () => {
+    mockGetAuthUser.mockResolvedValue({ id: '20000000-0000-4000-8000-000000000001' })
+    mockRpc.mockResolvedValue({
+      data: [
+        { target_id: 'bybit:active', score: 9 },
+        { target_id: 'bybit:idle', score: 8 },
+      ],
+      error: null,
+    })
+    const active = rankedTrader({ source: 'bybit', source_trader_id: 'active' })
+    // The view no longer returns the idle candidate's row.
+    const currentQuery = makeQuery({ data: [active], error: null })
+    const topQuery = makeQuery({ data: [], error: null })
+    mockFrom.mockReturnValueOnce(currentQuery).mockReturnValueOnce(topQuery)
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/recommendations/content?type=trader&limit=2')
+    )
+    const body = await response.json()
+
+    expect(currentQuery.eq).toHaveBeenCalledWith('idle_window', false)
+    expect(topQuery.eq).toHaveBeenCalledWith('idle_window', false)
+    expect(body.data.recommendations).toEqual([active])
+    expect(JSON.stringify(body)).not.toContain('bybit:idle')
+  })
+})

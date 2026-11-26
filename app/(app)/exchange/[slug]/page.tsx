@@ -127,6 +127,11 @@ async function fetchExchangeData(sourceKey: string): Promise<ExchangeData | null
 
   const publicCohort = getExchangeSupabase()
 
+  // "N ranked traders" counts traders with performance in the period, the
+  // same population as the homepage count (get_hero_stats). Idle-window rows
+  // (no ROI and no PnL) are left out of the count AND of the top list: the two
+  // queries must share one predicate, because a count smaller than the rows
+  // shown is treated as unknown (exactCountOrUnknown).
   const [topResult, countResult] = await Promise.all([
     publicCohort
       .from('public_ranked_leaderboard')
@@ -134,6 +139,7 @@ async function fetchExchangeData(sourceKey: string): Promise<ExchangeData | null
       .eq('source', sourceKey)
       .eq('season_id', '90D')
       .not('rank', 'is', null)
+      .eq('idle_window', false)
       .order('arena_score', { ascending: false, nullsFirst: false })
       .order('rank', { ascending: true, nullsFirst: false })
       .limit(10),
@@ -142,7 +148,8 @@ async function fetchExchangeData(sourceKey: string): Promise<ExchangeData | null
       .select('*', { count: 'exact', head: true })
       .eq('source', sourceKey)
       .eq('season_id', '90D')
-      .not('rank', 'is', null),
+      .not('rank', 'is', null)
+      .eq('idle_window', false),
   ])
 
   const rawTopTraders = Array.isArray(topResult.data) ? topResult.data : []

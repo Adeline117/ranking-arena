@@ -304,3 +304,41 @@ describe('exchange OG rank authority', () => {
     expect(text).not.toContain('0 ranked traders')
   })
 })
+
+describe('exchange OG counts traders with performance', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockImageTree = null
+  })
+
+  it('leaves idle-window rows out of the total and of the top traders alike', async () => {
+    const topQueryCalls: QueryCall[] = []
+    const countQueryCalls: QueryCall[] = []
+    mockFrom
+      .mockReturnValueOnce(
+        makeQuery(
+          {
+            data: [publicRankedRow({ source_trader_id: 'rank-one', handle: 'Rank One', rank: 1 })],
+            error: null,
+          },
+          topQueryCalls
+        )
+      )
+      .mockReturnValueOnce(makeQuery({ count: 42, error: null }, countQueryCalls))
+
+    await GET({ url: 'https://arenafi.org/api/og/exchange?exchange=binance_futures' } as never)
+
+    for (const calls of [topQueryCalls, countQueryCalls]) {
+      expect(
+        calls
+          .filter(({ method, args }) => method === 'eq' && args[0] === 'idle_window')
+          .map(({ args }) => args)
+      ).toEqual([['idle_window', false]])
+    }
+    // Old rule (full rows, none idle): same card as before.
+    expect(collectText(mockImageTree)).toContain('42 ranked traders')
+    expect(rankBadges().map((badge) => String((badge.props as ElementProps).children))).toEqual([
+      '1',
+    ])
+  })
+})

@@ -18,9 +18,13 @@
  *   PARTITION BY source* — i.e. it is a global rank across EVERY tracked
  *   exchange, not a per-platform position. The `rank` prop here is the 90D
  *   entry's rank (TraderProfileClient prefers timeframe===90). The denominator
- *   `total` = getHeroStats().traderCount, which counts the 90D leaderboard_ranks
- *   rows (arena_score > 0) — the same population `rank` is drawn from. So
- *   rank/total is a true cross-exchange percentile on the 90D board.
+ *   `total` = getHeroStats().traderCount = get_hero_stats().trader_count: the
+ *   served 90D public rows that have performance in the period
+ *   (idle_window = false, migration 20261124225312). Idle-window rows (no ROI
+ *   and no PnL) are ranked after every scored row, so a scored trader's rank
+ *   is already its rank among scored traders — numerator and denominator are
+ *   the same population — and an idle row's rank is greater than `total`, so
+ *   the `rank >= total` guard below shows nothing for it.
  *
  * Sibling to RankPercentileBadge (per-platform "Top X% on Binance"); this one
  * is the cross-exchange variant. Reuses its medal tiering via getBadgeStyle.

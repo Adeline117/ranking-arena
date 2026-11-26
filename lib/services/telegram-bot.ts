@@ -345,11 +345,13 @@ async function handleStats(chatId: number, lang: BotLang): Promise<void> {
     cohort
       .from('public_ranked_leaderboard')
       .select('source_trader_id', { count: 'exact', head: true })
-      .eq('season_id', PUBLIC_TELEGRAM_STATS_PERIOD),
+      .eq('season_id', PUBLIC_TELEGRAM_STATS_PERIOD)
+      .eq('idle_window', false),
     cohort
       .from('public_ranked_leaderboard')
       .select('source')
       .eq('season_id', PUBLIC_TELEGRAM_STATS_PERIOD)
+      .eq('idle_window', false)
       .range(0, MAX_PUBLIC_TELEGRAM_STATS_SOURCE_ROWS),
   ])
 

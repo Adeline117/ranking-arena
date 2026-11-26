@@ -49,6 +49,9 @@ function buildRow(period, index, nowIso) {
     calmar_ratio: null,
     trader_type: null,
     computed_at: nowIso,
+    // Public view flags: false on every ordinary row (never null).
+    idle_window: false,
+    mdd_contradiction: false,
   }
 }
 

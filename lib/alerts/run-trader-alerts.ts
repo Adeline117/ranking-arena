@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/supabase/database.types'
 import { sanitizePublicRankingPayload } from '@/lib/rankings/publication-policy'
 import { hasFeatureAccess } from '@/lib/types/premium'
+import { createLogger } from '@/lib/utils/logger'
 import { buildTraderAlertDelivery } from './trader-alert-delivery'
 import {
   evaluateTraderAlert,
@@ -16,6 +17,8 @@ const MAX_PENDING_PER_RUN = 5_000
 const PUBLIC_RANKED_LEADERBOARD = 'public_ranked_leaderboard' as const
 const PUBLIC_ALERT_PERIOD = '90D'
 
+const log = createLogger('trader-alerts')
+
 /**
  * State rows written before the sealed public cohort existed have no durable
  * evidence provenance. Keep them out of every future comparison rather than
@@ -24,7 +27,7 @@ const PUBLIC_ALERT_PERIOD = '90D'
 export const SEALED_PUBLIC_RANKING_ALERT_BASELINE_VERSION = 1_000_000_000
 
 const PUBLIC_ALERT_RANKING_COLUMNS =
-  'season_id,source,source_trader_id,roi,pnl,max_drawdown,arena_score,rank,win_rate,score_completeness,metrics_estimated,is_outlier,computed_at'
+  'season_id,source,source_trader_id,roi,pnl,max_drawdown,arena_score,rank,win_rate,score_completeness,metrics_estimated,is_outlier,computed_at,idle_window'
 
 type AlertRow = Pick<
   Database['public']['Tables']['trader_alerts']['Row'],
@@ -51,6 +54,13 @@ type DeliveryRow = Database['public']['Tables']['trader_alert_deliveries']['Row'
 interface TraderObservation extends TraderAlertObservation {
   traderId: string
   source: string
+  /**
+   * The row had no ROI and no PnL in the period (view column `idle_window`).
+   * Its ROI/PnL are 0, its score is the 0.01 floor and its rank is a tail
+   * position — none of them is performance, so an idle row neither fires an
+   * alert nor moves a baseline (see runTraderAlerts).
+   */
+  idleWindow: boolean
 }
 
 export interface DeliveredTraderAlert {
@@ -66,6 +76,13 @@ export interface TraderAlertRunResult {
   alertsConfigured: number
   alertsChecked: number
   alertsSkippedNoSubscription: number
+  /** Alerts left untouched this run because the trader's row is idle-window. */
+  alertsSkippedIdleWindow: number
+  /**
+   * Alerts with the drawdown condition enabled whose trader publishes no max
+   * drawdown: only that condition was skipped, the other metrics still ran.
+   */
+  drawdownConditionsSkippedNoDrawdown: number
   tradersChecked: number
   statesWritten: number
   alertsSent: number
@@ -151,11 +168,19 @@ function observationFromPublicRankingRow(row: unknown): TraderObservation | null
     pnl: row.pnl,
     score: row.arena_score,
     rank: row.rank,
-    drawdown: row.max_drawdown,
   }
   if (
     Object.values(metrics).some((value) => typeof value !== 'number' || !Number.isFinite(value))
   ) {
+    return null
+  }
+
+  // Max drawdown is optional on a public row (score_completeness partial /
+  // minimal, or mdd_contradiction). Null means "not published": only the
+  // drawdown condition is skipped for that trader, never the whole trader.
+  // A present value that is not a finite number is still a malformed row.
+  const rawDrawdown = row.max_drawdown
+  if (rawDrawdown != null && (typeof rawDrawdown !== 'number' || !Number.isFinite(rawDrawdown))) {
     return null
   }
 
@@ -166,7 +191,8 @@ function observationFromPublicRankingRow(row: unknown): TraderObservation | null
     pnl: metrics.pnl as number,
     score: metrics.score as number,
     rank: metrics.rank as number,
-    drawdown: metrics.drawdown as number,
+    drawdown: rawDrawdown ?? null,
+    idleWindow: row.idle_window === true,
   }
 }
 
@@ -180,6 +206,25 @@ function observationForAlert(
   // It remains inert until its owner saves an explicit source-bound alert.
   if (!alert.source) return null
   return observations.get(traderKey(alert.trader_id, alert.source)) ?? null
+}
+
+/**
+ * The observation an alert may be evaluated against, or null.
+ *
+ * An idle-window row is not evaluated at all: ROI 0 / PnL 0 / score 0.01 / a
+ * tail rank are placeholders, so comparing them with the last real values
+ * would announce "ROI changed" or "rank dropped" for an account that simply
+ * did not trade. Baselines are left as they were, so when the trader shows
+ * performance again the change is measured from the last real observation.
+ * Pending deliveries wait the same way they do for an unpublished trader.
+ */
+function evaluableObservationForAlert(
+  alert: AlertRow,
+  observations: Map<string, TraderObservation>
+): TraderObservation | null {
+  const observation = observationForAlert(alert, observations)
+  if (!observation || observation.idleWindow) return null
+  return observation
 }
 
 async function reserveDelivery(
@@ -274,6 +319,8 @@ export async function runTraderAlerts(
     alertsConfigured: allAlerts.length,
     alertsChecked: 0,
     alertsSkippedNoSubscription: 0,
+    alertsSkippedIdleWindow: 0,
+    drawdownConditionsSkippedNoDrawdown: 0,
     tradersChecked: 0,
     statesWritten: 0,
     alertsSent: 0,
@@ -380,7 +427,7 @@ export async function runTraderAlerts(
     if (delivery.baseline_version < SEALED_PUBLIC_RANKING_ALERT_BASELINE_VERSION) continue
     const alert = alertsById.get(delivery.alert_id)
     if (!alert) continue
-    const observation = observationForAlert(alert, observations)
+    const observation = evaluableObservationForAlert(alert, observations)
     if (!observation) continue
     const metric = delivery.metric as TraderAlertMetric
     const lastValue = metricValue(observation, metric) ?? delivery.new_value
@@ -401,9 +448,20 @@ export async function runTraderAlerts(
 
   const stateWrites: Database['public']['Tables']['trader_alert_states']['Insert'][] = []
 
+  let alertsSkippedIdleWindow = 0
+  let drawdownConditionsSkippedNoDrawdown = 0
+
   for (const alert of alerts) {
-    const observation = observationForAlert(alert, observations)
-    if (!observation) continue
+    const observation = evaluableObservationForAlert(alert, observations)
+    if (!observation) {
+      if (observationForAlert(alert, observations)?.idleWindow) alertsSkippedIdleWindow++
+      continue
+    }
+    // evaluateTraderAlert already leaves a null metric out; count the alerts
+    // whose owner asked for the drawdown condition so the skip is visible.
+    if (observation.drawdown == null && alert.alert_drawdown === true) {
+      drawdownConditionsSkippedNoDrawdown++
+    }
 
     const alertStates: Partial<Record<TraderAlertMetric, TraderAlertMetricState>> = {}
     for (const metric of ['roi', 'pnl', 'score', 'rank', 'drawdown'] as const) {
@@ -485,13 +543,23 @@ export async function runTraderAlerts(
       throw new Error(`Failed to persist trader alert state: ${stateWriteError.message}`)
   }
 
+  if (alertsSkippedIdleWindow > 0 || drawdownConditionsSkippedNoDrawdown > 0) {
+    log.info('skipped alert conditions that have no published basis', {
+      alertsSkippedIdleWindow,
+      drawdownConditionsSkippedNoDrawdown,
+      alertsChecked: alerts.length,
+    })
+  }
+
   return {
     alertsConfigured: allAlerts.length,
     alertsChecked: alerts.length,
     alertsSkippedNoSubscription: allAlerts.length - alerts.length,
+    alertsSkippedIdleWindow,
+    drawdownConditionsSkippedNoDrawdown,
     tradersChecked: new Set(
       alerts
-        .map((alert) => observationForAlert(alert, observations))
+        .map((alert) => evaluableObservationForAlert(alert, observations))
         .filter((value): value is TraderObservation => value != null)
         .map((observation) => traderKey(observation.traderId, observation.source))
     ).size,

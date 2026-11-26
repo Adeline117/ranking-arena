@@ -526,6 +526,17 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # sources. The website already reads the optional publicSource field, so no
 # release depends on it; it refuses if a duplicate name exists. Independent of
 # the other entries.
+# 20261124225312 replaces the body of public.get_hero_stats() and raises its
+# statement_timeout from 2s to 5s: it counts the served 90D rows with
+# idle_window = false (and the sources that have such rows) instead of every
+# served row; the timeout is a stopgap for the per-row policy cost on a board
+# twice the size. It reads the column 021904 adds (114140 restates the view
+# with it), so it follows both, and
+# refuses unless the function is the 20261114103025 one with the 2s timeout
+# (or its own with 5s, on replay). The return shape is unchanged, so no website
+# release depends on it; it must be applied before the scoring worker
+# publishes with roi_pnl, or the hero count and the profile percentile badge
+# include idle rows. It touches no table 192134 guards.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -567,6 +578,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261124114433_register_bitget_spot_live_board_exhaustion_contract.sql
   20261125035803_readiness_reads_run_metadata_once.sql
   20261122204058_resolve_trader_public_source.sql
+  20261124225312_hero_stats_exclude_idle_window.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS
