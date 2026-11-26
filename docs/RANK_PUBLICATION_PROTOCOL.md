@@ -106,7 +106,7 @@ fence / claim / seal 相关 RPC 只对 owner 和 `service_role` 开放。
   0 是占位值或口径不同的迹象。这是拒收自相矛盾的值，和越界值置空留痕同一类，不推算替代值。空窗行不适用。
 - 未印证的 0 回撤（`'roi_pnl'` 下，`hasUnverifiedZeroDrawdown`，在矛盾回撤之后判）：回撤为 0、且胜率为空或低于 100%（都按入库精度，
   两列都是 numeric(5,2)）的行，回撤这一维中性计分：不进回撤百分位队列，该维的分和权重都不进这一行的质量分（不加分也不扣分），
-  置信度仍把回撤算作有值。`max_drawdown` 照常写 0 并显示，完整度标签不变，`score_factors` 带 `mdd_zero_unverified: true`，
+  置信度也不把它算作有值（等同旧口径下缺失回撤的处理）。`max_drawdown` 照常写 0 并显示，完整度标签不变，`score_factors` 带 `mdd_zero_unverified: true`，
   发布日志按来源计数。依据：币安合约的窗口回撤按日度 ROI 曲线计算（夹具 performance-7 与 chart-roi-7 逐位吻合），
   日内亏损不留痕，胜率低于 100% 时 0 是交易所口径的真实值，但不能说明没有亏损。胜率 100% 且回撤 0 自洽，照常按真实值计。
   公开视图没有对应的标记列。
