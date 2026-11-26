@@ -377,6 +377,12 @@ describe('partitioned V4 worker startup readiness', () => {
     expect(queries[4]).toContain("trigger_row.tgname = 'sources_reject_ambiguous_serving_name'")
     expect(queries[4]).toContain("function_row.proname = 'reject_ambiguous_serving_source_name'")
     expect(queries[4]).toContain('trigger_row.tgtype = 23')
+    expect(queries[4]).toContain("trigger_row.tgattr::text = '2 27 26 25'")
+    expect(queries[4]).toContain('trigger_row.tgqual IS NULL')
+    expect(queries[4]).toContain('NOT function_row.prosecdef')
+    expect(queries[4]).toContain(
+      "= '254a1583a8bd4d67762d8f9ff8a5d068425878f1cf4e57abc010c8989a8d8d8f'"
+    )
     expect(queries[4]).toContain('pg_catalog.count(attribute.attrelid) = 33')
     expect(queries[4]).toContain('pg_catalog.count(function_row.oid) = 17')
     expect(queries[4]).toContain("'verification_round'::name")

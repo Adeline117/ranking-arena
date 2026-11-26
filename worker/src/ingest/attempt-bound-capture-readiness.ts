@@ -933,19 +933,43 @@ export const TIER_A_EXECUTION_ENFORCEMENT_CATALOG_SQL = `WITH marker_identity AS
       ON function_row.oid = trigger_row.tgfoid
     JOIN pg_catalog.pg_namespace AS function_namespace
       ON function_namespace.oid = function_row.pronamespace
-    -- 20261122204058 added a name-uniqueness guard on arena.sources. It does
-    -- not take part in Tier-A execution writes, so it is outside this
-    -- contract. Excluded by exact identity (name, function, tgtype): any
-    -- other trigger on these tables, or a changed copy of this one, still
-    -- counts and still fails the gate closed.
+    -- 20261122204058 added a name-uniqueness guard on arena.sources. It only
+    -- reads, takes an advisory lock and raises 23505; it does not take part
+    -- in Tier-A execution writes, so it is outside this contract. It is
+    -- excluded only while it is byte-for-byte the reviewed trigger: same
+    -- name, columns (slug, serving_mode, status, meta), no WHEN clause, not a
+    -- constraint trigger, and the same plpgsql function body (sha256 of
+    -- prosrc), owner, volatility, security and search_path. Any change to it,
+    -- or any other trigger on these tables, still counts and fails closed.
     WHERE NOT (
       table_namespace.nspname = 'arena'
       AND table_row.relname = 'sources'
       AND trigger_row.tgname = 'sources_reject_ambiguous_serving_name'
+      AND trigger_row.tgtype = 23
+      AND trigger_row.tgattr::text = '2 27 26 25'
+      AND trigger_row.tgqual IS NULL
+      AND NOT trigger_row.tgdeferrable
+      AND NOT trigger_row.tginitdeferred
+      AND trigger_row.tgconstraint = 0
+      AND trigger_row.tgconstrrelid = 0
+      AND trigger_row.tgparentid = 0
+      AND pg_catalog.octet_length(trigger_row.tgargs) = 0
+      AND trigger_row.tgenabled = 'O'
       AND function_namespace.nspname = 'arena'
       AND function_row.proname = 'reject_ambiguous_serving_source_name'
       AND pg_catalog.pg_get_function_identity_arguments(function_row.oid) = ''
-      AND trigger_row.tgtype = 23
+      AND function_row.prolang = (
+        SELECT language.oid FROM pg_catalog.pg_language AS language
+        WHERE language.lanname = 'plpgsql'
+      )
+      AND function_row.proowner = 'postgres'::pg_catalog.regrole
+      AND function_row.provolatile = 'v'
+      AND NOT function_row.prosecdef
+      AND function_row.proconfig = ARRAY['search_path=pg_catalog, pg_temp']::text[]
+      AND pg_catalog.encode(
+            pg_catalog.sha256(pg_catalog.convert_to(function_row.prosrc, 'UTF8')),
+            'hex'
+          ) = '254a1583a8bd4d67762d8f9ff8a5d068425878f1cf4e57abc010c8989a8d8d8f'
     )
   ),
   trigger_contract AS (
