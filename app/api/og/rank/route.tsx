@@ -167,12 +167,16 @@ export async function GET(request: NextRequest) {
     const score = parseFloat(searchParams.get('score') || 'NaN')
     const pnl = parseFloat(searchParams.get('pnl') || 'NaN')
     const windowParam = searchParams.get('window') || '7d'
+    // Ranked in this window but no trading (idle window): the card says so and
+    // draws no score, return or rank. The sharing page sets this; it passes no
+    // rank, roi or score for such an account.
+    const idle = searchParams.get('idle') === '1'
 
     const roiValid = !isNaN(roi)
     const winRateValid = !isNaN(winRate)
     const scoreValid = !isNaN(score)
     const pnlValid = !isNaN(pnl)
-    const rankValid = rank > 0
+    const rankValid = !idle && rank > 0
     const rankChangeValid = rankChange !== 0
     const rankChangeUp = rankChange > 0
     const roiColor = roiValid && roi >= 0 ? C.success : C.error
@@ -346,84 +350,117 @@ export async function GET(request: NextRequest) {
 
           {/* Data cards row */}
           <div style={{ display: 'flex', gap: 16, flex: 1, alignItems: 'stretch' }}>
+            {idle && (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  flex: 2.4,
+                  padding: '20px 24px',
+                  borderRadius: 16,
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.10)',
+                  gap: 8,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 36,
+                    fontWeight: 800,
+                    color: C.dimmer,
+                    letterSpacing: '-1px',
+                    lineHeight: 1.1,
+                    display: 'flex',
+                  }}
+                >
+                  No trading this period
+                </span>
+              </div>
+            )}
             {/* Arena Score - most prominent, gold accent */}
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                flex: 1.2,
-                padding: '20px 24px',
-                borderRadius: 16,
-                background: C.goldDim,
-                border: '1px solid ' + C.borderGold,
-                gap: 8,
-              }}
-            >
-              <span
+            {!idle && (
+              <div
                 style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: C.goldLight,
-                  letterSpacing: '2px',
                   display: 'flex',
+                  flexDirection: 'column',
+                  flex: 1.2,
+                  padding: '20px 24px',
+                  borderRadius: 16,
+                  background: C.goldDim,
+                  border: '1px solid ' + C.borderGold,
+                  gap: 8,
                 }}
               >
-                ARENA SCORE
-              </span>
-              <span
-                style={{
-                  fontSize: 52,
-                  fontWeight: 900,
-                  color: C.goldLight,
-                  letterSpacing: '-2px',
-                  lineHeight: 1,
-                  display: 'flex',
-                }}
-              >
-                {scoreValid ? formatScoreWhole(score) : '--'}
-              </span>
-            </div>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: C.goldLight,
+                    letterSpacing: '2px',
+                    display: 'flex',
+                  }}
+                >
+                  ARENA SCORE
+                </span>
+                <span
+                  style={{
+                    fontSize: 52,
+                    fontWeight: 900,
+                    color: C.goldLight,
+                    letterSpacing: '-2px',
+                    lineHeight: 1,
+                    display: 'flex',
+                  }}
+                >
+                  {scoreValid ? formatScoreWhole(score) : '--'}
+                </span>
+              </div>
+            )}
 
             {/* ROI */}
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                flex: 1.2,
-                padding: '20px 24px',
-                borderRadius: 16,
-                background: roiValid && roi >= 0 ? 'rgba(47,229,125,0.07)' : 'rgba(255,85,85,0.07)',
-                border:
-                  roiValid && roi >= 0
-                    ? '1px solid rgba(47,229,125,0.25)'
-                    : '1px solid rgba(255,85,85,0.25)',
-                gap: 8,
-              }}
-            >
-              <span
+            {!idle && (
+              <div
                 style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: C.dimmer,
-                  letterSpacing: '2px',
                   display: 'flex',
+                  flexDirection: 'column',
+                  flex: 1.2,
+                  padding: '20px 24px',
+                  borderRadius: 16,
+                  background:
+                    roiValid && roi >= 0 ? 'rgba(47,229,125,0.07)' : 'rgba(255,85,85,0.07)',
+                  border:
+                    roiValid && roi >= 0
+                      ? '1px solid rgba(47,229,125,0.25)'
+                      : '1px solid rgba(255,85,85,0.25)',
+                  gap: 8,
                 }}
               >
-                ROI
-              </span>
-              <span
-                style={{
-                  fontSize: 48,
-                  fontWeight: 900,
-                  color: roiColor,
-                  letterSpacing: '-2px',
-                  lineHeight: 1,
-                  display: 'flex',
-                }}
-              >
-                {roiStr}
-              </span>
-            </div>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: C.dimmer,
+                    letterSpacing: '2px',
+                    display: 'flex',
+                  }}
+                >
+                  ROI
+                </span>
+                <span
+                  style={{
+                    fontSize: 48,
+                    fontWeight: 900,
+                    color: roiColor,
+                    letterSpacing: '-2px',
+                    lineHeight: 1,
+                    display: 'flex',
+                  }}
+                >
+                  {roiStr}
+                </span>
+              </div>
+            )}
 
             {/* PnL — only render when passed. No caller supplied pnl, so this tile
                 was ALWAYS a dead "PNL --"; conditional render + flex lets the
