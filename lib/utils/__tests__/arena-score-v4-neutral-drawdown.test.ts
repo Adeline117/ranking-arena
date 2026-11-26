@@ -70,6 +70,25 @@ describe('neutral drawdown (maxDrawdownNeutral, publication options)', () => {
     expect(s.factors.drawdown).toBe(1)
   })
 
+  it('does not count a neutral drawdown as present data for confidence', () => {
+    // Known trade counts, so the completeness term of confidence is not clamped.
+    const known = { ...base, tradesCount: 400 }
+    const rows = computeArenaScoresV4WithOptions(
+      [
+        { ...known, maxDrawdown: null },
+        { ...known, maxDrawdown: 0, maxDrawdownNeutral: true },
+        { ...known, maxDrawdown: 0.05 },
+        ...filler,
+      ],
+      '7D',
+      publication
+    )
+    expect(rows[1].confidence).toBe(rows[0].confidence)
+    expect(rows[1].confidence).toBeLessThan(rows[2].confidence)
+    expect(rows[0].totalScore).toBeLessThan(rows[1].totalScore)
+    expect(rows[1].totalScore).toBeLessThan(rows[2].totalScore)
+  })
+
   it('a neutral row stays out of the drawdown percentile cohort', () => {
     const withoutNeutral = computeArenaScoresV4WithOptions(filler, '7D', publication)
     const withNeutral = computeArenaScoresV4WithOptions(

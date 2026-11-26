@@ -814,9 +814,11 @@ export function percentRanks(values: Array<number | null>): Array<number | null>
  *           row's quality ("no credit, no penalty"), whatever
  *           missingRiskPolicy says, and its drawdown is left out of the
  *           drawdown percentile cohort, so it does not shift anyone else's
- *           drawdown percentile. The drawdown still counts as present for
- *           confidence (the value is reported and shown). Its factor is
- *           reported as null.
+ *           drawdown percentile. It does not count as a present metric for
+ *           confidence either: the dimension takes no part in the score at
+ *           all, which is the legacy renormalizing treatment of a missing
+ *           drawdown. Its factor is reported as null. (The value itself is
+ *           kept and shown by the caller; only the score ignores it.)
  *   false / absent = the flag is ignored (historical v4 / v5 behavior).
  */
 export interface ArenaScoreV4Options {
@@ -851,8 +853,8 @@ function computeArenaScoresV4OrV5(
       ? Math.abs(t.maxDrawdown)
       : null
   )
-  // Present but neutral: out of the drawdown percentile cohort and out of this
-  // row's quality; still present for confidence (mddArr keeps the value).
+  // Present but neutral: out of the drawdown percentile cohort, out of this
+  // row's quality and out of its confidence presence count.
   const ddNeutral = inputs.map(
     (t, i) =>
       options.neutralDrawdownInputs === true && t.maxDrawdownNeutral === true && mddArr[i] != null
@@ -932,7 +934,9 @@ function computeArenaScoresV4OrV5(
       (tc > 0 || (tc === 0 && t.source != null && TRUE_ZERO_TRADES_SOURCES.has(t.source)))
     const sampleTrades = known ? tc : V.UNKNOWN_TRADES_EQUIV
     const cN = sampleTrades / (sampleTrades + V.SAMPLE_K)
-    const presentCnt = [shArr[i], mddArr[i], winArr[i], pfArr[i]].filter((v) => v != null).length
+    const presentCnt = [shArr[i], ddNeutral[i] ? null : mddArr[i], winArr[i], pfArr[i]].filter(
+      (v) => v != null
+    ).length
     const cC = Math.max(presentCnt / 4, 0.25)
     const confidence = V.CONF_FLOOR + (1 - V.CONF_FLOOR) * Math.cbrt(Math.max(0.01, cN * cC))
 
