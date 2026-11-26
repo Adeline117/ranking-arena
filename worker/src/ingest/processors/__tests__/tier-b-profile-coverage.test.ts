@@ -72,6 +72,8 @@ jest.mock('@/lib/ingest/serving/copier-snapshot-publish', () => ({
   publishCopierSnapshotInTransaction: (...args: unknown[]) => mockPublishCopierSnapshot(...args),
 }))
 jest.mock('@/lib/ingest/staging/validate', () => ({
+  roiCrossCheckComparable: jest.requireActual('@/lib/ingest/staging/validate')
+    .roiCrossCheckComparable,
   roiCrossCheckOk: (...args: unknown[]) => mockRoiCrossCheckOk(...args),
   validateStats: (...args: unknown[]) => mockValidateStats(...args),
 }))
@@ -478,6 +480,7 @@ describe('Tier-B profile coverage accounting', () => {
       rejects: 0,
       errors: 0,
       crossCheckFails: 0,
+      crossCheckSkipped: 0,
       remaining: 0,
     })
 
@@ -614,6 +617,53 @@ describe('Tier-B profile coverage accounting', () => {
         String(sql).includes('INSERT INTO arena.ingest_cursors')
       )
     ).toBe(true)
+  })
+
+  it('compares board and profile ROI only for boards read near the profile capture', async () => {
+    const now = Date.now()
+    mockGetLatestPassedNativeCohort.mockResolvedValue({
+      traders: [
+        {
+          id: 42,
+          exchange_trader_id: exchangeTraderId,
+          meta: null,
+          headline_rois: { '7': 10, '30': 10 },
+        },
+      ],
+      nativeTimeframes: [7, 30],
+      foundTimeframes: [7, 30],
+      missingTimeframes: [],
+      // 7d board read five minutes ago; 30d board three days ago.
+      snapshotScrapedAt: {
+        '7': new Date(now - 5 * 60 * 1000).toISOString(),
+        '30': new Date(now - 3 * 24 * 3600 * 1000).toISOString(),
+      },
+    })
+    mockParseProfile.mockImplementation((raw: { timeframe: 7 | 30 }) => {
+      const parsed = profile(raw.timeframe, true)
+      // Twice the board's ROI in both windows: a mismatch either way.
+      return { ...parsed, stats: parsed.stats.map((block) => ({ ...block, roi: 20 })) }
+    })
+    mockRoiCrossCheckOk.mockImplementation(
+      jest.requireActual('@/lib/ingest/staging/validate').roiCrossCheckOk
+    )
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      await expect(processTierB(job)).resolves.toMatchObject({
+        tradersCrawled: 1,
+        crossCheckFails: 1,
+        crossCheckSkipped: 1,
+        errors: 0,
+      })
+      const failures = warn.mock.calls
+        .map(([line]) => String(line))
+        .filter((line) => line.includes('ROI cross-check FAIL'))
+      expect(failures).toEqual([
+        expect.stringContaining(' 7d ROI cross-check FAIL: board=10 profile=20'),
+      ])
+    } finally {
+      warn.mockRestore()
+    }
   })
 
   it('skips product-specific histories declared unsupported by a shared adapter', async () => {
@@ -1503,6 +1553,7 @@ describe('Tier-B profile coverage accounting', () => {
       rejects: 1,
       errors: 0,
       crossCheckFails: 0,
+      crossCheckSkipped: 0,
     })
 
     expect(mockWriteRawObject).toHaveBeenCalledTimes(1)

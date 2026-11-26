@@ -9,7 +9,7 @@ import InfoTooltip from '../../ui/InfoTooltip'
 import PnlContractNotice from '../serving/PnlContractNotice'
 import { isValidScore } from './ScoreBar'
 import { getScoreColor } from '@/lib/utils/score-colors'
-import { NULL_DISPLAY } from '@/lib/utils/format'
+import { NULL_DISPLAY, formatScoreWhole } from '@/lib/utils/format'
 import type {
   GmxMaxCapitalRoiDisclosure,
   GmxRealizedNetDisclosure,
@@ -90,7 +90,9 @@ export function HeroMetrics({
             className="hero-score-value"
             role="img"
             aria-label={
-              finiteScore != null ? `Arena Score ${finiteScore.toFixed(0)}` : 'Arena Score unknown'
+              finiteScore != null
+                ? `Arena Score ${formatScoreWhole(finiteScore)}`
+                : 'Arena Score unknown'
             }
             style={{
               display: 'inline-flex',
@@ -110,7 +112,7 @@ export function HeroMetrics({
                 fontVariantNumeric: 'tabular-nums',
               }}
             >
-              {finiteScore != null ? finiteScore.toFixed(0) : NULL_DISPLAY}
+              {finiteScore != null ? formatScoreWhole(finiteScore) : NULL_DISPLAY}
             </span>
             {finiteScore != null && (
               <span

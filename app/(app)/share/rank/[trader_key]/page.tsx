@@ -33,15 +33,17 @@ export const revalidate = 300
 // explicit: share cards may show a verified rank but must leave total and
 // percentile unknown instead of reading raw MAX(rank) or a count cache.
 const PUBLIC_SHARE_RANK_COLUMNS =
-  'rank,rank_change,roi,pnl,win_rate,arena_score,max_drawdown,source,source_trader_id,score_completeness,metrics_estimated,is_outlier,computed_at,season_id'
+  'rank,rank_change,roi,pnl,win_rate,arena_score,max_drawdown,source,source_trader_id,score_completeness,metrics_estimated,is_outlier,computed_at,season_id,idle_window'
 
 type VerifiedShareRank = {
-  rank: number
+  /** Null for an idle-window row: ranked, but no trading and no score. */
+  rank: number | null
   rankChange: number | null
   roi: number | null
   winRate: number | null
   score: number | null
   maxDrawdown: number | null
+  idle: boolean
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -77,6 +79,21 @@ function verifiedShareRank(
   const rank = positiveRankOrNull(row.rank)
   if (rank === null) return null
 
+  // An idle-window row (no ROI and no PnL in the period) is published but not
+  // scored. A card shows "no trading this period" for it, not a rank, a return
+  // or a placeholder score. Its own win rate / drawdown stay if it has them.
+  if (row.idle_window === true) {
+    return {
+      rank: null,
+      rankChange: null,
+      roi: null,
+      winRate: finiteOrNull(row.win_rate),
+      score: null,
+      maxDrawdown: finiteOrNull(row.max_drawdown),
+      idle: true,
+    }
+  }
+
   return {
     rank,
     rankChange: finiteOrNull(row.rank_change),
@@ -84,6 +101,7 @@ function verifiedShareRank(
     winRate: finiteOrNull(row.win_rate),
     score: finiteOrNull(row.arena_score),
     maxDrawdown: finiteOrNull(row.max_drawdown),
+    idle: false,
   }
 }
 
@@ -175,6 +193,7 @@ async function resolveTraderForWrapped(
       winRate: rankData?.winRate ?? null,
       score: rankData?.score ?? null,
       maxDrawdown: rankData?.maxDrawdown ?? null,
+      idleWindow: rankData?.idle === true,
       window: seasonId,
     }
 
@@ -214,9 +233,11 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const title = `${name} Rank Card`
   // `rank`/`Top X%` are GLOBAL cross-exchange positions, so frame them as such —
   // not "on {platform}" (which falsely implied a per-exchange ranking).
-  const description = parts.length
-    ? `${parts.join(' | ')} across all tracked exchanges on Arena`
-    : `${name}'s trading performance card on Arena`
+  const description = data?.idleWindow
+    ? `${name} had no trading in this ranking period on Arena`
+    : parts.length
+      ? `${parts.join(' | ')} across all tracked exchanges on Arena`
+      : `${name}'s trading performance card on Arena`
 
   const ogParams = new URLSearchParams({
     name,
@@ -235,6 +256,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   if (roi != null) ogParams.set('roi', String(roi))
   if (winRate != null) ogParams.set('winRate', String(winRate))
   if (score != null) ogParams.set('score', String(score))
+  if (data?.idleWindow) ogParams.set('idle', '1')
 
   const ogImageUrl = `${BASE_URL}/api/og/rank?${ogParams}`
   const handle = data?.handle ?? decoded
@@ -306,6 +328,7 @@ export default async function ShareRankPage({ params, searchParams }: Props) {
   if (roi != null) ogParams.set('roi', String(roi))
   if (winRate != null) ogParams.set('winRate', String(winRate))
   if (score != null) ogParams.set('score', String(score))
+  if (data?.idleWindow) ogParams.set('idle', '1')
 
   const ogImageUrl = `/api/og/rank?${ogParams}`
 

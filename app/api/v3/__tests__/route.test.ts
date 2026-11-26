@@ -60,10 +60,11 @@ jest.mock('@/lib/supabase/server', () => ({
   }),
 }))
 
+const mockLogWarn = jest.fn()
 jest.mock('@/lib/utils/logger', () => ({
   createLogger: () => ({
     info: jest.fn(),
-    warn: jest.fn(),
+    warn: (...args: unknown[]) => mockLogWarn(...args),
     error: jest.fn(),
     debug: jest.fn(),
   }),
@@ -238,6 +239,29 @@ describe('GET /api/v3 cache and publication boundaries', () => {
     expect(body.meta).toEqual(expect.objectContaining({ total_count_is_exact: true, total: 2 }))
   })
 
+  it('counts each platform without idle-window rows', async () => {
+    const query = publicRankedQuery({
+      data: [
+        publicSearchRow(),
+        publicSearchRow({ source_trader_id: 'alice-2', rank: 2 }),
+        publicSearchRow({ source: 'bybit', source_trader_id: 'bob', rank: 3 }),
+      ],
+    })
+    mockFrom.mockReturnValueOnce(query)
+
+    const response = await GET(request('/api/v3?endpoint=platforms'))
+    const body = await response.json()
+
+    expect(query.eq).toHaveBeenCalledWith('idle_window', false)
+    // Old rule (no idle row): the predicate removes nothing, same counts.
+    expect(body.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'binance_futures', traderCount: 2 }),
+        expect.objectContaining({ key: 'bybit', traderCount: 1 }),
+      ])
+    )
+  })
+
   it('does not reuse a stale platform count between requests', async () => {
     const firstQuery = publicRankedQuery({
       data: [publicSearchRow(), publicSearchRow({ source_trader_id: 'alice-2', rank: 2 })],
@@ -313,7 +337,58 @@ describe('GET /api/v3 cache and publication boundaries', () => {
     expect(body.meta.total).toBeUndefined()
   })
 
-  it('marks a malformed public search cohort partial instead of returning a shortened ranking', async () => {
+  it('drops one search row that fails the proof, logs the count, and returns the rest', async () => {
+    const query = publicRankedQuery({
+      data: [
+        publicSearchRow(),
+        publicSearchRow({ source_trader_id: 'alice-estimated', rank: 2, metrics_estimated: true }),
+        publicSearchRow({ source_trader_id: 'alice-3', handle: 'Alice Three', rank: 3 }),
+      ],
+    })
+    mockFrom.mockReturnValue(query)
+    mockLogWarn.mockClear()
+
+    const response = await GET(request('/api/v3?endpoint=search&q=alice&limit=5'))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.data.map((trader: { traderKey: string }) => trader.traderKey)).toEqual([
+      'alice',
+      'alice-3',
+    ])
+    expect(body.meta).toEqual(expect.objectContaining({ total_count_is_exact: false }))
+    expect(body.meta.ranking_visibility).toBeUndefined()
+    expect(JSON.stringify(body)).not.toContain('alice-estimated')
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      expect.stringContaining('dropped rows'),
+      expect.objectContaining({ dropped: 1, kept: 2 })
+    )
+  })
+
+  it('returns the same search response as before when every row passes (old rule)', async () => {
+    const query = publicRankedQuery({
+      data: [
+        publicSearchRow(),
+        publicSearchRow({ source_trader_id: 'alice-3', handle: 'Alice Three', rank: 3 }),
+      ],
+    })
+    mockFrom.mockReturnValue(query)
+    mockLogWarn.mockClear()
+
+    const response = await GET(request('/api/v3?endpoint=search&q=alice&limit=5'))
+    const body = await response.json()
+
+    expect(body.data).toEqual([
+      expect.objectContaining({ platform: 'binance_futures', traderKey: 'alice', rank: 1 }),
+      expect.objectContaining({ platform: 'binance_futures', traderKey: 'alice-3', rank: 3 }),
+    ])
+    expect(body.meta).toEqual(expect.objectContaining({ total_count_is_exact: false }))
+    expect(body.meta.total).toBeUndefined()
+    expect(body.meta.ranking_visibility).toBeUndefined()
+    expect(mockLogWarn).not.toHaveBeenCalled()
+  })
+
+  it('still marks the search unverified, with no rows, when every row fails the proof', async () => {
     const query = publicRankedQuery({
       data: [
         {

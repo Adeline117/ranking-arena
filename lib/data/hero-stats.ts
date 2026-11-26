@@ -8,7 +8,24 @@
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { logger } from '@/lib/logger'
-import { SSR_QUERY_TIMEOUT_MS, ssrRace } from '@/lib/constants/timeouts'
+import { ssrRace } from '@/lib/constants/timeouts'
+
+/**
+ * Client-side ceiling for the get_hero_stats RPC.
+ *
+ * The function's own statement_timeout is 5 seconds (migration
+ * 20261124225312; it was 2). The view evaluates the row policy once per row,
+ * and on the full board (about 8,400 rows after the ROI + PnL rule) the count
+ * takes roughly 2 seconds warm and more on a cold cache. The generic 3 second
+ * SSR budget used here before would have aborted the call ahead of the
+ * database limit and left the hero and the percentile badge with no number.
+ * Half a second above the database limit, so a slow call is ended by the
+ * database (and reported as such) rather than by this abort.
+ *
+ * Paid at most once an hour per cache key (the result is cached), and at most
+ * once a minute while the RPC is failing (the fallback marker).
+ */
+export const HERO_STATS_RPC_TIMEOUT_MS = 5_500
 
 // Returned when the cache and the database are both unavailable. These are
 // placeholders, not facts: every result built from them carries
@@ -76,13 +93,13 @@ export async function getHeroStats(): Promise<HeroStats> {
       return { ...DEFAULT_STATS, isDefault: true }
     }
 
-    // 3. Query DB (3s timeout — SSR must never hang)
+    // 3. Query DB (bounded — SSR must never hang; see HERO_STATS_RPC_TIMEOUT_MS)
     // ssrRace cancels the PostgREST HTTP request on timeout (vs Promise.race
     // which abandons the query in the background, wasting a connection).
     const supabase = getSupabaseAdmin()
     const result = await ssrRace(
       (signal) => supabase.rpc('get_hero_stats').abortSignal(signal).single(),
-      SSR_QUERY_TIMEOUT_MS,
+      HERO_STATS_RPC_TIMEOUT_MS,
       { data: null, error: { code: 'TIMEOUT', message: 'SSR hero stats timeout' } as const }
     )
     const { data, error } = result ?? {

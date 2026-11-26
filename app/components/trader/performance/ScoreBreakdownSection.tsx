@@ -1,5 +1,6 @@
 'use client'
 
+import { formatScoreWhole } from '@/lib/utils/format'
 import { useId } from 'react'
 
 import { tokens, alpha } from '@/lib/design-tokens'
@@ -231,7 +232,7 @@ export function ScoreBreakdownSection({
                   fontFamily: tokens.typography.fontFamily.mono.join(', '),
                 }}
               >
-                {canonicalArenaScore.toFixed(0)}
+                {formatScoreWhole(canonicalArenaScore)}
               </Text>
             </Box>
           )}

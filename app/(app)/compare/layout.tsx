@@ -117,7 +117,15 @@ async function buildCompareOgUrl(accounts: CompareAccountRef[]): Promise<string>
     const names = verifiedRows.map((row) => row.handle).join(',')
     const platforms = verifiedRows.map((row) => row.source).join(',')
     const rois = verifiedRows.map((row) => Math.round(row.roi * 10) / 10).join(',')
-    const scores = verifiedRows.map((row) => Math.round(row.arenaScore)).join(',')
+    // A small positive score must not round to 0 in the URL: the image reads 0
+    // as "no score" and prints "--" for a trader that is ranked.
+    const scores = verifiedRows
+      .map((row) =>
+        row.arenaScore > 0 && row.arenaScore < 0.5
+          ? row.arenaScore.toFixed(2)
+          : Math.round(row.arenaScore)
+      )
+      .join(',')
     const pnls = verifiedRows.map((row) => Math.round(row.pnl)).join(',')
     return (
       `${BASE_URL}/api/og/compare?names=${encodeURIComponent(names)}` +

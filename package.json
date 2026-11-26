@@ -140,6 +140,8 @@
     "qa:score-bundle-entry-counts-pg17": "bash supabase/migrations/__tests__/score-bundle-index-only-entry-counts.pg17.sh",
     "qa:row-eligibility-roi-pnl-pg17": "bash supabase/migrations/__tests__/row-eligibility-roi-pnl-only.pg17.sh",
     "qa:ranked-view-window-flags-pg17": "bash supabase/migrations/__tests__/public-ranked-leaderboard-window-flags.pg17.sh",
+    "qa:hero-stats-exclude-idle-pg17": "bash supabase/migrations/__tests__/hero-stats-exclude-idle-window.pg17.sh",
+    "qa:hero-stats-latest-view-chain-pg17": "bash supabase/migrations/__tests__/hero-stats-on-latest-view-chain.pg17.sh",
     "qa:score-input-evidence-pg17": "bash supabase/migrations/__tests__/publication-score-input-evidence.pg17.sh",
     "qa:profile-acquisition-evidence-pg17": "bash supabase/migrations/__tests__/profile-acquisition-evidence.pg17.sh",
     "qa:profile-capture-contract-registration-pg17": "bash supabase/migrations/__tests__/profile-capture-contract-registration.pg17.sh",

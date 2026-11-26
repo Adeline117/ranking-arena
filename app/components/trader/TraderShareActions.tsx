@@ -14,6 +14,7 @@
  * not fetch, generate, or append a referral code to a shared URL.
  */
 
+import { formatScoreWhole } from '@/lib/utils/format'
 import { useState, useCallback, useEffect } from 'react'
 import ModalOverlay from '@/app/components/ui/ModalOverlay'
 import { tokens } from '@/lib/design-tokens'
@@ -188,7 +189,7 @@ export default function TraderShareActions({
       )
     }
     if (arenaScore != null) {
-      facts.push(t('traderShareFactScore').replace('{score}', String(Math.round(arenaScore))))
+      facts.push(t('traderShareFactScore').replace('{score}', formatScoreWhole(arenaScore)))
     }
     if (roi != null) {
       facts.push(t('traderShareFactRoi').replace('{roi}', formatRoiShort(roi)))

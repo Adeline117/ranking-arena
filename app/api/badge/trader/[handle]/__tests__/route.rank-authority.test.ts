@@ -1,27 +1,7 @@
 const mockFetch = jest.fn()
 
-jest.mock('@/lib/rankings/publication-policy', () => ({
-  isPublicRankingSourceAllowed: (source: unknown) => source === 'binance_futures',
-  sanitizePublicRankingPayload: (
-    { traders, period }: { traders: unknown; period: string },
-    { expectedPeriod }: { expectedPeriod?: string }
-  ) => ({
-    traders: Array.isArray(traders)
-      ? traders.filter(
-          (row) =>
-            typeof row === 'object' &&
-            row !== null &&
-            (row as Record<string, unknown>).source === 'binance_futures' &&
-            (row as Record<string, unknown>).season_id === period &&
-            expectedPeriod === period &&
-            (row as Record<string, unknown>).score_completeness === 'full' &&
-            (row as Record<string, unknown>).metrics_estimated === false &&
-            (row as Record<string, unknown>).is_outlier === false
-        )
-      : [],
-  }),
-}))
-
+// The real shared row policy, not a stand-in: a mock of it once hid that a
+// route selected too few columns for the real check to pass.
 jest.mock('@/lib/rankings/public-response-cache', () => ({
   publicRankingResponseRejectionHeaders: () => ({
     'Cache-Control': 'private, no-store, max-age=0',
@@ -124,6 +104,55 @@ describe('trader badge public rank authority', () => {
     expect(viewRequest).toContain('source=eq.binance_futures')
     expect(viewRequest).toContain('source_trader_id=eq.trader-1')
     expect(viewRequest).toContain('season_id=eq.90D')
+  })
+
+  async function badgeFor(row: Record<string, unknown>) {
+    mockFetch
+      .mockResolvedValueOnce(
+        restResponse([
+          { handle: 'Target Trader', source: 'binance_futures', source_trader_id: 'trader-1' },
+        ])
+      )
+      .mockResolvedValueOnce(restResponse([row]))
+      .mockResolvedValueOnce(restResponse([]))
+    const response = await GET(
+      { url: 'https://arenafi.org/api/badge/trader/Target.svg' } as never,
+      { params: Promise.resolve({ handle: 'Target.svg' }) }
+    )
+    return responseText(response)
+  }
+
+  // Every "<" in the document must open or close a tag: a raw "<1" inside
+  // <text> is not well-formed XML and browsers refuse to draw the image.
+  const strayLessThan = (svg: string) => svg.replace(/<\/?[a-zA-Z][^<>]*>/g, '').includes('<')
+
+  it('escapes a small score so the badge stays a well-formed SVG', async () => {
+    const svg = await badgeFor(publicRow({ arena_score: 0.3 }))
+    expect(svg).toContain('&lt;1</text>')
+    expect(strayLessThan(svg)).toBe(false)
+  })
+
+  it('says "no trading" and shows neither rank nor score for an idle-window account', async () => {
+    const svg = await badgeFor(
+      publicRow({
+        arena_score: 0.01,
+        roi: 0,
+        pnl: 0,
+        win_rate: null,
+        max_drawdown: null,
+        score_completeness: 'minimal',
+        idle_window: true,
+      })
+    )
+    expect(svg).toContain('No trading')
+    expect(svg).toContain('no trading this period')
+    expect(svg).not.toContain('#3')
+    expect(svg).not.toContain('SCORE')
+    expect(svg).not.toContain('&lt;1')
+    expect(strayLessThan(svg)).toBe(false)
+    expect(urls().find((url) => url.includes('/public_ranked_leaderboard?'))).toContain(
+      'idle_window'
+    )
   })
 
   it('renders rank and score as unknown when the sealed row lacks proof', async () => {

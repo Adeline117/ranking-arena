@@ -554,15 +554,100 @@ describe('SSR public ranking cohort', () => {
     expect(result.hasMore).toBe(false)
   })
 
+  // The relaxed row policy: a row may lack win rate and/or drawdown as long as
+  // its completeness says exactly that. One such row used to fail the whole
+  // server-rendered page.
+  it.each([
+    ['no win rate', { win_rate: null, score_completeness: 'partial' }],
+    ['no drawdown', { max_drawdown: null, score_completeness: 'partial' }],
+    ['neither', { win_rate: null, max_drawdown: null, score_completeness: 'minimal' }],
+  ])('keeps a published row with %s and shows the metric as unknown', async (_label, override) => {
+    mockFrom.mockImplementation((relation: string) => {
+      if (relation === 'public_ranked_leaderboard') {
+        return cohortQuery([
+          cohortRow('complete-row', 1),
+          { ...cohortRow('missing-metrics-row', 2), ...override },
+        ])
+      }
+      if (relation === 'leaderboard_source_freshness') {
+        return resultQuery([
+          { source: 'binance_futures', source_as_of: '2026-07-24T11:00:00.000Z' },
+        ])
+      }
+      throw new Error(`unexpected relation ${relation}`)
+    })
+
+    const result = await fetchLeaderboardFromDB('90D', 20, 0)
+
+    expect(result.traders.map((trader) => trader.id)).toEqual([
+      'complete-row',
+      'missing-metrics-row',
+    ])
+    const row = result.traders[1]
+    expect(row.score_completeness).toBe(override.score_completeness)
+    if ('win_rate' in override) expect(row.win_rate).toBeNull()
+    if ('max_drawdown' in override) expect(row.max_drawdown).toBeNull()
+  })
+
+  it('drops only the row that fails the proof instead of failing the whole page', async () => {
+    mockFrom.mockImplementation((relation: string) => {
+      if (relation === 'public_ranked_leaderboard') {
+        return cohortQuery([
+          cohortRow('first', 1),
+          { ...cohortRow('estimated', 2), metrics_estimated: true },
+          { ...cohortRow('unknown-completeness', 3), score_completeness: 'weird' },
+          cohortRow('last', 4),
+        ])
+      }
+      if (relation === 'leaderboard_source_freshness') {
+        return resultQuery([
+          { source: 'binance_futures', source_as_of: '2026-07-24T11:00:00.000Z' },
+        ])
+      }
+      throw new Error(`unexpected relation ${relation}`)
+    })
+
+    const result = await fetchLeaderboardFromDB('90D', 20, 0)
+
+    expect(result.traders.map((trader) => trader.id)).toEqual(['first', 'last'])
+  })
+
+  it('maps a page of complete rows exactly as before the policy was relaxed', async () => {
+    mockFrom.mockImplementation((relation: string) => {
+      if (relation === 'public_ranked_leaderboard') {
+        return cohortQuery([cohortRow('a', 1), cohortRow('b', 2), cohortRow('c', 3)])
+      }
+      if (relation === 'leaderboard_source_freshness') {
+        return resultQuery([
+          { source: 'binance_futures', source_as_of: '2026-07-24T11:00:00.000Z' },
+        ])
+      }
+      throw new Error(`unexpected relation ${relation}`)
+    })
+
+    const result = await fetchLeaderboardFromDB('90D', 20, 0)
+
+    expect(result.traders.map((trader) => trader.id)).toEqual(['a', 'b', 'c'])
+    for (const trader of result.traders) {
+      expect(trader).toMatchObject({
+        score_completeness: 'full',
+        win_rate: 55,
+        max_drawdown: 12,
+        metrics_estimated: false,
+        is_outlier: false,
+      })
+    }
+  })
+
   it('epochs cache entries that lack the view proof fields', () => {
     expect(homeInitialTradersCacheKeys('90D', 2)).toEqual({
-      cacheKey: 'public-rank-policy-v7:home-initial-traders-v7:90D:n50:p2',
+      cacheKey: 'public-rank-policy-v7:home-initial-traders-v8:90D:n50:p2',
     })
   })
 
   it('keeps cache pages isolated by their normalized page size', () => {
     expect(homeInitialTradersCacheKeys('90D', 2, 20)).toEqual({
-      cacheKey: 'public-rank-policy-v7:home-initial-traders-v7:90D:n20:p2',
+      cacheKey: 'public-rank-policy-v7:home-initial-traders-v8:90D:n20:p2',
     })
   })
 })

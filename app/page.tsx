@@ -100,6 +100,8 @@ const COHORT_QUERY_KEYS: ReadonlySet<string> = new Set([
   'min_pnl',
   'min_score',
   'min_wr',
+  // Expands the idle-window tail the default board hides: a different row set.
+  'idle',
 ])
 
 function isCohortQueryKey(key: string): boolean {

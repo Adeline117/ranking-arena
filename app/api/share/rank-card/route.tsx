@@ -1,3 +1,4 @@
+import { formatScoreWhole } from '@/lib/utils/format'
 import { ImageResponse } from 'next/og'
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
@@ -62,13 +63,15 @@ const PLAT_L: Record<string, string> = {
 // max_drawdown is compared against score_completeness. Leaving either out makes
 // the check reject every row and the card renders no numbers at all.
 const PUBLIC_RANK_CARD_COLUMNS =
-  'rank,roi,pnl,win_rate,max_drawdown,arena_score,source,source_trader_id,score_completeness,metrics_estimated,is_outlier,computed_at,season_id'
+  'rank,roi,pnl,win_rate,max_drawdown,arena_score,source,source_trader_id,score_completeness,metrics_estimated,is_outlier,computed_at,season_id,idle_window'
 
 type VerifiedRankCardRow = {
   rank: number
   roi: number | null
   winRate: number | null
   arenaScore: number | null
+  /** Ranked but no trading in the period: the card says so, with no rank or return. */
+  idle: boolean
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -101,10 +104,14 @@ function verifiedRankCardRow(
     roi: typeof row.roi === 'number' && Number.isFinite(row.roi) ? row.roi : null,
     winRate:
       typeof row.win_rate === 'number' && Number.isFinite(row.win_rate) ? row.win_rate : null,
+    // An idle-window row is ranked but not scored: no score on the card.
     arenaScore:
-      typeof row.arena_score === 'number' && Number.isFinite(row.arena_score)
+      row.idle_window !== true &&
+      typeof row.arena_score === 'number' &&
+      Number.isFinite(row.arena_score)
         ? row.arena_score
         : null,
+    idle: row.idle_window === true,
   }
 }
 
@@ -203,9 +210,12 @@ export async function GET(request: NextRequest) {
       { status: 404, headers: publicRankingResponseRejectionHeaders() }
     )
   }
+  // An idle-window account: the card says "no trading this period" and shows
+  // no rank, return or score.
+  const idle = lr?.idle === true
   const name = tr.handle || handle,
-    rank = lr?.rank ?? 0,
-    roi = lr?.roi ?? null,
+    rank = idle ? 0 : (lr?.rank ?? 0),
+    roi = idle ? null : (lr?.roi ?? null),
     score = lr?.arenaScore ?? null,
     winRate = lr?.winRate ?? null
   const rv = typeof roi === 'number' && Number.isFinite(roi),
@@ -347,81 +357,112 @@ export async function GET(request: NextRequest) {
           )}
         </div>
         <div style={{ display: 'flex', gap: 16, flex: 1, alignItems: 'stretch' }}>
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              flex: 1.2,
-              padding: '20px 24px',
-              borderRadius: 16,
-              background: C.goldDim,
-              border: '1px solid ' + C.borderGold,
-              gap: 8,
-            }}
-          >
-            <span
+          {idle && (
+            <div
               style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: C.goldLight,
-                letterSpacing: '2px',
                 display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                flex: 2.4,
+                padding: '20px 24px',
+                borderRadius: 16,
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.10)',
               }}
             >
-              ARENA SCORE
-            </span>
-            <span
+              <span
+                style={{
+                  fontSize: 36,
+                  fontWeight: 800,
+                  color: C.dimmer,
+                  letterSpacing: '-1px',
+                  lineHeight: 1.1,
+                  display: 'flex',
+                }}
+              >
+                No trading this period
+              </span>
+            </div>
+          )}
+          {!idle && (
+            <div
               style={{
-                fontSize: 52,
-                fontWeight: 900,
-                color: C.goldLight,
-                letterSpacing: '-2px',
-                lineHeight: 1,
                 display: 'flex',
+                flexDirection: 'column',
+                flex: 1.2,
+                padding: '20px 24px',
+                borderRadius: 16,
+                background: C.goldDim,
+                border: '1px solid ' + C.borderGold,
+                gap: 8,
               }}
             >
-              {sv ? Math.round(score).toString() : '--'}
-            </span>
-          </div>
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              flex: 1.2,
-              padding: '20px 24px',
-              borderRadius: 16,
-              background: rv && roi >= 0 ? 'rgba(47,229,125,0.07)' : 'rgba(255,85,85,0.07)',
-              border:
-                rv && roi >= 0
-                  ? '1px solid rgba(47,229,125,0.25)'
-                  : '1px solid rgba(255,85,85,0.25)',
-              gap: 8,
-            }}
-          >
-            <span
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: C.goldLight,
+                  letterSpacing: '2px',
+                  display: 'flex',
+                }}
+              >
+                ARENA SCORE
+              </span>
+              <span
+                style={{
+                  fontSize: 52,
+                  fontWeight: 900,
+                  color: C.goldLight,
+                  letterSpacing: '-2px',
+                  lineHeight: 1,
+                  display: 'flex',
+                }}
+              >
+                {sv ? formatScoreWhole(score) : '--'}
+              </span>
+            </div>
+          )}
+          {!idle && (
+            <div
               style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: C.dimmer,
-                letterSpacing: '2px',
                 display: 'flex',
+                flexDirection: 'column',
+                flex: 1.2,
+                padding: '20px 24px',
+                borderRadius: 16,
+                background: rv && roi >= 0 ? 'rgba(47,229,125,0.07)' : 'rgba(255,85,85,0.07)',
+                border:
+                  rv && roi >= 0
+                    ? '1px solid rgba(47,229,125,0.25)'
+                    : '1px solid rgba(255,85,85,0.25)',
+                gap: 8,
               }}
             >
-              ROI
-            </span>
-            <span
-              style={{
-                fontSize: 48,
-                fontWeight: 900,
-                color: rc,
-                letterSpacing: '-2px',
-                lineHeight: 1,
-                display: 'flex',
-              }}
-            >
-              {rs}
-            </span>
-          </div>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: C.dimmer,
+                  letterSpacing: '2px',
+                  display: 'flex',
+                }}
+              >
+                ROI
+              </span>
+              <span
+                style={{
+                  fontSize: 48,
+                  fontWeight: 900,
+                  color: rc,
+                  letterSpacing: '-2px',
+                  lineHeight: 1,
+                  display: 'flex',
+                }}
+              >
+                {rs}
+              </span>
+            </div>
+          )}
           <div
             style={{
               display: 'flex',

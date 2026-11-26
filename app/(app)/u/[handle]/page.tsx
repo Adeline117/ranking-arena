@@ -1,3 +1,4 @@
+import { formatScoreWhole } from '@/lib/utils/format'
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
@@ -109,7 +110,7 @@ export async function generateMetadata({
         traderMeta.roi != null
           ? `${traderMeta.roi >= 0 ? '+' : ''}${traderMeta.roi.toFixed(1)}% ROI`
           : null,
-        traderMeta.score != null ? `Score ${traderMeta.score.toFixed(0)}` : null,
+        traderMeta.score != null ? `Score ${formatScoreWhole(traderMeta.score)}` : null,
       ]
         .filter(Boolean)
         .join(' · ')

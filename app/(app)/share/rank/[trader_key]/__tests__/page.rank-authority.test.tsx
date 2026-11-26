@@ -106,7 +106,7 @@ describe('/share/rank/[trader_key] public rank authority', () => {
     expect(from).toHaveBeenCalledWith('public_ranked_leaderboard')
     expect(from).not.toHaveBeenCalledWith('leaderboard_ranks')
     expect(query.select).toHaveBeenCalledWith(
-      'rank,rank_change,roi,pnl,win_rate,arena_score,max_drawdown,source,source_trader_id,score_completeness,metrics_estimated,is_outlier,computed_at,season_id'
+      'rank,rank_change,roi,pnl,win_rate,arena_score,max_drawdown,source,source_trader_id,score_completeness,metrics_estimated,is_outlier,computed_at,season_id,idle_window'
     )
     expect(query.eq).toHaveBeenCalledWith('source', 'bybit')
     expect(query.eq).toHaveBeenCalledWith('source_trader_id', 'share-rank-authority-id')
@@ -114,6 +114,32 @@ describe('/share/rank/[trader_key] public rank authority', () => {
     expect(metadata.description).toContain('Ranked 11')
     expect(metadata.description).not.toContain('Top ')
     expect(JSON.stringify(metadata)).not.toContain('total=')
+  })
+
+  it('says an idle account had no trading and passes no rank, return or score to the image', async () => {
+    const query = publicRankedQuery({
+      data: publicRankedRow({ idle_window: true, arena_score: 0.01, roi: 0, pnl: 0 }),
+      error: null,
+    })
+    const from = jest.fn((relation: string) => {
+      if (relation === 'public_ranked_leaderboard') return query
+      throw new Error(`unexpected relation: ${relation}`)
+    })
+    mockGetSupabaseAdmin.mockReturnValue({ from })
+    mockResolveTrader.mockResolvedValueOnce({
+      platform: 'bybit',
+      traderKey: 'share-rank-authority-id',
+      handle: 'Idle Trader',
+      avatarUrl: null,
+    })
+
+    const metadata = await generateMetadata(shareProps('share-rank-authority'))
+    const serialized = JSON.stringify(metadata)
+
+    expect(metadata.description).toContain('had no trading in this ranking period')
+    expect(metadata.description).not.toContain('Ranked')
+    expect(serialized).toContain('idle=1')
+    expect(serialized).not.toMatch(/[?&](rank|roi|score)=/)
   })
 
   it('suppresses rank and metrics when the public row is non-finite or incomplete', async () => {

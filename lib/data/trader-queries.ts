@@ -33,6 +33,9 @@ import { type DataResult, success, failure } from '@/lib/types/result'
 /**
  * 根据 handle 获取交易员基本信息
  */
+const finiteOrNull = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? value : null
+
 export async function getTraderByHandle(handle: string): Promise<DataResult<TraderProfile | null>> {
   if (!handle) return success(null)
 
@@ -251,12 +254,16 @@ export async function getTraderStats(handle: string): Promise<DataResult<TraderS
           expectedDividends: undefined,
           trading: latestSnapshot
             ? {
-                totalTrades12M:
-                  ((latestSnapshot as Record<string, unknown>).trades_count as number) ?? 0,
+                // Unknown stays unknown: a missing count or win rate must not be
+                // shown as 0 (0 is a real value).
+                totalTrades12M: finiteOrNull(
+                  (latestSnapshot as Record<string, unknown>).trades_count
+                ),
                 avgProfit: 0,
                 avgLoss: 0,
-                profitableTradesPct:
-                  ((latestSnapshot as Record<string, unknown>).win_rate as number) ?? 0,
+                profitableTradesPct: finiteOrNull(
+                  (latestSnapshot as Record<string, unknown>).win_rate
+                ),
               }
             : undefined,
           frequentlyTraded: frequentlyTraded.length > 0 ? frequentlyTraded : undefined,

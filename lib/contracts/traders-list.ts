@@ -47,6 +47,10 @@ export interface PublicTradersListTrader {
   is_bot: boolean
   trader_type: string | null
   is_outlier: boolean
+  /** No ROI and no PnL in this window: ranked at the tail, not scored. */
+  idle_window: boolean
+  /** The reported drawdown was refused; max_drawdown is null. */
+  mdd_contradiction: boolean
   computed_at: string | null
   anti_gaming_flags: AntiGamingFlagCode[]
   is_verified_data: boolean

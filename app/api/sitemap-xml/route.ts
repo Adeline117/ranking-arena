@@ -286,6 +286,9 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
     .select('source_trader_id, source, rank')
     .eq('season_id', '90D')
     .not('rank', 'is', null)
+    // Accounts with no trading in the window have a near-empty profile; they
+    // stay reachable but are not offered to crawlers (the page is noindex too).
+    .eq('idle_window', false)
     .order('rank', { ascending: true, nullsFirst: false })
     .order('source', { ascending: true, nullsFirst: false })
     .order('source_trader_id', { ascending: true, nullsFirst: false })
@@ -360,7 +363,9 @@ async function getTraderCount(): Promise<number> {
       .from(PUBLIC_RANKED_LEADERBOARD as never)
       .select('id', { count: 'exact', head: true })
       .eq('season_id', '90D')
-      .not('rank', 'is', null)) as {
+      .not('rank', 'is', null)
+      // Same predicate as the shard query, or the index would list empty shards.
+      .eq('idle_window', false)) as {
       count: number | null
       error: { message: string } | null
     }

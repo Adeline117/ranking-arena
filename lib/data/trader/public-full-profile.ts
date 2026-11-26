@@ -163,6 +163,16 @@ function metric(row: PublicProfileRankingRow | null, key: string): number | null
   return row ? finiteOrNull(row[key]) : null
 }
 
+/**
+ * The view's statement about which optional risk metrics the row carries:
+ * full (win rate and max drawdown), partial (one of them), minimal (neither).
+ * All three are published states and pass through as they are; anything else
+ * is unknown.
+ */
+function scoreCompletenessOrNull(value: unknown): 'full' | 'partial' | 'minimal' | null {
+  return value === 'full' || value === 'partial' || value === 'minimal' ? value : null
+}
+
 function rowForPeriod(
   rows: readonly PublicProfileRankingRow[],
   period: '7D' | '30D' | '90D'
@@ -215,7 +225,7 @@ export function projectPublicFullProfileRanking(
         sortino_ratio: metric(row90D, 'sortino_ratio'),
         profit_factor: metric(row90D, 'profit_factor'),
         calmar_ratio: metric(row90D, 'calmar_ratio'),
-        score_completeness: row90D?.score_completeness === 'full' ? 'full' : null,
+        score_completeness: scoreCompletenessOrNull(row90D?.score_completeness),
         metrics_estimated: row90D?.metrics_estimated === false ? false : null,
         overall_score: null,
         score_penalty: null,

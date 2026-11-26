@@ -105,6 +105,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /**
  * The sealed public cohort, typed by the generated view row
  * (database.types.ts public.Views.public_ranked_leaderboard).
+ *
+ * Idle-window rows (no ROI and no PnL in the period) are left out of every
+ * read here: such a row is not recommended, and a followed trader in that
+ * state is not a seed either (its ROI of 0 would make the "similar ROI" range
+ * [0, 0], which matches only other idle rows). A cached candidate that has
+ * since gone idle is dropped at materialization like any other stale one.
  */
 function publicPersonalCohortQuery(supabase: ReturnType<typeof getSupabase>) {
   return supabase
@@ -112,6 +118,7 @@ function publicPersonalCohortQuery(supabase: ReturnType<typeof getSupabase>) {
     .select(PERSONAL_RECOMMENDATION_SELECT)
     .eq('season_id', PERSONAL_RECOMMENDATION_PERIOD)
     .not('rank', 'is', null)
+    .eq('idle_window', false)
 }
 
 type PublicRankedLeaderboardQuery = ReturnType<typeof publicPersonalCohortQuery>

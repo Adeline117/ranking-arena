@@ -277,3 +277,78 @@ describe('personal recommendation publication boundary', () => {
     ).toEqual([{ source: 'bybit', source_trader_id: 'candidate-1', reason: 'top_performer' }])
   })
 })
+
+describe('personal recommendations leave idle-window rows out', () => {
+  const idleFilterCalls = () =>
+    (queryCalls.public_ranked_leaderboard ?? []).map((query) =>
+      query.eq.mock.calls.some(([column, value]) => column === 'idle_window' && value === false)
+    )
+
+  it('asks the view for non-idle rows in every read: seeds, candidates and materialization', async () => {
+    queue('user_follows', { data: [{ following_id: 'followed-1' }] })
+    queue(
+      'public_ranked_leaderboard',
+      { data: [ranked('followed-1', 'bybit', { roi: 100 })] },
+      { data: [ranked('similar-1', 'bybit', { roi: 95 })] },
+      { data: [ranked('preferred-1', 'bybit', { roi: 30 })] },
+      { data: [ranked('followed-1'), ranked('similar-1'), ranked('preferred-1')] }
+    )
+
+    const candidates = await getPersonalRecommendationCandidates('u1', 10)
+    await materializePersonalRecommendations(candidates, 10)
+
+    expect(idleFilterCalls()).toEqual([true, true, true, true])
+  })
+
+  it('does not seed a "similar ROI" lookup from a followed trader whose row is idle', async () => {
+    // The view returns nothing for the followed trader once idle rows are
+    // filtered, so no [0, 0] ROI range is ever queried.
+    queue('user_follows', { data: [{ following_id: 'idle-follow' }] })
+    queue('public_ranked_leaderboard', { data: [] })
+
+    await expect(getPersonalRecommendationCandidates('u1', 10)).resolves.toEqual([])
+    expect(queryCalls.public_ranked_leaderboard).toHaveLength(1)
+    expect(idleFilterCalls()).toEqual([true])
+  })
+
+  it('drops a cached candidate that has gone idle and marks the result partial', async () => {
+    queue('public_ranked_leaderboard', { data: [ranked('still-active')] })
+
+    const result = await materializePersonalRecommendations(
+      [
+        { source: 'bybit', source_trader_id: 'still-active', reason: 'top_performer' },
+        { source: 'bybit', source_trader_id: 'gone-idle', reason: 'top_performer' },
+      ],
+      10
+    )
+
+    expect(result.recommendations.map((row) => row.source_trader_id)).toEqual(['still-active'])
+    expect(result.rankingVisibility).toBe('partial')
+  })
+
+  it('returns what it returned before under the old rule (full rows, none idle)', async () => {
+    // With no idle row in the view the added predicate removes nothing: the
+    // same rows come back and the same recommendations are built.
+    queue('user_follows', { data: [] })
+    queue(
+      'public_ranked_leaderboard',
+      { data: [ranked('top-1'), ranked('top-2', 'bybit', { rank: 2, arena_score: 70 })] },
+      { data: [ranked('top-1'), ranked('top-2', 'bybit', { rank: 2, arena_score: 70 })] }
+    )
+
+    const candidates = await getPersonalRecommendationCandidates('u1', 10)
+    const result = await materializePersonalRecommendations(candidates, 10)
+
+    expect(candidates).toEqual([
+      { source: 'bybit', source_trader_id: 'top-1', reason: 'top_performer' },
+      { source: 'bybit', source_trader_id: 'top-2', reason: 'top_performer' },
+    ])
+    expect(result.rankingVisibility).toBe('verified')
+    expect(
+      result.recommendations.map((row) => [row.source_trader_id, row.arena_score, row.roi])
+    ).toEqual([
+      ['top-1', 80, 50],
+      ['top-2', 70, 50],
+    ])
+  })
+})

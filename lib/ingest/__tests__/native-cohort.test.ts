@@ -22,8 +22,8 @@ describe('latest PASSED native top-N cohort', () => {
     mockQuery
       .mockResolvedValueOnce({
         rows: [
-          { snapshot_id: 700, timeframe: 7 },
-          { snapshot_id: 3000, timeframe: 30 },
+          { snapshot_id: 700, timeframe: 7, scraped_at: '2026-11-25 11:00:00+00' },
+          { snapshot_id: 3000, timeframe: 30, scraped_at: '2026-11-25 10:00:00+00' },
         ],
       })
       .mockResolvedValueOnce({
@@ -56,6 +56,7 @@ describe('latest PASSED native top-N cohort', () => {
       nativeTimeframes: [7, 30],
       foundTimeframes: [7, 30],
       missingTimeframes: [],
+      snapshotScrapedAt: { '7': '2026-11-25 11:00:00+00', '30': '2026-11-25 10:00:00+00' },
       traders: [
         {
           id: 1,

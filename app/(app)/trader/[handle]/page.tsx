@@ -1,3 +1,4 @@
+import { formatScoreWhole } from '@/lib/utils/format'
 import type { Metadata } from 'next'
 import { cache } from 'react'
 import { unstable_cache } from 'next/cache'
@@ -32,6 +33,7 @@ import {
   type Unavailable,
 } from './profile-identity'
 import { traderCanonicalPath } from '@/lib/seo/trader-url'
+import { scoreDisplayState, withoutScores, type IdleWindows } from './idle-window'
 import { BASE_URL } from '@/lib/constants/urls'
 import {
   generateTraderProfilePageSchema,
@@ -44,6 +46,7 @@ import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-tr
 import { findClaimedUserHandleByIdentity } from '@/lib/identity/claimed-trader'
 import {
   fetchPublicProfileRankingRows,
+  isIdleOnlyProfile,
   isProvenUnrankedProfile,
   isPublicSourceCohortPublished,
   PUBLIC_PROFILE_RANKING_PERIODS,
@@ -343,28 +346,38 @@ async function getCurrentPublicServingScores(platform: string, traderKey: string
     sourceTraderId: traderKey,
     periods: PUBLIC_PROFILE_RANKING_PERIODS,
   })
-  return cohort.rows.map((row) => ({
-    season_id: row.season_id,
-    arena_score: finiteOrNull(row.arena_score),
-    arena_score_v3: finiteOrNull(row.arena_score_v3),
-    profitability_score: finiteOrNull(row.profitability_score),
-    risk_control_score: finiteOrNull(row.risk_control_score),
-    execution_score: finiteOrNull(row.execution_score),
-    score_completeness:
-      typeof row.score_completeness === 'string' || typeof row.score_completeness === 'number'
-        ? row.score_completeness
-        : null,
-    trading_style: typeof row.trading_style === 'string' ? row.trading_style : null,
-    style_confidence: finiteOrNull(row.style_confidence),
-    avg_holding_hours: finiteOrNull(row.avg_holding_hours),
-  }))
+  return cohort.rows.map((row) => {
+    // An idle-window row (no ROI and no PnL in the period) is ranked but was not
+    // scored: it carries no score or sub-scores to any score surface.
+    const idle = row.idle_window === true
+    const scored = (value: unknown) => (idle ? null : finiteOrNull(value))
+    return {
+      season_id: row.season_id,
+      idle_window: idle,
+      arena_score: scored(row.arena_score),
+      arena_score_v3: scored(row.arena_score_v3),
+      profitability_score: scored(row.profitability_score),
+      risk_control_score: scored(row.risk_control_score),
+      execution_score: scored(row.execution_score),
+      score_completeness:
+        typeof row.score_completeness === 'string' || typeof row.score_completeness === 'number'
+          ? row.score_completeness
+          : null,
+      trading_style: typeof row.trading_style === 'string' ? row.trading_style : null,
+      style_confidence: finiteOrNull(row.style_confidence),
+      avg_holding_hours: finiteOrNull(row.avg_holding_hours),
+    }
+  })
 }
 
 // Metadata is rank-bearing, so it deliberately reads the current sealed cohort
 // instead of a cross-request cached payload. All periods are read in the one
 // query: the title uses the 90D row, and indexability needs to know whether
 // the trader is ranked in ANY period (see isProvenUnrankedProfile).
-async function getCurrentPublicLeaderboardMeta(platform: string, traderKey: string) {
+//
+// Request-deduplicated (React cache), never persisted: generateMetadata and the
+// page body both need it, and both must describe the same sealed cohort.
+const getCurrentPublicLeaderboardMeta = cache(async (platform: string, traderKey: string) => {
   const supabase = getReadReplica()
   const cohort = await fetchPublicProfileRankingRows(supabase, {
     source: platform,
@@ -386,14 +399,36 @@ async function getCurrentPublicLeaderboardMeta(platform: string, traderKey: stri
     )
   return {
     provenUnranked,
+    idleOnly: isIdleOnlyProfile(cohort),
+    // Periods in which the account is ranked but did no trading (idle window):
+    // it has a rank there, and no score, breakdown or comparable peers.
+    idleSeasons: cohort.rows.filter((r) => r.idle_window === true).map((r) => r.season_id),
     row: row
       ? {
           rank: row.rank,
           arena_score: finiteOrNull(row.arena_score),
           roi: finiteOrNull(row.roi),
           pnl: finiteOrNull(row.pnl),
+          idle: row.idle_window === true,
         }
       : null,
+  }
+})
+
+/**
+ * The periods in which this account is ranked but idle, or null when the
+ * ranking could not be read. A failed read is logged and reported as UNKNOWN:
+ * the page then withholds the score instead of showing a placeholder as one.
+ */
+async function getIdleWindows(platform: string, traderKey: string): Promise<IdleWindows> {
+  try {
+    return (await getCurrentPublicLeaderboardMeta(platform, traderKey)).idleSeasons
+  } catch (err) {
+    logger.error('[trader/page] idle-window read failed; score withheld', {
+      platform,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    return null
   }
 }
 
@@ -476,13 +511,16 @@ export async function generateMetadata({
     arena_score?: number | null
     roi?: number | null
     pnl?: number | null
+    idle?: boolean
   } | null = null
   let provenUnranked = false
+  let idleOnly = false
   if (account) {
     try {
       const meta = await getCurrentPublicLeaderboardMeta(account.platform, account.traderKey)
       lr = meta.row
       provenUnranked = meta.provenUnranked
+      idleOnly = meta.idleOnly
     } catch (err) {
       // Leaderboard fetch failure should NOT prevent title generation.
       // The trader name is already known — produce metadata without stats.
@@ -494,17 +532,20 @@ export async function generateMetadata({
     }
   }
 
-  const roi = typeof lr?.roi === 'number' ? lr.roi : null
-  const score = typeof lr?.arena_score === 'number' ? lr.arena_score : null
-  const rank = lr?.rank ?? null
+  // An idle-window account (no ROI and no PnL in the period) is ranked at the
+  // tail and was not scored: say so, and print no score, ROI or rank figure.
+  const idle90d = lr?.idle === true
+  const roi = !idle90d && typeof lr?.roi === 'number' ? lr.roi : null
+  const score = !idle90d && typeof lr?.arena_score === 'number' ? lr.arena_score : null
+  const rank = idle90d ? null : (lr?.rank ?? null)
 
   const parts = [
     roi != null ? `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}% ROI` : null,
-    score != null ? `Arena Score ${score.toFixed(0)}` : null,
+    score != null ? `Arena Score ${formatScoreWhole(score)}` : null,
     rank != null ? `Ranked ${rank}` : null,
   ].filter(Boolean)
 
-  const pnl = typeof lr?.pnl === 'number' ? lr.pnl : null
+  const pnl = !idle90d && typeof lr?.pnl === 'number' ? lr.pnl : null
 
   // Root layout template appends ' | Arena', so the metadata title must NOT
   // include it (else the tab/SEO title doubles to '… | Arena | Arena').
@@ -514,7 +555,9 @@ export async function generateMetadata({
   const ogTitle = `${title} | Arena`
   const rawDescription = parts.length
     ? `${name} is a ${exchange} trader with ${parts.join(', ')}${pnl != null ? `. PnL: $${pnl >= 0 ? '+' : ''}${pnl >= 1000 || pnl <= -1000 ? (pnl / 1000).toFixed(1) + 'K' : pnl.toFixed(0)}` : ''}. Track performance history, analytics, and rankings on Arena.`
-    : `${name} is a ${exchange} crypto trader. View performance analytics, trading history, risk metrics, and rankings on Arena.`
+    : idle90d
+      ? `${name} is a ${exchange} trader with no trading in the current 90-day ranking period. View trading history and rankings on Arena.`
+      : `${name} is a ${exchange} crypto trader. View performance analytics, trading history, risk metrics, and rankings on Arena.`
   const description =
     rawDescription.length > 160 ? rawDescription.substring(0, 157) + '...' : rawDescription
 
@@ -562,7 +605,9 @@ export async function generateMetadata({
     // The board for this source is live and this trader is on none of its
     // periods: the page has no numbers to show. Keep following its links, and
     // drop the tag automatically once the trader is ranked again.
-    ...(provenUnranked ? { robots: { index: false, follow: true } } : {}),
+    // Likewise when every period it is ranked in is an idle window (no trading):
+    // the profile carries no performance, and it is not in the sitemap either.
+    ...(provenUnranked || idleOnly ? { robots: { index: false, follow: true } } : {}),
   }
 }
 
@@ -680,6 +725,8 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
       entries.find((e) => e.timeframe === 90) ??
       entries.find((e) => e.timeframe === 30) ??
       entries[0]
+    // Win rate and drawdown here are already the PUBLISHED ranking values: the
+    // public overlay replaces the exchange's raw ones (see first-screen.ts).
     const bestWinRate =
       best?.headlineWinRate ??
       (typeof best?.extras.win_rate === 'number' ? (best.extras.win_rate as number) : null)
@@ -723,13 +770,25 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
 
     const similarScoreExtra = best?.extras.arena_score
     const similarArenaScore = typeof similarScoreExtra === 'number' ? similarScoreExtra : null
+    // An idle account has no score or return to compare by: matching on its
+    // zero ROI would only list other idle accounts. No similar traders for it.
+    // Judged for the window the profile DISPLAYS (the headline window), which
+    // is not always 90D.
+    const idleWindows = await getIdleWindows(publicSource, servingResolved.exchangeTraderId)
+    const displaySeason = (servingTraderData.headline_window ?? '90d').toUpperCase()
+    const displayScoreState = scoreDisplayState(idleWindows, displaySeason)
+    servingTraderData.idle_windows = idleWindows
     const serverSimilarTraders = (
-      await fetchSimilarTraders(
-        getReadReplica(),
-        publicSource,
-        servingResolved.exchangeTraderId,
-        similarArenaScore,
-        servingTraderData.roi ?? null
+      await (
+        displayScoreState === 'idle'
+          ? Promise.resolve([])
+          : fetchSimilarTraders(
+              getReadReplica(),
+              publicSource,
+              servingResolved.exchangeTraderId,
+              similarArenaScore,
+              servingTraderData.roi ?? null
+            )
       ).catch((e) => {
         logger.warn('[trader/page] fetchSimilarTraders failed', {
           source: servingResolved.source,
@@ -773,9 +832,10 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
     // Server-rendered summary: the numbers already resolved above, as real HTML
     // (see TraderServerSummary). The Arena Score shown is the one for the same
     // window as the headline ROI/PnL, never a different period's.
-    const { t } = await getServerTranslation()
+    const { t, lang } = await getServerTranslation()
     const summaryWindow = servingTraderData.headline_window ?? '90d'
     const summarySeason = summaryWindow.toUpperCase()
+    const summaryRow = servingScores.find((row) => row.season_id === summarySeason)
     const servingSummary = (
       <TraderServerSummary
         name={servingTraderData.handle}
@@ -783,7 +843,9 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
         windowLabel={t(SUMMARY_WINDOW_KEY[summaryWindow])}
         metrics={{
           rank: servingTraderData.rank,
-          arenaScore: servingScores.find((row) => row.season_id === summarySeason)?.arena_score,
+          // Withheld when the account is idle in this window, or when the
+          // ranking read failed and that is not known.
+          arenaScore: displayScoreState === 'scored' ? summaryRow?.arena_score : null,
           roi: servingTraderData.roi,
           pnl: servingTraderData.pnl,
           winRate: servingTraderData.win_rate,
@@ -791,6 +853,10 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
         }}
         similar={toSummarySimilar(serverSimilarTraders)}
         t={t}
+        language={lang}
+        // Board capture time of the headline entry (not Arena's re-score time).
+        dataAsOf={best?.provenance?.asOf ?? null}
+        idleWindow={displayScoreState === 'idle'}
       />
     )
 
@@ -932,8 +998,34 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
     { name: traderData.handle, url: legacyCanonicalUrl },
   ])
 
-  // Legacy header values are 90D-only (see traderData above).
-  const { t } = await getServerTranslation()
+  // Legacy header values are 90D-only (see traderData above). In an idle 90D
+  // window the account is ranked but unscored: no score, no breakdown, no
+  // similar traders. When the ranking read failed the state is unknown and the
+  // score is withheld as well. Same request-cached read the metadata used.
+  const legacyIdleWindows = await getIdleWindows(resolved.platform, resolved.traderKey)
+  const legacyScoreState = scoreDisplayState(legacyIdleWindows, '90D')
+  const legacyIdle90d = legacyScoreState === 'idle'
+  traderData.idle_windows = legacyIdleWindows
+  // The detail payload is what the client header and Overview tab read, so it
+  // is stripped too — emptying `traderData` alone left the placeholder score,
+  // the breakdown and the similar traders on screen.
+  const legacyDetail =
+    serverTraderData && legacyScoreState !== 'scored'
+      ? {
+          ...serverTraderData,
+          performance: withoutScores(
+            serverTraderData.performance as Record<string, unknown> | null | undefined
+          ),
+          ...(legacyIdle90d ? { similarTraders: [] } : {}),
+        }
+      : serverTraderData
+  if (legacyScoreState !== 'scored') {
+    traderData.arena_score = null
+    traderData.profitability_score = null
+    traderData.risk_control_score = null
+    traderData.execution_score = null
+  }
+  const { t, lang } = await getServerTranslation()
   const legacySummary = (
     <TraderServerSummary
       name={traderData.handle}
@@ -947,8 +1039,10 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
         winRate: traderData.win_rate,
         maxDrawdown: traderData.max_drawdown,
       }}
-      similar={toSummarySimilar(serverTraderData?.similarTraders ?? [])}
+      similar={legacyIdle90d ? [] : toSummarySimilar(serverTraderData?.similarTraders ?? [])}
       t={t}
+      language={lang}
+      idleWindow={legacyIdle90d}
     />
   )
 
@@ -960,9 +1054,7 @@ export default async function TraderPage({ params, searchParams }: TraderPagePro
         <TraderProfileClient
           data={traderData}
           serverTraderData={
-            serverTraderData as
-              | import('@/app/(app)/u/[handle]/components/types').TraderPageData
-              | null
+            legacyDetail as import('@/app/(app)/u/[handle]/components/types').TraderPageData | null
           }
           claimedUser={claimedUserProfile}
           serverSummary={legacySummary}

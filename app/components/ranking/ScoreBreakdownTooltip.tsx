@@ -14,20 +14,17 @@ const CONFIDENCE_LABELS: Record<
     i18nKey: 'scoreConfidencePartial' | 'scoreConfidenceMinimal'
     color: string
     icon: string
-    penalty: string
   }
 > = {
   partial: {
     i18nKey: 'scoreConfidencePartial',
     color: tokens.colors.accent.warning,
     icon: '!',
-    penalty: '-8%',
   },
   minimal: {
     i18nKey: 'scoreConfidenceMinimal',
-    color: tokens.colors.accent.error ?? tokens.colors.accent.warning,
+    color: tokens.colors.accent.warning,
     icon: '!',
-    penalty: '-20%',
   },
 }
 

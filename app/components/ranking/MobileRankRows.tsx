@@ -27,10 +27,11 @@ import { TraderAvatar, ScoreConfidenceIndicator, areTraderPropsEqual } from './s
 import { TraderRowSwipeActions } from './TraderRowSwipeActions'
 import { formatDisplayName } from './utils'
 import type { SourceInfo } from './utils'
+import { describeRowProvenance } from './row-provenance'
 import type { Trader } from './RankingTable'
 import { normalizeFiniteScore, type SortColumn, type SortDir } from './RankingTableTypes'
 import { getScoreColor } from '@/lib/utils/score-colors'
-import { formatDrawdown, NULL_DISPLAY } from '@/lib/utils/format'
+import { formatDrawdown, NULL_DISPLAY, formatScoreWhole } from '@/lib/utils/format'
 import { useComparisonStore } from '@/lib/stores/comparisonStore'
 import type { CompareAccountRef } from '@/lib/compare/identity'
 import {
@@ -190,6 +191,7 @@ export const TraderMobileRow = memo(
     trader,
     rank,
     source,
+    language,
     searchQuery = '',
     parseSourceInfo,
   }: TraderMobileRowProps) {
@@ -203,7 +205,14 @@ export const TraderMobileRow = memo(
     const sourceInfo = parseSourceInfo(traderSource)
     const compareAccount: CompareAccountRef = { id: trader.id, source: traderSource }
 
-    const score = normalizeFiniteScore(trader.arena_score)
+    // Idle-window rows were not scored: no score, and the label says why.
+    const isIdleWindow = trader.idle_window === true
+    const provenance = describeRowProvenance(
+      { source: trader.source || source, asOf: trader.source_as_of },
+      t,
+      language
+    )
+    const score = isIdleWindow ? null : normalizeFiniteScore(trader.arena_score)
     const roi = normalizeFiniteScore(trader.roi)
     const pnl = normalizeFiniteScore(trader.pnl)
     const winRate = normalizeFiniteScore(trader.win_rate)
@@ -238,9 +247,10 @@ export const TraderMobileRow = memo(
       roi != null
         ? t('roiValueAria').replace('{value}', `${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%`)
         : t('roiUnknown')
-    const scoreAria =
-      score != null
-        ? t('arenaScoreAria').replace('{score}', score.toFixed(0))
+    const scoreAria = isIdleWindow
+      ? t('noTradingThisPeriod')
+      : score != null
+        ? t('arenaScoreAria').replace('{score}', formatScoreWhole(score))
         : t('arenaScoreUnknownAria')
 
     return (
@@ -273,6 +283,25 @@ export const TraderMobileRow = memo(
               </span>
               <span className="mrow-tag">
                 {sourceInfo.type}
+                {isIdleWindow && (
+                  <span className="rank-idle-window" data-testid="idle-window-label">
+                    {' · '}
+                    {t('noTradingThisPeriod')}
+                  </span>
+                )}
+                {provenance && (
+                  <>
+                    {' · '}
+                    <time
+                      className="row-data-as-of"
+                      dateTime={provenance.iso}
+                      title={provenance.full}
+                      suppressHydrationWarning
+                    >
+                      {provenance.short}
+                    </time>
+                  </>
+                )}
                 {rankingPeriod === '90D' && isAllTime90dSource(traderSource) && (
                   <>
                     {' '}
@@ -289,7 +318,7 @@ export const TraderMobileRow = memo(
                 className="mrow-score"
                 style={{ '--mrow-score-ring': getScoreColor(score) } as React.CSSProperties}
               >
-                {score.toFixed(0)}
+                {formatScoreWhole(score)}
                 <ScoreConfidenceIndicator trader={trader} />
               </span>
             ) : (

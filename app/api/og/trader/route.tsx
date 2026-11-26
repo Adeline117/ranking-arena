@@ -7,6 +7,7 @@
  * Edge runtime compatible.
  */
 
+import { formatScoreWhole } from '@/lib/utils/format'
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
 import { BASE_URL } from '@/lib/constants/urls'
@@ -30,7 +31,7 @@ import {
 export const runtime = 'edge'
 
 const PUBLIC_RANKING_COLUMNS =
-  'season_id,source,source_trader_id,handle,avatar_url,rank,arena_score,roi,pnl,win_rate,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at'
+  'season_id,source,source_trader_id,handle,avatar_url,rank,arena_score,roi,pnl,win_rate,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at,idle_window'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -177,7 +178,10 @@ type TraderIdentity = {
 type PublishedTraderCard = {
   rank: number
   roi: number
-  score: number
+  /** Null for an idle-window row: ranked, but not scored. */
+  score: number | null
+  /** Ranked but no trading in the period: the card says so, with no rank or return. */
+  idle: boolean
   // Optional on a ranked row: null means the source did not provide it.
   winRate: number | null
   maxDrawdown: number | null
@@ -218,9 +222,11 @@ function verifiedTraderCard(
   return {
     rank: row.rank,
     roi: row.roi,
-    score: row.arena_score,
+    // An idle-window row carries a placeholder score that means "not scored".
+    score: row.idle_window === true ? null : row.arena_score,
     winRate: row.win_rate,
     maxDrawdown: row.max_drawdown,
+    idle: row.idle_window === true,
   }
 }
 
@@ -317,6 +323,7 @@ async function fetchTrader(handle: string, sourceHint: string | null) {
         arena_score: published.score,
         win_rate: published.winRate,
         max_drawdown: published.maxDrawdown,
+        idle_window: published.idle,
       }
     }
   }
@@ -364,9 +371,11 @@ export async function GET(request: NextRequest) {
     const str = (v: unknown): string | null => (typeof v === 'string' ? v : null)
 
     const displayName = str(trader?.display_name) || str(trader?.handle) || handle
-    const roi = num(trader?.roi)
-    const score = num(trader?.arena_score)
-    const rank = num(trader?.rank)
+    // An idle-window account: no score, no return, no rank — just the note.
+    const idle = trader?.idle_window === true
+    const roi = idle ? null : num(trader?.roi)
+    const score = idle ? null : num(trader?.arena_score)
+    const rank = idle ? null : num(trader?.rank)
     const winRate = num(trader?.win_rate)
     const mdd = num(trader?.max_drawdown)
     // `source` is a lookup constraint, not a display override. The only source
@@ -605,84 +614,116 @@ export async function GET(request: NextRequest) {
 
           {/* Stats cards row — only show cards with real data */}
           <div style={{ display: 'flex', gap: 16, flex: 1, alignItems: 'stretch' }}>
-            {/* Arena Score — always shown */}
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                flex: optionalCardCount === 0 ? 1.2 : 1,
-                padding: '20px 24px',
-                borderRadius: 16,
-                background: C.goldDim,
-                border: '1px solid ' + C.borderGold,
-                gap: 8,
-              }}
-            >
-              <span
+            {idle && (
+              <div
                 style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: C.goldLight,
-                  letterSpacing: '2px',
                   display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  flex: 2,
+                  padding: '20px 24px',
+                  borderRadius: 16,
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.10)',
                 }}
               >
-                ARENA SCORE
-              </span>
-              <span
+                <span
+                  style={{
+                    fontSize: 32,
+                    fontWeight: 800,
+                    color: C.dimmer,
+                    letterSpacing: '-1px',
+                    lineHeight: 1.1,
+                    display: 'flex',
+                  }}
+                >
+                  No trading this period
+                </span>
+              </div>
+            )}
+            {/* Arena Score — always shown (except for an idle account) */}
+            {!idle && (
+              <div
                 style={{
-                  fontSize: 52,
-                  fontWeight: 900,
-                  color: C.goldLight,
-                  letterSpacing: '-2px',
-                  lineHeight: 1,
                   display: 'flex',
+                  flexDirection: 'column',
+                  flex: optionalCardCount === 0 ? 1.2 : 1,
+                  padding: '20px 24px',
+                  borderRadius: 16,
+                  background: C.goldDim,
+                  border: '1px solid ' + C.borderGold,
+                  gap: 8,
                 }}
               >
-                {score != null ? Math.round(score).toString() : '--'}
-              </span>
-            </div>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: C.goldLight,
+                    letterSpacing: '2px',
+                    display: 'flex',
+                  }}
+                >
+                  ARENA SCORE
+                </span>
+                <span
+                  style={{
+                    fontSize: 52,
+                    fontWeight: 900,
+                    color: C.goldLight,
+                    letterSpacing: '-2px',
+                    lineHeight: 1,
+                    display: 'flex',
+                  }}
+                >
+                  {score != null ? formatScoreWhole(score) : '--'}
+                </span>
+              </div>
+            )}
 
-            {/* ROI — always shown */}
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                flex: optionalCardCount === 0 ? 1.2 : 1,
-                padding: '20px 24px',
-                borderRadius: 16,
-                background: roiValid && roi >= 0 ? 'rgba(47,229,125,0.07)' : 'rgba(255,85,85,0.07)',
-                border:
-                  roiValid && roi >= 0
-                    ? '1px solid rgba(47,229,125,0.25)'
-                    : '1px solid rgba(255,85,85,0.25)',
-                gap: 8,
-              }}
-            >
-              <span
+            {/* ROI — always shown (except for an idle account) */}
+            {!idle && (
+              <div
                 style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: C.dimmer,
-                  letterSpacing: '2px',
                   display: 'flex',
+                  flexDirection: 'column',
+                  flex: optionalCardCount === 0 ? 1.2 : 1,
+                  padding: '20px 24px',
+                  borderRadius: 16,
+                  background:
+                    roiValid && roi >= 0 ? 'rgba(47,229,125,0.07)' : 'rgba(255,85,85,0.07)',
+                  border:
+                    roiValid && roi >= 0
+                      ? '1px solid rgba(47,229,125,0.25)'
+                      : '1px solid rgba(255,85,85,0.25)',
+                  gap: 8,
                 }}
               >
-                ROI ({seasonLabel})
-              </span>
-              <span
-                style={{
-                  fontSize: 48,
-                  fontWeight: 900,
-                  color: roiColor,
-                  letterSpacing: '-2px',
-                  lineHeight: 1,
-                  display: 'flex',
-                }}
-              >
-                {roiStr}
-              </span>
-            </div>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: C.dimmer,
+                    letterSpacing: '2px',
+                    display: 'flex',
+                  }}
+                >
+                  ROI ({seasonLabel})
+                </span>
+                <span
+                  style={{
+                    fontSize: 48,
+                    fontWeight: 900,
+                    color: roiColor,
+                    letterSpacing: '-2px',
+                    lineHeight: 1,
+                    display: 'flex',
+                  }}
+                >
+                  {roiStr}
+                </span>
+              </div>
+            )}
 
             {/* Win Rate — only when data exists */}
             {showWinRate && (

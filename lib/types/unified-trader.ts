@@ -74,6 +74,14 @@ export interface UnifiedTrader {
   // Metadata
   traderType: string | null // 'human' | 'bot'
   isOutlier: boolean
+  /**
+   * Public-ranking row flags (public_ranked_leaderboard.idle_window /
+   * .mdd_contradiction). idleWindow: no ROI and no PnL in the window — ranked at
+   * the tail, not scored. mddContradiction: the reported drawdown was refused
+   * (a loss with 0% drawdown), so maxDrawdown is null.
+   */
+  idleWindow: boolean
+  mddContradiction: boolean
   lastUpdated: string | null
 }
 

@@ -14,7 +14,7 @@ jest.mock('@/lib/logger', () => ({
   logger: { warn: jest.fn(), error: jest.fn(), info: jest.fn() },
 }))
 
-import { getHeroStats } from '../hero-stats'
+import { getHeroStats, HERO_STATS_RPC_TIMEOUT_MS } from '../hero-stats'
 
 function rpcReturns(data: unknown, error: unknown = null) {
   mockRpc.mockReturnValue({
@@ -59,5 +59,55 @@ describe('getHeroStats', () => {
   it('returns real counts unchanged', async () => {
     rpcReturns({ exchange_count: 27, trader_count: 9_000 })
     await expect(getHeroStats()).resolves.toEqual({ sourceBoardCount: 27, traderCount: 9_000 })
+  })
+
+  describe('RPC time budget', () => {
+    /** An RPC that answers after `ms`, and rejects if the caller aborts first. */
+    function rpcAnswersAfter(ms: number, data: unknown) {
+      mockRpc.mockReturnValue({
+        abortSignal: (signal: AbortSignal) => ({
+          single: () =>
+            new Promise((resolve, reject) => {
+              const timer = setTimeout(() => resolve({ data, error: null }), ms)
+              signal.addEventListener('abort', () => {
+                clearTimeout(timer)
+                reject(new Error('aborted'))
+              })
+            }),
+        }),
+      })
+    }
+
+    beforeEach(() => jest.useFakeTimers())
+    afterEach(() => jest.useRealTimers())
+
+    it('sits just above the function statement_timeout of 5 seconds', () => {
+      expect(HERO_STATS_RPC_TIMEOUT_MS).toBe(5_500)
+    })
+
+    it('waits for a count that takes longer than the old 3 second budget', async () => {
+      rpcAnswersAfter(4_000, { exchange_count: 27, trader_count: 4_100 })
+      const pending = getHeroStats()
+      await jest.advanceTimersByTimeAsync(4_000)
+      await expect(pending).resolves.toEqual({ sourceBoardCount: 27, traderCount: 4_100 })
+    })
+
+    it('still gives up, with flagged defaults, when the RPC never answers', async () => {
+      rpcAnswersAfter(60_000, { exchange_count: 27, trader_count: 4_100 })
+      const pending = getHeroStats()
+      await jest.advanceTimersByTimeAsync(HERO_STATS_RPC_TIMEOUT_MS)
+      await expect(pending).resolves.toEqual({
+        sourceBoardCount: 0,
+        traderCount: 0,
+        isDefault: true,
+      })
+    })
+
+    it('returns a fast answer exactly as before', async () => {
+      rpcAnswersAfter(50, { exchange_count: 27, trader_count: 9_000 })
+      const pending = getHeroStats()
+      await jest.advanceTimersByTimeAsync(50)
+      await expect(pending).resolves.toEqual({ sourceBoardCount: 27, traderCount: 9_000 })
+    })
   })
 })

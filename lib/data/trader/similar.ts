@@ -63,6 +63,10 @@ async function fetchSimilarTradersUncached(
     // The view is the ranking authority. It seals source freshness and complete
     // metrics before this range filter, so a profile's recommendation card
     // cannot promote a raw/partial row merely because it looks similar.
+    //
+    // Idle-window rows (no ROI and no PnL in the period) are never a
+    // comparable: their ROI 0 and 0.01 score are placeholders, and a
+    // low-score trader's range would otherwise fill up with them.
     if (arenaScore != null) {
       const scoreRange = Math.max(arenaScore * 0.25, 10)
       const result = await supabase
@@ -72,6 +76,7 @@ async function fetchSimilarTradersUncached(
         .eq(LR.season_id, '90D')
         .neq(LR.source_trader_id, traderKey)
         .not('rank', 'is', null)
+        .eq('idle_window', false)
         .not(LR.arena_score, 'is', null)
         .gte(LR.arena_score, arenaScore - scoreRange)
         .lte(LR.arena_score, arenaScore + scoreRange)
@@ -90,6 +95,7 @@ async function fetchSimilarTradersUncached(
         .eq(LR.season_id, '90D')
         .neq(LR.source_trader_id, traderKey)
         .not('rank', 'is', null)
+        .eq('idle_window', false)
         .gte(LR.roi, roi - roiRange)
         .lte(LR.roi, roi + roiRange)
         .order(LR.roi, { ascending: false })
@@ -110,10 +116,17 @@ async function fetchSimilarTradersUncached(
       ? sanitized.traders.filter((row) => hasPositiveScopedRank(row, platform))
       : ([] as Record<string, unknown>[])
 
-    // Filtering an invalid row after finite recommendation bounds would change
-    // the visible cohort. The sealed view should make this impossible; fail
-    // closed rather than show a shifted selection.
-    if (safeRows.length !== data.length) return []
+    // A row that fails the public-ranking proof is dropped; the rest of the
+    // list is still shown. Returning nothing here emptied the whole module for
+    // every trader whose neighbours included one unexpected row.
+    const dropped = data.length - safeRows.length
+    if (dropped > 0) {
+      logger.warn('[similar-traders] dropped rows that failed public-ranking proof', {
+        platform,
+        dropped,
+        kept: safeRows.length,
+      })
+    }
 
     // Dedupe and map
     const seen = new Set<string>()

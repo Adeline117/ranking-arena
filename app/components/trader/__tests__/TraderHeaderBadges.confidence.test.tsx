@@ -54,3 +54,18 @@ describe('TraderHeaderBadges cross-exchange percentile', () => {
     expect(screen.queryByTestId('percentile-badge')).toBeNull()
   })
 })
+
+describe('TraderHeaderBadges idle window', () => {
+  it('says there was no trading and shows no score, even if one is passed', () => {
+    render(<TraderHeaderBadges idleWindow arenaScore={0.01} scoreConfidence="minimal" t={t} />)
+    expect(screen.getByTestId('header-idle-window')).toHaveTextContent('noTradingThisPeriod')
+    expect(screen.queryByText('<1')).toBeNull()
+    expect(screen.queryByText(/confidenceBadge/)).toBeNull()
+  })
+
+  it('shows the score and no idle note for an account that traded', () => {
+    render(<TraderHeaderBadges arenaScore={72} scoreConfidence="full" t={t} />)
+    expect(screen.getByText('72')).toBeInTheDocument()
+    expect(screen.queryByTestId('header-idle-window')).toBeNull()
+  })
+})

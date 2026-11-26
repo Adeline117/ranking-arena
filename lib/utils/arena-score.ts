@@ -698,6 +698,15 @@ export interface TraderScoreInputV4 {
   profitFactor: number | null
   tradesCount: number | null // 样本量(置信度)
   source?: string
+  /**
+   * The reported drawdown is kept and shown, but takes no part in the drawdown
+   * dimension: neither its factor nor its weight enters this row's quality,
+   * and it is not in the drawdown percentile cohort. Read only when
+   * ArenaScoreV4Options.neutralDrawdownInputs is true (the publication scorer
+   * decides which rows; see hasUnverifiedZeroDrawdown in
+   * lib/rankings/publication/score-traders.ts).
+   */
+  maxDrawdownNeutral?: boolean
 }
 
 export interface ArenaScoreV4Result {
@@ -798,16 +807,31 @@ export function percentRanks(values: Array<number | null>): Array<number | null>
  *           confidence is monotone in the number of present risk inputs.
  *   Sharpe keeps the renormalizing rule under both policies (unchanged scope).
  *   `factors` still report a missing dimension as null ("did not take part").
+ *
+ * `neutralDrawdownInputs`
+ *   true  = an input with `maxDrawdownNeutral: true` is scored without the
+ *           drawdown dimension: the factor and its weight both leave that
+ *           row's quality ("no credit, no penalty"), whatever
+ *           missingRiskPolicy says, and its drawdown is left out of the
+ *           drawdown percentile cohort, so it does not shift anyone else's
+ *           drawdown percentile. It does not count as a present metric for
+ *           confidence either: the dimension takes no part in the score at
+ *           all, which is the legacy renormalizing treatment of a missing
+ *           drawdown. Its factor is reported as null. (The value itself is
+ *           kept and shown by the caller; only the score ignores it.)
+ *   false / absent = the flag is ignored (historical v4 / v5 behavior).
  */
 export interface ArenaScoreV4Options {
   zeroRiskMetricsAreKnown: boolean
   missingRiskPolicy: 'renormalize' | 'zero'
+  neutralDrawdownInputs?: boolean
 }
 
 /** The signed historical v4 contract (PG17 parity + golden vectors). */
 const ARENA_V4_LEGACY_OPTIONS: ArenaScoreV4Options = {
   zeroRiskMetricsAreKnown: false,
   missingRiskPolicy: 'renormalize',
+  neutralDrawdownInputs: false,
 }
 
 function computeArenaScoresV4OrV5(
@@ -829,6 +853,12 @@ function computeArenaScoresV4OrV5(
       ? Math.abs(t.maxDrawdown)
       : null
   )
+  // Present but neutral: out of the drawdown percentile cohort, out of this
+  // row's quality and out of its confidence presence count.
+  const ddNeutral = inputs.map(
+    (t, i) =>
+      options.neutralDrawdownInputs === true && t.maxDrawdownNeutral === true && mddArr[i] != null
+  )
   const shArr = inputs.map((t) => t.sharpeRatio ?? null)
   const winArr = inputs.map((t) =>
     t.winRate != null && (zeroRiskMetricsAreKnown || t.winRate !== 0) ? t.winRate : null
@@ -837,7 +867,7 @@ function computeArenaScoresV4OrV5(
 
   // 队内百分位(回撤:越小越好 → 对 −|MDD| 排名)
   const pRoi = percentRanks(roiArr)
-  const pDd = percentRanks(mddArr.map((m) => (m == null ? null : -m)))
+  const pDd = percentRanks(mddArr.map((m, i) => (m == null || ddNeutral[i] ? null : -m)))
   const pSh = percentRanks(shArr)
   const pWin = percentRanks(winArr)
   const pPf = percentRanks(pfArr)
@@ -881,7 +911,7 @@ function computeArenaScoresV4OrV5(
     if (pDd[i] != null) {
       num += V.W.dd * pDd[i]!
       den += V.W.dd
-    } else if (missingRiskScoresZero) {
+    } else if (missingRiskScoresZero && !ddNeutral[i]) {
       den += V.W.dd
     }
     if (pSh[i] != null) {
@@ -904,7 +934,9 @@ function computeArenaScoresV4OrV5(
       (tc > 0 || (tc === 0 && t.source != null && TRUE_ZERO_TRADES_SOURCES.has(t.source)))
     const sampleTrades = known ? tc : V.UNKNOWN_TRADES_EQUIV
     const cN = sampleTrades / (sampleTrades + V.SAMPLE_K)
-    const presentCnt = [shArr[i], mddArr[i], winArr[i], pfArr[i]].filter((v) => v != null).length
+    const presentCnt = [shArr[i], ddNeutral[i] ? null : mddArr[i], winArr[i], pfArr[i]].filter(
+      (v) => v != null
+    ).length
     const cC = Math.max(presentCnt / 4, 0.25)
     const confidence = V.CONF_FLOOR + (1 - V.CONF_FLOOR) * Math.cbrt(Math.max(0.01, cN * cC))
 

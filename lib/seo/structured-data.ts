@@ -5,6 +5,7 @@
  * @see https://developers.google.com/search/docs/appearance/structured-data
  */
 
+import { formatScoreWhole } from '@/lib/utils/format'
 import { platformLabel } from '@/lib/constants/platform-labels'
 import { BASE_URL } from '@/lib/constants/urls'
 const SITE_NAME = 'Arena'
@@ -488,7 +489,7 @@ function traderListItems(traders: RankedTraderInput[]) {
     url: `${BASE_URL}/trader/${encodeURIComponent(trader.handle)}`,
     ...(trader.arenaScore != null
       ? {
-          description: `Arena Score: ${Math.round(trader.arenaScore)}${trader.roi != null ? ` | ROI: ${trader.roi >= 0 ? '+' : ''}${trader.roi.toFixed(1)}%` : ''}`,
+          description: `Arena Score: ${formatScoreWhole(trader.arenaScore)}${trader.roi != null ? ` | ROI: ${trader.roi >= 0 ? '+' : ''}${trader.roi.toFixed(1)}%` : ''}`,
         }
       : {}),
   }))

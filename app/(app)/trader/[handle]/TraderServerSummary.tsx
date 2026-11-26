@@ -82,6 +82,37 @@ export function buildTraderSummaryRows(
   return rows
 }
 
+const CLOCK_LOCALE: Record<string, string> = { en: 'en-US', zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' }
+
+/** "Public leaderboard data · {exchange} · as of {UTC time}" (time only if known). */
+export function summaryDataNote({
+  exchange,
+  dataAsOf,
+  language,
+  t,
+}: {
+  exchange: string
+  dataAsOf?: string | null
+  language: string
+  t: (key: string) => string
+}): string {
+  const parts = [t('publicLeaderboardData'), exchange]
+  const ms = dataAsOf ? Date.parse(dataAsOf) : Number.NaN
+  if (Number.isFinite(ms)) {
+    const clock = new Intl.DateTimeFormat(CLOCK_LOCALE[language] ?? 'en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'UTC',
+      timeZoneName: 'short',
+    }).format(new Date(ms))
+    parts.push(t('rowDataAsOf').replace('{time}', clock))
+  }
+  return parts.join(' · ')
+}
+
 const TONE_COLOR = {
   positive: 'var(--color-accent-success)',
   negative: 'var(--color-accent-error)',
@@ -94,6 +125,9 @@ export default function TraderServerSummary({
   metrics,
   similar,
   t,
+  dataAsOf,
+  language = 'en',
+  idleWindow = false,
 }: {
   name: string
   exchange: string
@@ -102,9 +136,22 @@ export default function TraderServerSummary({
   metrics: TraderSummaryMetrics
   similar: TraderSummarySimilar[]
   t: (key: string) => string
+  /**
+   * When the exchange data behind these numbers was captured (ISO). Shown in
+   * the data note; omitted from it when unknown — never replaced by "now".
+   */
+  dataAsOf?: string | null
+  /** UI language, for the capture-time format. */
+  language?: string
+  /**
+   * The account is ranked in this window but did no trading (idle window). It
+   * has no score: the summary says so and never prints one, whatever `metrics`
+   * carries.
+   */
+  idleWindow?: boolean
 }) {
-  const rows = buildTraderSummaryRows(metrics, t)
-  if (rows.length === 0 && similar.length === 0) return null
+  const rows = buildTraderSummaryRows(idleWindow ? { ...metrics, arenaScore: null } : metrics, t)
+  if (rows.length === 0 && similar.length === 0 && !idleWindow) return null
 
   return (
     <section aria-labelledby="trader-summary-heading" style={{ marginTop: tokens.spacing[8] }}>
@@ -127,6 +174,19 @@ export default function TraderServerSummary({
               the trader (tests and screen readers locate the page by it). */}
           {t('traderSummaryHeading')}
         </h2>
+
+        {idleWindow && (
+          <p
+            data-testid="trader-summary-idle"
+            style={{
+              margin: `${tokens.spacing[2]} 0 0`,
+              fontSize: tokens.typography.fontSize.sm,
+              color: tokens.colors.text.secondary,
+            }}
+          >
+            {t('noTradingThisPeriod')}
+          </p>
+        )}
 
         {rows.length > 0 && (
           <>
@@ -174,6 +234,18 @@ export default function TraderServerSummary({
                 </div>
               ))}
             </dl>
+            {/* Data level (L1): these are public leaderboard figures, from this
+                exchange, as of the capture time when it is known. */}
+            <p
+              data-testid="trader-summary-data-note"
+              style={{
+                margin: `${tokens.spacing[3]} 0 0`,
+                fontSize: tokens.typography.fontSize.xs,
+                color: tokens.colors.text.tertiary,
+              }}
+            >
+              {summaryDataNote({ exchange, dataAsOf, language, t })}
+            </p>
           </>
         )}
 

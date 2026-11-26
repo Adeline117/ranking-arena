@@ -5,6 +5,7 @@ jest.mock('@/lib/constants/exchanges', () => ({
 import {
   normalizePeriod,
   normalizeWinRate,
+  publishedWinRatePercent,
   normalizeScoreConfidence,
   getSourceAliases,
   mapLeaderboardRow,
@@ -151,5 +152,28 @@ describe('mapLeaderboardRow — 列名兼容 + 字段映射', () => {
   it('is_outlier 严格 === true', () => {
     expect(mapLeaderboardRow({ is_outlier: true }).isOutlier).toBe(true)
     expect(mapLeaderboardRow({ is_outlier: 'true' }).isOutlier).toBe(false) // 非严格 true
+  })
+})
+
+describe('publishedWinRatePercent (ranking rows are already percent)', () => {
+  it('keeps small real win rates instead of reading them as ratios', () => {
+    expect(publishedWinRatePercent(0.5)).toBe(0.5)
+    expect(publishedWinRatePercent(1)).toBe(1)
+    expect(publishedWinRatePercent(0)).toBe(0)
+    expect(publishedWinRatePercent(62.5)).toBe(62.5)
+    expect(publishedWinRatePercent('55')).toBe(55)
+  })
+
+  it('is unknown for missing or out-of-range values, never clamped into range', () => {
+    for (const value of [null, undefined, Number.NaN, -1, 100.01, 'abc']) {
+      expect(publishedWinRatePercent(value)).toBeNull()
+    }
+  })
+
+  it('is what a ranking row maps through', () => {
+    const base = { source: 'binance_futures', source_trader_id: 't', season_id: '90D', rank: 1 }
+    expect(mapLeaderboardRow({ ...base, win_rate: 0.5 }).winRate).toBe(0.5)
+    expect(mapLeaderboardRow({ ...base, win_rate: 60 }).winRate).toBe(60)
+    expect(mapLeaderboardRow({ ...base, win_rate: null }).winRate).toBeNull()
   })
 })

@@ -70,7 +70,7 @@ describe('similar trader public ranking cohort', () => {
     expect(result[0]).toMatchObject({ traderKey: 'similar-1', rank: 2, arenaScore: 88, roi: 10 })
   })
 
-  it('fails closed instead of exposing a partial similar-trader slice', async () => {
+  it('lists nothing when the only candidate fails the proof', async () => {
     const rankingQuery = query({ data: [row({ metrics_estimated: true })], error: null })
     const result = await fetchSimilarTraders(
       { from: jest.fn(() => rankingQuery) } as never,
@@ -81,6 +81,34 @@ describe('similar trader public ranking cohort', () => {
     )
 
     expect(result).toEqual([])
+  })
+
+  it('drops only the row that fails the proof and still lists the others', async () => {
+    const rankingQuery = query({
+      data: [
+        row({ source_trader_id: 'ok-1', rank: 2 }),
+        row({ source_trader_id: 'estimated', rank: 3, metrics_estimated: true }),
+        // A published row without win rate / drawdown is a valid neighbour.
+        row({
+          source_trader_id: 'no-risk-metrics',
+          rank: 4,
+          win_rate: null,
+          max_drawdown: null,
+          score_completeness: 'minimal',
+        }),
+      ],
+      error: null,
+    })
+    const result = await fetchSimilarTraders(
+      { from: jest.fn(() => rankingQuery) } as never,
+      'binance_futures',
+      'current-trader',
+      90,
+      null
+    )
+
+    expect(result.map((trader) => trader.traderKey)).toEqual(['ok-1', 'no-risk-metrics'])
+    expect(result[1]).toMatchObject({ winRate: null, maxDrawdown: null })
   })
 
   it('does not replay a cached recommendation slice after its current proof disappears', async () => {
