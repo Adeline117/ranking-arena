@@ -49,7 +49,8 @@ export const EXPECTED_METRICS_BY_SOURCE: Record<string, ExpectedMetrics> = {
   ],
   // cfd variant has no volume surface (prod 0/10523)
   // no mdd: the meaning of copy_tradfi's max_drawdown is not established (the
-  // parser keeps it as extras.max_drawdown_unverified)
+  // parser keeps it as extras.max_drawdown_unverified); recorded in
+  // docs/UNREACHABLE_FIELDS_LEDGER.md under "撤回认证"
   gate_cfd: [
     'roi',
     'pnl',
