@@ -45,7 +45,11 @@ import {
 } from '@/lib/ingest/raw'
 import { buildCopierSnapshotArtifact } from '@/lib/ingest/copier-snapshot-artifact'
 import { recordStagingRejects } from '@/lib/ingest/staging/rejects'
-import { roiCrossCheckOk, validateStats } from '@/lib/ingest/staging/validate'
+import {
+  roiCrossCheckComparable,
+  roiCrossCheckOk,
+  validateStats,
+} from '@/lib/ingest/staging/validate'
 import { getHistoryCursor, publishHistoryRows, publishProfile } from '@/lib/ingest/serving/publish'
 import { publishCopierSnapshotInTransaction } from '@/lib/ingest/serving/copier-snapshot-publish'
 import { recordFieldInventory } from '@/lib/ingest/field-inventory'
@@ -209,6 +213,8 @@ export interface TierBResult {
   rejects: number
   errors: number
   crossCheckFails: number
+  /** Board and profile ROI read too far apart to compare (not a failure). */
+  crossCheckSkipped: number
   /** Traders still stale when the deadline hit (0 = pass completed). */
   remaining: number
 }
@@ -628,6 +634,7 @@ export async function processTierB(
     rejects: 0,
     errors: 0,
     crossCheckFails: 0,
+    crossCheckSkipped: 0,
     remaining: 0,
   }
   const src = await getSourceBySlug(job.data.sourceSlug)
@@ -859,14 +866,21 @@ export async function processTierB(
             // profile ROI for the same TF within tolerance — catches stale
             // caches / wrong-timeframe clicks. Log-and-count, never block:
             // the board value stays authoritative for ranking either way.
+            // Only when both were read at nearly the same moment: otherwise a
+            // live ROI moving between reads looks like a mismatch.
             const headline = trader.headline_rois?.[String(timeframe)] ?? null
             const profileRoi = valid.find((b) => b.timeframe === timeframe)?.roi ?? null
-            if (roiCrossCheckOk(headline, profileRoi) === false) {
-              result.crossCheckFails += 1
-              console.warn(
-                `[tier-b] ${src.slug} ${trader.exchange_trader_id} ${timeframe}d ` +
-                  `ROI cross-check FAIL: board=${headline} profile=${profileRoi}`
-              )
+            const boardScrapedAt = nativeCohort.snapshotScrapedAt?.[String(timeframe)]
+            if (headline !== null && profileRoi !== null) {
+              if (!roiCrossCheckComparable(boardScrapedAt, scrapedAt)) {
+                result.crossCheckSkipped += 1
+              } else if (roiCrossCheckOk(headline, profileRoi) === false) {
+                result.crossCheckFails += 1
+                console.warn(
+                  `[tier-b] ${src.slug} ${trader.exchange_trader_id} ${timeframe}d ` +
+                    `ROI cross-check FAIL: board=${headline} profile=${profileRoi}`
+                )
+              }
             }
 
             await publishProfile(
@@ -1022,7 +1036,9 @@ export async function processTierB(
     `[tier-b] ${src.slug}: ${result.tradersCrawled}/${attempted} attempted ok ` +
       `(${result.remaining} stale remaining${result.remaining > 0 ? `, continuation depth ${contDepth + 1}` : ''}), ` +
       `${result.surfacesFetched} surfaces, ${result.historyRowsWritten} history rows, ` +
-      `${result.rejects} rejects, ${result.crossCheckFails} xcheck-fails, ${result.errors} errors`
+      `${result.rejects} rejects, ${result.crossCheckFails} xcheck-fails ` +
+      `(${result.crossCheckSkipped} not comparable: board and profile read >30 min apart), ` +
+      `${result.errors} errors`
   )
   return result
 }

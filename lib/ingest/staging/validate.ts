@@ -147,6 +147,28 @@ export function validateStats(
  * the same timeframe within tolerance — catches stale caches and
  * wrong-timeframe clicks. Returns null when either side is missing.
  */
+/**
+ * Board and profile ROI describe the same window only when they were read at
+ * nearly the same moment. A live window's ROI includes unrealized PnL and
+ * moves between reads, and the board the cohort comes from may be up to 72
+ * hours older than the profile capture (blofin: board 2.14% vs profile 1.84%
+ * in production, read hours apart). Beyond this gap the two are not compared.
+ */
+export const ROI_CROSS_CHECK_MAX_GAP_MS = 30 * 60 * 1000
+
+/** True when two capture times are close enough to compare their ROI. */
+export function roiCrossCheckComparable(
+  boardScrapedAt: string | null | undefined,
+  profileScrapedAt: string,
+  maxGapMs = ROI_CROSS_CHECK_MAX_GAP_MS
+): boolean {
+  if (!boardScrapedAt) return false
+  const board = Date.parse(boardScrapedAt)
+  const profile = Date.parse(profileScrapedAt)
+  if (!Number.isFinite(board) || !Number.isFinite(profile)) return false
+  return Math.abs(profile - board) <= maxGapMs
+}
+
 export function roiCrossCheckOk(
   headlineRoi: number | null,
   profileRoi: number | null,
