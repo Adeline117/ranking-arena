@@ -111,45 +111,41 @@ COMMENT ON TABLE arena.trader_stats_cleared_mdd IS
   'Append-only archive of max drawdown values cleared from arena.trader_stats, with the row as_of and the reason. Owner-only.';
 
 -- Archive and clear in one statement so the two sets are the same rows.
-CREATE TEMP TABLE gate_cfd_mdd_cleanup_run ON COMMIT DROP AS
-WITH candidate AS (
-  SELECT stats.trader_id, stats.timeframe, stats.mdd AS cleared_mdd
-    FROM arena.trader_stats AS stats
-    JOIN arena.traders AS trader ON trader.id = stats.trader_id
-    JOIN arena.sources AS source_row ON source_row.id = trader.source_id
-   WHERE source_row.slug = 'gate_cfd'
-     AND stats.mdd IS NOT NULL
-     FOR UPDATE OF stats
-),
-cleared AS (
-  UPDATE arena.trader_stats AS stats
-     SET mdd = NULL
-    FROM candidate
-   WHERE stats.trader_id = candidate.trader_id
-     AND stats.timeframe = candidate.timeframe
-  RETURNING stats.trader_id, stats.timeframe, stats.as_of, candidate.cleared_mdd
-),
-archived AS (
-  INSERT INTO arena.trader_stats_cleared_mdd
-    (trader_id, timeframe, stats_as_of, cleared_mdd, reason)
-  SELECT cleared.trader_id, cleared.timeframe, cleared.as_of, cleared.cleared_mdd,
-         'gate_cfd_max_drawdown_unverified'
-    FROM cleared
-  RETURNING id
-)
-SELECT
-  (SELECT pg_catalog.count(*) FROM cleared) AS cleared_rows,
-  (SELECT pg_catalog.count(*) FROM archived) AS archived_rows;
-
-DO $postflight$
+DO $cleanup$
 DECLARE
   v_cleared bigint;
   v_archived bigint;
   v_remaining bigint;
 BEGIN
-  SELECT run.cleared_rows, run.archived_rows
-    INTO STRICT v_cleared, v_archived
-    FROM gate_cfd_mdd_cleanup_run AS run;
+  WITH candidate AS (
+    SELECT stats.trader_id, stats.timeframe, stats.mdd AS cleared_mdd
+      FROM arena.trader_stats AS stats
+      JOIN arena.traders AS trader ON trader.id = stats.trader_id
+      JOIN arena.sources AS source_row ON source_row.id = trader.source_id
+     WHERE source_row.slug = 'gate_cfd'
+       AND stats.mdd IS NOT NULL
+       FOR UPDATE OF stats
+  ),
+  cleared AS (
+    UPDATE arena.trader_stats AS stats
+       SET mdd = NULL
+      FROM candidate
+     WHERE stats.trader_id = candidate.trader_id
+       AND stats.timeframe = candidate.timeframe
+    RETURNING stats.trader_id, stats.timeframe, stats.as_of, candidate.cleared_mdd
+  ),
+  archived AS (
+    INSERT INTO arena.trader_stats_cleared_mdd
+      (trader_id, timeframe, stats_as_of, cleared_mdd, reason)
+    SELECT cleared.trader_id, cleared.timeframe, cleared.as_of, cleared.cleared_mdd,
+           'gate_cfd_max_drawdown_unverified'
+      FROM cleared
+    RETURNING id
+  )
+  SELECT (SELECT pg_catalog.count(*) FROM cleared),
+         (SELECT pg_catalog.count(*) FROM archived)
+    INTO STRICT v_cleared, v_archived;
+
   IF v_cleared IS DISTINCT FROM v_archived THEN
     RAISE EXCEPTION 'cleared % rows but archived %', v_cleared, v_archived;
   END IF;
@@ -166,6 +162,6 @@ BEGIN
 
   RAISE NOTICE 'gate_cfd mdd cleanup: cleared % rows, archived %', v_cleared, v_archived;
 END
-$postflight$;
+$cleanup$;
 
 COMMIT;
