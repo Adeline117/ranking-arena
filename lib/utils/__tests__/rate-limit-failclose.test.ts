@@ -12,6 +12,11 @@
 // module here. Use requireActual + explicit re-mock with the real exports.
 jest.mock('@/lib/utils/rate-limit', () => jest.requireActual('@/lib/utils/rate-limit'))
 
+const mockSendRateLimitedAlert = jest.fn(async (..._args: unknown[]) => undefined)
+jest.mock('@/lib/alerts/send-alert', () => ({
+  sendRateLimitedAlert: (...args: unknown[]) => mockSendRateLimitedAlert(...args),
+}))
+
 // We'll override @upstash/redis and @upstash/ratelimit per-test via jest.doMock,
 // so we isolate modules between tests.
 import type { NextRequest } from 'next/server'
@@ -394,6 +399,19 @@ describe('checkRateLimitFull while the Redis circuit is open', () => {
     const second = await rlMod.checkRateLimitFull(makeRequest(), config)
     expect(second.response?.status).toBe(503)
     expect(limit).toHaveBeenCalledTimes(1)
+  })
+
+  it('sends the Redis outage alert once when the limiter meets the outage first', async () => {
+    mockSendRateLimitedAlert.mockClear()
+    const { rlMod } = await loadWithFailingLimiter()
+    const config = { requests: 5, window: 60, prefix: 'read' }
+
+    await rlMod.checkRateLimitFull(makeRequest(), config)
+    await rlMod.checkRateLimitFull(makeRequest(), config)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(mockSendRateLimitedAlert).toHaveBeenCalledTimes(1)
+    expect(mockSendRateLimitedAlert.mock.calls[0]?.[1]).toBe('redis-down')
   })
 
   it('keeps an ordinary preset on the in-memory limiter without calling Redis again', async () => {
