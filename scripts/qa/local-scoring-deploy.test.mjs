@@ -122,7 +122,7 @@ function makeRepo(t, { gateOpen, gatePreamble = '' }) {
   )
   put(
     join(bin, 'pm2'),
-    `#!/usr/bin/env bash\necho "pm2 $*" >> "${log}"\nif [ "$1" = start ] && [ "\${FAKE_PM2_READY:-1}" = 1 ]; then mkdir -p "$ARENA_SCORING_RELEASE_DIR/worker/logs"; echo '[heartbeat] redis-hset-committed node=scoring@mac pid=1' >> "$ARENA_SCORING_RELEASE_DIR/worker/logs/scoring-out.log"; fi\nif [ "$1" = pid ]; then [ "\${FAKE_PM2_DEAD:-0}" = 1 ] && echo 0 || echo 4242; fi\n`,
+    `#!/usr/bin/env bash\necho "pm2 $*" >> "${log}"\nif [ "$1" = start ] && [ "\${FAKE_PM2_READY:-1}" = 1 ]; then mkdir -p "$ARENA_SCORING_RELEASE_DIR/worker/logs"; echo '[heartbeat] redis-hset-committed node=scoring@mac pid=1' >> "$ARENA_SCORING_RELEASE_DIR/worker/logs/scoring-out.log"; fi\nif [ "$1" = pid ]; then if [ "\${FAKE_PM2_DEAD:-0}" = 1 ]; then echo 0; elif [ "\${FAKE_PM2_FLAPPING:-0}" = 1 ]; then echo $RANDOM$RANDOM; else echo 4242; fi; fi\n`,
     0o755
   )
   const envFile = join(root, 'worker.env')
@@ -141,6 +141,7 @@ function deploy(ctx, args, extraEnv = {}) {
       ARENA_SCORING_RELEASE_ROOT: ctx.releaseRoot,
       ARENA_SCORING_ENV_FILE: ctx.envFile,
       ARENA_SCORING_READY_TIMEOUT_SECONDS: '2',
+      ARENA_SCORING_STABLE_SECONDS: '1',
       ...extraEnv,
     },
   })
@@ -252,6 +253,58 @@ test('the preflight runs after the build and before any PM2 command', (t) => {
   const preflight = calls.findIndex((line) => /scoring-preflight\.mjs/.test(line))
   const firstPm2 = calls.findIndex((line) => line.startsWith('pm2 '))
   assert.ok(build >= 0 && preflight > build && firstPm2 > preflight, calls.join(' | '))
+})
+
+function nextCommit(ctx) {
+  put(join(ctx.repo, `next-${Date.now()}-${Math.random()}.txt`), 'x')
+  git(ctx.repo, 'add', '.')
+  git(ctx.repo, 'commit', '--quiet', '-m', 'next')
+  const sha = git(ctx.repo, 'rev-parse', 'HEAD')
+  git(ctx.repo, 'update-ref', 'refs/remotes/origin/main', sha)
+  return sha
+}
+
+test('a heartbeat left in the log by an earlier life does not prove a rollback', (t) => {
+  const ctx = makeRepo(t, { gateOpen: true })
+  const first = deploy(ctx, [`--target-sha=${ctx.sha}`])
+  assert.equal(first.status, 0, first.stderr + first.stdout)
+  const previousLog = join(ctx.releaseRoot, ctx.sha, 'worker', 'logs', 'scoring-out.log')
+  assert.match(readFileSync(previousLog, 'utf8'), /redis-hset-committed node=scoring@/)
+
+  // Neither the new release nor the restarted previous one ever heartbeats,
+  // while PM2 keeps reporting a pid (a crash loop looks like this).
+  const r = deploy(ctx, [`--target-sha=${nextCommit(ctx)}`], { FAKE_PM2_READY: '0' })
+  assert.equal(r.status, 1)
+  assert.match(r.stderr, /rollback to .* FAILED — manual recovery required/)
+  assert.doesNotMatch(r.stderr, /restored/)
+})
+
+test('a rollback is restored only on a fresh heartbeat from the previous release', (t) => {
+  const ctx = makeRepo(t, { gateOpen: true })
+  assert.equal(deploy(ctx, [`--target-sha=${ctx.sha}`]).status, 0)
+  // The new release dies after its heartbeat; the previous one comes back.
+  const pm2 = join(ctx.bin, 'pm2')
+  const original = readFileSync(pm2, 'utf8')
+  const next = nextCommit(ctx)
+  writeFileSync(
+    pm2,
+    original.replace(
+      'if [ "$1" = pid ]; then',
+      `if [ "$1" = pid ] && [[ "$(cat "${ctx.root}/last-start" 2>/dev/null)" == *${next}* ]]; then echo 0; elif [ "$1" = pid ]; then`
+    ) +
+      `\nif [ "$1" = start ]; then echo "$ARENA_SCORING_RELEASE_DIR" > "${ctx.root}/last-start"; fi\n`
+  )
+  const r = deploy(ctx, [`--target-sha=${next}`])
+  assert.equal(r.status, 1)
+  assert.match(r.stderr, new RegExp(`previous release .*${ctx.sha} restored`))
+})
+
+test('a pid that changes after the heartbeat is a crash loop, not liveness', (t) => {
+  const ctx = makeRepo(t, { gateOpen: true })
+  const r = deploy(ctx, [`--target-sha=${ctx.sha}`], { FAKE_PM2_FLAPPING: '1' })
+  assert.equal(r.status, 1)
+  assert.match(r.stderr, /rolling back/)
+  assert.equal(existsSync(join(ctx.releaseRoot, 'current')), false)
 })
 
 test('a comment mentioning "= true" does not open the V1 gate', (t) => {

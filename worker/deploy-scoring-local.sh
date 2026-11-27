@@ -15,8 +15,9 @@
 #   4. the candidate must pass the worker's own startup gate (database release
 #      contract) BEFORE the running process is touched; a failed preflight
 #      changes nothing;
-#   5. success = the release's own log shows the scoring heartbeat committed
-#      to Redis within the deadline; otherwise the previous release is restored.
+#   5. success = the release's log shows a scoring heartbeat committed to Redis
+#      AFTER this start's stamp, and the same pid then stays up; otherwise the
+#      previous release is restored and held to the same proof.
 #
 # V1 NO-GO: a real (non --dry-run) run REFUSES unless the target commit itself
 # sets V1_RANKING_COMMAND_CHAIN_PUBLISHED = true. During the V1 suspension no
@@ -32,7 +33,9 @@
 #
 # Optional: ARENA_SCORING_RELEASE_ROOT (default $HOME/arena-releases/scoring),
 #           ARENA_PM2_BIN (default: pm2 on PATH),
-#           ARENA_SCORING_READY_TIMEOUT_SECONDS (default 90).
+#           ARENA_SCORING_READY_TIMEOUT_SECONDS (default 90),
+#           ARENA_SCORING_STABLE_SECONDS (default 15: the pid must not change
+#           for this long after the heartbeat).
 
 set -Eeuo pipefail
 umask 077
@@ -78,6 +81,8 @@ CURRENT_LINK="$RELEASE_ROOT/current"
 PM2_BIN="${ARENA_PM2_BIN:-pm2}"
 READY_TIMEOUT="${ARENA_SCORING_READY_TIMEOUT_SECONDS:-90}"
 [[ "$READY_TIMEOUT" =~ ^[0-9]+$ ]] || fail 'ARENA_SCORING_READY_TIMEOUT_SECONDS must be an integer'
+STABLE_SECONDS="${ARENA_SCORING_STABLE_SECONDS:-15}"
+[[ "$STABLE_SECONDS" =~ ^[0-9]+$ ]] || fail 'ARENA_SCORING_STABLE_SECONDS must be an integer'
 
 # Local, read-only provenance checks (no fetch: the caller refreshes origin).
 git cat-file -e "${TARGET_SHA}^{commit}" 2>/dev/null || fail "target $TARGET_SHA is not a local commit"
@@ -138,20 +143,58 @@ echo '[scoring-deploy] proving the database release contract before touching PM2
 mv "$STAGE_DIR" "$RELEASE_DIR"
 trap - EXIT
 
+HEARTBEAT_LINE='[heartbeat] redis-hset-committed node=scoring@'
+LIVENESS_MARKER=''
+
+# Start a release and stamp its log first. Only a heartbeat line written AFTER
+# this stamp proves this start: a rolled-back release keeps the log of its
+# earlier life, and a heartbeat left there would "prove" a process that is
+# crash-looping (2026-11-26: only a midnight log rotation kept the rollback
+# from being reported as restored). Same idea as deploy-ingest-local.sh's
+# rollback marker.
 start_release() {
   local dir="$1"
+  local log="$dir/worker/logs/scoring-out.log"
   "$PM2_BIN" delete "$PM2_APP" >/dev/null 2>&1 || true
+  LIVENESS_MARKER="arena-scoring-deploy-$(date +%s)-$$-$RANDOM"
+  mkdir -p "$dir/worker/logs"
+  printf '%s\n' "$LIVENESS_MARKER" >> "$log"
   ARENA_SCORING_RELEASE_DIR="$dir" ARENA_NODE_BIN="$NODE_BIN" \
     "$PM2_BIN" start "$dir/worker/ecosystem.local-scoring.config.cjs" --only "$PM2_APP" --update-env
 }
 
+live_pid() {
+  local pid
+  pid="$("$PM2_BIN" pid "$PM2_APP" 2>/dev/null)" || return 1
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
+  printf '%s' "$pid"
+}
+
+heartbeat_after_marker() {
+  # Fixed-string matching: no regular expression is built from the marker.
+  awk -v marker="$LIVENESS_MARKER" -v heartbeat="$HEARTBEAT_LINE" '
+    $0 == marker { stamped = 1; next }
+    stamped && index($0, heartbeat) > 0 { proven = 1 }
+    END { exit proven ? 0 : 1 }
+  ' "$1"
+}
+
+# Liveness = a heartbeat after this start's stamp, then the SAME pid for
+# STABLE_SECONDS. A worker that fails its startup gate lives about ten seconds
+# per restart, so one "pid exists" sample is not evidence.
 wait_for_heartbeat() {
   local log="$1/worker/logs/scoring-out.log"
-  local waited=0
+  local waited=0 pid='' stable=0 current=''
+  [ -n "$LIVENESS_MARKER" ] || return 1
   while [ "$waited" -le "$READY_TIMEOUT" ]; do
-    if [ -f "$log" ] && grep -q '\[heartbeat\] redis-hset-committed node=scoring@' "$log"; then
-      # The line may predate a crash; require PM2 to still report a live pid.
-      [[ "$("$PM2_BIN" pid "$PM2_APP" 2>/dev/null)" =~ ^[1-9][0-9]*$ ]] && return 0
+    if [ -f "$log" ] && heartbeat_after_marker "$log" && pid="$(live_pid)"; then
+      while [ "$stable" -lt "$STABLE_SECONDS" ]; do
+        sleep 1
+        stable=$((stable + 1))
+        current="$(live_pid)" || return 1
+        [ "$current" = "$pid" ] || return 1
+      done
+      return 0
     fi
     sleep 1
     waited=$((waited + 1))
