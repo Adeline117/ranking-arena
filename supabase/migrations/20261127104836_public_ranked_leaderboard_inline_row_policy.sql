@@ -221,7 +221,7 @@ GRANT EXECUTE ON FUNCTION arena.leaderboard_rank_row_is_public_eligible_expr(
 ) TO anon, authenticated, service_role;
 COMMENT ON FUNCTION arena.leaderboard_rank_row_is_public_eligible_expr(
   public.leaderboard_ranks, timestamptz
-) IS 'The public rank row policy, inlinable. arena.leaderboard_rank_row_is_public_eligible returns its result.';
+) IS 'The public rank row policy (20261122201611), inlinable; arena.leaderboard_rank_row_is_public_eligible returns its result. EXECUTE is granted to anon, authenticated and service_role only because PostgreSQL inlines a function solely for a caller allowed to execute it. That is safe only while the body is a pure expression over the row passed in: it reads no table, view or function with side effects, so it reveals nothing the caller does not already hold. Never add a query (FROM, a subquery, a table-reading function) to it; the PostgreSQL 17 proof of 20261127104836 fails if its body depends on a relation.';
 
 CREATE OR REPLACE FUNCTION arena.leaderboard_rank_row_is_public_eligible(
   p_rank public.leaderboard_ranks,

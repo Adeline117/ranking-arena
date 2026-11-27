@@ -492,6 +492,36 @@ assert_equal "the API roles can execute the inlinable policy; PUBLIC cannot" "t:
                         WHERE p.oid = 'arena.leaderboard_rank_row_is_public_eligible_expr(public.leaderboard_ranks,timestamptz)'::regprocedure
                           AND acl.grantee = 0)" | sed 's/true/t/g; s/false/f/g')"
 
+# The new function is executable by anon, so it must stay a pure expression:
+# it may depend only on columns of public.leaderboard_ranks (its argument's
+# fields) and built-ins. A FROM, a subquery or a user function adds a
+# dependency on a whole relation or on a non-built-in function.
+relation_dependencies() {
+  psql_as postgres -Atqc "
+    SELECT count(*) FROM pg_depend AS dependency
+     WHERE dependency.classid = 'pg_proc'::regclass
+       AND dependency.objid = '$1'::regprocedure
+       AND dependency.deptype = 'n'
+       AND ((dependency.refclassid = 'pg_class'::regclass
+             AND NOT (dependency.refobjid = 'public.leaderboard_ranks'::regclass
+                      AND dependency.refobjsubid > 0))
+            OR dependency.refclassid = 'pg_proc'::regclass)"
+}
+assert_equal "the inlinable policy reads no relation and calls no user function" "0" \
+  "$(relation_dependencies 'arena.leaderboard_rank_row_is_public_eligible_expr(public.leaderboard_ranks,timestamptz)')"
+psql_as postgres -q <<'SQL'
+CREATE FUNCTION fixture.reads_a_table(p_rank public.leaderboard_ranks, p_observed_at timestamptz)
+RETURNS boolean LANGUAGE sql STABLE
+RETURN (p_rank).roi IS NOT NULL AND EXISTS (SELECT 1 FROM arena.sources WHERE slug = (p_rank).source);
+CREATE FUNCTION fixture.calls_a_function(p_rank public.leaderboard_ranks, p_observed_at timestamptz)
+RETURNS boolean LANGUAGE sql STABLE
+RETURN arena.leaderboard_rank_row_is_public_eligible_expr(p_rank, p_observed_at);
+SQL
+assert_equal "the check catches a body that reads a table" "1" \
+  "$(relation_dependencies 'fixture.reads_a_table(public.leaderboard_ranks,timestamptz)')"
+assert_equal "the check catches a body that calls a user function" "1" \
+  "$(relation_dependencies 'fixture.calls_a_function(public.leaderboard_ranks,timestamptz)')"
+
 assert_equal "the policy gives the 20261122201611 result on every matrix row (both functions)" "0" \
   "$(psql_as postgres -Atqc "
      SELECT count(*) FROM fixture.policy_rows AS row_value
@@ -553,6 +583,7 @@ assert_equal "the drifted 90D season serves nothing" "0" \
 
 psql_as postgres -q -f "$NEW_MIGRATION" >/dev/null
 check_same "a replay changes nothing"
+
 
 psql_as postgres -q <<'SQL'
 CREATE OR REPLACE FUNCTION arena.leaderboard_rank_row_is_public_eligible(
