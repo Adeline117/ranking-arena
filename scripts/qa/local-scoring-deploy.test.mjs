@@ -112,7 +112,7 @@ function makeRepo(t, { gateOpen, gatePreamble = '' }) {
   writeFileSync(log, '')
   put(
     join(bin, 'node'),
-    `#!/usr/bin/env bash\necho "node $*" >> "${log}"\nfor a in "$@"; do case "$a" in --outdir=*) d="\${a#--outdir=}"; mkdir -p "$d"; echo 'export {}' > "$d/scoring-worker.mjs";; esac; done\n`,
+    `#!/usr/bin/env bash\necho "node $*" >> "${log}"\nfor a in "$@"; do case "$a" in --outdir=*) d="\${a#--outdir=}"; mkdir -p "$d"; echo 'export {}' > "$d/scoring-worker.mjs"; echo 'export {}' > "$d/scoring-preflight.mjs";; *scoring-preflight.mjs) [ -z "$FAKE_PREFLIGHT_FAIL" ] || { echo '[scoring-preflight] ✗ readiness RPC is unavailable (connect_timeout; cause: Error)' >&2; exit 1; };; esac; done\n`,
     0o755
   )
   put(
@@ -122,7 +122,7 @@ function makeRepo(t, { gateOpen, gatePreamble = '' }) {
   )
   put(
     join(bin, 'pm2'),
-    `#!/usr/bin/env bash\necho "pm2 $*" >> "${log}"\nif [ "$1" = start ] && [ "\${FAKE_PM2_READY:-1}" = 1 ]; then mkdir -p "$ARENA_SCORING_RELEASE_DIR/worker/logs"; echo '[heartbeat] redis-hset-committed node=scoring@mac pid=1' >> "$ARENA_SCORING_RELEASE_DIR/worker/logs/scoring-out.log"; fi\nif [ "$1" = pid ]; then [ "\${FAKE_PM2_DEAD:-0}" = 1 ] && echo 0 || echo 4242; fi\n`,
+    `#!/usr/bin/env bash\necho "pm2 $*" >> "${log}"\nif [ "$1" = start ] && [ "\${FAKE_PM2_READY:-1}" = 1 ]; then mkdir -p "$ARENA_SCORING_RELEASE_DIR/worker/logs"; echo '[heartbeat] redis-hset-committed node=scoring@mac pid=1' >> "$ARENA_SCORING_RELEASE_DIR/worker/logs/scoring-out.log"; fi\nif [ "$1" = pid ]; then if [ "\${FAKE_PM2_DEAD:-0}" = 1 ]; then echo 0; elif [ "\${FAKE_PM2_FLAPPING:-0}" = 1 ]; then echo $RANDOM$RANDOM; else echo 4242; fi; fi\n`,
     0o755
   )
   const envFile = join(root, 'worker.env')
@@ -141,6 +141,7 @@ function deploy(ctx, args, extraEnv = {}) {
       ARENA_SCORING_RELEASE_ROOT: ctx.releaseRoot,
       ARENA_SCORING_ENV_FILE: ctx.envFile,
       ARENA_SCORING_READY_TIMEOUT_SECONDS: '2',
+      ARENA_SCORING_STABLE_SECONDS: '1',
       ...extraEnv,
     },
   })
@@ -208,6 +209,128 @@ test('rolls back (no previous release → stopped) when the heartbeat never appe
   assert.match(r.stderr, /rolling back/)
   assert.match(readFileSync(ctx.log, 'utf8'), /pm2 delete arena-worker/)
   assert.equal(existsSync(join(ctx.releaseRoot, 'current')), false)
+})
+
+test('a failed preflight changes nothing: PM2 is never called and the running release stays', (t) => {
+  const ctx = makeRepo(t, { gateOpen: true })
+  // A healthy previous release is running.
+  const first = deploy(ctx, [`--target-sha=${ctx.sha}`])
+  assert.equal(first.status, 0, first.stderr + first.stdout)
+  const previous = join(ctx.releaseRoot, ctx.sha)
+
+  put(join(ctx.repo, 'next.txt'), 'x')
+  git(ctx.repo, 'add', '.')
+  git(ctx.repo, 'commit', '--quiet', '-m', 'next')
+  const next = git(ctx.repo, 'rev-parse', 'HEAD')
+  git(ctx.repo, 'update-ref', 'refs/remotes/origin/main', next)
+  writeFileSync(ctx.log, '')
+
+  const r = deploy(ctx, [`--target-sha=${next}`], { FAKE_PREFLIGHT_FAIL: '1' })
+  assert.equal(r.status, 1)
+  assert.match(r.stderr, /connect_timeout/)
+  assert.match(r.stderr, /scoring preflight failed; arena-worker was not touched/)
+  const calls = readFileSync(ctx.log, 'utf8')
+  assert.match(calls, /node .*scoring-preflight\.mjs/)
+  assert.doesNotMatch(calls, /pm2 /, 'PM2 must not be touched after a failed preflight')
+  assert.doesNotMatch(r.stderr, /rolling back/)
+  // The previous release is still current and the failed sha can be retried.
+  assert.equal(readFileSync(join(previous, 'worker', '.env'), 'utf8'), 'X=1\n')
+  assert.equal(existsSync(join(ctx.releaseRoot, next)), false)
+  assert.deepEqual(
+    readdirSync(ctx.releaseRoot).filter((name) => name.startsWith('.staging-')),
+    []
+  )
+  const retry = deploy(ctx, [`--target-sha=${next}`])
+  assert.equal(retry.status, 0, retry.stderr + retry.stdout)
+})
+
+test('the preflight runs after the build and before any PM2 command', (t) => {
+  const ctx = makeRepo(t, { gateOpen: true })
+  const r = deploy(ctx, [`--target-sha=${ctx.sha}`])
+  assert.equal(r.status, 0, r.stderr + r.stdout)
+  const calls = readFileSync(ctx.log, 'utf8').split('\n')
+  const build = calls.findIndex((line) => /build-scoring-worker\.mjs/.test(line))
+  const preflight = calls.findIndex((line) => /scoring-preflight\.mjs/.test(line))
+  const firstPm2 = calls.findIndex((line) => line.startsWith('pm2 '))
+  assert.ok(build >= 0 && preflight > build && firstPm2 > preflight, calls.join(' | '))
+})
+
+function nextCommit(ctx) {
+  put(join(ctx.repo, `next-${Date.now()}-${Math.random()}.txt`), 'x')
+  git(ctx.repo, 'add', '.')
+  git(ctx.repo, 'commit', '--quiet', '-m', 'next')
+  const sha = git(ctx.repo, 'rev-parse', 'HEAD')
+  git(ctx.repo, 'update-ref', 'refs/remotes/origin/main', sha)
+  return sha
+}
+
+test('a heartbeat left in the log by an earlier life does not prove a rollback', (t) => {
+  const ctx = makeRepo(t, { gateOpen: true })
+  const first = deploy(ctx, [`--target-sha=${ctx.sha}`])
+  assert.equal(first.status, 0, first.stderr + first.stdout)
+  const previousLog = join(ctx.releaseRoot, ctx.sha, 'worker', 'logs', 'scoring-out.log')
+  assert.match(readFileSync(previousLog, 'utf8'), /redis-hset-committed node=scoring@/)
+
+  // Neither the new release nor the restarted previous one ever heartbeats,
+  // while PM2 keeps reporting a pid (a crash loop looks like this).
+  const r = deploy(ctx, [`--target-sha=${nextCommit(ctx)}`], { FAKE_PM2_READY: '0' })
+  assert.equal(r.status, 1)
+  assert.match(r.stderr, /rollback to .* FAILED — manual recovery required/)
+  assert.doesNotMatch(r.stderr, /restored/)
+})
+
+test('a rollback is restored only on a fresh heartbeat from the previous release', (t) => {
+  const ctx = makeRepo(t, { gateOpen: true })
+  assert.equal(deploy(ctx, [`--target-sha=${ctx.sha}`]).status, 0)
+  // The new release dies after its heartbeat; the previous one comes back.
+  const pm2 = join(ctx.bin, 'pm2')
+  const original = readFileSync(pm2, 'utf8')
+  const next = nextCommit(ctx)
+  writeFileSync(
+    pm2,
+    original.replace(
+      'if [ "$1" = pid ]; then',
+      `if [ "$1" = pid ] && [[ "$(cat "${ctx.root}/last-start" 2>/dev/null)" == *${next}* ]]; then echo 0; elif [ "$1" = pid ]; then`
+    ) +
+      `\nif [ "$1" = start ]; then echo "$ARENA_SCORING_RELEASE_DIR" > "${ctx.root}/last-start"; fi\n`
+  )
+  const r = deploy(ctx, [`--target-sha=${next}`])
+  assert.equal(r.status, 1)
+  assert.match(r.stderr, new RegExp(`previous release .*${ctx.sha} restored`))
+})
+
+test('a pid that changes after the heartbeat is a crash loop, not liveness', (t) => {
+  const ctx = makeRepo(t, { gateOpen: true })
+  const r = deploy(ctx, [`--target-sha=${ctx.sha}`], { FAKE_PM2_FLAPPING: '1' })
+  assert.equal(r.status, 1)
+  assert.match(r.stderr, /rolling back/)
+  assert.equal(existsSync(join(ctx.releaseRoot, 'current')), false)
+})
+
+test('the deploy waits longer than the startup gate is allowed to take', () => {
+  const gate = readFileSync(join(ROOT, 'worker/src/ingest/metric-trust-readiness.ts'), 'utf8')
+  const gateMs = Number(
+    gate
+      .match(/export const METRIC_TRUST_READINESS_GATE_TIMEOUT_MS = ([0-9_]+)/)?.[1]
+      .replaceAll('_', '')
+  )
+  const statementSeconds = Number(
+    gate.match(/export const METRIC_TRUST_READINESS_STATEMENT_TIMEOUT_SECONDS = ([0-9]+)/)?.[1]
+  )
+  const waitSeconds = Number(
+    readFileSync(DEPLOY, 'utf8').match(
+      /READY_TIMEOUT="\$\{ARENA_SCORING_READY_TIMEOUT_SECONDS:-([0-9]+)\}"/
+    )?.[1]
+  )
+  assert.ok(Number.isFinite(gateMs) && gateMs > 0, 'gate budget constant not found')
+  assert.ok(Number.isFinite(waitSeconds) && waitSeconds > 0, 'deploy default not found')
+  // The statement budget sits inside the gate's race; the deploy must outlast
+  // the race plus the pool's 10 s connection timeout and some start-up time.
+  assert.ok(statementSeconds * 1000 < gateMs)
+  assert.ok(
+    waitSeconds * 1000 >= gateMs + 10_000 + 20_000,
+    `deploy waits ${waitSeconds}s but the gate may take ${gateMs / 1000}s`
+  )
 })
 
 test('a comment mentioning "= true" does not open the V1 gate', (t) => {
