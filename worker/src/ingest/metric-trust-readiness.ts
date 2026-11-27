@@ -1,4 +1,5 @@
 import { ingestClientConnect } from '@/lib/ingest/db'
+import { describeSafeCauseChain } from './safe-error-cause'
 
 export const METRIC_TRUST_WORKER_READINESS_CONTRACT =
   'arena.metric-trust-release-readiness@2' as const
@@ -34,8 +35,68 @@ export type MetricTrustReadinessClient = {
 type ConnectReadinessClient = () => Promise<MetricTrustReadinessClient>
 type LoadReadiness = () => Promise<unknown>
 
+/** A refusal this gate raised itself; its reason is already safe to show. */
+export class MetricTrustStartupGateError extends Error {
+  constructor(reason: string) {
+    super(`[ingest-worker] metric-trust startup gate failed closed: ${reason}`)
+    this.name = 'MetricTrustStartupGateError'
+  }
+}
+
 function startupGateError(reason: string): Error {
-  return new Error(`[ingest-worker] metric-trust startup gate failed closed: ${reason}`)
+  return new MetricTrustStartupGateError(reason)
+}
+
+/**
+ * Budgets of the gate. The deploy scripts wait for a release to prove liveness
+ * and must wait longer than this (scripts/qa/local-scoring-deploy.test.mjs).
+ */
+export const METRIC_TRUST_READINESS_STATEMENT_TIMEOUT_SECONDS = 90
+export const METRIC_TRUST_READINESS_GATE_TIMEOUT_MS = 100_000
+
+export type MetricTrustReadinessFailureCategory =
+  | 'connect_timeout'
+  | 'network'
+  | 'statement_timeout'
+  | 'rpc_missing'
+  | 'other'
+
+const NETWORK_ERRNO = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'EAI_AGAIN',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'ENOTFOUND',
+  'EPIPE',
+  'ETIMEDOUT',
+])
+
+/**
+ * Why the readiness call failed, from fields that cannot carry a connection
+ * string or SQL. On 2026-11-26 a scoring deploy during a network outage logged
+ * only "readiness RPC is unavailable", which reads like a missing migration;
+ * the real cause (the 10 s connection timeout) had to be inferred from the
+ * spacing of the restarts.
+ */
+export function classifyReadinessFailure(error: unknown): MetricTrustReadinessFailureCategory {
+  for (let current: unknown = error, depth = 0; depth < 4; depth += 1) {
+    if (!(current instanceof Error)) break
+    const code = (current as { code?: unknown }).code
+    if (code === '57014') return 'statement_timeout'
+    if (code === '42883' || code === 'PGRST202') return 'rpc_missing'
+    if (typeof code === 'string' && NETWORK_ERRNO.has(code)) return 'network'
+    // node-postgres raises these two without a code; the texts are its own
+    // fixed literals, compared whole and never logged.
+    if (
+      current.message === 'timeout exceeded when trying to connect' ||
+      current.message === 'Connection terminated due to connection timeout'
+    ) {
+      return 'connect_timeout'
+    }
+    current = (current as { cause?: unknown }).cause
+  }
+  return 'other'
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -165,7 +226,9 @@ export async function loadMetricTrustWorkerReadiness({
     // 25s left no margin: one slow call would fail every restart and leave
     // ingestion down. 90s here, 100s for the caller's race, until the per-run
     // proof stops being recomputed on every start.
-    await client.query("SET LOCAL statement_timeout = '90s'")
+    await client.query(
+      `SET LOCAL statement_timeout = '${METRIC_TRUST_READINESS_STATEMENT_TIMEOUT_SECONDS}s'`
+    )
     const result = await client.query(
       'SELECT public.arena_metric_trust_release_readiness() AS readiness'
     )
@@ -187,24 +250,52 @@ export async function loadMetricTrustWorkerReadiness({
 
 export async function assertMetricTrustWorkerReadiness({
   load = loadMetricTrustWorkerReadiness,
-  timeoutMs = 100_000,
+  timeoutMs = METRIC_TRUST_READINESS_GATE_TIMEOUT_MS,
 }: {
   load?: LoadReadiness
   timeoutMs?: number
 } = {}): Promise<void> {
   let payload: unknown
   let timeout: ReturnType<typeof setTimeout> | undefined
+  const raceTimeout = startupGateError('readiness RPC timed out')
   try {
     payload = await Promise.race([
       load(),
       new Promise<never>((_resolve, reject) => {
-        timeout = setTimeout(() => reject(startupGateError('readiness RPC timed out')), timeoutMs)
+        timeout = setTimeout(() => reject(raceTimeout), timeoutMs)
       }),
     ])
-  } catch {
-    throw startupGateError('readiness RPC is unavailable')
+  } catch (error) {
+    // A refusal raised by this gate (bad URL, wrong row count, the race
+    // timeout above) already says what happened.
+    if (error instanceof MetricTrustStartupGateError) {
+      logStartupGateExit(error === raceTimeout ? 'race_timeout' : 'refused')
+      throw error
+    }
+    const category = classifyReadinessFailure(error)
+    logStartupGateExit(category)
+    throw startupGateError(
+      `readiness RPC is unavailable (${category}; cause: ${describeSafeCauseChain(error)})`
+    )
   } finally {
     if (timeout !== undefined) clearTimeout(timeout)
   }
-  validateMetricTrustWorkerReadiness(payload)
+  try {
+    validateMetricTrustWorkerReadiness(payload)
+  } catch (error) {
+    logStartupGateExit('contract')
+    throw error
+  }
+}
+
+/**
+ * One fixed-format line per failed start, so a restart count can be split by
+ * cause with `grep -c` (329 restarts on 2026-11-26 were all one outage; the
+ * category was only visible inside a stack trace). Every caller of the gate
+ * exits when it fails.
+ */
+function logStartupGateExit(
+  category: MetricTrustReadinessFailureCategory | 'race_timeout' | 'refused' | 'contract'
+): void {
+  console.error(`[startup-gate] exit category=${category}`)
 }
