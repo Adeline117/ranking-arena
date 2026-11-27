@@ -137,8 +137,10 @@ export const BITGET_SPOT_LEADERBOARD_EXHAUSTION: LeaderboardExhaustionDeclaratio
  * (accepted traders = maxShowSizes) therefore refused every capture.
  *
  * The proof counts portfolios: each read exactly once (no duplicate is
- * tolerated) and exactly as many as the last reported total, which must not
- * move during the capture (max_drift_bps 0). The ranking then keeps, per
+ * tolerated) and exactly as many as the last reported total. The reported
+ * total may move by 0.5% between pages (max_drift_bps 50: one row at 200-399
+ * portfolios, none below 200): in 12 window reads of the probe it moved once,
+ * between 224 and 225 during a 90D read. The ranking then keeps, per
  * traderUid, the portfolio with the best rank (the staging dedupe keeps the
  * lower rank) and records the merge on that row (bitgetIdentityMergeExtras).
  * The kept row is one real portfolio's figures, not the trader's combined
@@ -152,7 +154,7 @@ export const BITGET_CFD_LEADERBOARD_EXHAUSTION: LeaderboardExhaustionDeclaration
   board_version: {
     kind: 'reported_total_drift' as const,
     path: ['data', 'maxShowSizes'],
-    max_drift_bps: 0,
+    max_drift_bps: 50,
   },
   max_duplicate_rows: 0,
   identity_merge: { kind: 'best_rank' as const, identity_path: ['traderUid'] },

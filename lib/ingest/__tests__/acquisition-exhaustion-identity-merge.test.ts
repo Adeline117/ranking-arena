@@ -16,7 +16,10 @@ import {
 } from '../acquisition-exhaustion'
 import { BINANCE_FUTURES_LEADERBOARD_EXHAUSTION } from '../adapters/binance'
 import { BINANCE_WEB3_LEADERBOARD_EXHAUSTION } from '../adapters/binance-web3'
-import { BITGET_SPOT_LEADERBOARD_EXHAUSTION } from '../adapters/bitget'
+import {
+  BITGET_CFD_LEADERBOARD_EXHAUSTION,
+  BITGET_SPOT_LEADERBOARD_EXHAUSTION,
+} from '../adapters/bitget'
 import { BYBIT_MT5_LEADERBOARD_EXHAUSTION } from '../adapters/bybit-mt5'
 import { OKX_LEADERBOARD_EXHAUSTION } from '../adapters/okx'
 
@@ -390,10 +393,23 @@ describe('exhaustionCompletenessHolds with identity_merge (bitget_cfd)', () => {
   })
 })
 
-describe('identity_merge drift share', () => {
-  const declaration = leaderboardExhaustionDeclarationSchema.parse({
-    ...CFD,
-    board_version: { ...CFD.board_version, max_drift_bps: 50 },
+describe('identity_merge drift share (BITGET_CFD_LEADERBOARD_EXHAUSTION, 50 bps)', () => {
+  const declaration = BITGET_CFD_LEADERBOARD_EXHAUSTION
+
+  it('is 50 bps with no duplicate allowance', () => {
+    expect(declaration.board_version).toMatchObject({ max_drift_bps: 50 })
+    expect(declaration.max_duplicate_rows).toBe(0)
+  })
+
+  it('at 191 (7D) the share is 0 rows: a moved total is refused', () => {
+    const moved = build({
+      declaration,
+      pageRows: pagesOf(191),
+      distinct: 191,
+      totals: { min: 191, max: 192, last: 191 },
+      merge: { identities: 188, merged_rows: 3 },
+    })
+    expect(exhaustionCompletenessHolds(moved.completeness, moved.facts)).toBe(false)
   })
 
   it('bounds only the reported total, not capped by max_duplicate_rows 0', () => {
@@ -416,7 +432,7 @@ describe('identity_merge drift share', () => {
     expect(exhaustionCompletenessHolds(movedTwo.completeness, movedTwo.facts)).toBe(false)
   })
 
-  it('still refuses one portfolio read twice and any gap to the last total', () => {
+  it('a total that moved by 1 holds, but one portfolio read twice is still incomplete', () => {
     const duplicated = build({
       declaration,
       pageRows: pagesOf(224),

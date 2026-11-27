@@ -494,7 +494,13 @@ assert_equal "a portfolio read twice does not hold even when the board total mat
   "$(cfd short_page 6 11 190 190 190 190 188 3 188 2)"
 assert_equal "fewer portfolios than the last total do not hold" "f" "$(cfd short_page 6 11 191 192 192 192 188 3 188 3)"
 assert_equal "more portfolios than the last total do not hold" "f" "$(cfd short_page 6 11 191 190 190 190 188 3 188 3)"
-assert_equal "a total that moved by one does not hold" "f" "$(cfd short_page 6 11 191 191 192 191 188 3 188 3)"
+# max_drift_bps 50: the total may move by floor(last x 0.5%) = 1 at 224, 0 at 191.
+assert_equal "90D: a total that moved by one (224-225) holds" "t" "$(cfd short_page 7 14 224 224 225 224 222 2 222 2)"
+assert_equal "90D: a total that moved by one, with one portfolio read twice, does not hold" "f" \
+  "$(cfd short_page 7 14 223 224 225 224 221 3 221 2)"
+assert_equal "90D: a total that moved by two does not hold" "f" "$(cfd short_page 7 14 224 223 225 224 222 2 222 2)"
+assert_equal "90D: one portfolio short of the last total does not hold" "f" "$(cfd short_page 7 14 224 225 225 225 222 2 222 2)"
+assert_equal "7D: a total that moved by one (191, allowance 0) does not hold" "f" "$(cfd short_page 6 11 191 191 192 191 188 3 188 3)"
 assert_equal "identities other than the accepted rows do not hold" "f" "$(cfd short_page 6 11 191 191 191 191 189 3 188 3)"
 assert_equal "merged rows other than distinct - identities do not hold" "f" "$(cfd short_page 6 11 191 191 191 191 188 2 188 2)"
 assert_equal "deduplicated rows other than the merged rows do not hold" "f" "$(cfd short_page 6 11 191 191 191 191 188 4 188 3)"
@@ -517,12 +523,14 @@ assert_equal "malformed merge evidence does not hold" "f" "$(psql_db main -Atqc 
 valid() {
   psql_db main -Atqc "SELECT arena.leaderboard_exhaustion_declaration_valid('$1'::jsonb)"
 }
-CFD_DECL='{"completeness_mode": "exhausted", "list_path": ["data", "rows"], "row_key_path": ["portfolioId"], "end_signal": {"kind": "short_page"}, "board_version": {"kind": "reported_total_drift", "path": ["data", "maxShowSizes"], "max_drift_bps": 0}, "max_duplicate_rows": 0, "identity_merge": {"kind": "best_rank", "identity_path": ["traderUid"]}}'
+CFD_DECL='{"completeness_mode": "exhausted", "list_path": ["data", "rows"], "row_key_path": ["portfolioId"], "end_signal": {"kind": "short_page"}, "board_version": {"kind": "reported_total_drift", "path": ["data", "maxShowSizes"], "max_drift_bps": 50}, "max_duplicate_rows": 0, "identity_merge": {"kind": "best_rank", "identity_path": ["traderUid"]}}'
 assert_equal "the cfd declaration is valid" "t" "$(valid "$CFD_DECL")"
 assert_equal "identity_merge with a duplicate allowance is not valid" "f" \
   "$(valid "${CFD_DECL/\"max_duplicate_rows\": 0/\"max_duplicate_rows\": 1}")"
-assert_equal "identity_merge with a drift allowance is still valid" "t" \
-  "$(valid "${CFD_DECL/\"max_drift_bps\": 0/\"max_drift_bps\": 35}")"
+assert_equal "identity_merge without a drift allowance is still valid" "t" \
+  "$(valid "${CFD_DECL/\"max_drift_bps\": 50/\"max_drift_bps\": 0}")"
+assert_equal "identity_merge above 1% drift is not valid" "f" \
+  "$(valid "${CFD_DECL/\"max_drift_bps\": 50/\"max_drift_bps\": 101}")"
 assert_equal "identity_merge without reported_total_drift is not valid" "f" \
   "$(valid '{"completeness_mode": "exhausted", "list_path": ["data", "rows"], "row_key_path": ["portfolioId"], "end_signal": {"kind": "short_page"}, "board_version": {"kind": "first_page_reread"}, "max_duplicate_rows": 0, "identity_merge": {"kind": "best_rank", "identity_path": ["traderUid"]}}')"
 assert_equal "identity_merge of another kind is not valid" "f" \
