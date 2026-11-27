@@ -125,9 +125,11 @@ SQL
   statement_of "$SERVING_RPC_MIGRATION" \
     'CREATE OR REPLACE FUNCTION public.arena_serving_sources()' '$$;'
 } >"$TMP_ROOT/guards.sql"
-grep -q 'guarded Tier-A source authority cannot change before COMMIT' "$TMP_ROOT/guards.sql"
-grep -q 'collides with another active serving source' "$TMP_ROOT/guards.sql"
 psql_as postgres -q -f "$TMP_ROOT/guards.sql"
+assert_equal "both arena.sources guards and the serving-names RPC are installed" "2:1" \
+  "$(psql_as postgres -Atqc "
+     SELECT (SELECT count(*) FROM pg_trigger WHERE tgrelid = 'arena.sources'::regclass AND NOT tgisinternal)
+            || ':' || (SELECT count(*) FROM pg_proc WHERE proname = 'arena_serving_sources')")"
 
 state() {
   psql_as postgres -Atqc "

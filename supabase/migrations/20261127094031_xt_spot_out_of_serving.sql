@@ -60,10 +60,12 @@ BEGIN
     RAISE EXCEPTION 'expected exactly one xt_spot source, found %', v_rows;
   END IF;
 
+  -- Locked until COMMIT: the state checked here is the state updated below.
   SELECT source_row.status, source_row.serving_mode
     INTO STRICT v_status, v_serving_mode
     FROM arena.sources AS source_row
-   WHERE source_row.slug = 'xt_spot';
+   WHERE source_row.slug = 'xt_spot'
+     FOR UPDATE;
 
   -- active + serving is the state this migration was written for; inactive +
   -- shadow is its own result (a replay). Anything else was changed by someone
