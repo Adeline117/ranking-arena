@@ -1106,7 +1106,12 @@ export async function processTierA(
             ...(captureRankAnchors ? { captureRankAnchors } : {}),
           })
           failureReason = 'validation_failed'
-          validated = validateLeaderboardRows(rows, requiredFields)
+          const annotateIdentityMerge = adapter.leaderboardIdentityMerge?.(src) ?? null
+          validated = validateLeaderboardRows(
+            rows,
+            requiredFields,
+            annotateIdentityMerge ? { annotateIdentityMerge } : {}
+          )
           adapter.validateLeaderboard?.(
             {
               parsedRows: rows,
