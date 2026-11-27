@@ -8,7 +8,6 @@
  */
 
 import { isV1RankingCommandChainPublished } from '../../lib/cron/v1-ranking-command-chain-publication'
-import { rankPublicationLogSink } from './publication-log'
 
 // ENDGAME (ARENA_DATA_SPEC v1.2): legacy fetch/enrich removed — leaderboard
 // data is produced by arena-ingest-worker. This worker only keeps the
@@ -55,6 +54,7 @@ async function main() {
     { routeRankPublicationAlert },
     { finalJobFailureAlert },
     { startIngestCoverageWatch },
+    { rankPublicationLogSink },
   ] = await Promise.all([
     import('bullmq'),
     import('./connection'),
@@ -73,6 +73,7 @@ async function main() {
     import('../../lib/rankings/publication/alert-routing'),
     import('./job-failure-alert'),
     import('./ingest-coverage-watch'),
+    import('./publication-log'),
   ])
   // An assertion function must carry an explicit type to be callable (TS2775).
   const assertSuccessfulMeilisearchSyncResponse: typeof import('./pipeline-response').assertSuccessfulMeilisearchSyncResponse =
