@@ -433,11 +433,17 @@ BEGIN
             (v_totals->>'min')::integer AND (v_totals->>'max')::integer THEN
         RETURN false;
       END IF;
-      v_allowance := LEAST(
+      -- identity_merge declares max_duplicate_rows 0 and forbids any duplicate
+      -- and any distinct-vs-total gap on its own (below); the drift share then
+      -- bounds only how far the reported total may move between pages.
+      v_allowance := CASE WHEN v_merge IS NULL THEN LEAST(
         (v_totals->>'last')::bigint
           * (v_declaration->'board_version'->>'max_drift_bps')::bigint / 10000,
         (v_declaration->>'max_duplicate_rows')::bigint
-      );
+      ) ELSE
+        (v_totals->>'last')::bigint
+          * (v_declaration->'board_version'->>'max_drift_bps')::bigint / 10000
+      END;
       -- A NULL allowance must refuse, never fall through to true.
       IF v_allowance IS NULL
          OR (v_totals->>'max')::bigint - (v_totals->>'min')::bigint > v_allowance

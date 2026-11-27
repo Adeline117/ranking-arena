@@ -389,3 +389,51 @@ describe('exhaustionCompletenessHolds with identity_merge (bitget_cfd)', () => {
     expect(exhaustionCompletenessHolds(withoutMerge, facts)).toBe(false)
   })
 })
+
+describe('identity_merge drift share', () => {
+  const declaration = leaderboardExhaustionDeclarationSchema.parse({
+    ...CFD,
+    board_version: { ...CFD.board_version, max_drift_bps: 50 },
+  })
+
+  it('bounds only the reported total, not capped by max_duplicate_rows 0', () => {
+    // 224 x 0.5% = 1 row: the total may move by one between pages.
+    const moved = build({
+      declaration,
+      pageRows: pagesOf(224),
+      distinct: 224,
+      totals: { min: 224, max: 225, last: 224 },
+      merge: { identities: 222, merged_rows: 2 },
+    })
+    expect(exhaustionCompletenessHolds(moved.completeness, moved.facts)).toBe(true)
+    const movedTwo = build({
+      declaration,
+      pageRows: pagesOf(224),
+      distinct: 224,
+      totals: { min: 223, max: 225, last: 224 },
+      merge: { identities: 222, merged_rows: 2 },
+    })
+    expect(exhaustionCompletenessHolds(movedTwo.completeness, movedTwo.facts)).toBe(false)
+  })
+
+  it('still refuses one portfolio read twice and any gap to the last total', () => {
+    const duplicated = build({
+      declaration,
+      pageRows: pagesOf(224),
+      distinct: 223,
+      totals: { min: 224, max: 225, last: 224 },
+      merge: { identities: 221, merged_rows: 2 },
+      facts: { accepted_population: 221, deduplicated_row_count: 3 },
+    })
+    expect(duplicated.completeness.row_keys.duplicate).toBe(1)
+    expect(exhaustionCompletenessHolds(duplicated.completeness, duplicated.facts)).toBe(false)
+    const short = build({
+      declaration,
+      pageRows: pagesOf(224),
+      distinct: 224,
+      totals: { min: 225, max: 225, last: 225 },
+      merge: { identities: 222, merged_rows: 2 },
+    })
+    expect(exhaustionCompletenessHolds(short.completeness, short.facts)).toBe(false)
+  })
+})

@@ -372,10 +372,16 @@ function boardVersionHolds(completeness: LeaderboardExhaustionCompleteness): boo
     const declared = completeness.declaration.board_version
     if (declared.kind !== 'reported_total_drift') return false
     const totals = completeness.board_version.reported_totals
-    const allowance = Math.min(
-      Math.floor((totals.last * declared.max_drift_bps) / 10_000),
-      completeness.declaration.max_duplicate_rows
-    )
+    // identity_merge declares max_duplicate_rows 0 and forbids any duplicate
+    // and any distinct-vs-total gap on its own; the drift share then bounds
+    // only how far the reported total may move between pages.
+    const allowance =
+      completeness.declaration.identity_merge === undefined
+        ? Math.min(
+            Math.floor((totals.last * declared.max_drift_bps) / 10_000),
+            completeness.declaration.max_duplicate_rows
+          )
+        : Math.floor((totals.last * declared.max_drift_bps) / 10_000)
     return (
       totals.min <= totals.last &&
       totals.last <= totals.max &&
