@@ -7,11 +7,8 @@ import { Ratelimit } from '@upstash/ratelimit'
 import { Redis } from '@upstash/redis'
 import { NextRequest, NextResponse } from 'next/server'
 import { createLogger } from './logger'
-import {
-  recordRedisFailure,
-  recordRedisSuccess,
-  redisCircuitAllowsRequest,
-} from '@/lib/cache/redis-circuit'
+import { recordRedisSuccess, redisCircuitAllowsRequest } from '@/lib/cache/redis-circuit'
+import { reportRedisFailure } from '@/lib/cache/redis-outage'
 
 const rateLimitLogger = createLogger('RateLimit')
 
@@ -296,7 +293,7 @@ export async function checkRateLimitFull(
       limited = await limiter.limit(identifier)
       recordRedisSuccess()
     } catch (error) {
-      recordRedisFailure()
+      reportRedisFailure(error)
       throw error
     }
     const { success, limit, remaining, reset } = limited

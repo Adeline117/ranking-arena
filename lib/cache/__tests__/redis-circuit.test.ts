@@ -36,6 +36,17 @@ describe('Redis circuit breaker', () => {
     expect(redisCircuitAllowsRequest(after + REDIS_CIRCUIT_PROBE_WINDOW_MS)).toBe(true)
   })
 
+  it('ignores a late success from a call admitted before the failure', () => {
+    // Two calls pass the closed gate; one fails, the other answers afterwards.
+    expect(redisCircuitAllowsRequest(t0)).toBe(true)
+    expect(redisCircuitAllowsRequest(t0)).toBe(true)
+    recordRedisFailure(t0 + 900)
+    recordRedisSuccess()
+
+    expect(redisCircuitAllowsRequest(t0 + 901)).toBe(false)
+    expect(redisCircuitCoolingDown(t0 + 901)).toBe(true)
+  })
+
   it('restarts the cooldown when the probe fails and closes when it succeeds', () => {
     recordRedisFailure(t0)
     const probeAt = t0 + REDIS_CIRCUIT_COOLDOWN_MS

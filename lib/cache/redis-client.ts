@@ -5,15 +5,17 @@
  * to avoid duplicate connections and initialization overhead.
  */
 
-import { dataLogger, fireAndForget } from '@/lib/utils/logger'
+import { dataLogger } from '@/lib/utils/logger'
 import {
   RedisCircuitOpenError,
+  closeRedisCircuit,
   recordRedisFailure,
   recordRedisSuccess,
   redisCircuitAllowsRequest,
   redisCircuitCoolingDown,
   redisCircuitTripped,
 } from './redis-circuit'
+import { reportRedisFailure } from './redis-outage'
 
 type UpstashRedisType = InstanceType<(typeof import('@upstash/redis'))['Redis']>
 
@@ -109,32 +111,10 @@ function withCircuit(client: UpstashRedisType): UpstashRedisType {
 }
 
 /**
- * Record a Redis error. The first failure opens the circuit; calls that were
- * only refused by the open circuit are not failures of Redis itself.
+ * Record a Redis error. The first failure opens the circuit and alerts.
  */
 export function recordRedisError(error: unknown): void {
-  if (error instanceof RedisCircuitOpenError) return
-  if (!recordRedisFailure()) return
-
-  dataLogger.error('[Redis] Falling back to memory cache after a failed call', {
-    lastError: error instanceof Error ? error.message : String(error),
-  })
-  // Alert on Redis transition to unhealthy (dynamic import to avoid circular deps)
-  const alertPromise = import('@/lib/alerts/send-alert')
-    .then((m) =>
-      m.sendRateLimitedAlert(
-        {
-          title: 'Redis DOWN — memory fallback active',
-          message:
-            'A Redis call failed. Cache operations use the in-memory fallback until a probe succeeds. Rankings, rate limiting, and dedup affected.',
-          level: 'critical',
-        },
-        'redis-down',
-        30 * 60 * 1000
-      )
-    )
-    .catch(() => undefined)
-  fireAndForget(alertPromise, 'redis-down-alert')
+  reportRedisFailure(error)
 }
 
 /**
@@ -154,7 +134,7 @@ export async function pingRedis(): Promise<boolean> {
   try {
     await rawClient.ping()
     if (redisCircuitTripped()) dataLogger.info('[Redis] connection recovered')
-    recordRedisSuccess()
+    closeRedisCircuit()
     return true
   } catch (err) {
     dataLogger.warn('[Redis] ping failed:', err instanceof Error ? err.message : String(err))
