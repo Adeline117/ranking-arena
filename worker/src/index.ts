@@ -8,6 +8,7 @@
  */
 
 import { isV1RankingCommandChainPublished } from '../../lib/cron/v1-ranking-command-chain-publication'
+import { rankPublicationLogSink } from './publication-log'
 
 // ENDGAME (ARENA_DATA_SPEC v1.2): legacy fetch/enrich removed — leaderboard
 // data is produced by arena-ingest-worker. This worker only keeps the
@@ -128,7 +129,7 @@ async function main() {
           const published = await publishLeaderboardSeason(season, {
             database: rankPublicationDatabase,
             scoreCohort,
-            log: (message) => void job.log(message),
+            log: rankPublicationLogSink((message) => job.log(message)),
             alert: rankPublicationAlert,
           })
           job.log(
