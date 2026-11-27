@@ -47,9 +47,9 @@
 --
 -- Safety: refuses unless the policy body is the 20261122201611 body (sha256
 --   1a9fd63c...1429) or this migration's own (replay), its attributes are the
---   expected ones, and the view is the 37-column 20261124114140 view (it
---   still reads the served sources and the wrapper, or this migration's
---   function on replay). It adds no trigger or constraint and touches no
+--   expected ones, and the view is exactly the 20261124114140 view or this
+--   migration's (replay), compared as deparsed by the same server; any other
+--   edit is refused, not overwritten. It adds no trigger or constraint and touches no
 --   table the worker startup gate pins.
 --
 -- POSTDEPLOY. No application or worker release depends on it.
@@ -64,7 +64,6 @@ SET LOCAL search_path = pg_catalog, pg_temp;
 DO $preflight$
 DECLARE
   v_policy record;
-  v_view_definition text;
 BEGIN
   SELECT
     procedure_row.oid,
@@ -102,64 +101,6 @@ BEGIN
     RAISE EXCEPTION 'arena.leaderboard_rank_row_is_public_eligible has unexpected attributes';
   END IF;
 
-  IF pg_catalog.to_regclass('public.public_ranked_leaderboard') IS NULL
-     OR pg_catalog.to_regprocedure(
-          'arena.public_ranked_leaderboard_served_sources(timestamp with time zone)') IS NULL THEN
-    RAISE EXCEPTION 'the 20261124114140 public leaderboard is required';
-  END IF;
-  IF (
-       SELECT pg_catalog.array_agg(attribute.attname::text ORDER BY attribute.attnum)
-         FROM pg_catalog.pg_attribute AS attribute
-        WHERE attribute.attrelid = 'public.public_ranked_leaderboard'::pg_catalog.regclass
-          AND attribute.attnum > 0
-          AND NOT attribute.attisdropped
-     ) IS DISTINCT FROM ARRAY[
-      'id',
-      'season_id',
-      'source',
-      'source_type',
-      'source_trader_id',
-      'rank',
-      'arena_score',
-      'arena_score_v3',
-      'arena_score_v4',
-      'roi',
-      'pnl',
-      'win_rate',
-      'max_drawdown',
-      'followers',
-      'copiers',
-      'trades_count',
-      'handle',
-      'avatar_url',
-      'computed_at',
-      'profitability_score',
-      'risk_control_score',
-      'execution_score',
-      'score_completeness',
-      'trading_style',
-      'avg_holding_hours',
-      'style_confidence',
-      'sharpe_ratio',
-      'sortino_ratio',
-      'profit_factor',
-      'calmar_ratio',
-      'trader_type',
-      'is_outlier',
-      'metrics_estimated',
-      'rank_change',
-      'is_new',
-      'idle_window',
-      'mdd_contradiction'
-    ]::pg_catalog.text[] THEN
-    RAISE EXCEPTION 'public.public_ranked_leaderboard is not the 37-column 20261123021904 shape';
-  END IF;
-  v_view_definition := pg_catalog.pg_get_viewdef('public.public_ranked_leaderboard'::pg_catalog.regclass);
-  IF pg_catalog.strpos(v_view_definition, 'public_ranked_leaderboard_served_sources(') = 0
-     OR (pg_catalog.strpos(v_view_definition, 'public_ranked_leaderboard_row_is_eligible(') = 0
-         AND pg_catalog.strpos(v_view_definition, 'leaderboard_rank_row_is_public_eligible_expr(') = 0) THEN
-    RAISE EXCEPTION 'public.public_ranked_leaderboard is not the 20261124114140 view';
-  END IF;
 END
 $preflight$;
 
@@ -222,6 +163,225 @@ GRANT EXECUTE ON FUNCTION arena.leaderboard_rank_row_is_public_eligible_expr(
 COMMENT ON FUNCTION arena.leaderboard_rank_row_is_public_eligible_expr(
   public.leaderboard_ranks, timestamptz
 ) IS 'The public rank row policy (20261122201611), inlinable; arena.leaderboard_rank_row_is_public_eligible returns its result. EXECUTE is granted to anon, authenticated and service_role only because PostgreSQL inlines a function solely for a caller allowed to execute it. That is safe only while the body is a pure expression over the row passed in: it reads no table, view or function with side effects, so it reveals nothing the caller does not already hold. Never add a query (FROM, a subquery, a table-reading function) to it; the PostgreSQL 17 proof of 20261127104836 fails if its body depends on a relation.';
+
+-- The supported view states, deparsed by this server for an exact comparison
+-- (session-local; gone at the end of the session).
+CREATE TEMPORARY VIEW expected_view_20261124114140 AS
+WITH observed AS MATERIALIZED (
+  SELECT pg_catalog.statement_timestamp() AS observed_at
+),
+served_sources AS MATERIALIZED (
+  SELECT served.season_id, served.source
+  FROM observed
+  CROSS JOIN LATERAL arena.public_ranked_leaderboard_served_sources(
+    observed.observed_at
+  ) AS served
+)
+SELECT
+  rank_row.id,
+  rank_row.season_id,
+  rank_row.source,
+  rank_row.source_type,
+  rank_row.source_trader_id,
+  rank_row.rank,
+  rank_row.arena_score,
+  rank_row.arena_score_v3,
+  rank_row.arena_score_v4,
+  rank_row.roi,
+  rank_row.pnl,
+  rank_row.win_rate,
+  rank_row.max_drawdown,
+  rank_row.followers,
+  rank_row.copiers,
+  rank_row.trades_count,
+  rank_row.handle,
+  rank_row.avatar_url,
+  rank_row.computed_at,
+  rank_row.profitability_score,
+  rank_row.risk_control_score,
+  rank_row.execution_score,
+  rank_row.score_completeness,
+  rank_row.trading_style,
+  rank_row.avg_holding_hours,
+  rank_row.style_confidence,
+  rank_row.sharpe_ratio,
+  rank_row.sortino_ratio,
+  rank_row.profit_factor,
+  rank_row.calmar_ratio,
+  rank_row.trader_type,
+  rank_row.is_outlier,
+  rank_row.metrics_estimated,
+  rank_row.rank_change,
+  rank_row.is_new,
+  COALESCE(
+    (rank_row.score_factors -> 'idle_window') = 'true'::pg_catalog.jsonb,
+    false
+  ) AS idle_window,
+  COALESCE(
+    (rank_row.score_factors -> 'mdd_contradiction') = 'true'::pg_catalog.jsonb,
+    false
+  ) AS mdd_contradiction
+FROM public.leaderboard_ranks AS rank_row
+JOIN served_sources AS served
+  ON served.season_id = rank_row.season_id
+ AND served.source = rank_row.source
+JOIN ONLY arena.public_ranked_leaderboard_serving_heads AS head
+  ON head.season_id = rank_row.season_id
+ AND head.score_cohort_id = rank_row.rank_publication_id
+JOIN ONLY arena.public_ranked_leaderboard_serving_sources AS source_witness
+  ON source_witness.season_id = rank_row.season_id
+ AND source_witness.source = rank_row.source
+ AND source_witness.score_cohort_id = rank_row.rank_publication_id
+CROSS JOIN observed
+WHERE rank_row.rank IS NOT NULL
+  AND arena.public_ranked_leaderboard_row_is_eligible(
+    rank_row,
+    observed.observed_at
+  );
+
+CREATE TEMPORARY VIEW expected_view_20261127104836 AS
+WITH observed AS MATERIALIZED (
+  SELECT pg_catalog.statement_timestamp() AS observed_at
+),
+served_sources AS MATERIALIZED (
+  SELECT served.season_id, served.source
+  FROM observed
+  CROSS JOIN LATERAL arena.public_ranked_leaderboard_served_sources(
+    observed.observed_at
+  ) AS served
+)
+SELECT
+  rank_row.id,
+  rank_row.season_id,
+  rank_row.source,
+  rank_row.source_type,
+  rank_row.source_trader_id,
+  rank_row.rank,
+  rank_row.arena_score,
+  rank_row.arena_score_v3,
+  rank_row.arena_score_v4,
+  rank_row.roi,
+  rank_row.pnl,
+  rank_row.win_rate,
+  rank_row.max_drawdown,
+  rank_row.followers,
+  rank_row.copiers,
+  rank_row.trades_count,
+  rank_row.handle,
+  rank_row.avatar_url,
+  rank_row.computed_at,
+  rank_row.profitability_score,
+  rank_row.risk_control_score,
+  rank_row.execution_score,
+  rank_row.score_completeness,
+  rank_row.trading_style,
+  rank_row.avg_holding_hours,
+  rank_row.style_confidence,
+  rank_row.sharpe_ratio,
+  rank_row.sortino_ratio,
+  rank_row.profit_factor,
+  rank_row.calmar_ratio,
+  rank_row.trader_type,
+  rank_row.is_outlier,
+  rank_row.metrics_estimated,
+  rank_row.rank_change,
+  rank_row.is_new,
+  COALESCE(
+    (rank_row.score_factors -> 'idle_window') = 'true'::pg_catalog.jsonb,
+    false
+  ) AS idle_window,
+  COALESCE(
+    (rank_row.score_factors -> 'mdd_contradiction') = 'true'::pg_catalog.jsonb,
+    false
+  ) AS mdd_contradiction
+FROM public.leaderboard_ranks AS rank_row
+JOIN served_sources AS served
+  ON served.season_id = rank_row.season_id
+ AND served.source = rank_row.source
+JOIN ONLY arena.public_ranked_leaderboard_serving_heads AS head
+  ON head.season_id = rank_row.season_id
+ AND head.score_cohort_id = rank_row.rank_publication_id
+JOIN ONLY arena.public_ranked_leaderboard_serving_sources AS source_witness
+  ON source_witness.season_id = rank_row.season_id
+ AND source_witness.source = rank_row.source
+ AND source_witness.score_cohort_id = rank_row.rank_publication_id
+CROSS JOIN observed
+WHERE rank_row.rank IS NOT NULL
+  AND arena.leaderboard_rank_row_is_public_eligible_expr(
+    rank_row,
+    observed.observed_at
+  );
+
+DO $view_preflight$
+DECLARE
+  v_view_definition text;
+BEGIN
+  IF pg_catalog.to_regclass('public.public_ranked_leaderboard') IS NULL
+     OR pg_catalog.to_regprocedure(
+          'arena.public_ranked_leaderboard_served_sources(timestamp with time zone)') IS NULL THEN
+    RAISE EXCEPTION 'the 20261124114140 public leaderboard is required';
+  END IF;
+  IF (
+       SELECT pg_catalog.array_agg(attribute.attname::text ORDER BY attribute.attnum)
+         FROM pg_catalog.pg_attribute AS attribute
+        WHERE attribute.attrelid = 'public.public_ranked_leaderboard'::pg_catalog.regclass
+          AND attribute.attnum > 0
+          AND NOT attribute.attisdropped
+     ) IS DISTINCT FROM ARRAY[
+      'id',
+      'season_id',
+      'source',
+      'source_type',
+      'source_trader_id',
+      'rank',
+      'arena_score',
+      'arena_score_v3',
+      'arena_score_v4',
+      'roi',
+      'pnl',
+      'win_rate',
+      'max_drawdown',
+      'followers',
+      'copiers',
+      'trades_count',
+      'handle',
+      'avatar_url',
+      'computed_at',
+      'profitability_score',
+      'risk_control_score',
+      'execution_score',
+      'score_completeness',
+      'trading_style',
+      'avg_holding_hours',
+      'style_confidence',
+      'sharpe_ratio',
+      'sortino_ratio',
+      'profit_factor',
+      'calmar_ratio',
+      'trader_type',
+      'is_outlier',
+      'metrics_estimated',
+      'rank_change',
+      'is_new',
+      'idle_window',
+      'mdd_contradiction'
+    ]::pg_catalog.text[] THEN
+    RAISE EXCEPTION 'public.public_ranked_leaderboard is not the 37-column 20261123021904 shape';
+  END IF;
+  -- Exactly the 114140 view, or this migration's view (replay): anything else
+  -- someone changed is refused instead of being overwritten.
+  v_view_definition := pg_catalog.pg_get_viewdef('public.public_ranked_leaderboard'::pg_catalog.regclass);
+  IF v_view_definition IS DISTINCT FROM pg_catalog.pg_get_viewdef('pg_temp.expected_view_20261124114140'::pg_catalog.regclass)
+     AND v_view_definition IS DISTINCT FROM pg_catalog.pg_get_viewdef('pg_temp.expected_view_20261127104836'::pg_catalog.regclass) THEN
+    RAISE EXCEPTION 'public.public_ranked_leaderboard is neither the 20261124114140 view nor this migration''s; refusing to overwrite it';
+  END IF;
+  IF (SELECT relation.reloptions FROM pg_catalog.pg_class AS relation
+       WHERE relation.oid = 'public.public_ranked_leaderboard'::pg_catalog.regclass)
+     IS DISTINCT FROM ARRAY['security_barrier=true', 'security_invoker=false']::pg_catalog.text[] THEN
+    RAISE EXCEPTION 'public.public_ranked_leaderboard options changed';
+  END IF;
+END
+$view_preflight$;
 
 CREATE OR REPLACE FUNCTION arena.leaderboard_rank_row_is_public_eligible(
   p_rank public.leaderboard_ranks,
@@ -324,6 +484,10 @@ BEGIN
           'arena.leaderboard_rank_row_is_public_eligible(public.leaderboard_ranks,timestamp with time zone)')
      ) IS DISTINCT FROM 'daa18d7cd487b15e247ba9e300d770f14ff18d5b15ef0d5e3362173b2cb7e4ba' THEN
     RAISE EXCEPTION 'the policy body is not the reviewed one';
+  END IF;
+  IF pg_catalog.pg_get_viewdef('public.public_ranked_leaderboard'::pg_catalog.regclass)
+     IS DISTINCT FROM pg_catalog.pg_get_viewdef('pg_temp.expected_view_20261127104836'::pg_catalog.regclass) THEN
+    RAISE EXCEPTION 'public.public_ranked_leaderboard is not the reviewed view';
   END IF;
   IF (
        SELECT pg_catalog.array_agg(attribute.attname::text ORDER BY attribute.attnum)

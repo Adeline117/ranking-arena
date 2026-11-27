@@ -16,7 +16,8 @@
 #   = owners, grants and columns; the new function is executable by the API
 #     roles; a replay is accepted and changes nothing; an unexpected policy
 #     body is refused; the rollback file restores the previous body and view
-#     with the same rows and refuses any other state
+#     with the same rows and refuses any other state; an edited view is
+#     refused by both, never overwritten
 # The migration is applied by a non-superuser owner. Isolated cluster on a
 # private socket; never touches application data.
 
@@ -605,6 +606,22 @@ grep -q '20261127104836 is not the installed state' "$TMP_ROOT/rollback-twice.er
 echo "ok: the rollback refuses a state other than 20261127104836"
 psql_as postgres -q -f "$NEW_MIGRATION" >/dev/null
 check_same "the migration applies again after the rollback"
+
+# A view someone edited (an extra filter, same 37 columns and calls) is refused
+# by the migration and by the rollback, never overwritten.
+psql_as postgres -q <<SQL
+CREATE OR REPLACE VIEW public.public_ranked_leaderboard WITH (security_barrier = true, security_invoker = false) AS
+SELECT * FROM ($(psql_as postgres -Atqc "SELECT rtrim(pg_get_viewdef('public.public_ranked_leaderboard'::regclass), ';')")) AS edited
+ WHERE edited.rank < 1000000;
+SQL
+for file in "$NEW_MIGRATION" "$ROLLBACK_FILE"; do
+  if psql_as postgres -q -f "$file" >/dev/null 2>"$TMP_ROOT/edited.err"; then
+    echo "$(basename "$file") overwrote an edited view" >&2
+    exit 1
+  fi
+  grep -qE "refusing to overwrite it|is not the installed state" "$TMP_ROOT/edited.err"
+  echo "ok: $(basename "$file") refuses an edited view"
+done
 
 psql_as postgres -q <<'SQL'
 CREATE OR REPLACE FUNCTION arena.leaderboard_rank_row_is_public_eligible(
