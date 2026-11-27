@@ -7,6 +7,11 @@ import { Ratelimit } from '@upstash/ratelimit'
 import { Redis } from '@upstash/redis'
 import { NextRequest, NextResponse } from 'next/server'
 import { createLogger } from './logger'
+import {
+  recordRedisFailure,
+  recordRedisSuccess,
+  redisCircuitAllowsRequest,
+} from '@/lib/cache/redis-circuit'
 
 const rateLimitLogger = createLogger('RateLimit')
 
@@ -208,7 +213,9 @@ export async function checkRateLimitFull(
   const identifier = getIdentifier(request, userId)
 
   try {
-    const redisClient = getUpstashRedis()
+    // 熔断打开期间不再发请求（每次失败要等约 1 秒），直接走下面"Redis 不可用"
+    // 的既有分支：fail-close 预设照旧 503，其余退到内存限流。
+    const redisClient = redisCircuitAllowsRequest() ? getUpstashRedis() : null
 
     // Redis 不可用时，使用内存限流作为后备（不再完全跳过）
     if (!redisClient) {
@@ -284,7 +291,15 @@ export async function checkRateLimitFull(
     }
 
     const limiter = getRateLimiter(finalConfig, redisClient)
-    const { success, limit, remaining, reset } = await limiter.limit(identifier)
+    let limited: Awaited<ReturnType<Ratelimit['limit']>>
+    try {
+      limited = await limiter.limit(identifier)
+      recordRedisSuccess()
+    } catch (error) {
+      recordRedisFailure()
+      throw error
+    }
+    const { success, limit, remaining, reset } = limited
 
     if (!success) {
       const retryAfter = Math.ceil((reset - Date.now()) / 1000)
