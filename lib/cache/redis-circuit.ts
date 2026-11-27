@@ -55,7 +55,18 @@ export function recordRedisFailure(now: number = Date.now()): boolean {
   return newlyOpened
 }
 
+/**
+ * A call succeeded. While the circuit is open only the recovery probe may
+ * close it: a call admitted before the failure can answer late, and during a
+ * partial outage that late success must not cancel the cooldown.
+ */
 export function recordRedisSuccess(): void {
+  if (tripped && probeUntil === 0) return
+  closeRedisCircuit()
+}
+
+/** Close unconditionally: for an explicit health check that just succeeded. */
+export function closeRedisCircuit(): void {
   tripped = false
   openUntil = 0
   probeUntil = 0
@@ -70,5 +81,5 @@ export class RedisCircuitOpenError extends Error {
 }
 
 export function resetRedisCircuitForTests(): void {
-  recordRedisSuccess()
+  closeRedisCircuit()
 }

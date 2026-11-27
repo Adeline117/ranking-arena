@@ -8,6 +8,7 @@
 import { dataLogger, fireAndForget } from '@/lib/utils/logger'
 import {
   RedisCircuitOpenError,
+  closeRedisCircuit,
   recordRedisFailure,
   recordRedisSuccess,
   redisCircuitAllowsRequest,
@@ -154,7 +155,7 @@ export async function pingRedis(): Promise<boolean> {
   try {
     await rawClient.ping()
     if (redisCircuitTripped()) dataLogger.info('[Redis] connection recovered')
-    recordRedisSuccess()
+    closeRedisCircuit()
     return true
   } catch (err) {
     dataLogger.warn('[Redis] ping failed:', err instanceof Error ? err.message : String(err))
