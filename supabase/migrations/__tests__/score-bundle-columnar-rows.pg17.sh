@@ -13,6 +13,7 @@
 #     gives a deep-equal bundle
 #   + the columnar bundle is at most 70% of the object-form bytes
 #   - a row with an extra key, a missing key, or a non-object row raises
+#   = an empty bundle has no columns and no rows
 #   - anon / authenticated cannot execute it; service_role can
 # The migration is applied by a non-superuser owner. Isolated cluster on a
 # private socket; never touches application data.
@@ -114,7 +115,7 @@ CREATE FUNCTION public.arena_score_inputs_publish_bundle_json(
     FROM generate_series(1, 11682) AS n
   )
   SELECT jsonb_build_object(
-    'scoreRows', (
+    'scoreRows', CASE WHEN (SELECT mode FROM public.stub_mode) = 'empty' THEN '[]'::jsonb ELSE (
       SELECT jsonb_agg(
                CASE
                  WHEN n = 4321 AND mode = 'extra_key' THEN row_value || '{"extra": 1}'
@@ -123,7 +124,7 @@ CREATE FUNCTION public.arena_score_inputs_publish_bundle_json(
                  ELSE row_value
                END
                ORDER BY n)
-        FROM score_rows CROSS JOIN public.stub_mode),
+        FROM score_rows CROSS JOIN public.stub_mode) END,
     'physicalBoards', (
       SELECT jsonb_agg(jsonb_build_object('registry_slug', 'source_' || b, 'snapshot_id', 1000 + b,
                                           'evidence_status', 'passed') ORDER BY b)
@@ -182,9 +183,14 @@ for mode in extra_key missing_key not_object; do
     echo "a row with $mode was reshaped instead of refused" >&2
     exit 1
   fi
-  grep -q '1 score row(s) do not have exactly the 21 columnar keys' "$TMP_ROOT/$mode.err"
+  grep -qE '1 score row\(s\) do not have the key set of the first row' "$TMP_ROOT/$mode.err"
   echo "ok: a row with $mode raises"
 done
+psql_as postgres -q -c "UPDATE public.stub_mode SET mode = 'empty'"
+assert_equal "an empty bundle has no columns and no rows" "[]|[]|26" \
+  "$(psql_as postgres -Atqc "
+     SELECT (b->'scoreRowColumns')::text || '|' || (b->'scoreRowValues')::text || '|' || jsonb_array_length(b->'physicalBoards')
+       FROM (SELECT public.arena_score_inputs_publish_bundle_columnar_json('90D', 1000, 48) AS b) AS bundle")"
 psql_as postgres -q -c "UPDATE public.stub_mode SET mode = 'normal'"
 
 # The stub itself is not a grant fixture; only the new function's grants are checked.
