@@ -829,6 +829,8 @@ function exhaustionSignalScalar(value: unknown, label: string): string | number 
 interface ExhaustionPageFacts {
   rowKeys: string[]
   rowKeysSha256: string
+  /** Each row's identity (identity_merge.identity_path); null without identity_merge. */
+  identityKeys: string[] | null
   endSignalValue: string | number | boolean | null
   versionTokenSha256: string | null
   /** The board total a page with rows reports; null unless board_version is reported_total_drift. */
@@ -848,6 +850,11 @@ function exhaustionPageFacts(
     )
   }
   const rowKeys = list.map((row, index) => exhaustionRowKey(row, declaration.row_key_path, index))
+  const identityPath = declaration.identity_merge?.identity_path ?? null
+  const identityKeys =
+    identityPath === null
+      ? null
+      : list.map((row, index) => exhaustionRowKey(row, identityPath, index))
   let endSignalValue: string | number | boolean | null = null
   const signal = declaration.end_signal
   if (signal.kind !== 'short_page') {
@@ -901,6 +908,7 @@ function exhaustionPageFacts(
   return {
     rowKeys,
     rowKeysSha256: strictCanonicalSha256(rowKeys),
+    identityKeys,
     endSignalValue,
     versionTokenSha256,
     reportedTotal,
@@ -972,6 +980,14 @@ export async function captureNumericLeaderboard(
     if (exhaustion === null || exhaustionPages.length !== sourcePages.length) return null
     const keys = exhaustionPages.flatMap((page) => page.rowKeys)
     const distinct = new Set(keys).size
+    // identity_merge: rows of one identity beyond its first are merged into
+    // its best-ranked row downstream. A row key under two identities makes
+    // the identities exceed the rows; merged_rows then cannot match and the
+    // proof refuses.
+    const identities =
+      exhaustion.identity_merge === undefined
+        ? null
+        : new Set(exhaustionPages.flatMap((page) => page.identityKeys ?? [])).size
     return {
       data_contract: LEADERBOARD_EXHAUSTION_COMPLETENESS_CONTRACT,
       declaration: exhaustion,
@@ -985,6 +1001,14 @@ export async function captureNumericLeaderboard(
         version_token_sha256: page.versionTokenSha256,
       })),
       row_keys: { observed: keys.length, distinct, duplicate: keys.length - distinct },
+      ...(identities === null
+        ? {}
+        : {
+            identity_merge: {
+              identities,
+              merged_rows: Math.max(0, distinct - identities),
+            },
+          }),
       board_version:
         exhaustion.board_version.kind === 'token'
           ? { kind: 'token' }
