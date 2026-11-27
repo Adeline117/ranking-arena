@@ -118,7 +118,9 @@ export default function ShareRankCardButtons({
       const profileParams = new URLSearchParams()
       if (platform) profileParams.set('platform', platform)
       const profileUrl = `${base}/trader/${h}${profileParams.toString() ? `?${profileParams}` : ''}`
-      const badgeUrl = `${base}/api/badge/trader/${h}.svg`
+      // The badge needs the source to find an account that several sources
+      // share a name with, or that exists only on the public ranking.
+      const badgeUrl = `${base}/api/badge/trader/${h}.svg${platform ? `?platform=${encodeURIComponent(platform)}` : ''}`
       const alt = (displayName || handle).replace(/"/g, '')
       // Anchor-wrapped <img> so every embed is a backlink to the trader's Arena
       // profile (SEO + growth loop).
