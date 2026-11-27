@@ -127,9 +127,11 @@ CREATE TRIGGER trader_stats_profile_evidence
   FOR EACH ROW EXECUTE FUNCTION arena.trader_stats_profile_evidence();
 SQL
 } >"$TMP_ROOT/triggers.sql"
-grep -q 'trader-stats-score-input-evidence@1' "$TMP_ROOT/triggers.sql"
-grep -q 'trader-stats-profile-evidence@1' "$TMP_ROOT/triggers.sql"
 psql_as postgres -q -f "$TMP_ROOT/triggers.sql"
+assert_equal "both attestation triggers are installed on arena.trader_stats" "2" \
+  "$(psql_as postgres -Atqc "
+     SELECT count(*) FROM pg_trigger
+      WHERE tgrelid = 'arena.trader_stats'::regclass AND NOT tgisinternal")"
 
 psql_as postgres -q <<'SQL'
 INSERT INTO arena.sources VALUES (1, 'gate_cfd'), (2, 'gate_futures');
