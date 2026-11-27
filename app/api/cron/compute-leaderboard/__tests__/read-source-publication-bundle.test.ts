@@ -3,6 +3,7 @@
  */
 
 import { mapArenaScoreRowToTraderRow } from '../arena-score-row-mapper'
+import { encodeColumnarScoreBundle } from '@/lib/rankings/publication/columnar-score-bundle'
 import {
   SourcePublicationBundleReaderError,
   readSourcePublicationBundle,
@@ -65,7 +66,8 @@ function bundle(
   scoreRows: Record<string, unknown>[] = [scoreRow()],
   physicalBoards: Record<string, unknown>[] = [physicalBoard()]
 ) {
-  return { scoreRows, physicalBoards }
+  // The RPC's columnar form (20261127103322); the reader decodes it back.
+  return encodeColumnarScoreBundle({ scoreRows, physicalBoards })
 }
 
 function supabaseReturning(data: unknown, error: unknown = null) {
@@ -148,7 +150,7 @@ describe('readSourcePublicationBundle', () => {
 
     const result = await readSourcePublicationBundle(supabase as never, '30D', { now: NOW })
 
-    expect(supabase.rpc).toHaveBeenCalledWith('arena_score_inputs_publish_bundle_json', {
+    expect(supabase.rpc).toHaveBeenCalledWith('arena_score_inputs_publish_bundle_columnar_json', {
       p_window: '30D',
       p_per_platform_limit: 1000,
       p_max_age_hours: DEFAULT_SOURCE_PUBLICATION_MAX_AGE_HOURS,
@@ -210,6 +212,38 @@ describe('readSourcePublicationBundle', () => {
     ['top-level array', []],
     ['non-array scoreRows', { scoreRows: {}, physicalBoards: [physicalBoard()] }],
     ['non-array physicalBoards', { scoreRows: [], physicalBoards: {} }],
+    [
+      'a columnar row shorter than its columns',
+      {
+        scoreRowColumns: ['platform', 'trader_key'],
+        scoreRowValues: [['alpha']],
+        physicalBoards: [physicalBoard()],
+      },
+    ],
+    [
+      'duplicate columns',
+      {
+        scoreRowColumns: ['platform', 'platform'],
+        scoreRowValues: [],
+        physicalBoards: [physicalBoard()],
+      },
+    ],
+    [
+      'a column the score row does not have',
+      encodeColumnarScoreBundle({
+        scoreRows: [scoreRow({ extra: 1 })],
+        physicalBoards: [physicalBoard()],
+      }),
+    ],
+    [
+      'a missing required column',
+      encodeColumnarScoreBundle({
+        scoreRows: [
+          Object.fromEntries(Object.entries(scoreRow()).filter(([key]) => key !== 'roi_pct')),
+        ],
+        physicalBoards: [physicalBoard()],
+      }),
+    ],
   ])('rejects an invalid bundle with %s before projection', async (_label, data) => {
     const mapScoreRow = jest.fn(mapArenaScoreRowToTraderRow)
 
@@ -240,7 +274,7 @@ describe('readSourcePublicationBundle', () => {
     ).rejects.toMatchObject<Partial<SourcePublicationEvidenceError>>({
       code: 'invalid_count',
     })
-    expect(supabase.rpc).toHaveBeenCalledWith('arena_score_inputs_publish_bundle_json', {
+    expect(supabase.rpc).toHaveBeenCalledWith('arena_score_inputs_publish_bundle_columnar_json', {
       p_window: '30D',
       p_per_platform_limit: 925,
       p_max_age_hours: DEFAULT_SOURCE_PUBLICATION_MAX_AGE_HOURS,

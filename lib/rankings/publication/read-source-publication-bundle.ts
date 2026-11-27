@@ -1,6 +1,7 @@
 import type { PublicationRpcClient } from './rpc-client'
 import type { Period } from '@/lib/utils/arena-score'
 import { mapArenaScoreRowToTraderRow } from './arena-score-row-mapper'
+import { decodeColumnarScoreBundle } from './columnar-score-bundle'
 import {
   DEFAULT_SOURCE_PUBLICATION_MAX_AGE_HOURS,
   parseSourcePublicationEvidence,
@@ -11,6 +12,8 @@ import type { TraderRow } from './trader-row'
 
 export const SOURCE_PUBLICATION_PER_ALIAS_LIMIT = 1000
 export const SOURCE_PUBLICATION_RPC_TIMEOUT_MS = 30_000
+/** Score rows as column arrays (20261127103322); decoded before the strict parse. */
+export const SOURCE_PUBLICATION_BUNDLE_RPC = 'arena_score_inputs_publish_bundle_columnar_json'
 
 export type SourcePublicationBundleReaderErrorCode =
   | 'invalid_option'
@@ -93,7 +96,7 @@ function callPublicationBundleRpc(
   }
 
   const query: unknown = Reflect.apply(rpc, supabase, [
-    'arena_score_inputs_publish_bundle_json',
+    SOURCE_PUBLICATION_BUNDLE_RPC,
     {
       p_window: window,
       p_per_platform_limit: perAliasLimit,
@@ -137,12 +140,12 @@ async function runRpcWithTimeout(
     if (timedOut) {
       return fail(
         'rpc_timeout',
-        `[${window}] arena_score_inputs_publish_bundle_json timed out after ${timeoutMs}ms`
+        `[${window}] ${SOURCE_PUBLICATION_BUNDLE_RPC} timed out after ${timeoutMs}ms`
       )
     }
     return fail(
       'rpc_error',
-      `[${window}] arena_score_inputs_publish_bundle_json transport failed: ${
+      `[${window}] ${SOURCE_PUBLICATION_BUNDLE_RPC} transport failed: ${
         error instanceof Error ? error.message : String(error)
       }`
     )
@@ -183,7 +186,7 @@ export async function readSourcePublicationBundle(
     if (error instanceof SourcePublicationBundleReaderError) throw error
     fail(
       'rpc_error',
-      `[${window}] arena_score_inputs_publish_bundle_json call failed: ${
+      `[${window}] ${SOURCE_PUBLICATION_BUNDLE_RPC} call failed: ${
         error instanceof Error ? error.message : String(error)
       }`
     )
@@ -193,23 +196,21 @@ export async function readSourcePublicationBundle(
   const response = await runRpcWithTimeout(query, timeoutMs, window)
   const parseStartedAt = Date.now()
   if (!response || typeof response !== 'object') {
-    fail('rpc_error', `[${window}] arena_score_inputs_publish_bundle_json returned no envelope`)
+    fail('rpc_error', `[${window}] ${SOURCE_PUBLICATION_BUNDLE_RPC} returned no envelope`)
   }
   if (response.error !== null && response.error !== undefined) {
     fail(
       'rpc_error',
-      `[${window}] arena_score_inputs_publish_bundle_json failed: ${describeRpcError(
-        response.error
-      )}`
+      `[${window}] ${SOURCE_PUBLICATION_BUNDLE_RPC} failed: ${describeRpcError(response.error)}`
     )
   }
   if (response.data === null || response.data === undefined) {
-    fail('rpc_null', `[${window}] arena_score_inputs_publish_bundle_json returned null data`)
+    fail('rpc_null', `[${window}] ${SOURCE_PUBLICATION_BUNDLE_RPC} returned null data`)
   }
 
   // Nothing below this line runs unless every score row and physical board has
   // passed the strict publication-evidence contract.
-  const evidence = parseSourcePublicationEvidence(response.data, {
+  const evidence = parseSourcePublicationEvidence(decodeColumnarScoreBundle(response.data), {
     window,
     rankLimit: perAliasLimit,
     now: options.now,
