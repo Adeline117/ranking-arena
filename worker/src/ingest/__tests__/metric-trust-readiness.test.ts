@@ -124,13 +124,66 @@ describe('ingest worker metric-trust startup gate', () => {
     expect(error?.message).not.toContain('example.invalid')
   })
 
-  it('bounds a hung readiness call before any worker can start', async () => {
+  it('bounds a hung readiness call before any worker can start, and says it timed out', async () => {
     await expect(
       assertMetricTrustWorkerReadiness({
         load: () => new Promise<never>(() => undefined),
         timeoutMs: 5,
       })
-    ).rejects.toThrow('readiness RPC is unavailable')
+    ).rejects.toThrow('readiness RPC timed out')
+  })
+
+  it('names the kind of failure without repeating the error text', async () => {
+    const failWith = async (error: Error) => {
+      try {
+        await assertMetricTrustWorkerReadiness({
+          load: async () => {
+            throw error
+          },
+        })
+      } catch (caught) {
+        return (caught as Error).message
+      }
+      throw new Error('the gate did not fail')
+    }
+    const secret = 'postgres://user:secret@db.internal'
+
+    // The pool's connection timeout (the 2026-11-26 outage).
+    expect(await failWith(new Error('timeout exceeded when trying to connect'))).toContain(
+      'readiness RPC is unavailable (connect_timeout; cause: Error)'
+    )
+    const dns = await failWith(
+      Object.assign(new Error(`getaddrinfo ENOTFOUND ${secret}`), { code: 'ENOTFOUND' })
+    )
+    expect(dns).toContain('(network; cause: Error code=ENOTFOUND)')
+    expect(dns).not.toContain('secret')
+    expect(
+      await failWith(Object.assign(new Error(`canceling statement ${secret}`), { code: '57014' }))
+    ).toContain('(statement_timeout; cause: Error code=57014)')
+    expect(
+      await failWith(Object.assign(new Error('function does not exist'), { code: '42883' }))
+    ).toContain('(rpc_missing; cause: Error code=42883)')
+    // A driver error under a wrapper is still classified.
+    expect(
+      await failWith(
+        new Error('wrapped', { cause: Object.assign(new Error('reset'), { code: 'ECONNRESET' }) })
+      )
+    ).toContain('(network; cause: Error <- Error code=ECONNRESET)')
+    expect(await failWith(new Error(secret))).toContain('(other; cause: Error)')
+  })
+
+  it('keeps the reason of a refusal the gate raised itself', async () => {
+    await expect(
+      assertMetricTrustWorkerReadiness({
+        load: () =>
+          loadMetricTrustWorkerReadiness({
+            connect: async () => {
+              throw new Error('must not connect')
+            },
+            databaseUrl: 'not a url',
+          }),
+      })
+    ).rejects.toThrow('production database URL is malformed')
   })
 
   it('reads the RPC in one bounded read-only transaction and releases the client', async () => {
