@@ -13,6 +13,7 @@
 
 import type {
   HistoryKind,
+  ParsedLeaderboardRow,
   RankingTimeframe,
   RawBundle,
   RawPage,
@@ -106,9 +107,8 @@ const bitgetLeaderboardMeta = collectionMeta({
  * The allowance is also the most rows a capture judged complete may be
  * missing, so it is a few times the measured drift, not the 1% ceiling.
  *
- * bitget_cfd (about 200 rows, seven pages) stays in the total mode: it is read
- * in seconds and reaches its reported total exactly. bitget_futures has no
- * completeness proof (see bitgetLeaderboardMeta).
+ * bitget_cfd has its own contract (BITGET_CFD_LEADERBOARD_EXHAUSTION).
+ * bitget_futures has no completeness proof (see bitgetLeaderboardMeta).
  */
 export const BITGET_SPOT_LEADERBOARD_EXHAUSTION: LeaderboardExhaustionDeclaration = Object.freeze({
   completeness_mode: 'exhausted' as const,
@@ -122,6 +122,70 @@ export const BITGET_SPOT_LEADERBOARD_EXHAUSTION: LeaderboardExhaustionDeclaratio
   },
   max_duplicate_rows: 20,
 })
+
+/**
+ * Exhausted-completeness contract for bitget_cfd (registered in
+ * arena.leaderboard_exhaustion_contracts): one ranked row per trader.
+ *
+ * Each board row is one portfolio. A trader may lead several (a type 1
+ * copy-trading portfolio and a type 2 UTA portfolio), so the same traderUid
+ * appears on more than one row. Public probe 2026-11-27, four full reads of
+ * 7/30/90 days at the paced interval: 191 / 220 / 224 rows, as many distinct
+ * portfolioIds as the board reports, and 188 / 218 / 222 distinct traders
+ * (3 / 2 / 2 traders with two portfolios), identical on every read; every
+ * read ended on a short page followed by an empty one. The total mode
+ * (accepted traders = maxShowSizes) therefore refused every capture.
+ *
+ * The proof counts portfolios: each read exactly once (no duplicate is
+ * tolerated) and exactly as many as the last reported total, which must not
+ * move during the capture (max_drift_bps 0). The ranking then keeps, per
+ * traderUid, the portfolio with the best rank (the staging dedupe keeps the
+ * lower rank) and records the merge on that row (bitgetIdentityMergeExtras).
+ * The kept row is one real portfolio's figures, not the trader's combined
+ * performance.
+ */
+export const BITGET_CFD_LEADERBOARD_EXHAUSTION: LeaderboardExhaustionDeclaration = Object.freeze({
+  completeness_mode: 'exhausted' as const,
+  list_path: ['data', 'rows'],
+  row_key_path: ['portfolioId'],
+  end_signal: { kind: 'short_page' as const },
+  board_version: {
+    kind: 'reported_total_drift' as const,
+    path: ['data', 'maxShowSizes'],
+    max_drift_bps: 0,
+  },
+  max_duplicate_rows: 0,
+  identity_merge: { kind: 'best_rank' as const, identity_path: ['traderUid'] },
+})
+
+function exhaustionFor(src: SourceRow): LeaderboardExhaustionDeclaration | undefined {
+  if (src.slug === 'bitget_spot') return BITGET_SPOT_LEADERBOARD_EXHAUSTION
+  if (src.slug === 'bitget_cfd') return BITGET_CFD_LEADERBOARD_EXHAUSTION
+  return undefined
+}
+
+/**
+ * bitget_cfd ranks one row per trader: the kept (best-ranked) portfolio
+ * records which portfolio it is and how many other portfolios of the same
+ * trader were merged into it. Written on every kept row (0 for a trader with
+ * one portfolio) so a later board never leaves a stale count behind.
+ */
+export function bitgetIdentityMergeExtras(
+  kept: ParsedLeaderboardRow,
+  merged: readonly ParsedLeaderboardRow[]
+): ParsedLeaderboardRow {
+  const meta = kept.traderMeta ?? {}
+  return {
+    ...kept,
+    headlineExtras: {
+      ...(kept.headlineExtras ?? {}),
+      ranked_portfolio_id: typeof meta.portfolio_id === 'string' ? meta.portfolio_id : null,
+      ranked_portfolio_type:
+        typeof meta.bitget_trader_type === 'number' ? meta.bitget_trader_type : null,
+      merged_portfolio_count: merged.length,
+    },
+  }
+}
 
 function endpoint(src: SourceRow, key: string, fallback: string): string {
   const endpoints = (src.meta.endpoints ?? {}) as Record<string, string>
@@ -251,11 +315,14 @@ const bitgetAdapter: SourceAdapter = {
         pageBinding: { location: 'body', path: ['pageNo'] },
         extractMeta: bitgetLeaderboardMeta,
         pageSize,
-        // Only the registered source: bitget_cfd and bitget_futures keep the
-        // total mode.
-        exhaustion: src.slug === 'bitget_spot' ? BITGET_SPOT_LEADERBOARD_EXHAUSTION : undefined,
+        // Only the registered sources: bitget_futures keeps the total mode.
+        exhaustion: exhaustionFor(src),
       }
     )
+  },
+
+  leaderboardIdentityMerge(src) {
+    return src.slug === 'bitget_cfd' ? bitgetIdentityMergeExtras : null
   },
 
   async *listLeaderboard(
