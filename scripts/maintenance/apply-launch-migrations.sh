@@ -542,9 +542,9 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # to the reported total, then the best-ranked row kept per trader) and
 # registers bitget_cfd with it. It replaces the 114230 bodies of the two
 # exhaustion functions (refusing any other body), so it follows 114230 and
-# 114433; it takes effect with the worker release that captures bitget_cfd in
-# this mode. It refuses a replay or an earlier bitget_cfd registration and
-# touches no table 192134 guards.
+# 114433 (it is listed right after 114433); it takes effect with the worker
+# release that captures bitget_cfd in this mode. It refuses a replay or an
+# earlier bitget_cfd registration and touches no table 192134 guards.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -584,10 +584,10 @@ POSTDEPLOY_MIGRATIONS=(
   20261123021904_public_ranked_leaderboard_window_flags.sql
   20261124114140_stale_source_hides_only_its_own_rows.sql
   20261124114433_register_bitget_spot_live_board_exhaustion_contract.sql
+  20261127101312_bitget_cfd_one_row_per_trader_exhaustion_contract.sql
   20261125035803_readiness_reads_run_metadata_once.sql
   20261122204058_resolve_trader_public_source.sql
   20261124225312_hero_stats_exclude_idle_window.sql
-  20261127101312_bitget_cfd_one_row_per_trader_exhaustion_contract.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
 )
 readonly -a POSTDEPLOY_MIGRATIONS

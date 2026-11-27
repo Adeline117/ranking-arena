@@ -214,10 +214,10 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20261123021904_public_ranked_leaderboard_window_flags.sql',
     '20261124114140_stale_source_hides_only_its_own_rows.sql',
     '20261124114433_register_bitget_spot_live_board_exhaustion_contract.sql',
+    '20261127101312_bitget_cfd_one_row_per_trader_exhaustion_contract.sql',
     '20261125035803_readiness_reads_run_metadata_once.sql',
     '20261122204058_resolve_trader_public_source.sql',
     '20261124225312_hero_stats_exclude_idle_window.sql',
-    '20261127101312_bitget_cfd_one_row_per_trader_exhaustion_contract.sql',
     '20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql',
   ])
   // Classified, never emitted: applied one file at a time via ADR-023 at the
