@@ -43,6 +43,12 @@ export interface ReadSourcePublicationBundleResult {
   evidence: ParsedSourcePublicationEvidence
   traderRows: TraderRow[]
   freshRowCounts: Map<string, number>
+  /**
+   * Where the read's time went: until the RPC returned (database execution
+   * plus receiving and decoding the result), and the evidence parsing and row
+   * mapping after it.
+   */
+  timings: { queryMs: number; parseMs: number }
 }
 
 interface RpcEnvelope {
@@ -183,7 +189,9 @@ export async function readSourcePublicationBundle(
     )
   }
 
+  const queryStartedAt = Date.now()
   const response = await runRpcWithTimeout(query, timeoutMs, window)
+  const parseStartedAt = Date.now()
   if (!response || typeof response !== 'object') {
     fail('rpc_error', `[${window}] arena_score_inputs_publish_bundle_json returned no envelope`)
   }
@@ -216,5 +224,10 @@ export async function readSourcePublicationBundle(
     freshRowCounts.set(row.platform, (freshRowCounts.get(row.platform) ?? 0) + 1)
   }
 
-  return { evidence, traderRows, freshRowCounts }
+  return {
+    evidence,
+    traderRows,
+    freshRowCounts,
+    timings: { queryMs: parseStartedAt - queryStartedAt, parseMs: Date.now() - parseStartedAt },
+  }
 }

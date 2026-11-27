@@ -616,6 +616,10 @@ describe('publishLeaderboardSeason gate', () => {
       expect(
         logs.some((line) => line.includes('unsupported') && line.includes('hyperliquid'))
       ).toBe(true)
+      // The read stage is also logged split into the RPC and the parsing after it.
+      expect(
+        logs.filter((line) => /^\[90D\] stage=read query_ms=\d+ parse_ms=\d+$/.test(line))
+      ).toHaveLength(1)
       expect(
         statements.some((text) =>
           /INSERT INTO arena\.leaderboard_publication_source_isolations/.test(text)

@@ -8,6 +8,7 @@ import { createPgRpcClient } from '../pg-rpc-client'
 import {
   classifyPublishableRow,
   RANK_PUBLICATION_STAGES,
+  rankPublicationReadSplitLine,
   rankPublicationStageTimingLine,
   exclusionAlertDetails,
   fitNumeric,
@@ -240,6 +241,12 @@ describe('rankPublicationStageTimingLine', () => {
     )
     expect(rankPublicationStageTimingLine('90D', 'cleanup', 0, -3)).toBe(
       '[90D] stage=cleanup rows=0 ms=0'
+    )
+  })
+
+  it('splits the read into the RPC round trip and the parsing after it', () => {
+    expect(rankPublicationReadSplitLine('90D', { queryMs: 13044.4, parseMs: 912.6 })).toBe(
+      '[90D] stage=read query_ms=13044 parse_ms=913'
     )
   })
 })
