@@ -393,27 +393,45 @@ describe('exhaustionCompletenessHolds with identity_merge (bitget_cfd)', () => {
   })
 })
 
-describe('identity_merge drift share (BITGET_CFD_LEADERBOARD_EXHAUSTION, 50 bps)', () => {
+describe('identity_merge drift share (BITGET_CFD_LEADERBOARD_EXHAUSTION, 60 bps)', () => {
   const declaration = BITGET_CFD_LEADERBOARD_EXHAUSTION
 
-  it('is 50 bps with no duplicate allowance', () => {
-    expect(declaration.board_version).toMatchObject({ max_drift_bps: 50 })
+  it('is 60 bps with no duplicate allowance', () => {
+    expect(declaration.board_version).toMatchObject({ max_drift_bps: 60 })
     expect(declaration.max_duplicate_rows).toBe(0)
   })
 
-  it('at 191 (7D) the share is 0 rows: a moved total is refused', () => {
+  it('at 191 (7D) the share is 1 row: 191 -> 192 holds, a move by 2 or a duplicate does not', () => {
     const moved = build({
+      declaration,
+      pageRows: pagesOf(192),
+      distinct: 192,
+      totals: { min: 191, max: 192, last: 192 },
+      merge: { identities: 189, merged_rows: 3 },
+    })
+    expect(exhaustionCompletenessHolds(moved.completeness, moved.facts)).toBe(true)
+    const movedTwo = build({
       declaration,
       pageRows: pagesOf(191),
       distinct: 191,
-      totals: { min: 191, max: 192, last: 191 },
+      totals: { min: 191, max: 193, last: 191 },
       merge: { identities: 188, merged_rows: 3 },
     })
-    expect(exhaustionCompletenessHolds(moved.completeness, moved.facts)).toBe(false)
+    expect(exhaustionCompletenessHolds(movedTwo.completeness, movedTwo.facts)).toBe(false)
+    const duplicated = build({
+      declaration,
+      pageRows: pagesOf(192),
+      distinct: 191,
+      totals: { min: 191, max: 192, last: 192 },
+      merge: { identities: 188, merged_rows: 3 },
+      facts: { accepted_population: 188, deduplicated_row_count: 4 },
+    })
+    expect(duplicated.completeness.row_keys.duplicate).toBe(1)
+    expect(exhaustionCompletenessHolds(duplicated.completeness, duplicated.facts)).toBe(false)
   })
 
   it('bounds only the reported total, not capped by max_duplicate_rows 0', () => {
-    // 224 x 0.5% = 1 row: the total may move by one between pages.
+    // 224 x 0.6% = 1 row: the total may move by one between pages.
     const moved = build({
       declaration,
       pageRows: pagesOf(224),

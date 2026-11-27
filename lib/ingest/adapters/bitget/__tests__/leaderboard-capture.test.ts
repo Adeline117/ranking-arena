@@ -487,7 +487,7 @@ describe('Bitget cfd: one ranked row per trader', () => {
       board_version: {
         kind: 'reported_total_drift',
         path: ['data', 'maxShowSizes'],
-        max_drift_bps: 50,
+        max_drift_bps: 60,
       },
       max_duplicate_rows: 0,
       identity_merge: { kind: 'best_rank', identity_path: ['traderUid'] },

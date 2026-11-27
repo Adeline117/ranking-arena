@@ -34,10 +34,11 @@
 --     five-key block, distinct rows = accepted rows, duplicates = deduplicated
 --     rows.
 --   * bitget_cfd is registered: portfolioId rows, short_page end, total at
---     data.maxShowSizes with max_drift_bps 50 (the total may move by 0.5% of
---     itself between pages, one row at 224: in 12 window reads of the probe it
---     moved once, 224-225 during a 90D read), max_duplicate_rows 0 (no
---     portfolio read twice), identity_merge best_rank on
+--     data.maxShowSizes with max_drift_bps 60 (the total may move by 0.6% of
+--     itself between pages: one row at 191, 220 and 224, so every window
+--     tolerates a move by 1 and none by 2; 50 would floor 7D's 191 to 0. In
+--     12 window reads of the probe it moved once, 224-225 during a 90D read),
+--     max_duplicate_rows 0 (no portfolio read twice), identity_merge best_rank on
 --     traderUid.
 --
 --   The kept row is the trader's best-ranked portfolio: one real portfolio's
@@ -480,7 +481,7 @@ CREATE TEMPORARY TABLE bitget_cfd_one_row_seed (
 
 INSERT INTO bitget_cfd_one_row_seed VALUES
   ('bitget_cfd',
-   '{"completeness_mode": "exhausted", "list_path": ["data", "rows"], "row_key_path": ["portfolioId"], "end_signal": {"kind": "short_page"}, "board_version": {"kind": "reported_total_drift", "path": ["data", "maxShowSizes"], "max_drift_bps": 50}, "max_duplicate_rows": 0, "identity_merge": {"kind": "best_rank", "identity_path": ["traderUid"]}}');
+   '{"completeness_mode": "exhausted", "list_path": ["data", "rows"], "row_key_path": ["portfolioId"], "end_signal": {"kind": "short_page"}, "board_version": {"kind": "reported_total_drift", "path": ["data", "maxShowSizes"], "max_drift_bps": 60}, "max_duplicate_rows": 0, "identity_merge": {"kind": "best_rank", "identity_path": ["traderUid"]}}');
 
 INSERT INTO arena.leaderboard_exhaustion_contracts (
   source_id, completeness_contract, declaration
