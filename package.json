@@ -134,6 +134,7 @@
     "qa:stale-source-row-scope-pg17": "bash supabase/migrations/__tests__/stale-source-hides-only-its-own-rows.pg17.sh",
     "qa:readiness-run-level-count-pg17": "bash supabase/migrations/__tests__/metric-trust-readiness-run-level-count.pg17.sh",
     "qa:resolve-trader-public-source-pg17": "bash supabase/migrations/__tests__/resolve-trader-public-source.pg17.sh",
+    "qa:xt-spot-out-of-serving-pg17": "bash supabase/migrations/__tests__/xt-spot-out-of-serving.pg17.sh",
     "qa:worker-readiness-trigger-catalog-pg17": "bash supabase/migrations/__tests__/worker-readiness-trigger-catalog.pg17.sh",
     "qa:observation-lineage-statement-pg17": "bash supabase/migrations/__tests__/metric-trust-observation-lineage-per-statement.pg17.sh",
     "qa:artifact-integrity-statement-pg17": "bash supabase/migrations/__tests__/metric-trust-artifact-raw-integrity-per-statement.pg17.sh",
