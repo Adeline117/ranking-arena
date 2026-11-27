@@ -150,7 +150,13 @@ export default function TraderServerSummary({
    */
   idleWindow?: boolean
 }) {
-  const rows = buildTraderSummaryRows(idleWindow ? { ...metrics, arenaScore: null } : metrics, t)
+  // An idle window has no rank, score, return or PnL to show — the same rule as
+  // the badge, share images and page description. Win rate and drawdown are the
+  // account's own published values and stay when it has them.
+  const rows = buildTraderSummaryRows(
+    idleWindow ? { ...metrics, rank: null, arenaScore: null, roi: null, pnl: null } : metrics,
+    t
+  )
   if (rows.length === 0 && similar.length === 0 && !idleWindow) return null
 
   return (
