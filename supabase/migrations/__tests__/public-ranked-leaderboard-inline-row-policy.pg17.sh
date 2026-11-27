@@ -15,7 +15,8 @@
 #     (it is inlined); timings before and after are printed
 #   = owners, grants and columns; the new function is executable by the API
 #     roles; a replay is accepted and changes nothing; an unexpected policy
-#     body is refused
+#     body is refused; the rollback file restores the previous body and view
+#     with the same rows and refuses any other state
 # The migration is applied by a non-superuser owner. Isolated cluster on a
 # private socket; never touches application data.
 
@@ -30,6 +31,7 @@ WINDOW_FLAGS_MIGRATION="$MIGRATIONS/20261123021904_public_ranked_leaderboard_win
 VISIBLE_MIGRATION="$MIGRATIONS/20261121201553_visible_sources_from_served_ranks.sql"
 STALE_MIGRATION="$MIGRATIONS/20261124114140_stale_source_hides_only_its_own_rows.sql"
 NEW_MIGRATION="$MIGRATIONS/20261127104836_public_ranked_leaderboard_inline_row_policy.sql"
+ROLLBACK_FILE="$ROOT_DIR/scripts/maintenance/rollbacks/20261127104836_public_ranked_leaderboard_inline_row_policy.rollback.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -584,6 +586,25 @@ assert_equal "the drifted 90D season serves nothing" "0" \
 psql_as postgres -q -f "$NEW_MIGRATION" >/dev/null
 check_same "a replay changes nothing"
 
+# The rollback restores the 20261122201611 body and the 114140 view: same rows,
+# the wrapper is called per row again; then the migration applies again.
+psql_as postgres -q -f "$ROLLBACK_FILE" >/dev/null
+check_same "after the rollback"
+assert_equal "the rollback restores the 20261122201611 policy body" \
+  "1a9fd63c3a986c44bc8cc39a25d4e1962b2f09b34c89cabdc63eba2567601429" \
+  "$(psql_as postgres -Atqc "SELECT encode(sha256(convert_to(prosrc, 'UTF8')), 'hex') FROM pg_proc
+       WHERE oid = 'arena.leaderboard_rank_row_is_public_eligible(public.leaderboard_ranks,timestamptz)'::regprocedure")"
+psql_as anon -Atqc "EXPLAIN (VERBOSE, COSTS OFF) $(printf "$PAGE" public.public_ranked_leaderboard)" \
+  | grep -q "public_ranked_leaderboard_row_is_eligible"
+echo "ok: after the rollback the view calls the wrapper per row again"
+if psql_as postgres -q -f "$ROLLBACK_FILE" >/dev/null 2>"$TMP_ROOT/rollback-twice.err"; then
+  echo "the rollback ran on a state it does not roll back" >&2
+  exit 1
+fi
+grep -q '20261127104836 is not the installed state' "$TMP_ROOT/rollback-twice.err"
+echo "ok: the rollback refuses a state other than 20261127104836"
+psql_as postgres -q -f "$NEW_MIGRATION" >/dev/null
+check_same "the migration applies again after the rollback"
 
 psql_as postgres -q <<'SQL'
 CREATE OR REPLACE FUNCTION arena.leaderboard_rank_row_is_public_eligible(
