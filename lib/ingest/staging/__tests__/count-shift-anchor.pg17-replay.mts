@@ -47,12 +47,13 @@ try {
        VALUES (1, 30, clock_timestamp(), $1, $2, $3, $4)`,
       [observation.count, verdict.baselineUsed, verdict.passed, JSON.stringify(meta)]
     )
-    console.log(
+    process.stdout.write(
       `${observation.t} ${observation.count} base ${verdict.baselineUsed} ${verdict.passed ? 'PASS' : 'fail'}` +
         (result.shifted && verdict.passed ? ' shift adopted' : '') +
         (result.shiftPendingConfirmation
           ? ` down-shift ${result.shiftPendingConfirmation.proposedBaseline} pending ack`
-          : '')
+          : '') +
+        '\n'
     )
   }
 } finally {

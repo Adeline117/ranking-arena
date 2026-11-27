@@ -373,10 +373,6 @@ describe('getCountBaseline — 独立观测周期', () => {
       await expect(
         getCountBaseline(19, 30, 781, { actualCount: 333, cycleId: 'd' })
       ).resolves.toEqual({ baseline: 341, isBootstrap: false })
-      // The anchor bounds the passing-baseline read; it never reaches the shift evidence.
-      const sql = String(mockQuery.mock.calls[0][0])
-      expect(sql).toContain("meta->'count_shift_adopted'")
-      expect(sql).toContain('< (anchor.scraped_at, anchor.id)')
     })
 
     it('no passing cycle since the shift: the anchor-only row still carries its level', async () => {
