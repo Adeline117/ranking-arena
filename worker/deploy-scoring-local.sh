@@ -12,7 +12,10 @@
 #   3. dependencies come from that commit's lockfile; the worker is built into
 #      one artifact (worker/build-scoring-worker.mjs) and PM2 runs it with an
 #      explicit Node binary (worker/ecosystem.local-scoring.config.cjs);
-#   4. success = the release's own log shows the scoring heartbeat committed
+#   4. the candidate must pass the worker's own startup gate (database release
+#      contract) BEFORE the running process is touched; a failed preflight
+#      changes nothing;
+#   5. success = the release's own log shows the scoring heartbeat committed
 #      to Redis within the deadline; otherwise the previous release is restored.
 #
 # V1 NO-GO: a real (non --dry-run) run REFUSES unless the target commit itself
@@ -89,7 +92,7 @@ fi
 
 echo "[scoring-deploy] target=$TARGET_SHA app=$PM2_APP gate_open=$GATE_OPEN"
 echo "[scoring-deploy] release dir: $RELEASE_DIR"
-echo "[scoring-deploy] plan: git archive → npm ci → build worker/dist/scoring-worker.mjs → pm2 start (ecosystem.local-scoring) → wait for scoring heartbeat → current → $TARGET_SHA"
+echo "[scoring-deploy] plan: git archive → npm ci → build worker/dist/scoring-worker.mjs → database preflight → pm2 start (ecosystem.local-scoring) → wait for scoring heartbeat → current → $TARGET_SHA"
 
 if [ "$DRY_RUN" = 1 ]; then
   echo '[scoring-deploy] dry-run: no files written, PM2 untouched'
@@ -122,6 +125,16 @@ mkdir -p "$STAGE_DIR/worker/logs" "$STAGE_DIR/worker/dist"
 
 (cd "$STAGE_DIR" && PATH="$(dirname "$NODE_BIN"):$PATH" "$NPM_BIN" ci --ignore-scripts --no-audit --no-fund)
 "$NODE_BIN" "$STAGE_DIR/worker/build-scoring-worker.mjs" --outdir="$STAGE_DIR/worker/dist"
+
+# Prove the candidate can pass the worker's startup gate BEFORE the running
+# process is touched (same order as deploy-ingest-local.sh step 5/8). On
+# 2026-11-26 the database was unreachable; the deploy deleted the healthy
+# process first, then neither the new release nor the rollback could start.
+# A failure here leaves arena-worker exactly as it was and frees the sha.
+echo '[scoring-deploy] proving the database release contract before touching PM2'
+"$NODE_BIN" "$STAGE_DIR/worker/dist/scoring-preflight.mjs" || \
+  fail 'scoring preflight failed; arena-worker was not touched (see the line above for the cause)'
+
 mv "$STAGE_DIR" "$RELEASE_DIR"
 trap - EXIT
 

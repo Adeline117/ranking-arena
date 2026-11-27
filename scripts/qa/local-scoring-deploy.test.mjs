@@ -112,7 +112,7 @@ function makeRepo(t, { gateOpen, gatePreamble = '' }) {
   writeFileSync(log, '')
   put(
     join(bin, 'node'),
-    `#!/usr/bin/env bash\necho "node $*" >> "${log}"\nfor a in "$@"; do case "$a" in --outdir=*) d="\${a#--outdir=}"; mkdir -p "$d"; echo 'export {}' > "$d/scoring-worker.mjs";; esac; done\n`,
+    `#!/usr/bin/env bash\necho "node $*" >> "${log}"\nfor a in "$@"; do case "$a" in --outdir=*) d="\${a#--outdir=}"; mkdir -p "$d"; echo 'export {}' > "$d/scoring-worker.mjs"; echo 'export {}' > "$d/scoring-preflight.mjs";; *scoring-preflight.mjs) [ -z "$FAKE_PREFLIGHT_FAIL" ] || { echo '[scoring-preflight] ✗ readiness RPC is unavailable (connect_timeout; cause: Error)' >&2; exit 1; };; esac; done\n`,
     0o755
   )
   put(
@@ -208,6 +208,50 @@ test('rolls back (no previous release → stopped) when the heartbeat never appe
   assert.match(r.stderr, /rolling back/)
   assert.match(readFileSync(ctx.log, 'utf8'), /pm2 delete arena-worker/)
   assert.equal(existsSync(join(ctx.releaseRoot, 'current')), false)
+})
+
+test('a failed preflight changes nothing: PM2 is never called and the running release stays', (t) => {
+  const ctx = makeRepo(t, { gateOpen: true })
+  // A healthy previous release is running.
+  const first = deploy(ctx, [`--target-sha=${ctx.sha}`])
+  assert.equal(first.status, 0, first.stderr + first.stdout)
+  const previous = join(ctx.releaseRoot, ctx.sha)
+
+  put(join(ctx.repo, 'next.txt'), 'x')
+  git(ctx.repo, 'add', '.')
+  git(ctx.repo, 'commit', '--quiet', '-m', 'next')
+  const next = git(ctx.repo, 'rev-parse', 'HEAD')
+  git(ctx.repo, 'update-ref', 'refs/remotes/origin/main', next)
+  writeFileSync(ctx.log, '')
+
+  const r = deploy(ctx, [`--target-sha=${next}`], { FAKE_PREFLIGHT_FAIL: '1' })
+  assert.equal(r.status, 1)
+  assert.match(r.stderr, /connect_timeout/)
+  assert.match(r.stderr, /scoring preflight failed; arena-worker was not touched/)
+  const calls = readFileSync(ctx.log, 'utf8')
+  assert.match(calls, /node .*scoring-preflight\.mjs/)
+  assert.doesNotMatch(calls, /pm2 /, 'PM2 must not be touched after a failed preflight')
+  assert.doesNotMatch(r.stderr, /rolling back/)
+  // The previous release is still current and the failed sha can be retried.
+  assert.equal(readFileSync(join(previous, 'worker', '.env'), 'utf8'), 'X=1\n')
+  assert.equal(existsSync(join(ctx.releaseRoot, next)), false)
+  assert.deepEqual(
+    readdirSync(ctx.releaseRoot).filter((name) => name.startsWith('.staging-')),
+    []
+  )
+  const retry = deploy(ctx, [`--target-sha=${next}`])
+  assert.equal(retry.status, 0, retry.stderr + retry.stdout)
+})
+
+test('the preflight runs after the build and before any PM2 command', (t) => {
+  const ctx = makeRepo(t, { gateOpen: true })
+  const r = deploy(ctx, [`--target-sha=${ctx.sha}`])
+  assert.equal(r.status, 0, r.stderr + r.stdout)
+  const calls = readFileSync(ctx.log, 'utf8').split('\n')
+  const build = calls.findIndex((line) => /build-scoring-worker\.mjs/.test(line))
+  const preflight = calls.findIndex((line) => /scoring-preflight\.mjs/.test(line))
+  const firstPm2 = calls.findIndex((line) => line.startsWith('pm2 '))
+  assert.ok(build >= 0 && preflight > build && firstPm2 > preflight, calls.join(' | '))
 })
 
 test('a comment mentioning "= true" does not open the V1 gate', (t) => {
