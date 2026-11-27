@@ -260,6 +260,43 @@ describe('readSourcePublicationBundle', () => {
     expect(mapScoreRow).not.toHaveBeenCalled()
   })
 
+  it('splits the elapsed time into the RPC wait and the parsing after it', async () => {
+    // A controlled clock: the RPC takes 700 ms, mapping each row 30 ms.
+    let clock = 1_000_000
+    const nowSpy = jest.spyOn(Date, 'now').mockImplementation(() => clock)
+    try {
+      const data = bundle(
+        [
+          scoreRow({ trader_key: 'trader-1', board_rank: 1 }),
+          scoreRow({ trader_key: 'trader-2', board_rank: 2 }),
+        ],
+        [physicalBoard({ actual_count: 2, entry_count: 2, rank_limited_entry_count: 2 })]
+      )
+      const supabase = {
+        rpc: jest.fn().mockImplementation(async () => {
+          clock += 700
+          return { data, error: null }
+        }),
+      }
+      const mapScoreRow = jest.fn((row: Parameters<typeof mapArenaScoreRowToTraderRow>[0]) => {
+        clock += 30
+        return mapArenaScoreRowToTraderRow(row)
+      })
+
+      const result = await readSourcePublicationBundle(
+        supabase as never,
+        '30D',
+        { now: NOW },
+        { mapScoreRow }
+      )
+
+      expect(mapScoreRow).toHaveBeenCalledTimes(2)
+      expect(result.timings).toEqual({ queryMs: 700, parseMs: 60 })
+    } finally {
+      nowSpy.mockRestore()
+    }
+  })
+
   it('rejects an RPC rank limit that differs from the requested per-alias limit', async () => {
     const supabase = supabaseReturning(bundle())
     const mapScoreRow = jest.fn(mapArenaScoreRowToTraderRow)

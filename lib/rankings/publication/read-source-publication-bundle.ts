@@ -179,6 +179,8 @@ export async function readSourcePublicationBundle(
     'timeoutMs'
   )
 
+  // From before the call: an executor may send the query as soon as it is called.
+  const queryStartedAt = Date.now()
   let query: AbortableRpcQuery
   try {
     query = callPublicationBundleRpc(supabase, window, perAliasLimit, maxAgeHours)
@@ -192,7 +194,6 @@ export async function readSourcePublicationBundle(
     )
   }
 
-  const queryStartedAt = Date.now()
   const response = await runRpcWithTimeout(query, timeoutMs, window)
   const parseStartedAt = Date.now()
   if (!response || typeof response !== 'object') {
