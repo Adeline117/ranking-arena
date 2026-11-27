@@ -895,7 +895,7 @@ export function forceMemoryOnly(enabled: boolean): void {
       dataLogger.debug('Redis recovery check failed:', err)
     })
   }
-  // Note: when enabled=true, recordRedisError will mark unhealthy after threshold
+  // Note: when enabled=true, the first recorded Redis failure opens the circuit
 }
 
 // ============================================
