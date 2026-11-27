@@ -257,23 +257,45 @@ export async function assertMetricTrustWorkerReadiness({
 } = {}): Promise<void> {
   let payload: unknown
   let timeout: ReturnType<typeof setTimeout> | undefined
+  const raceTimeout = startupGateError('readiness RPC timed out')
   try {
     payload = await Promise.race([
       load(),
       new Promise<never>((_resolve, reject) => {
-        timeout = setTimeout(() => reject(startupGateError('readiness RPC timed out')), timeoutMs)
+        timeout = setTimeout(() => reject(raceTimeout), timeoutMs)
       }),
     ])
   } catch (error) {
     // A refusal raised by this gate (bad URL, wrong row count, the race
     // timeout above) already says what happened.
-    if (error instanceof MetricTrustStartupGateError) throw error
+    if (error instanceof MetricTrustStartupGateError) {
+      logStartupGateExit(error === raceTimeout ? 'race_timeout' : 'refused')
+      throw error
+    }
+    const category = classifyReadinessFailure(error)
+    logStartupGateExit(category)
     throw startupGateError(
-      `readiness RPC is unavailable (${classifyReadinessFailure(error)}; ` +
-        `cause: ${describeSafeCauseChain(error)})`
+      `readiness RPC is unavailable (${category}; cause: ${describeSafeCauseChain(error)})`
     )
   } finally {
     if (timeout !== undefined) clearTimeout(timeout)
   }
-  validateMetricTrustWorkerReadiness(payload)
+  try {
+    validateMetricTrustWorkerReadiness(payload)
+  } catch (error) {
+    logStartupGateExit('contract')
+    throw error
+  }
+}
+
+/**
+ * One fixed-format line per failed start, so a restart count can be split by
+ * cause with `grep -c` (329 restarts on 2026-11-26 were all one outage; the
+ * category was only visible inside a stack trace). Every caller of the gate
+ * exits when it fails.
+ */
+function logStartupGateExit(
+  category: MetricTrustReadinessFailureCategory | 'race_timeout' | 'refused' | 'contract'
+): void {
+  console.error(`[startup-gate] exit category=${category}`)
 }

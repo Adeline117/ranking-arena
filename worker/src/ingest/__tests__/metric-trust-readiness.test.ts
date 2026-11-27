@@ -172,6 +172,40 @@ describe('ingest worker metric-trust startup gate', () => {
     expect(await failWith(new Error(secret))).toContain('(other; cause: Error)')
   })
 
+  it('logs one fixed-format line per failed start, by cause', async () => {
+    const logged = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const attempt = (options: Parameters<typeof assertMetricTrustWorkerReadiness>[0]) =>
+        assertMetricTrustWorkerReadiness(options).catch(() => undefined)
+
+      await attempt({
+        load: async () => {
+          throw new Error('timeout exceeded when trying to connect')
+        },
+      })
+      await attempt({ load: () => new Promise<never>(() => undefined), timeoutMs: 5 })
+      await attempt({ load: async () => ({ not: 'a readiness payload' }) })
+      await attempt({
+        load: () =>
+          loadMetricTrustWorkerReadiness({
+            connect: async () => {
+              throw new Error('must not connect')
+            },
+            databaseUrl: 'not a url',
+          }),
+      })
+
+      expect(logged.mock.calls.map(([line]) => line)).toEqual([
+        '[startup-gate] exit category=connect_timeout',
+        '[startup-gate] exit category=race_timeout',
+        '[startup-gate] exit category=contract',
+        '[startup-gate] exit category=refused',
+      ])
+    } finally {
+      logged.mockRestore()
+    }
+  })
+
   it('keeps the reason of a refusal the gate raised itself', async () => {
     await expect(
       assertMetricTrustWorkerReadiness({
