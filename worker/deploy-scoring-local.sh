@@ -33,7 +33,8 @@
 #
 # Optional: ARENA_SCORING_RELEASE_ROOT (default $HOME/arena-releases/scoring),
 #           ARENA_PM2_BIN (default: pm2 on PATH),
-#           ARENA_SCORING_READY_TIMEOUT_SECONDS (default 90),
+#           ARENA_SCORING_READY_TIMEOUT_SECONDS (default 150; must exceed the
+#           startup gate's own budget),
 #           ARENA_SCORING_STABLE_SECONDS (default 15: the pid must not change
 #           for this long after the heartbeat).
 
@@ -79,7 +80,12 @@ RELEASE_ROOT="${ARENA_SCORING_RELEASE_ROOT:-$HOME/arena-releases/scoring}"
 RELEASE_DIR="$RELEASE_ROOT/$TARGET_SHA"
 CURRENT_LINK="$RELEASE_ROOT/current"
 PM2_BIN="${ARENA_PM2_BIN:-pm2}"
-READY_TIMEOUT="${ARENA_SCORING_READY_TIMEOUT_SECONDS:-90}"
+# The worker's startup gate may itself take up to 100 s (readiness RPC budget,
+# worker/src/ingest/metric-trust-readiness.ts); waiting less than that would
+# roll back a healthy release whose gate is merely slow. 100 s gate + 10 s
+# connection timeout + start-up margin. scripts/qa/local-scoring-deploy.test.mjs
+# fails if this default drops below the gate's budget.
+READY_TIMEOUT="${ARENA_SCORING_READY_TIMEOUT_SECONDS:-150}"
 [[ "$READY_TIMEOUT" =~ ^[0-9]+$ ]] || fail 'ARENA_SCORING_READY_TIMEOUT_SECONDS must be an integer'
 STABLE_SECONDS="${ARENA_SCORING_STABLE_SECONDS:-15}"
 [[ "$STABLE_SECONDS" =~ ^[0-9]+$ ]] || fail 'ARENA_SCORING_STABLE_SECONDS must be an integer'

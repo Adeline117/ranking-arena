@@ -307,6 +307,32 @@ test('a pid that changes after the heartbeat is a crash loop, not liveness', (t)
   assert.equal(existsSync(join(ctx.releaseRoot, 'current')), false)
 })
 
+test('the deploy waits longer than the startup gate is allowed to take', () => {
+  const gate = readFileSync(join(ROOT, 'worker/src/ingest/metric-trust-readiness.ts'), 'utf8')
+  const gateMs = Number(
+    gate
+      .match(/export const METRIC_TRUST_READINESS_GATE_TIMEOUT_MS = ([0-9_]+)/)?.[1]
+      .replaceAll('_', '')
+  )
+  const statementSeconds = Number(
+    gate.match(/export const METRIC_TRUST_READINESS_STATEMENT_TIMEOUT_SECONDS = ([0-9]+)/)?.[1]
+  )
+  const waitSeconds = Number(
+    readFileSync(DEPLOY, 'utf8').match(
+      /READY_TIMEOUT="\$\{ARENA_SCORING_READY_TIMEOUT_SECONDS:-([0-9]+)\}"/
+    )?.[1]
+  )
+  assert.ok(Number.isFinite(gateMs) && gateMs > 0, 'gate budget constant not found')
+  assert.ok(Number.isFinite(waitSeconds) && waitSeconds > 0, 'deploy default not found')
+  // The statement budget sits inside the gate's race; the deploy must outlast
+  // the race plus the pool's 10 s connection timeout and some start-up time.
+  assert.ok(statementSeconds * 1000 < gateMs)
+  assert.ok(
+    waitSeconds * 1000 >= gateMs + 10_000 + 20_000,
+    `deploy waits ${waitSeconds}s but the gate may take ${gateMs / 1000}s`
+  )
+})
+
 test('a comment mentioning "= true" does not open the V1 gate', (t) => {
   const ctx = makeRepo(t, {
     gateOpen: false,
