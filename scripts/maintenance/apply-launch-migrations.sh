@@ -506,6 +506,13 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # 20261124114140 makes a serving source whose sealed watermark leaves the
 # 48-hour window hide only its own rows instead of the whole season, and
 # applies the publisher's isolation bound at read time. It replaces the
+# 20261127104836 makes the public leaderboard view evaluate the row policy
+# inline: a new inlinable copy of the 20261122201611 policy expression, which
+# arena.leaderboard_rank_row_is_public_eligible now returns, called directly by
+# the view (the per-row SECURITY DEFINER wrapper cost anon 400 ms per 90D page
+# in a PostgreSQL 17 replica, 20 ms inline). Same rows. Refuses unless the
+# policy body is the 20261122201611 one and the view is the 114140 view, so it
+# follows both.
 # 20261121201553 body of arena_visible_sources, so it follows it.
 # 20261124114433 registers bitget_spot as a live board (reported_total_drift,
 # 0.35% of the board, at most 20 rows) in the append-only exhaustion registry.
@@ -580,6 +587,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261122201611_row_eligibility_roi_pnl_only.sql
   20261123021904_public_ranked_leaderboard_window_flags.sql
   20261124114140_stale_source_hides_only_its_own_rows.sql
+  20261127104836_public_ranked_leaderboard_inline_row_policy.sql
   20261124114433_register_bitget_spot_live_board_exhaustion_contract.sql
   20261125035803_readiness_reads_run_metadata_once.sql
   20261125183157_clear_gate_cfd_unverified_mdd.sql
