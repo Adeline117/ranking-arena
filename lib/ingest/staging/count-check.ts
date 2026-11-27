@@ -154,7 +154,42 @@ interface StoredCountObservation {
   actual_count: number
   cycle_id: string
   explicit_cycle: boolean
+  /** Passing-baseline reads only: level of the newest adopted shift, if any. */
+  anchor_level?: string | number | null
 }
+
+/**
+ * Snapshot meta key holding the level of a level-shift that was adopted and
+ * passed (written by publish.ts). From that snapshot on, the rolling baseline
+ * is computed only from passing cycles at or after it, and until three exist
+ * the adopted level itself is the baseline. Without the anchor the median
+ * stayed at the level the shift had just overturned: the next drift fell back
+ * to it, and a real drop from the new level could even pass as an "upward"
+ * shift relative to the old one, bypassing the operator acknowledgement every
+ * downward shift requires (binance_web3_bsc 30D, 2026-11-26/27:
+ * 237 -> 341 -> 293).
+ */
+export const COUNT_SHIFT_ADOPTED_META_KEY = 'count_shift_adopted'
+
+/**
+ * Newest adopted shift of ($1 source, $2 timeframe, $6 generation); empty
+ * unless $4 (passing-baseline read). Used twice in one statement.
+ */
+const ADOPTED_SHIFT_ANCHOR_SQL = `
+  SELECT anchor_row.id, anchor_row.scraped_at,
+         (anchor_row.meta->>'${COUNT_SHIFT_ADOPTED_META_KEY}')::numeric AS level
+    FROM arena.leaderboard_snapshots AS anchor_row
+   WHERE $4::boolean
+     AND anchor_row.source_id = $1
+     AND anchor_row.timeframe = $2
+     AND anchor_row.count_check_passed
+     AND pg_catalog.jsonb_typeof(anchor_row.meta->'${COUNT_SHIFT_ADOPTED_META_KEY}') = 'number'
+     AND (
+       ($6::text IS NULL AND NULLIF(anchor_row.meta->>'count_baseline_generation', '') IS NULL)
+       OR NULLIF(anchor_row.meta->>'count_baseline_generation', '') = $6
+     )
+   ORDER BY anchor_row.scraped_at DESC, anchor_row.id DESC
+   LIMIT 1`
 
 /**
  * Read the newest attempt from each independent observation cycle.
@@ -176,6 +211,9 @@ async function getRecentDistinctObservations(
   },
   queryExecutor: CountBaselineQueryExecutor
 ): Promise<StoredCountObservation[]> {
+  // One row per observation, newest first; with none, a single row that
+  // carries only the anchor level (dropped by observationsOf). No SQL
+  // comments: fenced write statements refuse them.
   const { rows } = await queryExecutor.query<StoredCountObservation>(
     `WITH observations AS (
        SELECT id, actual_count, scraped_at,
@@ -188,6 +226,11 @@ async function getRecentDistinctObservations(
         WHERE source_id = $1
           AND timeframe = $2
           AND ($4::boolean = false OR count_check_passed)
+          AND NOT EXISTS (
+            SELECT 1 FROM (${ADOPTED_SHIFT_ANCHOR_SQL}) AS anchor
+             WHERE (arena.leaderboard_snapshots.scraped_at, arena.leaderboard_snapshots.id)
+                   < (anchor.scraped_at, anchor.id)
+          )
           AND (
             ($6::text IS NULL AND NULLIF(meta->>'count_baseline_generation', '') IS NULL)
             OR NULLIF(meta->>'count_baseline_generation', '') = $6
@@ -200,11 +243,18 @@ async function getRecentDistinctObservations(
         WHERE ($5::text IS NULL OR cycle_id <> $5)
         ORDER BY cycle_id, scraped_at DESC, id DESC
      )
-     SELECT actual_count, cycle_id,
-            (explicit_cycle_id IS NOT NULL) AS explicit_cycle
-       FROM latest_per_cycle
-      ORDER BY scraped_at DESC, id DESC
-      LIMIT $3`,
+     SELECT newest.actual_count, newest.cycle_id, newest.explicit_cycle,
+            anchor.level AS anchor_level
+       FROM (SELECT 1) AS one
+       LEFT JOIN (
+         SELECT actual_count, cycle_id, scraped_at, id,
+                (explicit_cycle_id IS NOT NULL) AS explicit_cycle
+           FROM latest_per_cycle
+          ORDER BY scraped_at DESC, id DESC
+          LIMIT $3
+       ) AS newest ON true
+       LEFT JOIN (${ADOPTED_SHIFT_ANCHOR_SQL}) AS anchor ON true
+      ORDER BY newest.scraped_at DESC NULLS LAST, newest.id DESC NULLS LAST`,
     [
       sourceId,
       timeframe,
@@ -215,6 +265,22 @@ async function getRecentDistinctObservations(
     ]
   )
   return rows
+}
+
+/** Observations only: drops the anchor-only row of an empty result. */
+function observationsOf(rows: StoredCountObservation[]): StoredCountObservation[] {
+  return rows.filter((row) => row.cycle_id !== null && row.cycle_id !== undefined)
+}
+
+function positiveLevel(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) return null
+  const level = Number(value)
+  return Number.isFinite(level) && level > 0 ? Math.round(level) : null
+}
+
+/** Level of the newest adopted shift, carried on every row of the read. */
+function adoptedShiftLevel(rows: StoredCountObservation[]): number | null {
+  return positiveLevel(rows[0]?.anchor_level)
 }
 
 /**
@@ -235,7 +301,7 @@ export async function getCountBaseline(
   // Legacy callers retain the pool-backed behavior.
   const executor = queryExecutor ?? getIngestPool()
   const baselineGeneration = currentObservation.baselineGeneration?.trim() || null
-  const rows = await getRecentDistinctObservations(
+  const passingRead = await getRecentDistinctObservations(
     sourceId,
     timeframe,
     7,
@@ -250,16 +316,21 @@ export async function getCountBaseline(
     executor
   )
 
-  // Current baseline: rolling median of real passing crawls once we have ≥3,
-  // else the (loose) day-one survey number.
+  // Current baseline: rolling median of real passing crawls once we have ≥3
+  // (since the newest adopted shift, if any); else that adopted level; else
+  // the (loose) day-one survey number.
+  const rows = observationsOf(passingRead)
   const hasRolling = rows.length >= 3
   const rollingMedian = hasRolling ? median(rows.map((r) => r.actual_count)) : null
+  const anchorLevel = hasRolling ? null : adoptedShiftLevel(passingRead)
   const baseline = hasRolling
     ? rollingMedian === null
       ? null
       : Math.round(rollingMedian)
-    : expectedCount
-  const isBootstrap = !hasRolling
+    : anchorLevel !== null
+      ? anchorLevel
+      : expectedCount
+  const isBootstrap = !hasRolling && anchorLevel === null
 
   // Deadlock escape hatch (applies to BOTH the rolling median AND the bootstrap
   // survey number): either can deadlock a source out of ever passing —
@@ -280,16 +351,18 @@ export async function getCountBaseline(
     currentObservation.cycleId !== null &&
     currentObservation.cycleId.length > 0
   ) {
-    const recent = await getRecentDistinctObservations(
-      sourceId,
-      timeframe,
-      SHIFT_CONFIRM_CRAWLS - 1,
-      {
-        passedOnly: false,
-        excludeCycleId: currentObservation.cycleId,
-        baselineGeneration,
-      },
-      executor
+    const recent = observationsOf(
+      await getRecentDistinctObservations(
+        sourceId,
+        timeframe,
+        SHIFT_CONFIRM_CRAWLS - 1,
+        {
+          passedOnly: false,
+          excludeCycleId: currentObservation.cycleId,
+          baselineGeneration,
+        },
+        executor
+      )
     )
     // Pre-deploy/manual snapshots carry no trustworthy job-instance identity.
     // They stay visible in the newest-N sequence and break the quorum instead
