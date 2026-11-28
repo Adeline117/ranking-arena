@@ -531,6 +531,35 @@ describe('server-side filters (audit P2-5)', () => {
     })
     expect(mockFetchPage).toHaveBeenCalledWith(0, expect.objectContaining({ filters: 'fex=bybit' }))
   })
+
+  it('an unknown ?ex= shows the full board and drops the scope instead of a load error', async () => {
+    // /rankings/<x> redirects to /?ex=<x> for any x; a stale or mistyped link
+    // must not end on "failed to load rankings" (the API answers 400).
+    window.history.replaceState(null, '', '/?ex=does-not-exist-xyz&sort=roi')
+    const { result } = setup(FIXTURES, { fetchPage: mockFetchPage })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(result.current.selectedExchange).not.toBe('does_not_exist_xyz')
+    expect(mockFetchPage).toHaveBeenCalledWith(
+      0,
+      expect.objectContaining({ exchange: undefined, sortBy: 'roi' })
+    )
+    expect(window.location.search).toBe('?sort=roi')
+  })
+
+  it('a known exchange alias in ?ex= still scopes the board', async () => {
+    window.history.replaceState(null, '', '/?ex=binance')
+    setup(FIXTURES, { fetchPage: mockFetchPage })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(mockFetchPage).toHaveBeenCalledWith(
+      0,
+      expect.objectContaining({ exchange: 'binance_futures' })
+    )
+    expect(window.location.search).toBe('?ex=binance')
+  })
 })
 
 // ---------------------------------------------------------------------------

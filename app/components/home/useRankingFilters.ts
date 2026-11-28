@@ -29,16 +29,21 @@ const LS_KEY_FILTER_CONFIG = 'ranking-filter-config'
 /** Typing in a filter input waits this long before the server cohort request. */
 const FILTER_FETCH_DEBOUNCE_MS = 400
 
+/**
+ * The public source id an exchange slug from a URL or stored filter names, or
+ * null when `/api/traders` would refuse it (the same rule the API applies). An
+ * unknown slug is dropped rather than failing the whole board with a 400.
+ */
+function publicExchangeSource(slug: string): string | null {
+  const source = resolveExchangeSlug(slug)
+  return parsePublicActiveRankingSource(source) || isPublicRankingSourceQuarantined(source)
+    ? source
+    : null
+}
+
 /** Canonical `/api/traders` filter params for this filter state (null = none). */
 function serverFilterQuery(config: FilterConfig, preset: PresetId | null): string | null {
-  // The API takes exact public source ids only; a stale stored exchange is
-  // dropped rather than failing the whole page with a 400.
-  return leaderboardFilterQuery(config, preset, (slug) => {
-    const source = resolveExchangeSlug(slug)
-    return parsePublicActiveRankingSource(source) || isPublicRankingSourceQuarantined(source)
-      ? source
-      : null
-  })
+  return leaderboardFilterQuery(config, preset, publicExchangeSource)
 }
 
 /**
@@ -428,8 +433,21 @@ export function useRankingFilters({
     }
     const targetExchange = requestedExchange || undefined
     const resolvedExchange = targetExchange
-      ? resolveExchangeSlug(targetExchange.split(',')[0])
+      ? (publicExchangeSource(targetExchange.split(',')[0]) ?? undefined)
       : undefined
+    if (targetExchange && resolvedExchange === undefined) {
+      // A stale or mistyped `/rankings/<x>` link: show the full board instead of
+      // a "failed to load" error, and drop the scope nothing can satisfy.
+      const cleaned = new URLSearchParams(window.location.search)
+      cleaned.delete('ex')
+      cleaned.delete('exchange')
+      const query = cleaned.toString()
+      window.history.replaceState(
+        null,
+        '',
+        query ? `${window.location.pathname}?${query}` : window.location.pathname
+      )
+    }
 
     let restoredConfig: FilterConfig = {}
     if (Object.keys(config).length > 0) {
