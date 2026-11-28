@@ -52,7 +52,7 @@ SET LOCAL search_path = pg_catalog, pg_temp;
 
 -- This migration's definition, created in pg_temp so the server deparses it
 -- for the replay comparison below.
-CREATE FUNCTION pg_temp.expected_score_input_value_20261127200517(
+CREATE OR REPLACE FUNCTION pg_temp.expected_score_input_value_20261127200517(
   p_row jsonb,
   p_metric text
 )
@@ -176,7 +176,5 @@ BEGIN
   END IF;
 END
 $postflight$;
-
-DROP FUNCTION pg_temp.expected_score_input_value_20261127200517(jsonb, text);
 
 COMMIT;
