@@ -9,6 +9,9 @@ import { HTML_LIMITED_BOT_UA_RE } from 'next/dist/shared/lib/router/utils/html-b
 
 // Bundle Analyzer 条件导入
 /* eslint-disable @typescript-eslint/no-require-imports */
+/** Webpack filesystem-cache entries unused this long are dropped (see webpack()). */
+const WEBPACK_CACHE_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000
+
 const withBundleAnalyzer =
   process.env.ANALYZE === 'true'
     ? require('@next/bundle-analyzer')({ enabled: true })
@@ -68,10 +71,24 @@ const nextConfig = {
   webpack: (
     config: Record<string, any>,
     {
+      dev,
       isServer,
       webpack,
-    }: { isServer: boolean; webpack: { IgnorePlugin: new (options: object) => unknown } }
+    }: {
+      dev: boolean
+      isServer: boolean
+      webpack: { IgnorePlugin: new (options: object) => unknown }
+    }
   ) => {
+    // Vercel restores the previous deployment's build cache. Webpack keeps
+    // filesystem-cache entries for 60 days by default, so each deploy adds the
+    // changed modules' new versions while the old ones stay: the restored
+    // cache grew 626 → 672 MB over five deploys and compiles slowed 90 → 120 s,
+    // until the build was OOM-killed on the 8 GB build machine (2026-11-28).
+    // Drop entries unused for 3 days so the cache stays about one build's size.
+    if (!dev && config.cache && typeof config.cache === 'object') {
+      config.cache.maxAge = WEBPACK_CACHE_MAX_AGE_MS
+    }
     if (!isServer) {
       config.resolve.alias = {
         ...(config.resolve.alias || {}),
@@ -411,6 +428,10 @@ const nextConfig = {
 
   // 实验性功能
   experimental: {
+    // Lower webpack's peak memory during `next build` (string interning in
+    // webpack-sources). The build runs on Vercel's 8 GB standard machine.
+    webpackMemoryOptimizations: true,
+
     // Tree-shaking optimization for large packages
     optimizePackageImports: [
       '@supabase/supabase-js',
