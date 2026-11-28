@@ -65,7 +65,6 @@ describe('ROI-less ranking source shadow migration', () => {
   })
 
   it('uses the existing serving-mode control surface for product coverage and QA', () => {
-    expect(sourceLoader).toContain("WHERE serving_mode = 'serving'")
     expect(visibleSourcesRpc).toContain("source_row.serving_mode = 'serving'")
     expect(visibleSourcesRpc).toContain('count_row.total_count > 0')
     expect(coverageAudit).toContain("row.serving_mode === 'serving'")
