@@ -74,7 +74,6 @@ jest.mock('@/lib/ingest/sources', () => ({
       meta: {},
     },
   ],
-  getServingSourceNames: async () => [],
 }))
 
 import { reconcileSchedulers } from '../scheduler'
