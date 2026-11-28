@@ -9,7 +9,9 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260729015500_tier_a_execution_claim_fence.sql"
-ENFORCEMENT_MIGRATION="$ROOT_DIR/supabase/migrations/20260729061000_tier_a_execution_claim_enforcement.sql"
+# The launch replacement, not the superseded 20260729061000: it is the one the
+# launch plan applies and the one the worker startup gate pins (24 triggers).
+ENFORCEMENT_MIGRATION="$ROOT_DIR/supabase/migrations/20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql"
 ONE_PHASE_MIGRATION="$ROOT_DIR/supabase/migrations/20260729071500_tier_a_one_phase_commit_guard.sql"
 TSX_BIN="$ROOT_DIR/node_modules/.bin/tsx"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
@@ -629,6 +631,41 @@ BEGIN
 END
 $function$;
 
+-- Raw-object guards that later launch migrations install (20260803100000,
+-- 20260804053000, 20260808010000) before the enforcement migration runs.
+CREATE FUNCTION arena.protect_record_surface_publication_raw_object()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE FUNCTION arena.protect_copier_snapshot_raw_object()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE FUNCTION arena.protect_copier_snapshot_trust_raw_object()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END
+$function$;
+
 CREATE FUNCTION arena.serialize_leaderboard_terminal_publication()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -644,6 +681,11 @@ ALTER FUNCTION arena.reject_direct_leaderboard_acquisition_mutation()
   OWNER TO postgres;
 ALTER FUNCTION arena.protect_metric_trust_raw_object() OWNER TO postgres;
 ALTER FUNCTION arena.protect_leaderboard_acquisition_raw_evidence()
+  OWNER TO postgres;
+ALTER FUNCTION arena.protect_record_surface_publication_raw_object()
+  OWNER TO postgres;
+ALTER FUNCTION arena.protect_copier_snapshot_raw_object() OWNER TO postgres;
+ALTER FUNCTION arena.protect_copier_snapshot_trust_raw_object()
   OWNER TO postgres;
 ALTER FUNCTION arena.serialize_leaderboard_terminal_publication()
   OWNER TO postgres;
@@ -676,6 +718,18 @@ CREATE TRIGGER protect_leaderboard_acquisition_raw_evidence_before_write
   BEFORE UPDATE OR DELETE ON arena.raw_objects
   FOR EACH ROW
   EXECUTE FUNCTION arena.protect_leaderboard_acquisition_raw_evidence();
+CREATE TRIGGER protect_record_surface_publication_raw_before_write
+  BEFORE UPDATE OR DELETE ON arena.raw_objects
+  FOR EACH ROW
+  EXECUTE FUNCTION arena.protect_record_surface_publication_raw_object();
+CREATE TRIGGER protect_copier_snapshot_raw_before_write
+  BEFORE UPDATE OR DELETE ON arena.raw_objects
+  FOR EACH ROW
+  EXECUTE FUNCTION arena.protect_copier_snapshot_raw_object();
+CREATE TRIGGER protect_copier_snapshot_trust_raw_before_write
+  BEFORE UPDATE OR DELETE ON arena.raw_objects
+  FOR EACH ROW
+  EXECUTE FUNCTION arena.protect_copier_snapshot_trust_raw_object();
 
 CREATE TABLE public.fixture_old_callables AS
 SELECT
