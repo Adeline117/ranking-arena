@@ -216,7 +216,7 @@
     "@bull-board/express": "^9.10.5",
     "@privy-io/react-auth": "^3.18.0",
     "@rainbow-me/rainbowkit": "^2.2.10",
-    "@sentry/nextjs": "^10.78.0",
+    "@sentry/nextjs": "^11.10.0",
     "@simplewebauthn/browser": "^13.3.0",
     "@simplewebauthn/server": "^13.3.2",
     "@solana/wallet-adapter-react": "^0.15.39",
