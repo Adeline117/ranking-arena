@@ -1267,7 +1267,12 @@ export async function processTierA(
    *
    * Any check failing before publication logs one `republish skipped` line
    * and returns `rescan`, so the ordinary capture path runs unchanged. Once
-   * publication has started, errors are split in two. A transient failure
+   * publication has started, an execution-authority failure is rethrown
+   * (job fails). Note that on the claimed-write path a fence failure of the
+   * transaction itself (write deadline, commit aborted/unknown, lease
+   * deadline) is converted by SourceJobExecutionAuthority.withClaimedWrite
+   * into region_lost and revokes the execution, so the whole job fails there.
+   * The remaining errors are split in two. A transient failure
    * (deadline, timeout, connection, lock, serialization;
    * reason=publish_failed) fails this window like the ordinary path would and
    * does NOT rescan in the same job attempt: a failed republish followed by a
@@ -1624,8 +1629,11 @@ export async function processTierA(
       }
       // As in the capture path: a receipt-stage or receipt-contract failure
       // follows a published snapshot, leaves an ambiguous terminal side
-      // effect and fails the job. The next retry finds that snapshot newer
-      // than or equal to this capture (stale publication below) and rescans.
+      // effect and fails the job. The next retry republishes the same
+      // capture: publication reconciles it to the already-committed,
+      // byte-bound snapshot of this source run (reconcileLeaderboardMetricTrust
+      // in lib/ingest/serving/publish.ts) instead of writing a second one, and
+      // then records the missing republish receipt. Nothing is rescanned.
       if (cause instanceof TierAExecutionWindowReceiptError || terminalSideEffect !== null) {
         logRepublishSkipped(
           cause instanceof TierAExecutionWindowReceiptError && cause.code === 'undefined_function'
@@ -1653,8 +1661,9 @@ export async function processTierA(
       // retry fall back to the rescan now; nothing of this replay is left
       // published (the snapshot transaction rolled back, or the snapshot is
       // GATED and out of serving, or the optional series alone failed):
-      // - stale: a newer snapshot already serves the window (for instance a
-      //   prior republish whose receipt did not commit);
+      // - stale: a newer snapshot of a different capture already serves the
+      //   window (the same capture's own committed snapshot is reconciled and
+      //   reused instead, never reported stale);
       // - count_check_gated: within one cycle the baseline does not move;
       // - publish_rejected: every other non-transient error, unknown ones
       //   included (identity conflict, a no-longer-holding exhaustion proof,

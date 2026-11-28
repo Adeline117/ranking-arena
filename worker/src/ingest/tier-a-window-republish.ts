@@ -520,21 +520,36 @@ export type RepublishPublicationErrorClass = 'transient' | 'deterministic' | 'au
  * Every worker database fence code (lib/ingest/db-fenced-write-contract.ts),
  * classified. `satisfies` makes a new code a compile error until reviewed.
  *
- * - transient: the fence itself stays usable and the same capture can
- *   succeed on the next retry.
+ * Scope: on the claimed-write path a fence failure of the transaction itself
+ * never reaches this table as a WorkerDbFenceError. withFencedWrite rejects
+ * outside the callback (worker-db-fence.ts, writeAbortError / commit
+ * handling), and SourceJobExecutionAuthority.withClaimedWrite maps every such
+ * non-callback error to SourceJobExecutionError(region_lost) and revokes the
+ * execution (source-job-execution-authority.ts, withClaimedWrite catch), so
+ * write_deadline_exceeded, commit_aborted, commit_outcome_unknown and
+ * lease_deadline_exceeded there fail the WHOLE job, through the revoked
+ * signal or the region_lost authority entry below. The "transient" entries
+ * below therefore apply only when a fence error surfaces while the execution
+ * still asserts active, i.e. not thrown by the withClaimedWrite layer (for
+ * instance wrapped as the cause of a callback failure). Only then does the
+ * window fail without a same-attempt rescan while other windows continue.
+ *
+ * - transient (execution still active, see scope):
  *   write_deadline_exceeded: one write ran past its per-write deadline; the
- *     fence deliberately does not fence the authority for it (11-27).
+ *     fence itself deliberately does not fence the authority for it.
  *   control_plane_unavailable: Redis/DB control plane briefly unreachable.
  *   lease_deadline_exceeded: the fence lease could not be renewed in time.
  *     It fences the region authority, which revokes the execution; when that
- *     revocation is visible the caller rethrows first, so this entry only
- *     applies while the execution still asserts active.
+ *     revocation is visible the caller rethrows first.
  *   commit_aborted: COMMIT was refused or rolled back; nothing committed.
  * - authority: the outcome is unknown or the authority is gone. Never rescan
  *   in the same attempt; rethrow so the job fails and BullMQ retries.
  *   commit_outcome_unknown: the publication may have committed (the fence
- *     fences itself); a rescan could publish twice. The next retry sees either
- *     the committed snapshot (stale publication → rescan) or none (republish).
+ *     fences itself); a rescan could publish a second snapshot. If it did
+ *     commit, the next retry republishes the same capture and publication
+ *     reconciles it to that committed snapshot (reconcileLeaderboardMetricTrust,
+ *     lib/ingest/serving/publish.ts) and records the receipt; if it did not,
+ *     the next retry simply republishes.
  *   db_control_outcome_unknown, fenced, invalid_state: the region authority is
  *     lost or its write facade is closed.
  * - deterministic: invalid_input, rpc_contract_violation: a contract defect
