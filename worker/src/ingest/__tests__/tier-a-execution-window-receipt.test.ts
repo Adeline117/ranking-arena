@@ -13,6 +13,10 @@ import {
 import {
   GET_TIER_A_EXECUTION_WINDOW_RECEIPT_SQL,
   getTierAExecutionWindowReceipt,
+  hasTierAExecutionWindowRepublishReceipt,
+  RECORD_TIER_A_EXECUTION_WINDOW_REPUBLISH_RECEIPT_SQL,
+  recordTierAExecutionWindowRepublishReceipt,
+  TIER_A_EXECUTION_WINDOW_REPUBLISH_RECEIPT_PRESENT_SQL,
   RECORD_TIER_A_EXECUTION_WINDOW_RECEIPT_SQL,
   recordTierAExecutionWindowReceipt,
   TIER_A_EXECUTION_WINDOW_RECEIPT_CONTRACT,
@@ -517,5 +521,113 @@ describe('Tier-A execution window receipt', () => {
         : getTierAExecutionWindowReceipt(readExecutor(query), getInput())
     await expect(promise).rejects.toEqual(expectReceiptError(operation, 'unavailable'))
     expect(query).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('Tier-A execution window republish receipt', () => {
+  async function republishWith(
+    query: jest.Mock,
+    input: RecordTierAExecutionWindowReceiptInput = recordInput()
+  ): Promise<TierAExecutionWindowReceipt> {
+    const transaction = claimedTransaction(query)
+    return withTierAExecutionReceiptWriter(transaction, binding(), (writer) =>
+      recordTierAExecutionWindowRepublishReceipt(writer, input)
+    )
+  }
+
+  it('calls the republish RPC with the calling claim and validates the same receipt shape', async () => {
+    const query = jest.fn(async () => selectResult(payload()))
+
+    const receipt = await republishWith(query)
+
+    expect(RECORD_TIER_A_EXECUTION_WINDOW_REPUBLISH_RECEIPT_SQL).toContain(
+      'arena.record_tier_a_execution_window_republish_receipt('
+    )
+    expect(query).toHaveBeenCalledWith(RECORD_TIER_A_EXECUTION_WINDOW_REPUBLISH_RECEIPT_SQL, [
+      CLAIM_ID,
+      GENERATION_SEQ,
+      ATTEMPT_ID,
+      SNAPSHOT_ID,
+    ])
+    expect(receipt.attemptId).toBe(ATTEMPT_ID)
+    expect(receipt.claimId).toBe(CLAIM_ID)
+  })
+
+  it('maps a missing function (42883) to undefined_function', async () => {
+    const query = jest.fn(async () => {
+      throw Object.assign(new Error('function does not exist'), { code: '42883' })
+    })
+
+    await expect(republishWith(query)).rejects.toEqual(
+      expectReceiptError('republish', 'undefined_function')
+    )
+  })
+
+  it('maps any other database failure to unavailable', async () => {
+    const query = jest.fn(async () => {
+      throw Object.assign(new Error('deadline'), { code: '57014' })
+    })
+
+    await expect(republishWith(query)).rejects.toEqual(
+      expectReceiptError('republish', 'unavailable')
+    )
+  })
+
+  it('rejects a receipt naming a different claim, snapshot or RAW', async () => {
+    for (const override of [
+      { claim_id: '33333333-3333-4333-8333-333333333333' },
+      { snapshot_id: SNAPSHOT_ID + 1 },
+      { raw_object_id: 402 },
+    ]) {
+      const query = jest.fn(async () => selectResult(payload(override)))
+      await expect(republishWith(query)).rejects.toEqual(
+        expectReceiptError('republish', 'rpc_contract_violation')
+      )
+    }
+  })
+
+  it('refuses a writer outside its callback', async () => {
+    const query = jest.fn(async () => selectResult(payload()))
+    let escaped: TierAExecutionReceiptWriter | null = null
+    await withTierAExecutionReceiptWriter(claimedTransaction(query), binding(), async (writer) => {
+      escaped = writer
+    })
+
+    await expect(
+      recordTierAExecutionWindowRepublishReceipt(escaped!, recordInput())
+    ).rejects.toEqual(expectReceiptError('republish', 'unauthorized'))
+    expect(query).not.toHaveBeenCalled()
+  })
+
+  it('probes the RPC with a read-only catalog query', async () => {
+    for (const present of [true, false]) {
+      const query = jest.fn(async () => ({
+        command: 'SELECT',
+        fields: [],
+        oid: 0,
+        rowCount: 1,
+        rows: [{ republish_receipt_present: present }],
+      }))
+      await expect(hasTierAExecutionWindowRepublishReceipt(readExecutor(query))).resolves.toBe(
+        present
+      )
+      expect(query).toHaveBeenCalledWith(TIER_A_EXECUTION_WINDOW_REPUBLISH_RECEIPT_PRESENT_SQL)
+    }
+    expect(TIER_A_EXECUTION_WINDOW_REPUBLISH_RECEIPT_PRESENT_SQL).toContain(
+      "to_regprocedure(\n    'arena.record_tier_a_execution_window_republish_receipt(uuid,bigint,uuid,bigint)'"
+    )
+  })
+
+  it('reports a malformed probe result as a contract violation', async () => {
+    const query = jest.fn(async () => ({
+      command: 'SELECT',
+      fields: [],
+      oid: 0,
+      rowCount: 1,
+      rows: [{ republish_receipt_present: 't' }],
+    }))
+    await expect(hasTierAExecutionWindowRepublishReceipt(readExecutor(query))).rejects.toEqual(
+      expectReceiptError('probe', 'rpc_contract_violation')
+    )
   })
 })

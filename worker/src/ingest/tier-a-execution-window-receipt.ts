@@ -44,6 +44,24 @@ export const RECORD_TIER_A_EXECUTION_WINDOW_RECEIPT_SQL = `SELECT arena.record_t
     p_snapshot_id => $4::bigint
   ) AS ${RECEIPT_RESULT_ALIAS}`
 
+/**
+ * Receipt for a window whose capture an earlier queue attempt of the same job
+ * recorded but failed to publish (migration 20261127202748). Same receipt
+ * shape and table as the ordinary receipt; the database proves the
+ * cross-claim lineage and refuses a second republish of the attempt.
+ */
+export const RECORD_TIER_A_EXECUTION_WINDOW_REPUBLISH_RECEIPT_SQL = `SELECT arena.record_tier_a_execution_window_republish_receipt(
+    p_claim_id => $1::uuid,
+    p_generation_seq => $2::bigint,
+    p_attempt_id => $3::uuid,
+    p_snapshot_id => $4::bigint
+  ) AS ${RECEIPT_RESULT_ALIAS}`
+
+/** Read-only probe: whether the republish receipt RPC exists (migration applied). */
+export const TIER_A_EXECUTION_WINDOW_REPUBLISH_RECEIPT_PRESENT_SQL = `SELECT pg_catalog.to_regprocedure(
+    'arena.record_tier_a_execution_window_republish_receipt(uuid,bigint,uuid,bigint)'
+  ) IS NOT NULL AS republish_receipt_present`
+
 export const GET_TIER_A_EXECUTION_WINDOW_RECEIPT_SQL = `SELECT arena.get_tier_a_execution_window_receipt(
     p_source_id => $1::integer,
     p_queue_name => $2::text,
@@ -52,10 +70,16 @@ export const GET_TIER_A_EXECUTION_WINDOW_RECEIPT_SQL = `SELECT arena.get_tier_a_
     p_timeframe => $5::integer
   ) AS ${RECEIPT_RESULT_ALIAS}`
 
-export type TierAExecutionWindowReceiptOperation = 'get' | 'record' | 'writer'
+export type TierAExecutionWindowReceiptOperation =
+  | 'get'
+  | 'probe'
+  | 'record'
+  | 'republish'
+  | 'writer'
 export type TierAExecutionWindowReceiptErrorCode =
   | 'invalid_input'
   | 'rpc_contract_violation'
+  | 'undefined_function'
   | 'unauthorized'
   | 'unavailable'
 
@@ -416,8 +440,14 @@ export async function withTierAExecutionReceiptWriter<T>(
   }
 }
 
-/** Record one database-derived window receipt on the caller's claimed transaction. */
-export async function recordTierAExecutionWindowReceipt(
+function databaseErrorCode(value: unknown): string {
+  if (typeof value !== 'object' || value === null || !('code' in value)) return ''
+  return String((value as { code: unknown }).code)
+}
+
+async function recordReceiptWithSql(
+  operation: 'record' | 'republish',
+  sql: string,
   writer: TierAExecutionReceiptWriter,
   input: RecordTierAExecutionWindowReceiptInput
 ): Promise<TierAExecutionWindowReceipt> {
@@ -425,24 +455,24 @@ export async function recordTierAExecutionWindowReceipt(
     writer !== null && typeof writer === 'object'
       ? RECEIPT_WRITERS.get(writer as object)
       : undefined
-  if (state === undefined) throw receiptError('record', 'unauthorized')
+  if (state === undefined) throw receiptError(operation, 'unauthorized')
 
   try {
     assertTierAExecutionClaimedWrite(state.transaction)
   } catch {
-    throw receiptError('record', 'unauthorized')
+    throw receiptError(operation, 'unauthorized')
   }
   let normalized: Readonly<RecordTierAExecutionWindowReceiptInput>
   try {
     normalized = normalizeRecordInput(input)
   } catch {
-    throw receiptError('record', 'invalid_input')
+    throw receiptError(operation, 'invalid_input')
   }
 
   let result: QueryResult<QueryResultRow>
   try {
     result = await state.transaction.query(
-      RECORD_TIER_A_EXECUTION_WINDOW_RECEIPT_SQL,
+      sql,
       Object.freeze([
         state.binding.claimId,
         state.binding.generationSeq,
@@ -450,14 +480,18 @@ export async function recordTierAExecutionWindowReceipt(
         normalized.snapshotId,
       ])
     )
-  } catch {
-    throw receiptError('record', 'unavailable')
+  } catch (cause) {
+    // 42883 undefined_function: the republish migration is not applied.
+    if (operation === 'republish' && databaseErrorCode(cause) === '42883') {
+      throw receiptError(operation, 'undefined_function')
+    }
+    throw receiptError(operation, 'unavailable')
   }
 
   try {
     assertTierAExecutionClaimedWrite(state.transaction)
   } catch {
-    throw receiptError('record', 'unauthorized')
+    throw receiptError(operation, 'unauthorized')
   }
   try {
     const payload = rpcPayload(result, false)
@@ -466,7 +500,63 @@ export async function recordTierAExecutionWindowReceipt(
     assertRecordIdentity(receipt, state.binding, normalized)
     return receipt
   } catch {
-    throw receiptError('record', 'rpc_contract_violation')
+    throw receiptError(operation, 'rpc_contract_violation')
+  }
+}
+
+/** Record one database-derived window receipt on the caller's claimed transaction. */
+export async function recordTierAExecutionWindowReceipt(
+  writer: TierAExecutionReceiptWriter,
+  input: RecordTierAExecutionWindowReceiptInput
+): Promise<TierAExecutionWindowReceipt> {
+  return recordReceiptWithSql('record', RECORD_TIER_A_EXECUTION_WINDOW_RECEIPT_SQL, writer, input)
+}
+
+/**
+ * Record the window receipt for a re-published earlier-claim capture on the
+ * caller's claimed transaction. The returned receipt is validated exactly
+ * like an ordinary receipt: it names the calling claim, the re-published
+ * attempt, the snapshot, the source payload RAW and the source run.
+ */
+export async function recordTierAExecutionWindowRepublishReceipt(
+  writer: TierAExecutionReceiptWriter,
+  input: RecordTierAExecutionWindowReceiptInput
+): Promise<TierAExecutionWindowReceipt> {
+  return recordReceiptWithSql(
+    'republish',
+    RECORD_TIER_A_EXECUTION_WINDOW_REPUBLISH_RECEIPT_SQL,
+    writer,
+    input
+  )
+}
+
+/**
+ * Whether the republish receipt RPC exists. Probed before any republish
+ * publication so a missing migration can never leave a published snapshot
+ * without its receipt.
+ */
+export async function hasTierAExecutionWindowRepublishReceipt(
+  executor: IngestQueryExecutor
+): Promise<boolean> {
+  let database: IngestQueryExecutor
+  try {
+    database = queryExecutor(executor)
+  } catch {
+    throw receiptError('probe', 'invalid_input')
+  }
+  let result: QueryResult<QueryResultRow>
+  try {
+    result = await database.query(TIER_A_EXECUTION_WINDOW_REPUBLISH_RECEIPT_PRESENT_SQL)
+  } catch {
+    throw receiptError('probe', 'unavailable')
+  }
+  try {
+    if (result.rowCount !== 1 || result.rows.length !== 1) throw new ReceiptContractViolation()
+    const row = strictDataRecord(result.rows[0], ['republish_receipt_present'])
+    if (typeof row.republish_receipt_present !== 'boolean') throw new ReceiptContractViolation()
+    return row.republish_receipt_present
+  } catch {
+    throw receiptError('probe', 'rpc_contract_violation')
   }
 }
 
