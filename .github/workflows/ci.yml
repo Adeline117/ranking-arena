@@ -668,6 +668,12 @@ jobs:
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:worker-readiness-trigger-catalog-pg17
+
+      - name: Prove the Tier-A execution claim fence and its launch enforcement migration
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:tier-a-execution-claim-fence-pg17
+
       - name: Prove the gate_cfd drawdown cleanup archives and clears only that column
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
