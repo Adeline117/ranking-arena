@@ -107,7 +107,7 @@ import {
 import {
   classifyTierAWindowRepublishCandidate,
   findLatestTierAWindowAttempt,
-  isTransientRepublishPublicationError,
+  classifyRepublishPublicationError,
   type TierAWindowRepublishSkipReason,
 } from '../tier-a-window-republish'
 
@@ -1637,6 +1637,18 @@ export async function processTierA(
         )
         throw cause
       }
+      // Order matters: authority loss is decided before any rescan or window
+      // failure. A revoked execution was already rethrown above (signal);
+      // an authority-class fence or execution error (commit outcome unknown,
+      // fenced, region_lost, closed, ...) found anywhere in the cause chain is
+      // rethrown here even if the signal has not observed it yet, and
+      // assertActive() below surfaces an ownership loss nothing reported.
+      const errorClass = classifyRepublishPublicationError(cause)
+      if (errorClass === 'authority') {
+        logRepublishSkipped('publish_failed', timeframe, attempt.attemptSeq, cause)
+        throw cause
+      }
+      execution.assertActive()
       // Failures that the same recorded capture would hit again on every
       // retry fall back to the rescan now; nothing of this replay is left
       // published (the snapshot transaction rolled back, or the snapshot is
@@ -1649,18 +1661,18 @@ export async function processTierA(
       //   a missing metric contract...). Rescanning once too often is cheaper
       //   than republishing a doomed capture until the job's attempts run out.
       // Only a transient failure (deadline, timeout, connection, lock,
-      // serialization) keeps the no-rescan rule: the window fails and the
-      // next BullMQ retry republishes again.
+      // serialization, a transient worker-fence code such as 11-27's
+      // write_deadline_exceeded) keeps the no-rescan rule: the window fails
+      // and the next BullMQ retry republishes again.
       const deterministicReason: TierAWindowRepublishSkipReason | null =
         cause instanceof StaleLeaderboardPublicationError
           ? 'stale'
           : cause instanceof TierACountCheckGatedError
             ? 'count_check_gated'
-            : isTransientRepublishPublicationError(cause)
+            : errorClass === 'transient'
               ? null
               : 'publish_rejected'
       if (deterministicReason !== null) {
-        execution.assertActive()
         logRepublishSkipped(deterministicReason, timeframe, attempt.attemptSeq, cause)
         return { kind: 'rescan' }
       }

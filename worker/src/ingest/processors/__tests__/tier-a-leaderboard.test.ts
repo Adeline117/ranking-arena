@@ -4211,6 +4211,101 @@ describe('Tier-A board-series publication guard', () => {
       }
     )
 
+    it('keeps the 11-27 write deadline transient: window fails, no rescan, no new attempt', async () => {
+      const { captureLeaderboard, attempt } = await recordCaptureThatFailedToPublish()
+      const { WorkerDbFenceError } = jest.requireActual(
+        '@/lib/ingest/db-fenced-write-contract'
+      ) as {
+        WorkerDbFenceError: new (code: string, operation: string, retryPolicy: string) => Error
+      }
+      mockPublishTrustedLeaderboardSnapshot.mockRejectedValueOnce(
+        new WorkerDbFenceError('write_deadline_exceeded', 'write', 'never')
+      )
+
+      const failure = await processTierA(job).then(
+        () => null,
+        (error: unknown) => error as AggregateError
+      )
+
+      expect(failure?.message).toContain('1/1 native windows failed (30d)')
+      expect(failure?.errors.map((error: Error) => error.message)).toEqual([
+        '[tier-a] binance_futures 30d failed: [ingest-worker] worker database fence write failed (write_deadline_exceeded)',
+      ])
+      expectSkipped('publish_failed', attempt.attemptSeq)
+      expect(captureLeaderboard).not.toHaveBeenCalled()
+      expect(mockOpenSession).not.toHaveBeenCalled()
+      expect(mockStartLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
+      expect(mockExecutionClose).toHaveBeenLastCalledWith('failed')
+    })
+
+    it.each(['control_plane_unavailable', 'lease_deadline_exceeded', 'commit_aborted'])(
+      'keeps the fence code %s transient without a same-attempt rescan',
+      async (code) => {
+        const { captureLeaderboard, attempt } = await recordCaptureThatFailedToPublish()
+        const { WorkerDbFenceError } = jest.requireActual(
+          '@/lib/ingest/db-fenced-write-contract'
+        ) as {
+          WorkerDbFenceError: new (code: string, operation: string, retryPolicy: string) => Error
+        }
+        mockPublishTrustedLeaderboardSnapshot.mockRejectedValueOnce(
+          new Error('[publish] failed', {
+            cause: new WorkerDbFenceError(code, 'write', 'reacquire'),
+          })
+        )
+
+        await expect(processTierA(job)).rejects.toThrow('1/1 native windows failed (30d)')
+
+        expectSkipped('publish_failed', attempt.attemptSeq)
+        expect(captureLeaderboard).not.toHaveBeenCalled()
+        expect(mockStartLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
+      }
+    )
+
+    it.each([
+      ['region_lost', 'SourceJobExecutionError'],
+      ['commit_outcome_unknown', 'WorkerDbFenceError'],
+    ])('rethrows %s: the job fails and nothing rescans', async (code, kind) => {
+      const { captureLeaderboard, attempt } = await recordCaptureThatFailedToPublish()
+      const { WorkerDbFenceError } = jest.requireActual(
+        '@/lib/ingest/db-fenced-write-contract'
+      ) as {
+        WorkerDbFenceError: new (code: string, operation: string, retryPolicy: string) => Error
+      }
+      const authorityFailure =
+        kind === 'WorkerDbFenceError'
+          ? new WorkerDbFenceError(code, 'write', 'never')
+          : Object.assign(new Error(`[ingest-worker] Tier-A execution assert failed (${code})`), {
+              name: 'SourceJobExecutionError',
+              code,
+            })
+      mockPublishTrustedLeaderboardSnapshot.mockRejectedValueOnce(authorityFailure)
+
+      await expect(processTierA(job)).rejects.toBe(authorityFailure)
+
+      expectSkipped('publish_failed', attempt.attemptSeq)
+      expect(captureLeaderboard).not.toHaveBeenCalled()
+      expect(mockOpenSession).not.toHaveBeenCalled()
+      expect(mockStartLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
+      expect(mockRecordRepublishReceipt).not.toHaveBeenCalled()
+    })
+
+    it('does not rescan when a deterministic-looking failure hides an ownership loss', async () => {
+      const { captureLeaderboard } = await recordCaptureThatFailedToPublish()
+      const lost = new Error('bull lock lost')
+      mockPublishTrustedLeaderboardSnapshot.mockImplementationOnce(async () => {
+        mockExecutionAssertActive.mockImplementation(() => {
+          throw lost
+        })
+        throw Object.assign(new Error('duplicate trader identity'), { code: '23505' })
+      })
+
+      await expect(processTierA(job)).rejects.toBeDefined()
+
+      expect(captureLeaderboard).not.toHaveBeenCalled()
+      expect(mockStartLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
+      expect(mockExecutionClose).toHaveBeenLastCalledWith('revoked')
+    })
+
     it('stops when execution authority is revoked during the republish', async () => {
       const { captureLeaderboard } = await recordCaptureThatFailedToPublish()
       const lost = new Error('execution lease lost')
