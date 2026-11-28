@@ -367,6 +367,17 @@ BEGIN
     RAISE EXCEPTION 'Tier-A republish receipt RPC contract is not exact';
   END IF;
 
+  -- The ingest worker connects as postgres (no superuser, BYPASSRLS): it
+  -- holds the function and reads the table as their owner.
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_class AS table_row
+     WHERE table_row.oid = 'arena.tier_a_execution_window_republishes'::pg_catalog.regclass
+       AND table_row.relowner = 'postgres'::pg_catalog.regrole
+       AND table_row.relrowsecurity
+  ) THEN
+    RAISE EXCEPTION 'arena.tier_a_execution_window_republishes must be owned by postgres with RLS enabled';
+  END IF;
+
   IF NOT pg_catalog.has_function_privilege('service_role',
        'arena.record_tier_a_execution_window_republish_receipt(uuid,bigint,uuid,bigint)', 'EXECUTE')
      OR pg_catalog.has_function_privilege('anon',

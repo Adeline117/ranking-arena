@@ -399,5 +399,14 @@ expect_eq "table privileges: service_role SELECT only; anon and authenticated no
    WHERE table_schema = 'arena' AND table_name = 'tier_a_execution_window_republishes'
      AND grantee IN ('service_role', 'anon', 'authenticated', 'PUBLIC')")" "service_role:SELECT"
 echo "ok: row level security is on and only service_role may read the table"
+expect_eq "function and table are owned by postgres (the ingest worker's role)" "$(psql_cmd -Atqc "
+  SELECT pg_catalog.pg_get_userbyid(p.proowner) || '|' || pg_catalog.pg_get_userbyid(c.relowner)
+    FROM pg_catalog.pg_proc AS p, pg_catalog.pg_class AS c
+   WHERE p.oid = 'arena.record_tier_a_execution_window_republish_receipt(uuid,bigint,uuid,bigint)'::pg_catalog.regprocedure
+     AND c.oid = 'arena.tier_a_execution_window_republishes'::pg_catalog.regclass")" "postgres|postgres"
+expect_eq "postgres may execute the RPC (the worker's probe)" "$(psql_cmd -Atqc "
+  SELECT pg_catalog.has_function_privilege(current_user,
+    'arena.record_tier_a_execution_window_republish_receipt(uuid,bigint,uuid,bigint)', 'EXECUTE')")" "t"
+echo "ok: owned by postgres, which may execute it"
 
 echo "Tier-A window republish receipt PostgreSQL 17 proof passed"
