@@ -542,6 +542,14 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # rows, so no attempt-bound capture can prove completeness and every Tier-A
 # run failed before a session. Refuses unless xt_spot is active/serving (or
 # already inactive/shadow, on replay). Independent of the other entries.
+# 20261127202748 adds arena.record_tier_a_execution_window_republish_receipt and
+# its append-only arena.tier_a_execution_window_republishes: the window receipt
+# for a capture that an earlier queue attempt of the same job recorded but
+# failed to publish (bybit_mt5 7D, 2026-11-27: two durable captures lost to the
+# publication write deadline, each retry rescanned for 107 minutes). Purely
+# additive: the existing receipt RPC, its table and everything the worker
+# startup gate pins are untouched, so it may be applied before the worker
+# release that calls it. After 20261118161307. Independent of the others.
 # 20261122204058 makes public.arena_resolve_trader() also return the source's
 # public name (meta.legacy_platform when set, else the slug) and adds the
 # index and trigger that keep that name unambiguous among active serving
@@ -612,6 +620,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261125035803_readiness_reads_run_metadata_once.sql
   20261125183157_clear_gate_cfd_unverified_mdd.sql
   20261127094031_xt_spot_out_of_serving.sql
+  20261127202748_tier_a_window_republish_receipt.sql
   20261122204058_resolve_trader_public_source.sql
   20261124225312_hero_stats_exclude_idle_window.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
