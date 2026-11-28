@@ -10,19 +10,15 @@
  * Resolution order (server-side only — pass the result down as a prop so there
  * is no hydration mismatch):
  *
- *   1. Redis `serving_sources` (comma list) — fast hot-path mirror, kept fresh
- *      by the worker scheduler reconcile. Wins when present.
- *   2. DB RPC `arena_serving_sources()` — self-heal when Redis is absent/flushed
- *      (cached in-process 5 min). This is what makes a Redis FLUSH safe: the
- *      set rebuilds from the DB instead of collapsing to the (possibly empty)
- *      env list and reverting every trader to the empty legacy page.
- *   3. env NEXT_PUBLIC_SERVING_SOURCES — cold-bootstrap fallback only.
+ *   1. DB RPC `arena_serving_sources()`, cached in-process 5 min.
+ *   2. env NEXT_PUBLIC_SERVING_SOURCES — only when the DB cannot be read.
  *
- * Root-cause history (2026-06-15): the Redis list was hand-edited and the env
- * was empty, so the two drifted — Redis was missing 4 legacy aliases
- * (xt/blofin/btcc/bitunix) and a Redis flush would have reverted ALL sources
- * to legacy. Making the DB authoritative (RPC + worker reconcile) removes the
- * manual editing that was the actual source of drift.
+ * There is deliberately no Redis copy of the set. A Redis `serving_sources`
+ * list used to win over the database, and a list missing an alias made that
+ * alias non-serving with no error: the trader page then could not resolve the
+ * alias URL (2026-06-15: xt/blofin/btcc/bitunix were missing; issue #543).
+ * Production has answered from the database since Upstash went away, so the
+ * copy bought nothing and was a second place for the set to be wrong.
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase/server'
@@ -35,16 +31,12 @@ const envList = (): Set<string> =>
       .filter(Boolean)
   )
 
-let runtimeOverride: { sources: Set<string>; expiresAt: number } | null = null
-const RUNTIME_TTL_MS = 60_000
-
 let dbServingSet: { sources: Set<string>; expiresAt: number } | null = null
 const DB_TTL_MS = 5 * 60_000
 
 /**
  * Authoritative serving set from the DB (arena.sources.serving_mode), cached
- * in-process 5 min. Only consulted when Redis is unavailable — keeps the DB
- * the source of truth without adding a DB round-trip to the warm hot path.
+ * in-process 5 min.
  */
 async function getDbServingSet(): Promise<Set<string> | null> {
   if (dbServingSet && Date.now() < dbServingSet.expiresAt) {
@@ -61,39 +53,8 @@ async function getDbServingSet(): Promise<Set<string> | null> {
   }
 }
 
-async function getRuntimeOverride(): Promise<Set<string> | null> {
-  if (runtimeOverride && Date.now() < runtimeOverride.expiresAt) {
-    return runtimeOverride.sources
-  }
-  try {
-    const { getSharedRedis } = await import('@/lib/cache/redis-client')
-    const redis = await getSharedRedis()
-    if (!redis) return null
-    const raw = await redis.get('serving_sources')
-    if (raw === null || raw === undefined) {
-      runtimeOverride = null
-      return null
-    }
-    const sources = new Set(
-      String(raw)
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean)
-    )
-    runtimeOverride = { sources, expiresAt: Date.now() + RUNTIME_TTL_MS }
-    return sources
-  } catch {
-    return null // Redis unavailable → fall back to env
-  }
-}
-
 /** Is this source served from the new arena.* read path? */
 export async function isServingSource(platform: string): Promise<boolean> {
-  const override = await getRuntimeOverride()
-  if (override !== null) return override.has(platform)
-  // Redis absent/flushed → rebuild from the DB (authoritative) before ever
-  // falling back to the env bootstrap list, so a flush can't revert traders
-  // to the empty legacy page.
   const dbSet = await getDbServingSet()
   if (dbSet !== null) return dbSet.has(platform)
   return envList().has(platform)
