@@ -347,6 +347,20 @@ export function hasRegisteredLeaderboardMetricTrust(
   return registeredPopulationFields(src, timeframe).length > 0
 }
 
+/**
+ * The tightest reviewed freshness bound for this source/window/currency, or
+ * null without a reviewed population contract. Publication rejects evidence
+ * older than any field's bound, so a replay older than this cannot publish.
+ */
+export function registeredLeaderboardMetricMaxFreshnessMs(
+  src: Pick<SourceRow, 'slug' | 'currency'>,
+  timeframe: RankingTimeframe
+): number | null {
+  const fields = registeredPopulationFields(src, timeframe)
+  if (fields.length === 0) return null
+  return Math.min(...fields.map((field) => field.maxFreshnessMs))
+}
+
 function sorted<T extends string | number>(values: readonly T[]): T[] {
   return [...values].sort((a, b) => String(a).localeCompare(String(b)))
 }

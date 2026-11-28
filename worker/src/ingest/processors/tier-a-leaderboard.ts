@@ -36,8 +36,11 @@ import {
   buildLeaderboardAcquisitionManifestV3,
   buildLeaderboardAcquisitionManifestV4,
   LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
+  parseLeaderboardAcquisitionManifestV3,
   projectPartitionedNumericParserPage,
+  type BuiltLeaderboardAcquisitionManifestV3,
   type BuildLeaderboardAcquisitionManifestInput,
+  type LeaderboardAcquisitionManifestV3,
   type BuildLeaderboardAcquisitionManifestV4Input,
 } from '@/lib/ingest/acquisition-manifest'
 import {
@@ -45,14 +48,18 @@ import {
   ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
   findRegisteredAttemptBoundLeaderboardAcquisitionContract,
   finishLeaderboardAcquisitionAttemptInTransaction,
+  projectLeaderboardManifestV3Outcome,
   startLeaderboardAcquisitionAttemptInTransaction,
   type AttemptBoundLeaderboardAcquisitionContract,
+  type LeaderboardManifestOutcomeProjection,
   type ClaimedLeaderboardAcquisitionAttempt,
   type LeaderboardAcquisitionExecutionBinding,
   type LeaderboardAcquisitionFailureStage,
   type LeaderboardAcquisitionReasonCode,
 } from '@/lib/ingest/acquisition-attempts'
 import {
+  LeaderboardTrustRawReadError,
+  readAttemptBoundLeaderboardTrustRawPayload,
   writeAttemptBoundLeaderboardRawArtifactSet,
   writeRawObject,
   type IngestTransactionRunner,
@@ -64,9 +71,11 @@ import {
   strictCanonicalSha256,
 } from '@/lib/ingest/strict-canonical-json'
 import { recordFieldInventoryWithExecutor } from '@/lib/ingest/field-inventory'
+import { StaleLeaderboardPublicationError } from '@/lib/ingest/serving/publish'
 import { validateLeaderboardRows } from '@/lib/ingest/staging/validate'
 import {
   hasRegisteredLeaderboardMetricTrust,
+  registeredLeaderboardMetricMaxFreshnessMs,
   type LeaderboardAttemptBoundV4Bundle,
   type LeaderboardMetricTrustBundle,
 } from '@/lib/ingest/serving/metric-trust-publish'
@@ -89,10 +98,18 @@ import {
 import type { SourceJobRunProvenance } from '../source-job-routing'
 import {
   getTierAExecutionWindowReceipt,
+  hasTierAExecutionWindowRepublishReceipt,
   recordTierAExecutionWindowReceipt,
+  recordTierAExecutionWindowRepublishReceipt,
   TierAExecutionWindowReceiptError,
   withTierAExecutionReceiptWriter,
 } from '../tier-a-execution-window-receipt'
+import {
+  classifyTierAWindowRepublishCandidate,
+  findLatestTierAWindowAttempt,
+  classifyRepublishPublicationError,
+  type TierAWindowRepublishSkipReason,
+} from '../tier-a-window-republish'
 
 export interface TierAResult {
   timeframe: number
@@ -224,6 +241,14 @@ class TierAAttemptFinalizationError extends AggregateError {
     this.name = 'TierAAttemptFinalizationError'
   }
 }
+
+/**
+ * The snapshot was recorded but failed its count check (GATED). A plain Error
+ * subclass with the unchanged message, so the capture path handles it exactly
+ * as before; the republish path recognises it, because replaying the same
+ * capture within the same cycle would be GATED again on every retry.
+ */
+class TierACountCheckGatedError extends Error {}
 
 function throwIfTierACancelled(signal?: AbortSignal): void {
   if (!signal?.aborted) return
@@ -489,7 +514,7 @@ function buildAttemptBoundCaptureManifest(
   return { kind: 'v4' as const, built: buildLeaderboardAcquisitionManifestV4(manifestInput) }
 }
 
-interface CapturedPageRankAnchor {
+export interface CapturedPageRankAnchor {
   sourcePageOrdinal: number
   rankBase: number
   sourceRowCount: number
@@ -540,6 +565,72 @@ function capturedIdentityPageRankAnchors(capture: LeaderboardCapture): CapturedP
     rankBase += sourcePage.sourceRowCount
     if (!Number.isSafeInteger(rankBase)) {
       throw new TypeError('[tier-a] captured rank base exceeds the safe integer range')
+    }
+    return anchor
+  })
+}
+
+/**
+ * Replay counterpart of capturedIdentityPageRankAnchors for a capture read
+ * back from its stored RAW. There is no in-memory graph to compare by
+ * reference, so every parser page must be canonically byte-equal to the
+ * stored source page at its ordinal, and that stored page must carry the
+ * payload hash, ordinal and page-index position the manifest recorded. Rank
+ * bases come from the manifest's per-page source_row_count, under the same
+ * continuous-prefix rule: skips, reordering, a missing or tampered page all
+ * fail closed.
+ */
+export function replayedIdentityPageRankAnchors(input: {
+  sourcePages: readonly RawPage[]
+  parsePages: readonly RawPage[]
+  manifest: Pick<LeaderboardAcquisitionManifestV3, 'source_pages' | 'parser_input'>
+}): CapturedPageRankAnchor[] {
+  const transformation = input.manifest.parser_input.transformation
+  if (transformation.kind !== 'identity_projection') {
+    throw new TypeError('[tier-a] replayed v3 parser pages require an identity projection')
+  }
+  const ordinals = transformation.source_page_ordinals
+  if (
+    ordinals.length !== input.parsePages.length ||
+    input.manifest.parser_input.page_count !== input.parsePages.length ||
+    input.manifest.source_pages.length !== input.sourcePages.length
+  ) {
+    throw new TypeError('[tier-a] replayed parser pages require one source-page ordinal each')
+  }
+
+  let rankBase = 0
+  return input.parsePages.map((parsePage, pageOffset) => {
+    const sourcePageOrdinal = ordinals[pageOffset]
+    if (sourcePageOrdinal !== pageOffset + 1) {
+      throw new TypeError('[tier-a] replayed parser pages must be a continuous source prefix')
+    }
+    const sourcePage = input.sourcePages[sourcePageOrdinal - 1]
+    const recorded = input.manifest.source_pages[sourcePageOrdinal - 1]
+    if (
+      !sourcePage ||
+      !recorded ||
+      recorded.ordinal !== sourcePageOrdinal ||
+      recorded.stored_page_index !== sourcePageOrdinal ||
+      sourcePage.pageIndex !== sourcePageOrdinal ||
+      recorded.pagination_position?.kind !== 'page_index' ||
+      recorded.pagination_position.request_page_index !== sourcePageOrdinal ||
+      strictCanonicalSha256(sourcePage.payload) !== recorded.payload.sha256 ||
+      strictCanonicalJson(sourcePage) !== strictCanonicalJson(parsePage)
+    ) {
+      throw new TypeError('[tier-a] replayed parser page is not bound to its stored source page')
+    }
+    const sourceRowCount = recorded.source_row_count
+    if (
+      !Number.isSafeInteger(sourceRowCount) ||
+      Object.is(sourceRowCount, -0) ||
+      sourceRowCount < 1
+    ) {
+      throw new TypeError('[tier-a] replayed parser page must have a positive source row count')
+    }
+    const anchor = { sourcePageOrdinal, rankBase, sourceRowCount }
+    rankBase += sourceRowCount
+    if (!Number.isSafeInteger(rankBase)) {
+      throw new TypeError('[tier-a] replayed rank base exceeds the safe integer range')
     }
     return anchor
   })
@@ -965,6 +1056,643 @@ export async function processTierA(
   }
   executionSignal.addEventListener('abort', closeSessionOnAbort, { once: true })
 
+  type RecordWindowReceipt = typeof recordTierAExecutionWindowReceipt
+  // Everything after a window's capture evidence is durable and terminal:
+  // trust gate, metric-trust check, fenced publication, count check, board
+  // series and the durable window receipt. Shared by the capture path and the
+  // republish path (which replays an earlier attempt's recorded RAW), so both
+  // publish under exactly the same gates; only the receipt RPC differs.
+  const publishGatedWindowEvidence = async (window: {
+    timeframe: RankingTimeframe
+    attemptId: string
+    pages: readonly RawPage[]
+    ctx: ParseCtx
+    valid: ParsedLeaderboardRow[]
+    rejects: ReturnType<typeof validateLeaderboardRows>['rejects']
+    projection: LeaderboardManifestOutcomeProjection
+    evidence:
+      | { kind: 'v3'; bundle: LeaderboardMetricTrustBundle }
+      | { kind: 'v4'; bundle: LeaderboardAttemptBoundV4Bundle }
+    rawObjectId: number
+    recordReceipt: RecordWindowReceipt
+    markTerminalSideEffect: (sideEffect: 'receipt' | null) => void
+  }): Promise<TierAResult> => {
+    const { timeframe, attemptId, pages, ctx, valid, rejects, projection, evidence, rawObjectId } =
+      window
+    if (projection.terminalState !== 'complete' && !projection.exhaustionVerified) {
+      throw new Error(
+        `acquisition trust gate FAILED: acquisition=` +
+          `${projection.acquisitionState}, population=` +
+          `${projection.populationState}, source_run=` +
+          `${projection.sourceRunId}`
+      )
+    }
+
+    // Series are additive serving material, not population evidence.
+    // Parse them only after the capture pair passed its trust gate so a
+    // series-specific bug cannot erase an otherwise truthful manifest.
+    const boardSeries = parseLeaderboardSeriesWindow({ adapter, pages, ctx, timeframe })
+
+    if (evidence.kind === 'v3' && !hasRegisteredLeaderboardMetricTrust(src, timeframe)) {
+      throw new Error(
+        `[tier-a] ${src.slug} ${timeframe}d attempt-bound capture has no reviewed metric trust contract`
+      )
+    }
+    const receiptSourceRunId = evidence.bundle.sourceRunId
+    const result =
+      evidence.kind === 'v4'
+        ? await publishClaimedAttemptBoundLeaderboardSnapshot(
+            {
+              src,
+              timeframe,
+              rows: valid,
+              rejects,
+              observationCycleId: attemptBoundCycleId,
+              attemptEvidence: evidence.bundle,
+            },
+            context,
+            execution,
+            executionSignal
+          )
+        : await publishClaimedTrustedLeaderboardSnapshot(
+            {
+              src,
+              timeframe,
+              rows: valid,
+              rejects,
+              observationCycleId: cycleId ?? undefined,
+              trust: evidence.bundle,
+            },
+            context,
+            execution,
+            executionSignal
+          )
+    throwIfTierACancelled(executionSignal)
+
+    const status = result.published ? 'PUBLISHED' : 'GATED'
+    console.log(
+      `[tier-a] ${src.slug} ${timeframe}d: ${valid.length} rows ` +
+        `(${rejects.length} rejected, baseline=${result.verdict.baselineUsed}, ` +
+        `deviation=${result.verdict.deviationPct?.toFixed(1) ?? '–'}%) → ${status}`
+    )
+    if (result.published) {
+      // Output watermark next to the heartbeat (audit P2-8): proves this
+      // node is publishing, not just alive. Best-effort, never throws.
+      noteTierAPublished()
+    }
+    if (!result.published) {
+      // Keep this window out of serving, but do not sacrifice the other
+      // native windows. The aggregate error after the loop still fails the
+      // BullMQ job for retry and operator visibility.
+      throw new TierACountCheckGatedError(
+        `count check FAILED: actual=${valid.length} ` +
+          `baseline=${result.verdict.baselineUsed} — snapshot ${result.snapshotId} ` +
+          `recorded, serving keeps last good`
+      )
+    }
+
+    // Board-level free series (spec §13.1): every ranked trader gets a
+    // chart with no extra fetch — closes the long-tail series gap that
+    // otherwise waits on Tier-B topN / on-demand Tier-C.
+    if (boardSeries.size > 0) {
+      const seriesOut = await publishClaimedBoardSeries(
+        src,
+        boardSeries,
+        result.traderIds,
+        context,
+        execution,
+        {
+          expectedLatestSnapshots: new Map([
+            [
+              timeframe,
+              {
+                id: result.snapshotId,
+                rawObjectId,
+                scrapedAt: new Date(result.scrapedAt).toISOString(),
+              },
+            ],
+          ]),
+        },
+        executionSignal
+      )
+      throwIfTierACancelled(executionSignal)
+      console.log(
+        `[tier-a] ${src.slug} ${timeframe}d board series: ` +
+          `${seriesOut.points} pts for ${seriesOut.traders} traders`
+      )
+    }
+
+    // (compat→trader_latest write removed 2026-06-15) The score chain now runs
+    // on arena directly (compute-leaderboard reads arena_score_inputs, not
+    // trader_latest), so the compat bridge is orphaned and trader_latest is
+    // being dropped. publish() above already wrote arena.* — the canonical source.
+
+    // The database receipt, not Redis job.data, is the sole retry skip
+    // authority. It is committed only after snapshot and optional series.
+    window.markTerminalSideEffect('receipt')
+    await execution.withClaimedWrite((transaction) =>
+      withTierAExecutionReceiptWriter(
+        transaction,
+        {
+          claimId: execution.proof.claimId,
+          generationSeq: execution.proof.generationSeq,
+          queueJobId: execution.proof.queueJobId,
+          queueName: execution.proof.queueName,
+          sourceId: src.id,
+        },
+        (writer) =>
+          window.recordReceipt(writer, {
+            attemptId,
+            observationCycleId: attemptBoundCycleId,
+            rawObjectId,
+            snapshotId: result.snapshotId,
+            sourceRunId: receiptSourceRunId,
+            timeframe,
+          })
+      )
+    )
+    throwIfTierACancelled(executionSignal)
+    window.markTerminalSideEffect(null)
+
+    completedTimeframes.add(timeframe)
+    persistedJobData = await replaceCompletedTimeframeCache({
+      provenance,
+      execution,
+      persistedJobData,
+      completedTimeframes,
+      nativeTimeframes: timeframes,
+      sourceSlug: src.slug,
+      timeframe,
+    })
+    throwIfTierACancelled(executionSignal)
+
+    return {
+      timeframe,
+      actualCount: valid.length,
+      rejects: rejects.length,
+      passed: result.verdict.passed,
+      baselineUsed: result.verdict.baselineUsed,
+      snapshotId: result.snapshotId,
+    }
+  }
+
+  type WindowRepublish =
+    | { kind: 'rescan' }
+    | { kind: 'republished'; result: TierAResult }
+    | { kind: 'failed'; error: Error }
+  const logRepublishSkipped = (
+    reason: TierAWindowRepublishSkipReason,
+    timeframe: RankingTimeframe,
+    attemptSeq: number,
+    detail?: unknown
+  ): void => {
+    console.warn(
+      `[tier-a] republish skipped reason=${reason} source=${src.slug} tf=${timeframe}d ` +
+        `attempt_seq=${attemptSeq}` +
+        (detail === undefined ? '' : ` detail=${JSON.stringify(asError(detail).message)}`)
+    )
+  }
+
+  /**
+   * Retry fast path: when an earlier queue attempt of this job already
+   * captured this window, persisted its RAW pair and a publishable terminal
+   * outcome, and failed only while publishing, re-publish that recorded
+   * capture instead of rescanning the board (bybit_mt5 7D: 2,047 pages,
+   * 107 min per scan). The stored RAW is read back, every page and the
+   * manifest are re-verified byte-for-byte, the rows are re-parsed with the
+   * original context, and the manifest is rebuilt and must be identical
+   * before the shared gated publication runs. The receipt goes through
+   * arena.record_tier_a_execution_window_republish_receipt, which re-proves
+   * the cross-claim lineage. Only v3 identity captures are replayed.
+   *
+   * Any check failing before publication logs one `republish skipped` line
+   * and returns `rescan`, so the ordinary capture path runs unchanged. Once
+   * publication has started, an execution-authority failure is rethrown
+   * (job fails). Note that on the claimed-write path a fence failure of the
+   * transaction itself (write deadline, commit aborted/unknown, lease
+   * deadline) is converted by SourceJobExecutionAuthority.withClaimedWrite
+   * into region_lost and revokes the execution, so the whole job fails there.
+   * The remaining errors are split in two. A transient failure
+   * (deadline, timeout, connection, lock, serialization;
+   * reason=publish_failed) fails this window like the ordinary path would and
+   * does NOT rescan in the same job attempt: a failed republish followed by a
+   * 107-minute rescan could exceed the job's lock/timeout budget, and the
+   * next BullMQ retry can republish again (the capture is still the window's
+   * latest attempt). A deterministic one (stale, count_check_gated,
+   * publish_rejected; unknown errors count as deterministic) would fail the
+   * same way on every retry, so it rescans now. This classification was
+   * chosen over a per-attempt republish-failure counter: it needs no new
+   * durable state, and a repeatedly transient failure is bounded by the
+   * job's own attempt limit, exactly as it was for the rescan.
+   */
+  const republishRecordedWindow = async (timeframe: RankingTimeframe): Promise<WindowRepublish> => {
+    // Only pending windows reach here, so the window has no durable receipt
+    // for this job yet. Queue attempt 0 has no earlier attempt to reuse.
+    if (execution.proof.queueAttempt < 1) return { kind: 'rescan' }
+    let latest: Awaited<ReturnType<typeof findLatestTierAWindowAttempt>>
+    try {
+      latest = await execution.withClaimedWrite((transaction) =>
+        findLatestTierAWindowAttempt(transaction, { sourceId: src.id, timeframe })
+      )
+    } catch (cause) {
+      // Authority loss stays terminal and sticky; a lookup defect must never
+      // block the ordinary capture path.
+      execution.assertActive()
+      console.warn(
+        `[tier-a] republish lookup failed source=${src.slug} tf=${timeframe}d: ` +
+          asError(cause).message
+      )
+      return { kind: 'rescan' }
+    }
+    throwIfTierACancelled(executionSignal)
+    const classification = classifyTierAWindowRepublishCandidate(latest, {
+      sourceId: src.id,
+      timeframe,
+      observationCycleId: attemptBoundCycleId,
+      queueJobId: execution.proof.queueJobId,
+      queueAttempt: execution.proof.queueAttempt,
+      claimId: execution.proof.claimId,
+      generationSeq: execution.proof.generationSeq,
+      gitSha: execution.proof.gitSha,
+      maxFreshnessMs: registeredLeaderboardMetricMaxFreshnessMs(src, timeframe),
+    })
+    if (classification.kind === 'none') return { kind: 'rescan' }
+    if (classification.kind === 'skip') {
+      logRepublishSkipped(classification.reason, timeframe, classification.attemptSeq)
+      return { kind: 'rescan' }
+    }
+    const { attempt, outcome } = classification
+    const skip = (reason: TierAWindowRepublishSkipReason, detail?: unknown): WindowRepublish => {
+      logRepublishSkipped(reason, timeframe, attempt.attemptSeq, detail)
+      return { kind: 'rescan' }
+    }
+
+    // Probe first: without the receipt RPC a published snapshot could be
+    // left without its window receipt.
+    let receiptRpcPresent = false
+    try {
+      receiptRpcPresent = await execution.withClaimedWrite((transaction) =>
+        hasTierAExecutionWindowRepublishReceipt(transaction)
+      )
+    } catch (cause) {
+      execution.assertActive()
+      return skip('receipt_rpc_unavailable', cause)
+    }
+    throwIfTierACancelled(executionSignal)
+    if (!receiptRpcPresent) return skip('receipt_rpc_unavailable')
+
+    const startedAtMs = Date.now()
+    const readTrustRaw = async (
+      role: 'source_payload' | 'population_manifest',
+      receipt: RawObjectReceipt
+    ): Promise<{ ok: true; payload: unknown } | { ok: false; skipped: WindowRepublish }> => {
+      try {
+        const payload = await readAttemptBoundLeaderboardTrustRawPayload(
+          {
+            rawObjectId: receipt.id,
+            role,
+            expectedSourceId: src.id,
+            expectedTimeframe: timeframe,
+            expectedSourceRunId: outcome.sourceRunId,
+            expectedContentHash: receipt.contentHash,
+            expectedStoragePath: receipt.storagePath,
+          },
+          runClaimedTransaction
+        )
+        throwIfTierACancelled(executionSignal)
+        return { ok: true, payload }
+      } catch (cause) {
+        throwIfTierACancelled(executionSignal)
+        execution.assertActive()
+        const hashMismatch =
+          cause instanceof LeaderboardTrustRawReadError && cause.failure === 'hash_mismatch'
+        return {
+          ok: false,
+          skipped: skip(hashMismatch ? 'raw_hash_mismatch' : 'raw_unreadable', cause),
+        }
+      }
+    }
+
+    // 1. The manifest RAW: strict v3, canonically hashing to the outcome's
+    //    source run, and bound to this durable attempt.
+    if (outcome.populationManifest.contentHash !== outcome.sourceRunId) {
+      return skip('manifest_mismatch')
+    }
+    const manifestRead = await readTrustRaw('population_manifest', outcome.populationManifest)
+    if (!manifestRead.ok) return manifestRead.skipped
+    let storedManifest: LeaderboardAcquisitionManifestV3
+    try {
+      storedManifest = parseLeaderboardAcquisitionManifestV3(manifestRead.payload)
+    } catch (cause) {
+      return skip('manifest_mismatch', cause)
+    }
+    if (
+      strictCanonicalSha256(storedManifest) !== outcome.sourceRunId ||
+      storedManifest.acquisition_attempt.binding_contract !== attempt.attemptBindingContract ||
+      storedManifest.acquisition_attempt.attempt_id !== attempt.attemptId ||
+      storedManifest.acquisition_attempt.attempt_seq !== attempt.attemptSeq ||
+      storedManifest.runner_git_sha !== attempt.runnerGitSha ||
+      storedManifest.started_at !== attempt.recordedStartedAt ||
+      storedManifest.started_at !== outcome.captureStartedAt ||
+      storedManifest.completed_at !== outcome.captureCompletedAt ||
+      storedManifest.observation_cycle_id !== attempt.observationCycleId ||
+      storedManifest.source.id !== src.id ||
+      storedManifest.source.slug !== src.slug ||
+      storedManifest.source.adapter_slug !== src.adapter_slug ||
+      storedManifest.timeframe !== timeframe ||
+      storedManifest.parser_input.transformation.kind !== 'identity_projection'
+    ) {
+      return skip('manifest_mismatch')
+    }
+
+    // 2. The source payload RAW: exactly the recorded pages, each hashing to
+    //    its manifest entry.
+    const sourceRead = await readTrustRaw('source_payload', outcome.sourcePayload)
+    if (!sourceRead.ok) return sourceRead.skipped
+    const storedPages = sourceRead.payload
+    if (
+      !Array.isArray(storedPages) ||
+      storedPages.length !== storedManifest.source_pages.length ||
+      storedPages.some((page: unknown, index) => {
+        const recorded = storedManifest.source_pages[index]
+        if (page === null || typeof page !== 'object' || Array.isArray(page)) return true
+        const candidate = page as RawPage
+        return (
+          strictCanonicalJson(candidate) !==
+            strictCanonicalJson({
+              pageIndex: recorded.stored_page_index,
+              payload: candidate.payload,
+              url: recorded.url,
+              fetchedAt: recorded.fetched_at,
+            }) || strictCanonicalSha256(candidate.payload) !== recorded.payload.sha256
+        )
+      })
+    ) {
+      return skip('page_hash_mismatch')
+    }
+    const sourcePages = storedPages as RawPage[]
+
+    // 3. Parser pages and rank anchors under canonical byte equality.
+    const parsePages = storedManifest.parser_input.transformation.source_page_ordinals.map(
+      (ordinal) => sourcePages[ordinal - 1]
+    )
+    let captureRankAnchors: CapturedPageRankAnchor[]
+    try {
+      if (parsePages.some((page) => page === undefined)) {
+        throw new TypeError('[tier-a] replayed parser page ordinal is out of range')
+      }
+      captureRankAnchors = replayedIdentityPageRankAnchors({
+        sourcePages,
+        parsePages,
+        manifest: storedManifest,
+      })
+    } catch (cause) {
+      return skip('manifest_mismatch', cause)
+    }
+
+    // 4. Re-parse exactly as the capture path did (scrapedAt = attempt start).
+    const ctx: ParseCtx = {
+      sourceSlug: src.slug,
+      currency: src.currency,
+      tfLabelMap: src.tf_label_map,
+      scrapedAt: attempt.recordedStartedAt,
+      meta: src.meta,
+    }
+    const requiredFields = ((src.meta.required_fields as string[]) ?? []) as Array<
+      keyof ParsedLeaderboardRow
+    >
+    let valid: ParsedLeaderboardRow[]
+    let rejects: ReturnType<typeof validateLeaderboardRows>['rejects']
+    try {
+      const rows = parseLeaderboardRows({
+        adapter,
+        pages: parsePages,
+        ctx,
+        pageSize: src.page_size ?? 100,
+        captureRankAnchors,
+      })
+      const annotateIdentityMerge = adapter.leaderboardIdentityMerge?.(src) ?? null
+      const validated = validateLeaderboardRows(
+        rows,
+        requiredFields,
+        annotateIdentityMerge ? { annotateIdentityMerge } : {}
+      )
+      adapter.validateLeaderboard?.(
+        {
+          parsedRows: rows,
+          validRows: validated.valid,
+          rejectedRowCount: validated.rejects.length,
+        },
+        src,
+        timeframe,
+        { purpose: 'publication' }
+      )
+      valid = validated.valid
+      rejects = validated.rejects
+    } catch (cause) {
+      return skip('parse_mismatch', cause)
+    }
+    if (
+      valid.length !== storedManifest.population.accepted_population ||
+      rejects.length !== storedManifest.population.rejected_row_count ||
+      outcome.acceptedPopulation !== valid.length ||
+      outcome.rejectedRowCount !== rejects.length
+    ) {
+      return skip('parse_mismatch')
+    }
+
+    // 5. Rebuild the manifest from the stored pages and fresh counts; it must
+    //    be byte-identical to the recorded one, and its projection must be
+    //    the recorded terminal outcome.
+    let rebuilt: BuiltLeaderboardAcquisitionManifestV3
+    let projection: LeaderboardManifestOutcomeProjection
+    try {
+      const capture: LeaderboardCapture = {
+        sourcePages: sourcePages.map((rawPage, index) => {
+          const recorded = storedManifest.source_pages[index]
+          if (
+            recorded.request_sha256 === null ||
+            recorded.http_status === null ||
+            recorded.source_reports === null ||
+            recorded.pagination_position?.kind !== 'page_index'
+          ) {
+            throw new TypeError('[tier-a] replayed v3 source page lacks captured response metadata')
+          }
+          return {
+            rawPage,
+            sourceRowCount: recorded.source_row_count,
+            requestSha256: recorded.request_sha256,
+            httpStatus: recorded.http_status,
+            paginationPosition: recorded.pagination_position,
+            sourceReports: recorded.source_reports,
+          }
+        }),
+        parsePages,
+        terminationReason:
+          storedManifest.termination_reason as LeaderboardCapture['terminationReason'],
+        captureConfig: storedManifest.capture_config,
+        parserTransformation: {
+          kind: 'identity_projection',
+          source_page_ordinals: [
+            ...storedManifest.parser_input.transformation.source_page_ordinals,
+          ],
+        },
+        ...(storedManifest.completeness ? { completeness: storedManifest.completeness } : {}),
+      }
+      const built = buildAttemptBoundCaptureManifest({
+        src,
+        timeframe,
+        startedAt: attempt.recordedStartedAt,
+        completedAt: outcome.captureCompletedAt,
+        runnerGitSha: attempt.runnerGitSha,
+        cycleId,
+        capture,
+        capturedFailure: false,
+        acceptedPopulation: valid.length,
+        rejectedRowCount: rejects.length,
+        attempt,
+        configuredPartitionIds: null,
+      })
+      if (built.kind !== 'v3') throw new TypeError('[tier-a] replay rebuilt a non-v3 manifest')
+      rebuilt = built.built
+      projection = projectLeaderboardManifestV3Outcome(attempt, rebuilt)
+    } catch (cause) {
+      return skip('manifest_mismatch', cause)
+    }
+    if (
+      rebuilt.sourceRunId !== outcome.sourceRunId ||
+      rebuilt.canonicalJson !== strictCanonicalJson(storedManifest) ||
+      projection.terminalState !== outcome.terminalState ||
+      projection.acquisitionState !== outcome.acquisitionState ||
+      projection.populationState !== outcome.populationState ||
+      projection.reasonCode !== outcome.reasonCode ||
+      projection.captureEvidenceState !== outcome.captureEvidenceState ||
+      projection.terminationReason !== outcome.terminationReason ||
+      projection.sourcePageCount !== outcome.sourcePageCount ||
+      projection.observedPopulation !== outcome.observedPopulation ||
+      projection.deduplicatedRowCount !== outcome.deduplicatedRowCount ||
+      projection.reportedPopulation !== outcome.reportedPopulation ||
+      projection.populationReportState !== outcome.populationReportState ||
+      projection.reportedPageCount !== outcome.reportedPageCount ||
+      projection.pageCountReportState !== outcome.pageCountReportState ||
+      projection.callerLimited !== outcome.callerLimited ||
+      projection.safetyLimited !== outcome.safetyLimited ||
+      (projection.terminalState !== 'complete' && !projection.exhaustionVerified)
+    ) {
+      return skip('manifest_mismatch')
+    }
+    throwIfTierACancelled(executionSignal)
+
+    // 6. The same gated publication as the capture path; only the receipt
+    //    RPC differs. From here on a failure fails the window (see above).
+    let terminalSideEffect: 'receipt' | null = null
+    try {
+      const result = await publishGatedWindowEvidence({
+        timeframe,
+        attemptId: attempt.attemptId,
+        pages: parsePages,
+        ctx,
+        valid,
+        rejects,
+        projection,
+        evidence: {
+          kind: 'v3',
+          bundle: {
+            sourceRunId: rebuilt.sourceRunId,
+            manifest: rebuilt.manifest,
+            artifacts: {
+              sourcePayload: outcome.sourcePayload,
+              populationManifest: outcome.populationManifest,
+            },
+          },
+        },
+        rawObjectId: outcome.sourcePayload.id,
+        recordReceipt: recordTierAExecutionWindowRepublishReceipt,
+        markTerminalSideEffect: (sideEffect) => {
+          terminalSideEffect = sideEffect
+        },
+      })
+      console.log(
+        `[tier-a] republished source=${src.slug} tf=${timeframe}d ` +
+          `attempt_seq=${attempt.attemptSeq} rows=${valid.length} ms=${Date.now() - startedAtMs}`
+      )
+      return { kind: 'republished', result }
+    } catch (cause) {
+      if (cause instanceof TierACheckpointPersistenceError) throw cause
+      if (executionSignal.aborted) {
+        const abortReason = executionSignal.reason
+        if (cause === abortReason) throw cause
+        throw new AggregateError(
+          [asError(cause), asError(abortReason)],
+          `[tier-a] ${src.slug} ${timeframe}d republish failed while execution authority was revoked`
+        )
+      }
+      // As in the capture path: a receipt-stage or receipt-contract failure
+      // follows a published snapshot, leaves an ambiguous terminal side
+      // effect and fails the job. The next retry republishes the same
+      // capture: publication reconciles it to the already-committed,
+      // byte-bound snapshot of this source run (reconcileLeaderboardMetricTrust
+      // in lib/ingest/serving/publish.ts) instead of writing a second one, and
+      // then records the missing republish receipt. Nothing is rescanned.
+      if (cause instanceof TierAExecutionWindowReceiptError || terminalSideEffect !== null) {
+        logRepublishSkipped(
+          cause instanceof TierAExecutionWindowReceiptError && cause.code === 'undefined_function'
+            ? 'receipt_rpc_unavailable'
+            : 'publish_failed',
+          timeframe,
+          attempt.attemptSeq,
+          cause
+        )
+        throw cause
+      }
+      // Order matters: authority loss is decided before any rescan or window
+      // failure. A revoked execution was already rethrown above (signal);
+      // an authority-class fence or execution error (commit outcome unknown,
+      // fenced, region_lost, closed, ...) found anywhere in the cause chain is
+      // rethrown here even if the signal has not observed it yet, and
+      // assertActive() below surfaces an ownership loss nothing reported.
+      const errorClass = classifyRepublishPublicationError(cause)
+      if (errorClass === 'authority') {
+        logRepublishSkipped('publish_failed', timeframe, attempt.attemptSeq, cause)
+        throw cause
+      }
+      execution.assertActive()
+      // Failures that the same recorded capture would hit again on every
+      // retry fall back to the rescan now; nothing of this replay is left
+      // published (the snapshot transaction rolled back, or the snapshot is
+      // GATED and out of serving, or the optional series alone failed):
+      // - stale: a newer snapshot of a different capture already serves the
+      //   window (the same capture's own committed snapshot is reconciled and
+      //   reused instead, never reported stale);
+      // - count_check_gated: within one cycle the baseline does not move;
+      // - publish_rejected: every other non-transient error, unknown ones
+      //   included (identity conflict, a no-longer-holding exhaustion proof,
+      //   a missing metric contract...). Rescanning once too often is cheaper
+      //   than republishing a doomed capture until the job's attempts run out.
+      // Only a transient failure (deadline, timeout, connection, lock,
+      // serialization, a transient worker-fence code such as 11-27's
+      // write_deadline_exceeded) keeps the no-rescan rule: the window fails
+      // and the next BullMQ retry republishes again.
+      const deterministicReason: TierAWindowRepublishSkipReason | null =
+        cause instanceof StaleLeaderboardPublicationError
+          ? 'stale'
+          : cause instanceof TierACountCheckGatedError
+            ? 'count_check_gated'
+            : errorClass === 'transient'
+              ? null
+              : 'publish_rejected'
+      if (deterministicReason !== null) {
+        logRepublishSkipped(deterministicReason, timeframe, attempt.attemptSeq, cause)
+        return { kind: 'rescan' }
+      }
+      logRepublishSkipped('publish_failed', timeframe, attempt.attemptSeq, cause)
+      const detail = asError(cause).message
+      const error = new Error(`[tier-a] ${src.slug} ${timeframe}d failed: ${detail}`, { cause })
+      console.error(error.message)
+      return { kind: 'failed', error }
+    }
+  }
+
   try {
     await execution.withClaimedWrite(async (transaction) => {
       for (const timeframe of timeframes) {
@@ -1013,6 +1741,15 @@ export async function processTierA(
 
     for (const timeframe of pendingTimeframes) {
       throwIfTierACancelled(executionSignal)
+      const republish = await republishRecordedWindow(timeframe)
+      if (republish.kind === 'republished') {
+        results.push(republish.result)
+        continue
+      }
+      if (republish.kind === 'failed') {
+        failures.push({ timeframe, error: republish.error })
+        continue
+      }
       let acquisitionAttempt: ClaimedLeaderboardAcquisitionAttempt | null = null
       let attemptLifecycle: AttemptLifecycle = 'not_started'
       let failureStage: LeaderboardAcquisitionFailureStage = 'upstream_fetch'
@@ -1244,164 +1981,23 @@ export async function processTierA(
         // The failed/partial response is now durable and terminal. Preserve
         // the upstream error for retry classification, but never publish it.
         if (capturedError) throw capturedError
-        if (
-          artifactSet.projection.terminalState !== 'complete' &&
-          !artifactSet.projection.exhaustionVerified
-        ) {
-          throw new Error(
-            `acquisition trust gate FAILED: acquisition=` +
-              `${artifactSet.projection.acquisitionState}, population=` +
-              `${artifactSet.projection.populationState}, source_run=` +
-              `${artifactSet.projection.sourceRunId}`
-          )
-        }
-
-        // Series are additive serving material, not population evidence.
-        // Parse them only after the capture pair passed its trust gate so a
-        // series-specific bug cannot erase an otherwise truthful manifest.
-        const boardSeries = parseLeaderboardSeriesWindow({ adapter, pages, ctx, timeframe })
-
-        if (evidence.kind === 'v3' && !hasRegisteredLeaderboardMetricTrust(src, timeframe)) {
-          throw new Error(
-            `[tier-a] ${src.slug} ${timeframe}d attempt-bound capture has no reviewed metric trust contract`
-          )
-        }
-        const receiptSourceRunId = evidence.bundle.sourceRunId
-        const result =
-          evidence.kind === 'v4'
-            ? await publishClaimedAttemptBoundLeaderboardSnapshot(
-                {
-                  src,
-                  timeframe,
-                  rows: valid,
-                  rejects,
-                  observationCycleId: attemptBoundCycleId,
-                  attemptEvidence: evidence.bundle,
-                },
-                context,
-                execution,
-                executionSignal
-              )
-            : await publishClaimedTrustedLeaderboardSnapshot(
-                {
-                  src,
-                  timeframe,
-                  rows: valid,
-                  rejects,
-                  observationCycleId: cycleId ?? undefined,
-                  trust: evidence.bundle,
-                },
-                context,
-                execution,
-                executionSignal
-              )
-        throwIfTierACancelled(executionSignal)
-
-        const status = result.published ? 'PUBLISHED' : 'GATED'
-        console.log(
-          `[tier-a] ${src.slug} ${timeframe}d: ${valid.length} rows ` +
-            `(${rejects.length} rejected, baseline=${result.verdict.baselineUsed}, ` +
-            `deviation=${result.verdict.deviationPct?.toFixed(1) ?? '–'}%) → ${status}`
-        )
-        if (result.published) {
-          // Output watermark next to the heartbeat (audit P2-8): proves this
-          // node is publishing, not just alive. Best-effort, never throws.
-          noteTierAPublished()
-        }
-        if (!result.published) {
-          // Keep this window out of serving, but do not sacrifice the other
-          // native windows. The aggregate error after the loop still fails the
-          // BullMQ job for retry and operator visibility.
-          throw new Error(
-            `count check FAILED: actual=${valid.length} ` +
-              `baseline=${result.verdict.baselineUsed} — snapshot ${result.snapshotId} ` +
-              `recorded, serving keeps last good`
-          )
-        }
-
-        // Board-level free series (spec §13.1): every ranked trader gets a
-        // chart with no extra fetch — closes the long-tail series gap that
-        // otherwise waits on Tier-B topN / on-demand Tier-C.
-        if (boardSeries.size > 0) {
-          const seriesOut = await publishClaimedBoardSeries(
-            src,
-            boardSeries,
-            result.traderIds,
-            context,
-            execution,
-            {
-              expectedLatestSnapshots: new Map([
-                [
-                  timeframe,
-                  {
-                    id: result.snapshotId,
-                    rawObjectId,
-                    scrapedAt: new Date(result.scrapedAt).toISOString(),
-                  },
-                ],
-              ]),
+        results.push(
+          await publishGatedWindowEvidence({
+            timeframe,
+            attemptId: attempt.attemptId,
+            pages,
+            ctx,
+            valid,
+            rejects,
+            projection: artifactSet.projection,
+            evidence,
+            rawObjectId,
+            recordReceipt: recordTierAExecutionWindowReceipt,
+            markTerminalSideEffect: (sideEffect) => {
+              terminalWindowSideEffect = sideEffect
             },
-            executionSignal
-          )
-          throwIfTierACancelled(executionSignal)
-          console.log(
-            `[tier-a] ${src.slug} ${timeframe}d board series: ` +
-              `${seriesOut.points} pts for ${seriesOut.traders} traders`
-          )
-        }
-
-        // (compat→trader_latest write removed 2026-06-15) The score chain now runs
-        // on arena directly (compute-leaderboard reads arena_score_inputs, not
-        // trader_latest), so the compat bridge is orphaned and trader_latest is
-        // being dropped. publish() above already wrote arena.* — the canonical source.
-
-        // The database receipt, not Redis job.data, is the sole retry skip
-        // authority. It is committed only after snapshot and optional series.
-        terminalWindowSideEffect = 'receipt'
-        await execution.withClaimedWrite((transaction) =>
-          withTierAExecutionReceiptWriter(
-            transaction,
-            {
-              claimId: execution.proof.claimId,
-              generationSeq: execution.proof.generationSeq,
-              queueJobId: execution.proof.queueJobId,
-              queueName: execution.proof.queueName,
-              sourceId: src.id,
-            },
-            (writer) =>
-              recordTierAExecutionWindowReceipt(writer, {
-                attemptId: attempt.attemptId,
-                observationCycleId: attemptBoundCycleId,
-                rawObjectId,
-                snapshotId: result.snapshotId,
-                sourceRunId: receiptSourceRunId,
-                timeframe,
-              })
-          )
+          })
         )
-        throwIfTierACancelled(executionSignal)
-        terminalWindowSideEffect = null
-
-        completedTimeframes.add(timeframe)
-        persistedJobData = await replaceCompletedTimeframeCache({
-          provenance,
-          execution,
-          persistedJobData,
-          completedTimeframes,
-          nativeTimeframes: timeframes,
-          sourceSlug: src.slug,
-          timeframe,
-        })
-        throwIfTierACancelled(executionSignal)
-
-        results.push({
-          timeframe,
-          actualCount: valid.length,
-          rejects: rejects.length,
-          passed: result.verdict.passed,
-          baselineUsed: result.verdict.baselineUsed,
-          snapshotId: result.snapshotId,
-        })
       } catch (cause) {
         // A failed CAS has already durably committed the receipt and then
         // asserted the now-sticky Bull authority. Preserve both failures;

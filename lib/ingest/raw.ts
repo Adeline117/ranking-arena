@@ -253,7 +253,7 @@ interface RawObjectGcPointer {
   storage_path: string
 }
 
-type LeaderboardTrustArtifactRole = 'source_payload' | 'population_manifest'
+export type LeaderboardTrustArtifactRole = 'source_payload' | 'population_manifest'
 
 interface PreparedDeterministicRawArtifact {
   storagePath: string
@@ -293,6 +293,18 @@ function rawIntegrityError(rawObjectId: number, storagePath: string, detail: str
   return new Error(
     `[ingest] RAW integrity failed (id=${rawObjectId}, path=${JSON.stringify(storagePath)}): ${detail}`
   )
+}
+
+/**
+ * The stored bytes do not hash to the pointer's content_hash. Same message as
+ * every other RAW integrity failure; the type lets callers tell a hash
+ * mismatch from an unreadable object without matching message text.
+ */
+class RawChecksumMismatchError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'RawChecksumMismatchError'
+  }
 }
 
 function verifyRawIntegrityMetadata(
@@ -2272,7 +2284,9 @@ async function readRawPayload(
   const fullHash = createHash('sha256').update(jsonBytes).digest('hex')
   const expectedHash = pointer.content_hash.length === 32 ? fullHash.slice(0, 32) : fullHash
   if (pointer.content_hash !== expectedHash) {
-    throw rawIntegrityError(rawObjectId, pointer.storage_path, 'SHA-256 checksum mismatch')
+    throw new RawChecksumMismatchError(
+      rawIntegrityError(rawObjectId, pointer.storage_path, 'SHA-256 checksum mismatch').message
+    )
   }
 
   let json: string
@@ -2332,6 +2346,109 @@ export async function readRawObject(rawObjectId: number): Promise<unknown> {
     throw new Error(`[ingest] raw object ${rawObjectId} not found`)
   }
   return (await readRawPayload(rawObjectId, rows[0])).payload
+}
+
+export type LeaderboardTrustRawReadFailure = 'unreadable' | 'hash_mismatch'
+
+/** A Tier-A trust RAW could not be read back as the exact recorded artifact. */
+export class LeaderboardTrustRawReadError extends Error {
+  readonly failure: LeaderboardTrustRawReadFailure
+
+  constructor(rawObjectId: number, failure: LeaderboardTrustRawReadFailure, detail: string) {
+    super(`[ingest] leaderboard trust RAW ${rawObjectId} read failed (${failure}): ${detail}`)
+    this.name = 'LeaderboardTrustRawReadError'
+    this.failure = failure
+  }
+}
+
+export interface ReadAttemptBoundLeaderboardTrustRawInput {
+  rawObjectId: number
+  role: LeaderboardTrustArtifactRole
+  expectedSourceId: number
+  expectedTimeframe: RankingTimeframe
+  expectedSourceRunId: string
+  /** The content hash the acquisition outcome recorded for this artifact. */
+  expectedContentHash: string
+  /** The Storage path the acquisition outcome recorded for this artifact. */
+  expectedStoragePath: string
+}
+
+/**
+ * Read one attempt-bound Tier-A trust RAW (source payload or population
+ * manifest) back for a republish. Read-only: the pointer row is loaded through
+ * the caller's runner, then the Storage bytes are downloaded outside it. The
+ * pointer must be the exact bound trust artifact the outcome recorded (id,
+ * role, source run, path and content hash), and the bytes must pass the same
+ * integrity checks as every other RAW read plus strict canonical JSON. A
+ * mismatch between the recorded content hash and the pointer or the stored
+ * bytes is reported as `hash_mismatch`; anything else as `unreadable`.
+ */
+export async function readAttemptBoundLeaderboardTrustRawPayload(
+  input: ReadAttemptBoundLeaderboardTrustRawInput,
+  runTransaction: IngestTransactionRunner
+): Promise<unknown> {
+  assertTierARawTransactionRunner(runTransaction)
+  const { rawObjectId } = input
+  const unreadable = (detail: string) =>
+    new LeaderboardTrustRawReadError(rawObjectId, 'unreadable', detail)
+  if (
+    !Number.isSafeInteger(rawObjectId) ||
+    rawObjectId <= 0 ||
+    (input.role !== 'source_payload' && input.role !== 'population_manifest') ||
+    !/^[0-9a-f]{64}$/.test(input.expectedContentHash) ||
+    !/^[0-9a-f]{64}$/.test(input.expectedSourceRunId)
+  ) {
+    throw unreadable('invalid read request')
+  }
+
+  const rows = await runTransaction(async (transaction) => {
+    const result = await transaction.query<LeaderboardTrustPointerRow>(
+      `SELECT id, source_id, job_type, trader_id, timeframe,
+              fetched_at::text AS fetched_at, storage_path,
+              bytes, content_hash, quarantined, meta,
+              source_run_id, trust_artifact_role
+         FROM arena.raw_objects
+        WHERE id = $1::bigint`,
+      [rawObjectId]
+    )
+    return result.rows
+  })
+  if (rows.length !== 1) throw unreadable('pointer row does not exist')
+  const pointer = rows[0]
+  if (pointer.content_hash !== input.expectedContentHash) {
+    throw new LeaderboardTrustRawReadError(
+      rawObjectId,
+      'hash_mismatch',
+      'pointer content hash differs from the recorded outcome'
+    )
+  }
+  const integrity = isRecord(pointer.meta) ? pointer.meta.raw_integrity : undefined
+  if (
+    Number(pointer.id) !== rawObjectId ||
+    pointer.source_id !== input.expectedSourceId ||
+    pointer.job_type !== (input.role === 'source_payload' ? 'tier_a' : 'tier_a_manifest') ||
+    pointer.trader_id !== null ||
+    pointer.timeframe !== input.expectedTimeframe ||
+    pointer.storage_path !== input.expectedStoragePath ||
+    pointer.quarantined !== false ||
+    pointer.source_run_id !== input.expectedSourceRunId ||
+    pointer.trust_artifact_role !== input.role ||
+    !isRecord(integrity) ||
+    integrity.serialization_contract !== STRICT_CANONICAL_JSON_CONTRACT
+  ) {
+    throw unreadable('pointer row is not the recorded bound trust artifact')
+  }
+
+  try {
+    return (await readRawPayload(rawObjectId, pointer)).payload
+  } catch (cause) {
+    const detail = asError(cause).message
+    throw new LeaderboardTrustRawReadError(
+      rawObjectId,
+      cause instanceof RawChecksumMismatchError ? 'hash_mismatch' : 'unreadable',
+      detail
+    )
+  }
 }
 
 const VERIFIED_COPIER_SNAPSHOT_TRUST_RAW_INPUT_FIELDS = Object.freeze([
