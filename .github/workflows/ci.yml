@@ -560,6 +560,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:headline-stats-as-of-pg17
 
+      - name: Prove an adopted count level-shift anchors the baseline
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:count-shift-anchor-pg17
+
       - name: Prove the columnar score bundle carries exactly the object-form bundle
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
@@ -569,6 +574,16 @@ jobs:
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:public-ranked-leaderboard-inline-row-policy-pg17
+
+      - name: Prove the trader_stats score-input value function inlines with the same results
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:trader-stats-score-input-value-inline-pg17
+
+      - name: Prove dropping the unused metric-trust lookup index keeps every other index
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:metric-trust-observations-drop-lookup-index-pg17
 
       - name: Prove a Tier-A window receipt can be recorded once for an earlier queue attempt's capture
         env:

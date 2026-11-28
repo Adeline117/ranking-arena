@@ -44,6 +44,7 @@ import {
   ROLLING_DEVIATION_PCT,
   evaluateCount,
   getCountBaseline,
+  COUNT_SHIFT_ADOPTED_META_KEY,
   type CountVerdict,
 } from '../staging/count-check'
 import {
@@ -421,6 +422,11 @@ async function publishLeaderboardSnapshotTransactionInternal(
           ? { observation_cycle_id: input.observationCycleId.trim() }
           : {}),
         ...(countBaselineGeneration ? { count_baseline_generation: countBaselineGeneration } : {}),
+        // An adopted level-shift that passed anchors later baselines
+        // (count-check.ts COUNT_SHIFT_ADOPTED_META_KEY).
+        ...(shifted && verdict.passed && baseline !== null
+          ? { [COUNT_SHIFT_ADOPTED_META_KEY]: baseline }
+          : {}),
         // Read by the freshness sentinel, which alerts for manual confirmation.
         ...(shiftPendingConfirmation
           ? {

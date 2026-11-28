@@ -1,0 +1,9 @@
+[
+  {
+    "count": 1,
+    "path": "supabase/migrations/20261127201511_metric_trust_observations_drop_lookup_index.sql",
+    "review": "Reviewed 2026-11-28 by the launch lead (d7, PR #599): drops only idx_arena_metric_trust_observations_lookup (393 MB, 0 scans in production, no reader in the repository). Exact production definition preflight, valid/not-constraint checks, postflight on the five kept indexes, lock_timeout 3 s; PG17 proof run in an isolated worktree.",
+    "rule": "drop",
+    "sha256": "227cc1c844d26f573c992634f774d7cea9e9d01c3d5fea4d69118bfcf18e0d67"
+  }
+]

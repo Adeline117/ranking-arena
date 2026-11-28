@@ -24,6 +24,9 @@
 
 # CI / 部署 / 质量门禁（改这些影响所有会话与生产部署）
 /.github/workflows/         @Adeline117
+# 迁移安全门的人工复核豁免清单：新增条目即放行一个 DROP，须部署负责人复核
+/scripts/qa/migration-sql-safety-reviewed.json @Adeline117
+/scripts/qa/migration-sql-safety-check.mjs @Adeline117
 /vercel.json                @Adeline117
 /scripts/git-hooks/         @Adeline117
 /eslint.config.mjs          @Adeline117
