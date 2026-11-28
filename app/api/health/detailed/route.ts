@@ -13,11 +13,12 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { readServedRankingSources } from '@/lib/data/served-ranking-sources'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkHealth as checkCacheHealth, getCacheStats } from '@/lib/cache'
 import { getSupportedPlatforms } from '@/lib/cron/utils'
 import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
-import { getFireAndForgetStats } from '@/lib/utils/logger'
+import { getFireAndForgetStats, logger } from '@/lib/utils/logger'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { getAuthFailureStats } from '@/lib/auth/extract-user'
 
@@ -299,7 +300,7 @@ async function getConnectorsSection(request: Request) {
 
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
-  const [{ data: logs }, { data: freshness }] = await Promise.all([
+  const [{ data: logs }, servedSources] = await Promise.all([
     supabase
       .from('pipeline_logs')
       .select(
@@ -308,14 +309,24 @@ async function getConnectorsSection(request: Request) {
       .like('job_name', 'batch-fetch-traders%')
       .gte('started_at', oneDayAgo)
       .order('started_at', { ascending: false }),
-    // Get latest computed_at per source using leaderboard_count_cache
-    // (was: fetch 5000 rows and dedupe in JS)
-    supabase.from('leaderboard_count_cache').select('source, updated_at').neq('source', '_all'),
+    // Sources the public board is serving and when each was last published.
+    // A source the public view dropped is absent, so it reports as critical.
+    readServedRankingSources(getSupabaseAdmin()).catch((error: unknown) => {
+      logger.error('[health/detailed] served ranking sources unavailable', error)
+      return null
+    }),
   ])
 
+  if (servedSources === null) {
+    return NextResponse.json(
+      { status: 'unknown', error: 'served ranking sources unavailable' },
+      { status: 503 }
+    )
+  }
+
   const latestByPlatform = new Map<string, string>()
-  for (const row of freshness || []) {
-    latestByPlatform.set(row.source, row.updated_at)
+  for (const row of servedSources) {
+    latestByPlatform.set(row.source, row.recordedAt)
   }
 
   const groupStats = new Map<string, { total: number; success: number; errors: string[] }>()
