@@ -5,9 +5,12 @@
 process.env.PUBLIC_RANKING_ROW_ELIGIBILITY = 'roi_pnl'
 
 import { createPgRpcClient } from '../pg-rpc-client'
+import { encodeColumnarScoreBundle } from '../columnar-score-bundle'
+import { SOURCE_PUBLICATION_BUNDLE_RPC } from '../read-source-publication-bundle'
 import {
   classifyPublishableRow,
   RANK_PUBLICATION_STAGES,
+  rankPublicationReadSplitLine,
   rankPublicationStageTimingLine,
   exclusionAlertDetails,
   fitNumeric,
@@ -242,6 +245,12 @@ describe('rankPublicationStageTimingLine', () => {
       '[90D] stage=cleanup rows=0 ms=0'
     )
   })
+
+  it('splits the read into the RPC round trip and the parsing after it', () => {
+    expect(rankPublicationReadSplitLine('90D', { queryMs: 13044.4, parseMs: 912.6 })).toBe(
+      '[90D] stage=read query_ms=13044 parse_ms=913'
+    )
+  })
 })
 
 describe('exclusionAlertDetails', () => {
@@ -433,9 +442,11 @@ describe('publishLeaderboardSeason gate', () => {
             rowCount: sources.length,
           }
         }
-        if (text.includes('arena_score_inputs_publish_bundle_json')) {
+        if (text.includes(SOURCE_PUBLICATION_BUNDLE_RPC)) {
           return {
-            rows: [{ result: { scoreRows: [], physicalBoards: boards } }] as never[],
+            rows: [
+              { result: encodeColumnarScoreBundle({ scoreRows: [], physicalBoards: boards }) },
+            ] as never[],
             rowCount: 1,
           }
         }
@@ -635,17 +646,17 @@ describe('publishLeaderboardSeason gate', () => {
       original(async (tx) =>
         work({
           async query(text, values) {
-            if (text.includes('arena_score_inputs_publish_bundle_json')) {
+            if (text.includes(SOURCE_PUBLICATION_BUNDLE_RPC)) {
               return {
                 rows: [
                   {
-                    result: {
+                    result: encodeColumnarScoreBundle({
                       scoreRows: rows,
                       physicalBoards: [
                         { ...board, rank_limited_entry_count: 3 },
                         passedBoard('bybit', 2),
                       ],
-                    },
+                    }),
                   },
                 ] as never[],
                 rowCount: 1,

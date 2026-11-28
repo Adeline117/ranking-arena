@@ -560,6 +560,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:headline-stats-as-of-pg17
 
+      - name: Prove the columnar score bundle carries exactly the object-form bundle
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:score-bundle-columnar-pg17
+
       - name: Prove the public leaderboard evaluates the row policy inline with the same rows
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
