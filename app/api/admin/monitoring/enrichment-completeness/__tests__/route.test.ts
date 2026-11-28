@@ -7,6 +7,7 @@ const mockGetSupabaseAdmin = jest.fn()
 const mockGetByPrefix = jest.fn()
 const mockFrom = jest.fn()
 const mockRpc = jest.fn()
+let gapSummary: unknown[] = []
 
 jest.mock('@/lib/auth/verify-service-auth', () => ({
   verifyAdminAuth: (...args: unknown[]) => mockVerifyAdminAuth(...args),
@@ -59,13 +60,22 @@ describe('GET /api/admin/monitoring/enrichment-completeness', () => {
     jest.clearAllMocks()
     mockGetSupabaseAdmin.mockReturnValue({ from: mockFrom, rpc: mockRpc })
     mockGetByPrefix.mockResolvedValue([])
-    mockRpc.mockResolvedValue({ data: [] })
+    gapSummary = []
+    mockRpc.mockImplementation(async (name: string) =>
+      name === 'arena_visible_sources'
+        ? {
+            data: [
+              {
+                filter_source: 'binance_futures',
+                trader_count: 10,
+                cache_updated_at: '2026-11-27T00:00:00Z',
+              },
+            ],
+            error: null,
+          }
+        : { data: gapSummary }
+    )
     mockFrom.mockImplementation((table: string) => {
-      if (table === 'leaderboard_count_cache') {
-        return queryResult({
-          data: [{ source: 'binance_futures', total_count: 10, season_id: '90D' }],
-        })
-      }
       if (table === 'trader_equity_curve') return queryResult({ count: 8 })
       if (table === 'trader_stats_detail') return queryResult({ count: 6 })
       if (table === 'pipeline_logs') {
@@ -103,7 +113,7 @@ describe('GET /api/admin/monitoring/enrichment-completeness', () => {
         updated_at: '2026-08-16T00:00:00.000Z',
       },
     ])
-    mockRpc.mockResolvedValue({ data: [{ platform: 'binance_futures', stale: 2 }] })
+    gapSummary = [{ platform: 'binance_futures', stale: 2 }]
     const response = await GET(request())
 
     expect(response.status).toBe(200)
