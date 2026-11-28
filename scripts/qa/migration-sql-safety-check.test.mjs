@@ -6,9 +6,14 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
+import { createHash } from 'node:crypto'
+
 import {
   analyzeMigrationSql,
+  applyReviewedExceptions,
   changedMigrationFiles,
+  parseReviewedExceptions,
+  REVIEWED_EXCEPTIONS_PATH,
   maskSqlComments,
   parseChangedMigrationOutput,
   run as runMigrationSafety,
@@ -478,6 +483,263 @@ test('git migration enumeration is bound to committed HEAD and rejects in-place 
     console.error = originalConsoleError
   }
   assert.match(errors.join('\n'), /dangerous\.sql:1 \[drop\]/)
+})
+
+const DROP_MIGRATION = 'supabase/migrations/20261201000000_drop_reviewed_index.sql'
+const DROP_SOURCE = 'BEGIN;\nDROP INDEX IF EXISTS arena.idx_reviewed;\nCOMMIT;\n'
+const sha256 = (text) => createHash('sha256').update(Buffer.from(text, 'utf8')).digest('hex')
+const REVIEW =
+  'reviewed: drops one never-scanned index; definition preflight and kept-index postflight'
+
+function exception(overrides = {}) {
+  return {
+    count: 1,
+    path: DROP_MIGRATION,
+    review: REVIEW,
+    rule: 'drop',
+    sha256: sha256(DROP_SOURCE),
+    ...overrides,
+  }
+}
+
+test('the reviewed exception list in the repository parses', () => {
+  const text = readFileSync(path.join(ROOT, REVIEWED_EXCEPTIONS_PATH), 'utf8')
+  assert.ok(Array.isArray(parseReviewedExceptions(text)))
+})
+
+test('reviewed exceptions fail closed on any malformed entry', () => {
+  const parse = (value) => parseReviewedExceptions(JSON.stringify(value), 'list')
+  assert.deepEqual(parse([]), [])
+  assert.equal(parse([exception()]).length, 1)
+  assert.throws(() => parseReviewedExceptions('{', 'list'), /not valid JSON/)
+  assert.throws(() => parse({}), /must be a JSON array/)
+  assert.throws(() => parse([{ ...exception(), extra: 1 }]), /must have exactly/)
+  assert.throws(
+    () => parse([exception({ path: 'supabase/migrations/../x.sql' })]),
+    /modern migration/
+  )
+  assert.throws(() => parse([exception({ path: 'scripts/x.sql' })]), /modern migration/)
+  assert.throws(() => parse([exception({ sha256: 'ABC' })]), /64 lowercase hex/)
+  assert.throws(
+    () => parse([exception({ rule: 'migration-file-modified' })]),
+    /rule must be one of: drop/
+  )
+  assert.throws(() => parse([exception({ rule: 'truncate' })]), /rule must be one of: drop/)
+  assert.throws(() => parse([exception({ count: 0 })]), /count must be/)
+  assert.throws(() => parse([exception({ count: 1.5 })]), /count must be/)
+  assert.throws(() => parse([exception({ review: 'ok' })]), /review must say/)
+  assert.throws(() => parse([exception(), exception()]), /duplicates/)
+})
+
+test('a reviewed exception waives exactly the reviewed findings of the exact file', () => {
+  const findings = analyzeMigrationSql(DROP_SOURCE, DROP_MIGRATION)
+  assert.deepEqual(rules(findings), ['drop'])
+  const [entry] = parseReviewedExceptions(JSON.stringify([exception()]))
+
+  const applied = []
+  assert.deepEqual(
+    applyReviewedExceptions(findings, Buffer.from(DROP_SOURCE), DROP_MIGRATION, [entry], applied),
+    []
+  )
+  assert.deepEqual(applied, [entry])
+
+  // One byte more: the sha256 no longer matches, the DROP is reported again.
+  const edited = DROP_SOURCE + '\n'
+  assert.deepEqual(
+    rules(
+      applyReviewedExceptions(
+        analyzeMigrationSql(edited, DROP_MIGRATION),
+        Buffer.from(edited),
+        DROP_MIGRATION,
+        [entry]
+      )
+    ),
+    ['drop', 'reviewed-exception-mismatch']
+  )
+
+  // One DROP more under a matching hash: the count does not match.
+  const twoDrops = DROP_SOURCE + 'DROP INDEX IF EXISTS arena.idx_other;\n'
+  const [twoEntry] = parseReviewedExceptions(
+    JSON.stringify([exception({ sha256: sha256(twoDrops) })])
+  )
+  assert.deepEqual(
+    rules(
+      applyReviewedExceptions(
+        analyzeMigrationSql(twoDrops, DROP_MIGRATION),
+        Buffer.from(twoDrops),
+        DROP_MIGRATION,
+        [twoEntry]
+      )
+    ),
+    ['drop', 'drop', 'reviewed-exception-mismatch']
+  )
+
+  // Another file, or another rule in the same file, is untouched.
+  const other = 'supabase/migrations/20261201000001_other.sql'
+  assert.deepEqual(
+    rules(
+      applyReviewedExceptions(
+        analyzeMigrationSql(DROP_SOURCE, other),
+        Buffer.from(DROP_SOURCE),
+        other,
+        [entry]
+      )
+    ),
+    ['drop']
+  )
+  const withTruncate = DROP_SOURCE + 'TRUNCATE TABLE arena.accounts;\n'
+  const [truncEntry] = parseReviewedExceptions(
+    JSON.stringify([exception({ sha256: sha256(withTruncate) })])
+  )
+  assert.deepEqual(
+    rules(
+      applyReviewedExceptions(
+        analyzeMigrationSql(withTruncate, DROP_MIGRATION),
+        Buffer.from(withTruncate),
+        DROP_MIGRATION,
+        [truncEntry]
+      )
+    ),
+    ['truncate']
+  )
+})
+
+test('git mode applies an exception added with its migration, prints it, and refuses a retroactive one', (t) => {
+  const repo = mkdtempSync(path.join(tmpdir(), 'arena-migration-safety-reviewed-'))
+  t.after(() => rmSync(repo, { recursive: true, force: true }))
+  const git = (...args) =>
+    execFileSync('git', args, {
+      cwd: repo,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        GIT_AUTHOR_EMAIL: 'migration-safety@example.com',
+        GIT_AUTHOR_NAME: 'Migration Safety',
+        GIT_COMMITTER_EMAIL: 'migration-safety@example.com',
+        GIT_COMMITTER_NAME: 'Migration Safety',
+      },
+    }).trim()
+  const write = (relativePath, text) => {
+    mkdirSync(path.dirname(path.join(repo, relativePath)), { recursive: true })
+    writeFileSync(path.join(repo, relativePath), text)
+  }
+  const runIn = (base) => {
+    const out = []
+    const err = []
+    const log = console.log
+    const error = console.error
+    console.log = (...values) => out.push(values.join(' '))
+    console.error = (...values) => err.push(values.join(' '))
+    try {
+      return {
+        status: runMigrationSafety({
+          args: [],
+          env: { MIGRATION_SAFETY_BASE_REF: base },
+          root: repo,
+        }),
+        out: out.join('\n'),
+        err: err.join('\n'),
+      }
+    } finally {
+      console.log = log
+      console.error = error
+    }
+  }
+
+  git('init', '-q')
+  write('supabase/migrations/20261130000000_old_drop.sql', 'DROP INDEX arena.idx_old;\n')
+  write(REVIEWED_EXCEPTIONS_PATH, '[]\n')
+  git('add', '.')
+  git('commit', '-q', '-m', 'baseline')
+  const base = git('rev-parse', 'HEAD')
+
+  // Without an exception the new DROP fails.
+  write(DROP_MIGRATION, DROP_SOURCE)
+  git('add', DROP_MIGRATION)
+  git('commit', '-q', '-m', 'add reviewed drop')
+  const withoutException = runIn(base)
+  assert.equal(withoutException.status, 1)
+  assert.match(withoutException.err, /20261201000000_drop_reviewed_index\.sql:2 \[drop\]/)
+
+  // With the exception in the same diff it passes and the waiver is printed.
+  write(REVIEWED_EXCEPTIONS_PATH, JSON.stringify([exception()], null, 2) + '\n')
+  git('add', REVIEWED_EXCEPTIONS_PATH)
+  git('commit', '-q', '-m', 'record review')
+  const withException = runIn(base)
+  assert.equal(withException.status, 0, withException.err)
+  assert.match(
+    withException.out,
+    /Reviewed exception applied: supabase\/migrations\/20261201000000_drop_reviewed_index\.sql rule=drop count=1 sha256=[0-9a-f]{64}/
+  )
+
+  // A later diff that does not add the migration: the old entry stays inert.
+  const reviewedBase = git('rev-parse', 'HEAD')
+  write('supabase/migrations/20261202000000_additive.sql', 'SELECT 1;\n')
+  git('add', '.')
+  git('commit', '-q', '-m', 'unrelated additive migration')
+  assert.equal(runIn(reviewedBase).status, 0)
+
+  // A new exception for a migration committed before this diff is refused.
+  const retroBase = git('rev-parse', 'HEAD')
+  const old = 'supabase/migrations/20261130000000_old_drop.sql'
+  write(
+    REVIEWED_EXCEPTIONS_PATH,
+    JSON.stringify(
+      [exception(), exception({ path: old, sha256: sha256('DROP INDEX arena.idx_old;\n') })],
+      null,
+      2
+    ) + '\n'
+  )
+  git('add', REVIEWED_EXCEPTIONS_PATH)
+  git('commit', '-q', '-m', 'retroactive waiver')
+  const retro = runIn(retroBase)
+  assert.equal(retro.status, 1)
+  assert.match(retro.err, /20261130000000_old_drop\.sql:1 \[reviewed-exception-retroactive\]/)
+
+  // A reviewed file saved with a UTF-8 byte-order mark: the sha256 of the
+  // committed bytes (BOM included) is what matches, not the decoded text.
+  const bomBase = git('rev-parse', 'HEAD')
+  const bomMigration = 'supabase/migrations/20261203000000_bom_drop.sql'
+  const bomBytes = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(DROP_SOURCE)])
+  mkdirSync(path.dirname(path.join(repo, bomMigration)), { recursive: true })
+  writeFileSync(path.join(repo, bomMigration), bomBytes)
+  const bomHash = createHash('sha256').update(bomBytes).digest('hex')
+  assert.notEqual(bomHash, sha256(DROP_SOURCE))
+  write(
+    REVIEWED_EXCEPTIONS_PATH,
+    JSON.stringify(
+      [
+        exception(),
+        exception({ path: old, sha256: sha256('DROP INDEX arena.idx_old;\n') }),
+        exception({ path: bomMigration, sha256: bomHash }),
+      ],
+      null,
+      2
+    ) + '\n'
+  )
+  git('add', '.')
+  git('commit', '-q', '-m', 'reviewed drop saved with a BOM')
+  const bom = runIn(bomBase)
+  assert.equal(bom.status, 0, bom.err)
+  assert.match(
+    bom.out,
+    /Reviewed exception applied: supabase\/migrations\/20261203000000_bom_drop\.sql rule=drop count=1/
+  )
+
+  // A malformed list is an operational failure, not a pass.
+  const malformedBase = git('rev-parse', 'HEAD')
+  write(REVIEWED_EXCEPTIONS_PATH, '{"not": "a list"}\n')
+  git('add', REVIEWED_EXCEPTIONS_PATH)
+  git('commit', '-q', '-m', 'malformed')
+  assert.throws(
+    () =>
+      runMigrationSafety({
+        args: [],
+        env: { MIGRATION_SAFETY_BASE_REF: malformedBase },
+        root: repo,
+      }),
+    /must be a JSON array/
+  )
 })
 
 test('CI invokes the fail-closed checker directly without shell error suppression', () => {

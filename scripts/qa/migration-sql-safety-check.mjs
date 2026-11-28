@@ -1,12 +1,18 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process'
-import { lstatSync, readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, lstatSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const MIGRATIONS_PREFIX = 'supabase/migrations/'
+export const REVIEWED_EXCEPTIONS_PATH = 'scripts/qa/migration-sql-safety-reviewed.json'
+// Only rules whose finding is a judgement about intent may be waived after
+// review. History rules (deleted, modified, renamed migrations) never are.
+const REVIEWABLE_RULES = new Set(['drop'])
+const REVIEWED_EXCEPTION_KEYS = ['count', 'path', 'review', 'rule', 'sha256']
 const QUOTED_IDENTIFIER = String.raw`"(?:[^"]|"")+"`
 const UNICODE_QUOTED_IDENTIFIER = String.raw`U&${QUOTED_IDENTIFIER}(?:\s+UESCAPE\s+'(?:[^']|'')+')?`
 const UNQUOTED_IDENTIFIER = String.raw`[\p{L}_][\p{L}\p{N}\p{M}_$]*`
@@ -760,6 +766,132 @@ export function analyzeMigrationSql(source, pathName = '<migration>', depth = 0)
   )
 }
 
+/**
+ * Reviewed exceptions: a finding a person reviewed and accepted for one exact
+ * migration file. An entry names the file, the sha256 of its exact bytes, one
+ * reviewable rule and how many findings of that rule the file has. It waives
+ * those findings only when all three match; any edit of the file, one more
+ * finding, or another rule fails as before. Malformed entries are an
+ * operational error (exit 2), not an empty list.
+ */
+export function parseReviewedExceptions(text, label = REVIEWED_EXCEPTIONS_PATH) {
+  let value
+  try {
+    value = JSON.parse(text)
+  } catch {
+    throw new Error(`${label} is not valid JSON`)
+  }
+  if (!Array.isArray(value)) throw new Error(`${label} must be a JSON array`)
+  const seen = new Set()
+  return value.map((entry, index) => {
+    const where = `${label}[${index}]`
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new Error(`${where} must be an object`)
+    }
+    const keys = Object.keys(entry).sort()
+    if (
+      keys.length !== REVIEWED_EXCEPTION_KEYS.length ||
+      keys.some((key, keyIndex) => key !== REVIEWED_EXCEPTION_KEYS[keyIndex])
+    ) {
+      throw new Error(`${where} must have exactly: ${REVIEWED_EXCEPTION_KEYS.join(', ')}`)
+    }
+    const { count, path: entryPath, review, rule, sha256 } = entry
+    if (
+      typeof entryPath !== 'string' ||
+      !entryPath.startsWith(MIGRATIONS_PREFIX) ||
+      !/^supabase\/migrations\/[0-9]{14}_[a-z0-9_]+\.sql$/u.test(entryPath)
+    ) {
+      throw new Error(`${where}.path must be one modern migration file`)
+    }
+    if (typeof sha256 !== 'string' || !/^[0-9a-f]{64}$/u.test(sha256)) {
+      throw new Error(`${where}.sha256 must be 64 lowercase hex digits`)
+    }
+    if (typeof rule !== 'string' || !REVIEWABLE_RULES.has(rule)) {
+      throw new Error(`${where}.rule must be one of: ${[...REVIEWABLE_RULES].join(', ')}`)
+    }
+    if (!Number.isSafeInteger(count) || count < 1 || count > 100) {
+      throw new Error(`${where}.count must be an integer from 1 to 100`)
+    }
+    if (typeof review !== 'string' || review.trim().length < 20 || review.length > 1000) {
+      throw new Error(`${where}.review must say what was reviewed (20 to 1000 characters)`)
+    }
+    const key = `${entryPath}\u0000${rule}`
+    if (seen.has(key)) throw new Error(`${where} duplicates ${entryPath} ${rule}`)
+    seen.add(key)
+    return Object.freeze({ count, path: entryPath, review, rule, sha256 })
+  })
+}
+
+function readReviewedExceptionsFromFile(root = ROOT) {
+  const filePath = path.join(root, REVIEWED_EXCEPTIONS_PATH)
+  if (!existsSync(filePath)) return []
+  return parseReviewedExceptions(readFileSync(filePath, 'utf8'))
+}
+
+function readReviewedExceptionsAt(commit, root = ROOT) {
+  let tree
+  try {
+    tree = gitBuffer(['ls-tree', '--full-tree', commit, '--', REVIEWED_EXCEPTIONS_PATH], root)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    throw new Error(`cannot read ${REVIEWED_EXCEPTIONS_PATH} at ${commit}: ${detail}`)
+  }
+  if (tree.length === 0) return []
+  const blob = gitBuffer(['show', `${commit}:${REVIEWED_EXCEPTIONS_PATH}`], root)
+  let text
+  try {
+    text = utf8Decoder.decode(blob)
+  } catch {
+    throw new Error(`${REVIEWED_EXCEPTIONS_PATH} at ${commit} is not valid UTF-8`)
+  }
+  return parseReviewedExceptions(text, `${REVIEWED_EXCEPTIONS_PATH}@${commit.slice(0, 12)}`)
+}
+
+// Hash the file's exact bytes: decoding may drop a byte-order mark, and the
+// reviewed sha256 names the committed file, not its decoded text.
+function sha256Hex(bytes) {
+  return createHash('sha256').update(bytes).digest('hex')
+}
+
+/**
+ * Removes the findings a matching reviewed exception covers. Returns the
+ * remaining findings; every waiver used is pushed onto `applied`.
+ */
+export function applyReviewedExceptions(findings, bytes, relativePath, exceptions, applied = []) {
+  const entries = exceptions.filter((entry) => entry.path === relativePath)
+  if (entries.length === 0) return findings
+  if (!Buffer.isBuffer(bytes)) throw new TypeError('reviewed exceptions need the file bytes')
+  const digest = sha256Hex(bytes)
+  let remaining = findings
+  const extra = []
+  for (const entry of entries) {
+    const covered = remaining.filter((finding) => finding.rule === entry.rule)
+    if (entry.sha256 !== digest) {
+      extra.push({
+        path: relativePath,
+        line: 1,
+        rule: 'reviewed-exception-mismatch',
+        message: `reviewed exception for ${entry.rule} names sha256 ${entry.sha256}, but the file is ${digest}`,
+        snippet: '',
+      })
+      continue
+    }
+    if (covered.length !== entry.count) {
+      extra.push({
+        path: relativePath,
+        line: 1,
+        rule: 'reviewed-exception-mismatch',
+        message: `reviewed exception for ${entry.rule} expects ${entry.count} finding(s), the file has ${covered.length}`,
+        snippet: '',
+      })
+      continue
+    }
+    remaining = remaining.filter((finding) => finding.rule !== entry.rule)
+    applied.push(entry)
+  }
+  return [...remaining, ...extra]
+}
+
 function repositoryPath(rawPath, root = ROOT) {
   const absolutePath = path.resolve(root, rawPath)
   const relativePath = path.relative(root, absolutePath).replaceAll(path.sep, '/')
@@ -770,7 +902,7 @@ function repositoryPath(rawPath, root = ROOT) {
   return { absolutePath, relativePath }
 }
 
-export function scanMigrationFiles(paths, root = ROOT) {
+export function scanMigrationFiles(paths, root = ROOT, exceptions = [], applied = []) {
   const findings = []
   for (const rawPath of paths) {
     const { absolutePath, relativePath } = repositoryPath(rawPath, root)
@@ -778,8 +910,17 @@ export function scanMigrationFiles(paths, root = ROOT) {
     if (!stat.isFile() || stat.isSymbolicLink()) {
       throw new Error(`migration path must be a regular file: ${relativePath}`)
     }
-    const source = readFileSync(absolutePath, 'utf8')
-    findings.push(...analyzeMigrationSql(source, relativePath))
+    const bytes = readFileSync(absolutePath)
+    const source = bytes.toString('utf8')
+    findings.push(
+      ...applyReviewedExceptions(
+        analyzeMigrationSql(source, relativePath),
+        bytes,
+        relativePath,
+        exceptions,
+        applied
+      )
+    )
   }
   return findings
 }
@@ -828,20 +969,28 @@ function committedMigrationSource(rawPath, commit, root = ROOT) {
 
   const blob = gitBuffer(['cat-file', 'blob', match[2]], root)
   try {
-    return { relativePath, source: utf8Decoder.decode(blob) }
+    return { bytes: blob, relativePath, source: utf8Decoder.decode(blob) }
   } catch {
     throw new Error(`committed migration is not valid UTF-8: ${relativePath}`)
   }
 }
 
-export function scanMigrationBlobs(paths, commit, root = ROOT) {
+export function scanMigrationBlobs(paths, commit, root = ROOT, exceptions = [], applied = []) {
   if (!/^[a-f0-9]{40,64}$/u.test(commit)) {
     throw new Error('committed migration scan requires an exact commit id')
   }
   const findings = []
   for (const rawPath of paths) {
-    const { relativePath, source } = committedMigrationSource(rawPath, commit, root)
-    findings.push(...analyzeMigrationSql(source, relativePath))
+    const { bytes, relativePath, source } = committedMigrationSource(rawPath, commit, root)
+    findings.push(
+      ...applyReviewedExceptions(
+        analyzeMigrationSql(source, relativePath),
+        bytes,
+        relativePath,
+        exceptions,
+        applied
+      )
+    )
   }
   return findings
 }
@@ -956,15 +1105,41 @@ export function run({ args = process.argv.slice(2), env = process.env, root = RO
   let historyViolations = []
   let context = 'explicit file list'
   let sqlFindings
+  const applied = []
 
   if (args.length === 0) {
     const changed = changedMigrationFiles(env.MIGRATION_SAFETY_BASE_REF, root)
     paths = changed.paths
     historyViolations = changed.historyViolations
-    sqlFindings = scanMigrationBlobs(paths, changed.headCommit, root)
+    const exceptions = readReviewedExceptionsAt(changed.headCommit, root)
+    // A reviewed exception may be added only together with the migration it
+    // covers: an entry new in this diff must name a migration this diff adds.
+    // Every migration already committed (and so every applied one) is out of
+    // reach of a later waiver.
+    const baseExceptions = readReviewedExceptionsAt(changed.baseCommit, root)
+    const baseKeys = new Set(baseExceptions.map((entry) => JSON.stringify(entry)))
+    const touched = new Set(historyViolations.map((violation) => violation.path))
+    const added = new Set(paths.filter((migrationPath) => !touched.has(migrationPath)))
+    for (const entry of exceptions) {
+      if (baseKeys.has(JSON.stringify(entry)) || added.has(entry.path)) continue
+      historyViolations.push({
+        path: entry.path,
+        line: 1,
+        rule: 'reviewed-exception-retroactive',
+        message: `a new reviewed exception must be added with its migration; ${entry.path} is not added in this diff`,
+        snippet: '',
+      })
+    }
+    sqlFindings = scanMigrationBlobs(paths, changed.headCommit, root, exceptions, applied)
     context = `base ${changed.baseCommit} to HEAD ${changed.headCommit}`
   } else {
-    sqlFindings = scanMigrationFiles(paths, root)
+    sqlFindings = scanMigrationFiles(paths, root, readReviewedExceptionsFromFile(root), applied)
+  }
+
+  for (const entry of applied) {
+    console.log(
+      `Reviewed exception applied: ${entry.path} rule=${entry.rule} count=${entry.count} sha256=${entry.sha256} review="${entry.review}"`
+    )
   }
 
   const findings = [...historyViolations, ...sqlFindings]
