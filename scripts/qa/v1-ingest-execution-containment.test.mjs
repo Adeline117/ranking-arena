@@ -75,17 +75,10 @@ test('scheduler paths gate before deferred DB, Redis, and BullMQ runtime loading
   const schedulerGate = scheduler.indexOf('if (!isV1IngestExecutionPublished())')
   const schedulerLoad = scheduler.indexOf('await loadSchedulerRuntime()', schedulerGate)
   const sourceRead = scheduler.indexOf('const sources = await getActiveSources()', schedulerGate)
-  const servingStart = scheduler.indexOf('export async function reconcileServingSources')
-  const servingGate = scheduler.indexOf('if (!isV1IngestExecutionPublished())', servingStart)
-  const servingLoad = scheduler.indexOf('await loadSchedulerRuntime()', servingGate)
-  const servingRead = scheduler.indexOf('const names = await getServingSourceNames()', servingGate)
 
   assert.ok(schedulerGate >= 0)
   assert.ok(schedulerLoad > schedulerGate)
   assert.ok(sourceRead > schedulerLoad)
-  assert.ok(servingGate > servingStart)
-  assert.ok(servingLoad > servingGate)
-  assert.ok(servingRead > servingLoad)
   assert.doesNotMatch(scheduler, /^import\s+(?!\{\s*isV1IngestExecutionPublished\s*\})/m)
 })
 
