@@ -75,6 +75,7 @@ describe('/quiz/result public recommendation authority', () => {
       'source,source_trader_id,handle,avatar_url,roi,arena_score,win_rate,pnl,rank,season_id,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at'
     )
     expect(query.eq).toHaveBeenCalledWith('season_id', '90D')
+    expect(query.eq).toHaveBeenCalledWith('idle_window', false)
     expect(page.props.recommendedTraders).toEqual([
       {
         handle: 'Verified Quiz Trader',
