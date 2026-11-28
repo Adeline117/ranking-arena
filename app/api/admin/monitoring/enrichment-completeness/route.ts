@@ -17,6 +17,7 @@ import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
 import { V1_HEARTBEAT_HISTORY_NOT_PUBLISHED_CODE } from '@/lib/monitoring/v1-heartbeat-history-publication'
 import { PipelineState } from '@/lib/services/pipeline-state'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { logger } from '@/lib/utils/logger'
 import { readServedRankingSources } from '@/lib/data/served-ranking-sources'
 
 export const dynamic = 'force-dynamic'
@@ -150,7 +151,8 @@ export async function GET(request: Request) {
       },
       { headers: PRIVATE_NO_STORE_HEADERS }
     )
-  } catch {
+  } catch (error) {
+    logger.error('[enrichment-completeness] panel read failed', error)
     return NextResponse.json(
       {
         ok: false,
