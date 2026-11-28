@@ -14,6 +14,7 @@ import {
   CURRENT_METRIC_CONTRACTS_SQL,
   fenceAttemptBoundLeaderboardPublicationCommit,
   hasRegisteredLeaderboardMetricTrust,
+  registeredLeaderboardMetricMaxFreshnessMs,
   prepareLeaderboardMetricTrust,
   reconcileLeaderboardMetricTrust,
   writeLeaderboardMetricTrust,
@@ -1446,6 +1447,16 @@ describe('Tier-A metric trust transaction writer', () => {
     expect(
       query.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO arena.metric_trust_runs'))
     ).toBe(false)
+  })
+
+  it('reports the tightest reviewed freshness bound, or null without a contract', () => {
+    const spotSrc = { ...src, slug: 'binance_spot', page_size: 20 }
+    const bound = registeredLeaderboardMetricMaxFreshnessMs(spotSrc, 30)
+    expect(bound).toEqual(expect.any(Number))
+    expect(bound).toBeGreaterThan(0)
+    expect(registeredLeaderboardMetricMaxFreshnessMs({ ...src, slug: 'unregistered' }, 30)).toBe(
+      null
+    )
   })
 
   it('prepares Binance Spot only from its reviewed board population contracts', () => {
