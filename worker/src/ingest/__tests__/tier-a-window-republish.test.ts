@@ -1,5 +1,9 @@
 import type { IngestQueryExecutor } from '@/lib/ingest/db'
-import { validateWorkerDbFencedWriteStatement } from '@/lib/ingest/db-fenced-write-contract'
+import {
+  validateWorkerDbFencedWriteStatement,
+  WorkerDbFenceError,
+  type WorkerDbFenceErrorCode,
+} from '@/lib/ingest/db-fenced-write-contract'
 import {
   ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
   ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
@@ -7,6 +11,7 @@ import {
 } from '@/lib/ingest/acquisition-attempts'
 
 import {
+  classifyRepublishPublicationError,
   classifyTierAWindowRepublishCandidate,
   findLatestTierAWindowAttempt,
   isTransientRepublishPublicationError,
@@ -280,5 +285,66 @@ describe('isTransientRepublishPublicationError', () => {
     ['a non-error value', 'boom'],
   ])('treats %s as deterministic', (_label, error) => {
     expect(isTransientRepublishPublicationError(error)).toBe(false)
+  })
+})
+
+describe('classifyRepublishPublicationError', () => {
+  const fence = (code: WorkerDbFenceErrorCode) => new WorkerDbFenceError(code, 'write', 'never')
+  const execution = (code: string) =>
+    Object.assign(new Error(`[ingest-worker] Tier-A execution assert failed (${code})`), {
+      name: 'SourceJobExecutionError',
+      code,
+    })
+
+  it.each([
+    'write_deadline_exceeded',
+    'control_plane_unavailable',
+    'lease_deadline_exceeded',
+    'commit_aborted',
+  ] as const)('treats the fence code %s as transient', (code) => {
+    expect(classifyRepublishPublicationError(fence(code))).toBe('transient')
+    expect(
+      classifyRepublishPublicationError(new Error('[publish] failed', { cause: fence(code) }))
+    ).toBe('transient')
+  })
+
+  it.each([
+    'commit_outcome_unknown',
+    'db_control_outcome_unknown',
+    'fenced',
+    'invalid_state',
+  ] as const)('rethrows the fence code %s as an authority failure', (code) => {
+    expect(classifyRepublishPublicationError(fence(code))).toBe('authority')
+  })
+
+  it.each(['invalid_input', 'rpc_contract_violation'] as const)(
+    'treats the fence code %s as deterministic',
+    (code) => {
+      expect(classifyRepublishPublicationError(fence(code))).toBe('deterministic')
+    }
+  )
+
+  it.each([
+    'cancelled',
+    'closed',
+    'invalid_input',
+    'ownership_lost',
+    'region_lost',
+    'rpc_contract_violation',
+    'unavailable',
+  ])('rethrows the execution code %s as an authority failure', (code) => {
+    expect(classifyRepublishPublicationError(execution(code))).toBe('authority')
+  })
+
+  it('lets an authority member win over a transient one anywhere in the chain', () => {
+    const chain = new AggregateError(
+      [fence('write_deadline_exceeded'), new Error('x', { cause: execution('region_lost') })],
+      'publication failed'
+    )
+    expect(classifyRepublishPublicationError(chain)).toBe('authority')
+  })
+
+  it('classifies an unknown error as deterministic', () => {
+    expect(classifyRepublishPublicationError(new Error('unexpected'))).toBe('deterministic')
   })
 })

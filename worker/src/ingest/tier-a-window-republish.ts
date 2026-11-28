@@ -23,6 +23,11 @@ import {
   type LeaderboardAcquisitionContract,
 } from '@/lib/ingest/acquisition-attempts'
 import type { RawObjectReceipt } from '@/lib/ingest/raw'
+import {
+  WorkerDbFenceError,
+  type WorkerDbFenceErrorCode,
+} from '@/lib/ingest/db-fenced-write-contract'
+import type { SourceJobExecutionFailureCode } from './source-job-execution-authority'
 
 /** Fixed skip reasons, logged as `reason=<value>`. */
 export type TierAWindowRepublishSkipReason =
@@ -499,28 +504,114 @@ function isTransientLeaf(value: unknown): boolean {
   return code === '' && TRANSIENT_MESSAGE.test(errorMessage(value))
 }
 
+export type RepublishPublicationErrorClass = 'transient' | 'deterministic' | 'authority'
+
 /**
- * Classify a failed republish publication. Transient (deadline, timeout,
- * connection, lock, serialization) failures can succeed on the next BullMQ
- * retry, so the window fails without a same-attempt rescan and the next
- * attempt republishes again. Everything else, unknown errors included, is
- * treated as deterministic: the same recorded capture would fail the same way
- * on every retry (identity conflict, an exhaustion proof that no longer holds,
- * a missing metric contract, ...), so the caller rescans now. Rescanning once
- * too often is cheaper than republishing a doomed capture until the job's
- * attempts run out. The whole cause chain (including AggregateError members)
- * is inspected because publication wraps database failures.
+ * Every worker database fence code (lib/ingest/db-fenced-write-contract.ts),
+ * classified. `satisfies` makes a new code a compile error until reviewed.
+ *
+ * - transient: the fence itself stays usable and the same capture can
+ *   succeed on the next retry.
+ *   write_deadline_exceeded: one write ran past its per-write deadline; the
+ *     fence deliberately does not fence the authority for it (11-27).
+ *   control_plane_unavailable: Redis/DB control plane briefly unreachable.
+ *   lease_deadline_exceeded: the fence lease could not be renewed in time.
+ *     It fences the region authority, which revokes the execution; when that
+ *     revocation is visible the caller rethrows first, so this entry only
+ *     applies while the execution still asserts active.
+ *   commit_aborted: COMMIT was refused or rolled back; nothing committed.
+ * - authority: the outcome is unknown or the authority is gone. Never rescan
+ *   in the same attempt; rethrow so the job fails and BullMQ retries.
+ *   commit_outcome_unknown: the publication may have committed (the fence
+ *     fences itself); a rescan could publish twice. The next retry sees either
+ *     the committed snapshot (stale publication → rescan) or none (republish).
+ *   db_control_outcome_unknown, fenced, invalid_state: the region authority is
+ *     lost or its write facade is closed.
+ * - deterministic: invalid_input, rpc_contract_violation: a contract defect
+ *   the same capture would hit on every retry.
  */
-export function isTransientRepublishPublicationError(error: unknown): boolean {
-  const seen = new Set<unknown>()
-  const visit = (value: unknown, depth: number): boolean => {
-    if (value === null || typeof value !== 'object' || seen.has(value) || depth > 8) return false
-    seen.add(value)
-    if (isTransientLeaf(value)) return true
-    if (value instanceof AggregateError && value.errors.some((inner) => visit(inner, depth + 1))) {
-      return true
-    }
-    return 'cause' in value && visit((value as { cause: unknown }).cause, depth + 1)
+export const WORKER_DB_FENCE_REPUBLISH_ERROR_CLASS = {
+  write_deadline_exceeded: 'transient',
+  control_plane_unavailable: 'transient',
+  lease_deadline_exceeded: 'transient',
+  commit_aborted: 'transient',
+  commit_outcome_unknown: 'authority',
+  db_control_outcome_unknown: 'authority',
+  fenced: 'authority',
+  invalid_state: 'authority',
+  invalid_input: 'deterministic',
+  rpc_contract_violation: 'deterministic',
+} as const satisfies Record<WorkerDbFenceErrorCode, RepublishPublicationErrorClass>
+
+/**
+ * Every Tier-A execution authority code
+ * (worker/src/ingest/source-job-execution-authority.ts): all of them mean the
+ * execution is revoked, closed or unprovable, so they are always rethrown
+ * (cancelled, closed, ownership_lost, region_lost, unavailable,
+ * invalid_input, rpc_contract_violation). Matched by name and code instead of
+ * instanceof so this read-only module does not load the authority runtime.
+ */
+export const SOURCE_JOB_EXECUTION_REPUBLISH_ERROR_CLASS = {
+  cancelled: 'authority',
+  closed: 'authority',
+  invalid_input: 'authority',
+  ownership_lost: 'authority',
+  region_lost: 'authority',
+  rpc_contract_violation: 'authority',
+  unavailable: 'authority',
+} as const satisfies Record<SourceJobExecutionFailureCode, RepublishPublicationErrorClass>
+
+function classifyLeaf(value: object): RepublishPublicationErrorClass | null {
+  if (value instanceof WorkerDbFenceError) {
+    return Object.hasOwn(WORKER_DB_FENCE_REPUBLISH_ERROR_CLASS, value.code)
+      ? WORKER_DB_FENCE_REPUBLISH_ERROR_CLASS[value.code]
+      : 'authority'
   }
-  return visit(error, 0)
+  if ((value as { name?: unknown }).name === 'SourceJobExecutionError') {
+    const code = errorCode(value)
+    return Object.hasOwn(SOURCE_JOB_EXECUTION_REPUBLISH_ERROR_CLASS, code)
+      ? SOURCE_JOB_EXECUTION_REPUBLISH_ERROR_CLASS[
+          code as keyof typeof SOURCE_JOB_EXECUTION_REPUBLISH_ERROR_CLASS
+        ]
+      : 'authority'
+  }
+  return isTransientLeaf(value) ? 'transient' : null
+}
+
+/**
+ * Classify a failed republish publication by its whole cause chain
+ * (including AggregateError members), because publication wraps database
+ * and fence failures:
+ * - authority, if any member is: rethrow (job fails, no rescan);
+ * - else transient, if any member is (deadline, timeout, connection, lock,
+ *   serialization, a transient fence code): the window fails without a
+ *   same-attempt rescan and the next attempt republishes again;
+ * - else deterministic, unknown errors included: the same recorded capture
+ *   would fail the same way on every retry (identity conflict, an exhaustion
+ *   proof that no longer holds, a missing metric contract, ...), so the
+ *   caller rescans now. Rescanning once too often is cheaper than
+ *   republishing a doomed capture until the job's attempts run out.
+ */
+export function classifyRepublishPublicationError(error: unknown): RepublishPublicationErrorClass {
+  const seen = new Set<unknown>()
+  let transient = false
+  let authority = false
+  const visit = (value: unknown, depth: number): void => {
+    if (value === null || typeof value !== 'object' || seen.has(value) || depth > 8) return
+    seen.add(value)
+    const verdict = classifyLeaf(value)
+    if (verdict === 'authority') authority = true
+    if (verdict === 'transient') transient = true
+    if (value instanceof AggregateError) {
+      for (const inner of value.errors) visit(inner, depth + 1)
+    }
+    if ('cause' in value) visit((value as { cause: unknown }).cause, depth + 1)
+  }
+  visit(error, 0)
+  return authority ? 'authority' : transient ? 'transient' : 'deterministic'
+}
+
+/** Whether a failed republish publication is transient (see classifyRepublishPublicationError). */
+export function isTransientRepublishPublicationError(error: unknown): boolean {
+  return classifyRepublishPublicationError(error) === 'transient'
 }
