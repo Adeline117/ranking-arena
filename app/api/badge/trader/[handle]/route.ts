@@ -6,18 +6,22 @@
  *     <img src="https://www.arenafi.org/api/badge/trader/<handle>.svg" alt="Arena rank"/>
  *   </a>
  * on their X/site → a crisp, self-contained SVG showing their Arena rank +
- * score, back-linking to Arena. Every embed is a backlink (SEO) and a proof
+ * score, back-linking to Arena. `?platform=<source>` (optional) names the
+ * account's source, which is what makes a serving-only account findable. Every embed is a backlink (SEO) and a proof
  * point. SVG (not next/og PNG) so it embeds anywhere via <img>, scales
  * crisply, and stays tiny.
  *
  * Edge runtime. Public serving data only (public_ranked_leaderboard /
  * trader_sources). Never errors the embed: an unknown handle returns a generic
  * "View on Arena" badge, not a 404, so a trader's page never shows a broken
- * image.
+ * image. A lookup that FAILED still answers with that generic image, but with
+ * status 503 so nothing downstream keeps it as this trader's badge.
  */
 
 import { formatScoreWhole } from '@/lib/utils/format'
 import type { NextRequest } from 'next/server'
+import { resolveServingTraderOutcome, SERVING_RESOLVE_ERRORED } from '@/lib/data/serving/resolve'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import {
   isPublicRankingSourceAllowed,
   sanitizePublicRankingPayload,
@@ -53,6 +57,30 @@ function exactIlike(value: string): string {
   return encodeURIComponent(value.replace(/[\\*%_]/g, '\\$&'))
 }
 
+/** The lookup has no answer. NOT the same as "no such trader". */
+const LOOKUP_ERRORED = Symbol('badge-lookup-errored')
+
+async function restSelect(
+  table: string,
+  query: string,
+  limit: number
+): Promise<Record<string, unknown>[] | typeof LOOKUP_ERRORED> {
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    if (!supabaseUrl || !supabaseKey) return LOOKUP_ERRORED
+    const res = await fetch(`${supabaseUrl}/rest/v1/${table}?${query}&limit=${limit}`, {
+      headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
+      signal: AbortSignal.timeout(4000),
+    })
+    if (!res.ok) return LOOKUP_ERRORED
+    const rows: unknown = await res.json()
+    return Array.isArray(rows) ? rows.filter(isRecord) : LOOKUP_ERRORED
+  } catch {
+    return LOOKUP_ERRORED
+  }
+}
+
 /**
  * Fetch exactly one REST row. A duplicate is not an identity proof: return
  * unknown instead of binding an arbitrary account to a public rank badge.
@@ -61,20 +89,8 @@ async function restSelectOne(
   table: string,
   query: string
 ): Promise<Record<string, unknown> | null> {
-  try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-    if (!supabaseUrl || !supabaseKey) return null
-    const res = await fetch(`${supabaseUrl}/rest/v1/${table}?${query}&limit=2`, {
-      headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
-      signal: AbortSignal.timeout(4000),
-    })
-    if (!res.ok) return null
-    const rows = (await res.json()) as Record<string, unknown>[]
-    return rows.length === 1 && isRecord(rows[0]) ? rows[0] : null
-  } catch {
-    return null
-  }
+  const rows = await restSelect(table, query, 2)
+  return rows !== LOOKUP_ERRORED && rows.length === 1 ? rows[0] : null
 }
 
 type PublishedBadgeRow = {
@@ -121,55 +137,182 @@ function verifiedBadgeRow(
   return { rank: row.rank, score: row.arena_score, idle: false }
 }
 
-async function fetchRank(handle: string) {
-  const enc = encodeURIComponent
-  const decoded = safeDecode(handle)
-  const cols = 'handle,source,source_trader_id'
-  const source =
-    (await restSelectOne('trader_sources', `select=${cols}&handle=ilike.${exactIlike(decoded)}`)) ??
-    (await restSelectOne('trader_sources', `select=${cols}&source_trader_id=eq.${enc(decoded)}`))
-  if (!source) return null
-  const identityHandle =
-    typeof source.handle === 'string' && source.handle.trim().length > 0 ? source.handle : decoded
-  const srcName = typeof source.source === 'string' ? source.source : ''
-  const srcTraderId = typeof source.source_trader_id === 'string' ? source.source_trader_id : ''
-  if (!isPublicRankingSourceAllowed(srcName)) {
-    return { handle: identityHandle, rank: null, score: null, verified: false }
-  }
-  if (!srcTraderId) {
-    return { handle: identityHandle, rank: null, score: null, verified: false }
-  }
+const SEASONS = ['90D', '30D', '7D'] as const
 
-  let published: PublishedBadgeRow | null = null
-  for (const season of ['90D', '30D', '7D']) {
-    const candidate = await restSelectOne(
-      'public_ranked_leaderboard',
-      `select=${PUBLIC_RANKING_COLUMNS}&source=eq.${enc(srcName)}&source_trader_id=eq.${enc(srcTraderId)}&season_id=eq.${season}`
-    )
-    const verified = verifiedBadgeRow(candidate, srcName, srcTraderId, season)
-    if (verified) {
-      published = verified
-      break
-    }
-  }
+type BadgeData = {
+  handle: string
+  rank: number | null
+  score: number | null
+  idle?: boolean
+  verified: boolean
+}
 
-  // A verified-API marker is meaningful only alongside a currently published
-  // metric row. Never let a source authorization revive an unpublished rank.
-  if (!published) {
-    return { handle: identityHandle, rank: null, score: null, verified: false }
-  }
+function unranked(handle: string): BadgeData {
+  return { handle, rank: null, score: null, verified: false }
+}
 
+function ranked(handle: string, published: PublishedBadgeRow): BadgeData {
   // V1 CEX connections are private and never mint a public data badge. Legacy
   // authorization-derived rows remain quarantined during the 48-hour drain and
   // are deliberately ignored here.
   const verified = false
-  return {
-    handle: identityHandle,
-    rank: published.rank,
-    score: published.score,
-    idle: published.idle,
-    verified,
+  return { handle, rank: published.rank, score: published.score, idle: published.idle, verified }
+}
+
+/** The account's first publishable row, longest period first. */
+async function readPublished(
+  source: string,
+  sourceTraderId: string
+): Promise<{ published: PublishedBadgeRow | null; errored: boolean }> {
+  const enc = encodeURIComponent
+  let errored = false
+  for (const season of SEASONS) {
+    const rows = await restSelect(
+      'public_ranked_leaderboard',
+      `select=${PUBLIC_RANKING_COLUMNS}&source=eq.${enc(source)}&source_trader_id=eq.${enc(sourceTraderId)}&season_id=eq.${season}`,
+      2
+    )
+    if (rows === LOOKUP_ERRORED) {
+      errored = true
+      continue
+    }
+    const verified = verifiedBadgeRow(
+      rows.length === 1 ? rows[0] : null,
+      source,
+      sourceTraderId,
+      season
+    )
+    if (verified) return { published: verified, errored: false }
   }
+  return { published: null, errored }
+}
+
+/** trader_sources, the legacy identity table. Lookup failures read as "no row". */
+async function legacyIdentity(decoded: string, platform: string | null) {
+  const enc = encodeURIComponent
+  const cols = 'handle,source,source_trader_id'
+  const sourceFilter = platform ? `&source=eq.${enc(platform)}` : ''
+  const source =
+    (await restSelectOne(
+      'trader_sources',
+      `select=${cols}&handle=ilike.${exactIlike(decoded)}${sourceFilter}`
+    )) ??
+    (await restSelectOne(
+      'trader_sources',
+      `select=${cols}&source_trader_id=eq.${enc(decoded)}${sourceFilter}`
+    ))
+  if (!source) return null
+  return {
+    handle:
+      typeof source.handle === 'string' && source.handle.trim().length > 0
+        ? source.handle
+        : decoded,
+    source: typeof source.source === 'string' ? source.source : '',
+    sourceTraderId: typeof source.source_trader_id === 'string' ? source.source_trader_id : '',
+  }
+}
+
+async function legacyBadge(decoded: string, platform: string | null): Promise<BadgeData | null> {
+  const identity = await legacyIdentity(decoded, platform)
+  if (!identity) return null
+  if (!isPublicRankingSourceAllowed(identity.source)) return unranked(identity.handle)
+  if (!identity.sourceTraderId) return unranked(identity.handle)
+  // A verified-API marker is meaningful only alongside a currently published
+  // metric row. Never let a source authorization revive an unpublished rank.
+  const { published } = await readPublished(identity.source, identity.sourceTraderId)
+  return published ? ranked(identity.handle, published) : unranked(identity.handle)
+}
+
+/**
+ * The request names the source. A serving-only account has no trader_sources
+ * row, and the public ranking may publish its source under an alias (`gateio`)
+ * while the serving layer uses the slug (`gate_futures`). arena_resolve_trader
+ * accepts either name for the same account and reports the public one; until a
+ * deployed resolver does, the name the request used is the public one (same
+ * rule as /api/share/rank-card and /api/og/trader).
+ */
+async function platformBadge(
+  decoded: string,
+  platform: string
+): Promise<BadgeData | null | typeof LOOKUP_ERRORED> {
+  const resolved = await resolveServingTraderOutcome(getSupabaseAdmin(), {
+    handle: decoded,
+    source: platform,
+  })
+  if (resolved === SERVING_RESOLVE_ERRORED) return LOOKUP_ERRORED
+  // Not a serving account: it may still be a legacy one on that source.
+  if (!resolved) return legacyBadge(decoded, platform)
+
+  const name =
+    resolved.nickname && resolved.nickname.trim().length > 0 ? resolved.nickname : decoded
+  const publicSource = resolved.publicSource ?? platform
+  if (!isPublicRankingSourceAllowed(publicSource)) return unranked(name)
+  const { published, errored } = await readPublished(publicSource, resolved.exchangeTraderId)
+  if (published) return ranked(name, published)
+  return errored ? LOOKUP_ERRORED : unranked(name)
+}
+
+/**
+ * No source in the request and no legacy row: the handle may still identify
+ * exactly one account on the public ranking. "Exactly one" is across every
+ * period, by nickname or by account id — the same name on two sources is not
+ * an identity, and the badge shows no numbers rather than pick one.
+ */
+async function uniquePublicBadge(
+  decoded: string
+): Promise<BadgeData | null | typeof LOOKUP_ERRORED> {
+  const seasons = `season_id=in.(${SEASONS.join(',')})`
+  // One account has at most one row per period, so a fourth row (or any row of
+  // a second account within the first four) proves the name is shared.
+  const limit = SEASONS.length + 1
+  const lookups = await Promise.all([
+    restSelect(
+      'public_ranked_leaderboard',
+      `select=${PUBLIC_RANKING_COLUMNS}&handle=ilike.${exactIlike(decoded)}&${seasons}`,
+      limit
+    ),
+    restSelect(
+      'public_ranked_leaderboard',
+      `select=${PUBLIC_RANKING_COLUMNS}&source_trader_id=eq.${encodeURIComponent(decoded)}&${seasons}`,
+      limit
+    ),
+  ])
+  const rows: Record<string, unknown>[] = []
+  for (const lookup of lookups) {
+    // Half an answer cannot prove uniqueness.
+    if (lookup === LOOKUP_ERRORED) return LOOKUP_ERRORED
+    rows.push(...lookup)
+  }
+  if (rows.length === 0) return null
+
+  const accounts = new Set(rows.map((row) => JSON.stringify([row.source, row.source_trader_id])))
+  const first = rows[0]
+  if (
+    accounts.size !== 1 ||
+    typeof first.source !== 'string' ||
+    typeof first.source_trader_id !== 'string'
+  ) {
+    return null
+  }
+  const name =
+    typeof first.handle === 'string' && first.handle.trim().length > 0 ? first.handle : decoded
+  for (const season of SEASONS) {
+    const row = rows.find((candidate) => candidate.season_id === season)
+    const verified = row
+      ? verifiedBadgeRow(row, first.source, first.source_trader_id, season)
+      : null
+    if (verified) return ranked(name, verified)
+  }
+  return unranked(name)
+}
+
+async function fetchRank(
+  handle: string,
+  platform: string | null
+): Promise<BadgeData | null | typeof LOOKUP_ERRORED> {
+  const decoded = safeDecode(handle)
+  if (platform) return platformBadge(decoded, platform)
+  return (await legacyBadge(decoded, null)) ?? uniquePublicBadge(decoded)
 }
 
 /** XML-escape for safe SVG text interpolation. */
@@ -252,18 +395,24 @@ export async function GET(
   let score: number | null = null
   let verified = false
   let idle = false
-  const data = await fetchRank(handle)
-  if (data) {
+  const platform =
+    (new URL(_request.url).searchParams.get('platform') || '').slice(0, 50).trim().toLowerCase() ||
+    null
+  const data = await fetchRank(handle, platform)
+  if (data !== LOOKUP_ERRORED && data) {
     name = data.handle
     rank = data.rank
     score = data.score
     verified = !!data.verified
-    idle = 'idle' in data && data.idle === true
+    idle = data.idle === true
   }
 
   const svg = buildSvg({ name, rank, score, verified, idle })
   return new Response(svg, {
-    status: 200,
+    // A failed lookup is not "this trader has no rank". The body is still a
+    // drawable image (an <img> shows it either way), but the status keeps a
+    // proxy or image cache from storing it as the trader's badge.
+    status: data === LOOKUP_ERRORED ? 503 : 200,
     headers: {
       'Content-Type': 'image/svg+xml; charset=utf-8',
       // A public-rank withdrawal must take effect on the next image request;

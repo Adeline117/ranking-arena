@@ -24,23 +24,29 @@ if (!outdir || !isAbsolute(outdir)) {
   process.exit(2)
 }
 
-const SCORING_ARTIFACT = 'scoring-worker.mjs'
+// The worker, and the preflight the deploy runs before touching PM2.
+const ARTIFACTS = [
+  { entry: join(repoDir, 'worker', 'src', 'index.ts'), file: 'scoring-worker.mjs' },
+  { entry: join(repoDir, 'worker', 'src', 'scoring-preflight.ts'), file: 'scoring-preflight.mjs' },
+]
 
-await build({
-  absWorkingDir: repoDir,
-  entryPoints: [join(repoDir, 'worker', 'src', 'index.ts')],
-  outfile: join(outdir, SCORING_ARTIFACT),
-  bundle: true,
-  platform: 'node',
-  format: 'esm',
-  target: 'node22',
-  packages: 'external',
-  tsconfig: join(repoDir, 'tsconfig.json'),
-  sourcemap: 'linked',
-  logLevel: 'warning',
-  // Bundled CommonJS helpers in ESM need a real require.
-  banner: {
-    js: "import { createRequire as __arenaCreateRequire } from 'node:module'; const require = __arenaCreateRequire(import.meta.url);",
-  },
-})
-console.log(`[build-scoring-worker] wrote ${join(outdir, SCORING_ARTIFACT)}`)
+for (const { entry, file } of ARTIFACTS) {
+  await build({
+    absWorkingDir: repoDir,
+    entryPoints: [entry],
+    outfile: join(outdir, file),
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    target: 'node22',
+    packages: 'external',
+    tsconfig: join(repoDir, 'tsconfig.json'),
+    sourcemap: 'linked',
+    logLevel: 'warning',
+    // Bundled CommonJS helpers in ESM need a real require.
+    banner: {
+      js: "import { createRequire as __arenaCreateRequire } from 'node:module'; const require = __arenaCreateRequire(import.meta.url);",
+    },
+  })
+  console.log(`[build-scoring-worker] wrote ${join(outdir, file)}`)
+}
