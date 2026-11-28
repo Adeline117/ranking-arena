@@ -2100,6 +2100,36 @@ describe('worker database fenced writes', () => {
     }
   })
 
+  it('labels an explicit default as set in the write cap log', async () => {
+    process.env[WORKER_DB_FENCE_WRITE_CAP_ENV] = '120000'
+    const logs = jest.spyOn(console, 'log').mockImplementation(() => undefined)
+    try {
+      // A raised cap first, so the explicit default is a change and is logged.
+      process.env[WORKER_DB_FENCE_WRITE_CAP_ENV] = '130000'
+      const first = databaseHarness(
+        [{ operation: 'activate' }, { operation: 'renew' }, { operation: 'release' }],
+        [],
+        true
+      )
+      const { fence: raised } = await acquireActiveFence(first)
+      await raised.release()
+      process.env[WORKER_DB_FENCE_WRITE_CAP_ENV] = '120000'
+      const second = databaseHarness(
+        [{ operation: 'activate' }, { operation: 'renew' }, { operation: 'release' }],
+        [],
+        true
+      )
+      const { fence } = await acquireActiveFence(second)
+      expect(logs).toHaveBeenCalledWith(
+        '[worker-db-fence] write cap 120000 ms (INGEST_DB_FENCE_WRITE_CAP_MS set)'
+      )
+      await fence.release()
+    } finally {
+      logs.mockRestore()
+      delete process.env[WORKER_DB_FENCE_WRITE_CAP_ENV]
+    }
+  })
+
   describe('resolveWorkerDbFenceWriteCapMs', () => {
     it('keeps 120 s when unset or empty', () => {
       expect(resolveWorkerDbFenceWriteCapMs({})).toBe(WORKER_DB_FENCE_WRITE_TRANSACTION_CAP_MS)

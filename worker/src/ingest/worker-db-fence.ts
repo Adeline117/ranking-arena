@@ -1058,7 +1058,7 @@ export async function acquireWorkerDbFenceAuthority({
     // deploy set without reading the environment of the host.
     console.log(
       `[worker-db-fence] write cap ${writeCapMs} ms (${WORKER_DB_FENCE_WRITE_CAP_ENV} ` +
-        `${writeCapMs === WORKER_DB_FENCE_WRITE_TRANSACTION_CAP_MS ? 'unset, default' : 'set'})`
+        `${process.env[WORKER_DB_FENCE_WRITE_CAP_ENV] ? 'set' : 'unset, default'})`
     )
     loggedWriteCapMs = writeCapMs
   }
