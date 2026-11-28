@@ -18,7 +18,11 @@ describe('countPublicRankedTradersBySource', () => {
       ['binance_futures', 2_600],
       ['bybit', 1_500],
     ])
-    expect(fake.rpcCalls).toEqual([['arena_visible_sources', { p_season_id: '90D' }]])
+    // Once before the counts and once after them.
+    expect(fake.rpcCalls).toEqual([
+      ['arena_visible_sources', { p_season_id: '90D' }],
+      ['arena_visible_sources', { p_season_id: '90D' }],
+    ])
     expect(new Set(fake.relations)).toEqual(new Set(['public_ranked_leaderboard']))
     for (const select of fake.selects) {
       expect(select).toEqual(['source_trader_id', { count: 'exact', head: true }])
@@ -36,6 +40,18 @@ describe('countPublicRankedTradersBySource', () => {
       served: ['binance_futures'],
       nonIdleBySource: { binance_futures: 10 },
       total: 11,
+    })
+
+    await expect(
+      countPublicRankedTradersBySource(fake.client as unknown as Client, '90D')
+    ).resolves.toBeNull()
+  })
+
+  it('is unknown when the publication changed while counting, even if the sum still matches', async () => {
+    const fake = fakePublicRankedCountClient({
+      served: ['binance_futures', 'bybit'],
+      nonIdleBySource: { binance_futures: 10, bybit: 10 },
+      recordedAtByCall: ['2026-11-27T00:00:00Z', '2026-11-27T01:00:00Z'],
     })
 
     await expect(

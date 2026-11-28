@@ -11,6 +11,11 @@ export interface FakePublicRankedCounts {
   /** Season total; defaults to the sum of nonIdleBySource. */
   total?: number
   rpcError?: boolean
+  /**
+   * Publication record time per arena_visible_sources call (first, second,
+   * ...). Different values model a publication switch while counting.
+   */
+  recordedAtByCall?: string[]
   /** Sources whose count request fails; 'total' fails the season count. */
   failCountFor?: string[]
 }
@@ -62,7 +67,15 @@ export function fakePublicRankedCountClient(state: FakePublicRankedCounts) {
     if (name !== 'arena_visible_sources') throw new Error(`Unexpected rpc ${name}`)
     return state.rpcError
       ? { data: null, error: { message: 'rpc failed' } }
-      : { data: state.served.map((source) => ({ filter_source: source })), error: null }
+      : {
+          data: state.served.map((source) => ({
+            filter_source: source,
+            trader_count: 0,
+            cache_updated_at:
+              state.recordedAtByCall?.[rpcCalls.length - 1] ?? '2026-11-27T00:00:00Z',
+          })),
+          error: null,
+        }
   }
 
   return { client: { from, rpc }, from, rpc, rpcCalls, filters, relations, selects }
