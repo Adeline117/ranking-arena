@@ -24,6 +24,7 @@
 #   20261113110430 rank_publication_source_evidence_binding
 #   20261114193017 rank_publication_requires_attempt_bound_evidence
 #   20261116210657 rank_publication_evidence_score_input_digest
+#   20261127103322 score_bundle_columnar_rows   (the bundle the publisher reads)
 # leaderboard_ranks itself is created in the reviewed codec layout of
 # 20261111140053 (the forward repair that rebuilds it in production).
 
@@ -55,6 +56,8 @@ CHAIN=(
   20261122201611_row_eligibility_roi_pnl_only.sql
   # The public view exposes the idle-window and refused-drawdown marks.
   20261123021904_public_ranked_leaderboard_window_flags.sql
+  # The publisher reads the score bundle in columnar form.
+  20261127103322_score_bundle_columnar_rows.sql
 )
 
 for executable in initdb pg_ctl psql; do

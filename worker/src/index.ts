@@ -54,6 +54,7 @@ async function main() {
     { routeRankPublicationAlert },
     { finalJobFailureAlert },
     { startIngestCoverageWatch },
+    { rankPublicationLogSink },
   ] = await Promise.all([
     import('bullmq'),
     import('./connection'),
@@ -72,6 +73,7 @@ async function main() {
     import('../../lib/rankings/publication/alert-routing'),
     import('./job-failure-alert'),
     import('./ingest-coverage-watch'),
+    import('./publication-log'),
   ])
   // An assertion function must carry an explicit type to be callable (TS2775).
   const assertSuccessfulMeilisearchSyncResponse: typeof import('./pipeline-response').assertSuccessfulMeilisearchSyncResponse =
@@ -128,7 +130,7 @@ async function main() {
           const published = await publishLeaderboardSeason(season, {
             database: rankPublicationDatabase,
             scoreCohort,
-            log: (message) => void job.log(message),
+            log: rankPublicationLogSink((message) => job.log(message)),
             alert: rankPublicationAlert,
           })
           job.log(

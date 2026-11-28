@@ -1,4 +1,6 @@
 import { createPgRpcClient } from '../pg-rpc-client'
+import { encodeColumnarScoreBundle } from '../columnar-score-bundle'
+import { SOURCE_PUBLICATION_BUNDLE_RPC } from '../read-source-publication-bundle'
 import {
   classifyPublishableRow,
   exclusionAlertDetails,
@@ -313,9 +315,11 @@ describe('publishLeaderboardSeason gate', () => {
             rowCount: sources.length,
           }
         }
-        if (text.includes('arena_score_inputs_publish_bundle_json')) {
+        if (text.includes(SOURCE_PUBLICATION_BUNDLE_RPC)) {
           return {
-            rows: [{ result: { scoreRows: [], physicalBoards: boards } }] as never[],
+            rows: [
+              { result: encodeColumnarScoreBundle({ scoreRows: [], physicalBoards: boards }) },
+            ] as never[],
             rowCount: 1,
           }
         }
@@ -513,17 +517,17 @@ describe('publishLeaderboardSeason gate', () => {
       original(async (tx) =>
         work({
           async query(text, values) {
-            if (text.includes('arena_score_inputs_publish_bundle_json')) {
+            if (text.includes(SOURCE_PUBLICATION_BUNDLE_RPC)) {
               return {
                 rows: [
                   {
-                    result: {
+                    result: encodeColumnarScoreBundle({
                       scoreRows: rows,
                       physicalBoards: [
                         { ...board, rank_limited_entry_count: 3 },
                         passedBoard('bybit', 2),
                       ],
-                    },
+                    }),
                   },
                 ] as never[],
                 rowCount: 1,
@@ -616,6 +620,10 @@ describe('publishLeaderboardSeason gate', () => {
       expect(
         logs.some((line) => line.includes('unsupported') && line.includes('hyperliquid'))
       ).toBe(true)
+      // The read stage is also logged split into the RPC and the parsing after it.
+      expect(
+        logs.filter((line) => /^\[90D\] stage=read query_ms=\d+ parse_ms=\d+$/.test(line))
+      ).toHaveLength(1)
       expect(
         statements.some((text) =>
           /INSERT INTO arena\.leaderboard_publication_source_isolations/.test(text)
