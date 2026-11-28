@@ -11,7 +11,10 @@
 #      unknown metric names, SQL NULL arguments);
 #   2. triggers: the native-board headline upsert (the production statement)
 #      leaves the same evidence on arena.trader_stats before and after, across
-#      new, repeated, overwritten, sparse and pointer-less writes;
+#      new, repeated, overwritten, sparse and pointer-less writes; the profile
+#      evidence trigger (20261116215328, the function's second caller, which
+#      compares stored values with the captured profile values) attests and
+#      later strips the same metrics before and after;
 #   3. inlining: before, the call appears in the plan; after, it does not;
 #   4. the function references no table (pg_depend) and keeps its ACL;
 #   5. replay is a no-op, a function edited by someone else is refused, and
@@ -24,6 +27,7 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 SQL_MODULE="$ROOT_DIR/lib/ingest/serving/headline-stats-sql.ts"
 EVIDENCE_MIGRATION="$ROOT_DIR/supabase/migrations/20261116205144_trader_stats_score_input_evidence_pointer.sql"
+PROFILE_MIGRATION="$ROOT_DIR/supabase/migrations/20261116215328_profile_acquisition_evidence_ledger.sql"
 MIGRATION="$ROOT_DIR/supabase/migrations/20261127200517_trader_stats_score_input_value_inline.sql"
 ROLLBACK="$ROOT_DIR/scripts/maintenance/rollbacks/20261127200517_trader_stats_score_input_value_inline.rollback.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
@@ -110,6 +114,34 @@ SQL
 
 psql_cmd -f "$EVIDENCE_MIGRATION" >/dev/null
 
+# The profile evidence trigger exactly as 20261116215328 defines it, over the
+# columns it reads: trader_stats profile columns and the two profile ledger
+# tables (only the columns the trigger reads).
+psql_cmd <<'SQL'
+ALTER TABLE arena.trader_stats
+  ADD COLUMN profile_evidence_attempt_seq bigint,
+  ADD COLUMN profile_evidence_metrics text[];
+CREATE TABLE arena.profile_acquisition_attempts (
+  attempt_seq bigint PRIMARY KEY, trader_id bigint NOT NULL, timeframe smallint NOT NULL
+);
+CREATE TABLE arena.profile_acquisition_outcomes (
+  attempt_seq bigint PRIMARY KEY REFERENCES arena.profile_acquisition_attempts(attempt_seq),
+  terminal_state text NOT NULL, manifest jsonb NOT NULL, attested_metrics text[] NOT NULL
+);
+SQL
+awk '
+  index($0, "CREATE FUNCTION arena.trader_stats_profile_evidence()") == 1 { emit = 1 }
+  emit { print }
+  emit && $0 == "$function$;" { exit }
+' "$PROFILE_MIGRATION" | psql_cmd -q
+psql_cmd -q <<'SQL'
+CREATE TRIGGER trader_stats_profile_evidence
+  BEFORE INSERT OR UPDATE ON arena.trader_stats
+  FOR EACH ROW EXECUTE FUNCTION arena.trader_stats_profile_evidence();
+SQL
+[[ "$(scalar "SELECT count(*) FROM pg_trigger WHERE tgrelid = 'arena.trader_stats'::regclass AND NOT tgisinternal")" == "2" ]] \
+  || fail 'fixture must carry both production evidence triggers'
+
 [[ "$(scalar "SELECT encode(sha256(convert_to(prosrc, 'UTF8')), 'hex') FROM pg_proc WHERE oid = 'arena.trader_stats_score_input_value(jsonb,text)'::regprocedure")" == "$ORIGINAL_SHA256" ]] \
   || fail 'fixture function is not the 20261116205144 definition'
 
@@ -148,7 +180,8 @@ INSERT INTO arena.proof_metrics VALUES
 -- Trigger scenarios through the production upsert; results land in proof_evidence.
 CREATE TABLE arena.proof_evidence (
   phase text, scenario text, exchange_trader_id text,
-  evidence_raw_object_id bigint, evidence_source_run_id text, evidence_metrics text[]
+  evidence_raw_object_id bigint, evidence_source_run_id text, evidence_metrics text[],
+  profile_evidence_attempt_seq bigint, profile_evidence_metrics text[]
 );
 SQL
 
@@ -168,7 +201,36 @@ EXECUTE upsert_${phase}(30, '2026-11-01T00:00:00Z', 'USDT',
     {"exchange_trader_id":"${phase}-nulls","roi":null,"pnl":null}]'::jsonb, 9, 7001, repeat('a', 64));
 INSERT INTO arena.proof_evidence
 SELECT '${phase}', 'first', substr(t.exchange_trader_id, length('${phase}') + 2),
-       s.evidence_raw_object_id, s.evidence_source_run_id, s.evidence_metrics
+       s.evidence_raw_object_id, s.evidence_source_run_id, s.evidence_metrics,
+       s.profile_evidence_attempt_seq - t.id * 10, s.profile_evidence_metrics
+  FROM arena.trader_stats s JOIN arena.traders t ON t.id = s.trader_id
+ WHERE t.exchange_trader_id LIKE '${phase}-%';
+
+-- 1b. a complete profile capture attests roi, pnl and sortino (values equal
+-- to the captured ones) and mdd (not equal: never attested).
+INSERT INTO arena.profile_acquisition_attempts
+SELECT t.id * 10 + 1, t.id, 30 FROM arena.traders t
+ WHERE t.exchange_trader_id IN ('${phase}-full', '${phase}-extras');
+INSERT INTO arena.profile_acquisition_outcomes
+SELECT a.attempt_seq, 'complete',
+       jsonb_build_object('metrics', jsonb_build_object(
+         'roi', jsonb_build_object('value', s.roi),
+         'pnl', jsonb_build_object('value', s.pnl),
+         'mdd', jsonb_build_object('value', 12345),
+         'sortino', jsonb_build_object('value', s.extras->'sortino'))),
+       ARRAY['roi', 'pnl', 'mdd', 'sortino']
+  FROM arena.profile_acquisition_attempts a
+  JOIN arena.trader_stats s ON s.trader_id = a.trader_id AND s.timeframe = a.timeframe
+ WHERE a.attempt_seq IN (SELECT t.id * 10 + 1 FROM arena.traders t WHERE t.exchange_trader_id LIKE '${phase}-%');
+UPDATE arena.trader_stats s
+   SET profile_evidence_attempt_seq = t.id * 10 + 1,
+       profile_evidence_metrics = ARRAY['roi', 'pnl', 'mdd', 'sortino', 'win_rate']
+  FROM arena.traders t
+ WHERE t.id = s.trader_id AND t.exchange_trader_id IN ('${phase}-full', '${phase}-extras');
+INSERT INTO arena.proof_evidence
+SELECT '${phase}', 'profile', substr(t.exchange_trader_id, length('${phase}') + 2),
+       s.evidence_raw_object_id, s.evidence_source_run_id, s.evidence_metrics,
+       s.profile_evidence_attempt_seq - t.id * 10, s.profile_evidence_metrics
   FROM arena.trader_stats s JOIN arena.traders t ON t.id = s.trader_id
  WHERE t.exchange_trader_id LIKE '${phase}-%';
 
@@ -179,7 +241,8 @@ EXECUTE upsert_${phase}(30, '2026-11-02T00:00:00Z', 'USDT',
     {"exchange_trader_id":"${phase}-extras","roi":1,"pnl":2,"extras":{"sortino":2.5}}]'::jsonb, 9, 7002, repeat('b', 64));
 INSERT INTO arena.proof_evidence
 SELECT '${phase}', 'second', substr(t.exchange_trader_id, length('${phase}') + 2),
-       s.evidence_raw_object_id, s.evidence_source_run_id, s.evidence_metrics
+       s.evidence_raw_object_id, s.evidence_source_run_id, s.evidence_metrics,
+       s.profile_evidence_attempt_seq - t.id * 10, s.profile_evidence_metrics
   FROM arena.trader_stats s JOIN arena.traders t ON t.id = s.trader_id
  WHERE t.exchange_trader_id LIKE '${phase}-%';
 
@@ -192,7 +255,8 @@ UPDATE arena.trader_stats s SET pnl = s.pnl
  WHERE t.id = s.trader_id AND t.exchange_trader_id = '${phase}-sparse';
 INSERT INTO arena.proof_evidence
 SELECT '${phase}', 'overwritten', substr(t.exchange_trader_id, length('${phase}') + 2),
-       s.evidence_raw_object_id, s.evidence_source_run_id, s.evidence_metrics
+       s.evidence_raw_object_id, s.evidence_source_run_id, s.evidence_metrics,
+       s.profile_evidence_attempt_seq - t.id * 10, s.profile_evidence_metrics
   FROM arena.trader_stats s JOIN arena.traders t ON t.id = s.trader_id
  WHERE t.exchange_trader_id LIKE '${phase}-%';
 
@@ -202,7 +266,8 @@ EXECUTE upsert_${phase}(30, '2026-11-03T00:00:00Z', 'USDT',
     {"exchange_trader_id":"${phase}-none","roi":5,"pnl":6}]'::jsonb, 9, NULL, NULL);
 INSERT INTO arena.proof_evidence
 SELECT '${phase}', 'no_pointer', substr(t.exchange_trader_id, length('${phase}') + 2),
-       s.evidence_raw_object_id, s.evidence_source_run_id, s.evidence_metrics
+       s.evidence_raw_object_id, s.evidence_source_run_id, s.evidence_metrics,
+       s.profile_evidence_attempt_seq - t.id * 10, s.profile_evidence_metrics
   FROM arena.trader_stats s JOIN arena.traders t ON t.id = s.trader_id
  WHERE t.exchange_trader_id LIKE '${phase}-%';
 SQL
@@ -272,16 +337,20 @@ ok "results: identical in all $cases row x metric cases ($non_null non-null)"
 run_trigger_scenarios after
 evidence_diff="$(scalar "
   SELECT count(*) FROM (
-    (SELECT scenario, exchange_trader_id, evidence_raw_object_id, evidence_source_run_id, evidence_metrics
+    (SELECT scenario, exchange_trader_id, evidence_raw_object_id, evidence_source_run_id, evidence_metrics,
+            profile_evidence_attempt_seq, profile_evidence_metrics
        FROM arena.proof_evidence WHERE phase = 'before'
      EXCEPT ALL
-     SELECT scenario, exchange_trader_id, evidence_raw_object_id, evidence_source_run_id, evidence_metrics
+     SELECT scenario, exchange_trader_id, evidence_raw_object_id, evidence_source_run_id, evidence_metrics,
+            profile_evidence_attempt_seq, profile_evidence_metrics
        FROM arena.proof_evidence WHERE phase = 'after')
     UNION ALL
-    (SELECT scenario, exchange_trader_id, evidence_raw_object_id, evidence_source_run_id, evidence_metrics
+    (SELECT scenario, exchange_trader_id, evidence_raw_object_id, evidence_source_run_id, evidence_metrics,
+            profile_evidence_attempt_seq, profile_evidence_metrics
        FROM arena.proof_evidence WHERE phase = 'after'
      EXCEPT ALL
-     SELECT scenario, exchange_trader_id, evidence_raw_object_id, evidence_source_run_id, evidence_metrics
+     SELECT scenario, exchange_trader_id, evidence_raw_object_id, evidence_source_run_id, evidence_metrics,
+            profile_evidence_attempt_seq, profile_evidence_metrics
        FROM arena.proof_evidence WHERE phase = 'before')
   ) AS d")"
 evidence_rows="$(scalar "SELECT count(*) FROM arena.proof_evidence WHERE phase = 'after'")"
@@ -291,8 +360,19 @@ stripped="$(scalar "
    WHERE phase = 'after' AND s.scenario = 'second' AND o.scenario = 'overwritten'
      AND o.evidence_metrics IS DISTINCT FROM s.evidence_metrics")"
 [[ "$evidence_diff" == "0" ]] || fail "trigger evidence differs in $evidence_diff rows"
+profile_attested="$(scalar "
+  SELECT count(*) FROM arena.proof_evidence
+   WHERE phase = 'after' AND scenario = 'profile'
+     AND profile_evidence_metrics = ARRAY['pnl', 'roi', 'sortino']")"
+profile_stripped="$(scalar "
+  SELECT count(*) FROM arena.proof_evidence AS p JOIN arena.proof_evidence AS o USING (phase, exchange_trader_id)
+   WHERE phase = 'after' AND p.scenario = 'profile' AND o.scenario = 'overwritten'
+     AND p.profile_evidence_metrics IS NOT NULL
+     AND o.profile_evidence_metrics IS DISTINCT FROM p.profile_evidence_metrics")"
+[[ "$profile_attested" == "1" ]] || fail "profile evidence attested on $profile_attested rows, expected 1 (the extras row: roi, pnl and sortino match the capture; mdd does not; win_rate was not attested)"
+[[ "$profile_stripped" -ge 1 ]] || fail "no profile attestation was stripped by an overwrite"
 [[ "$attested" -ge 6 && "$stripped" -ge 2 ]] || fail "trigger scenarios exercise too little (attested $attested, stripped $stripped)"
-ok "triggers: identical evidence on all $evidence_rows rows ($attested attested, $stripped stripped by an overwrite)"
+ok "triggers: identical score-input and profile evidence on all $evidence_rows rows ($attested score-input attested, $stripped stripped; $profile_stripped profile attestation(s) stripped by an overwrite)"
 
 table_deps="$(scalar "
   SELECT count(*) FROM pg_depend
