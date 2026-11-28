@@ -36,7 +36,8 @@ export const WORKER_DB_FENCE_WRITE_TRANSACTION_CAP_MS = 120_000
  * authority lease: a write's deadline is also bounded by the database
  * authority deadline minus the finalize margin, so more than
  * lease TTL - safety margin - finalize margin (140 s) could never be used.
- * Read at each write, so it does not depend on when the environment is loaded.
+ * Read when authority is acquired (after the environment is loaded), then
+ * reused by every write of that authority.
  */
 export const WORKER_DB_FENCE_WRITE_CAP_ENV = 'INGEST_DB_FENCE_WRITE_CAP_MS' as const
 export const WORKER_DB_FENCE_WRITE_CAP_MAX_MS =
@@ -1041,7 +1042,15 @@ export async function acquireWorkerDbFenceAuthority({
 }: AcquireWorkerDbFenceOptions): Promise<AcquireWorkerDbFenceResult> {
   // Validated before any ownership is taken: a malformed margin fails startup,
   // not the first write. Every write of this authority uses this value.
-  const writeCapMs = resolveWorkerDbFenceWriteCapMs()
+  let writeCapMs: number
+  try {
+    writeCapMs = resolveWorkerDbFenceWriteCapMs()
+  } catch (error) {
+    // The authority-acquisition retry wrapper logs only that acquisition
+    // failed; say why here. The message names the variable and its bounds only.
+    console.error(error instanceof Error ? error.message : String(error))
+    throw error
+  }
   const initialHeartbeat = snapshotHeartbeat(heartbeat, 'acquire')
   const region = initialHeartbeat.regions[0]
   const identity = createIdentity(region)
