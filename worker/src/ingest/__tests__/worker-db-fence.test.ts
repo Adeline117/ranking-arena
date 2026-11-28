@@ -1224,6 +1224,7 @@ describe('worker database fence lifecycle', () => {
 describe('worker database fenced writes', () => {
   it('gives the business query and the PostgreSQL timeouts the raised cap', async () => {
     process.env[WORKER_DB_FENCE_WRITE_CAP_ENV] = '135000'
+    const logs = jest.spyOn(console, 'log').mockImplementation(() => undefined)
     try {
       const database = databaseHarness(
         [
@@ -1267,8 +1268,12 @@ describe('worker database fenced writes', () => {
         expect(timeout).toBeGreaterThan(WORKER_DB_FENCE_WRITE_QUERY_CAP_MS)
         expect(timeout).toBeLessThanOrEqual(135_000)
       }
+      expect(logs).toHaveBeenCalledWith(
+        '[worker-db-fence] write cap 135000 ms (INGEST_DB_FENCE_WRITE_CAP_MS set)'
+      )
       await fence.release()
     } finally {
+      logs.mockRestore()
       delete process.env[WORKER_DB_FENCE_WRITE_CAP_ENV]
     }
   })

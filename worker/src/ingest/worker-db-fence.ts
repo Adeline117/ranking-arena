@@ -45,6 +45,8 @@ export const WORKER_DB_FENCE_WRITE_CAP_MAX_MS =
   WORKER_DB_FENCE_SAFETY_MARGIN_MS -
   WORKER_DB_FENCE_WRITE_FINALIZE_MARGIN_MS
 
+let loggedWriteCapMs: number | null = null
+
 export function resolveWorkerDbFenceWriteCapMs(
   env: Readonly<Record<string, string | undefined>> = process.env
 ): number {
@@ -1050,6 +1052,15 @@ export async function acquireWorkerDbFenceAuthority({
     // failed; say why here. The message names the variable and its bounds only.
     console.error(error instanceof Error ? error.message : String(error))
     throw error
+  }
+  if (loggedWriteCapMs !== writeCapMs) {
+    // Once per process (and on change): lets an operator confirm the margin a
+    // deploy set without reading the environment of the host.
+    console.log(
+      `[worker-db-fence] write cap ${writeCapMs} ms (${WORKER_DB_FENCE_WRITE_CAP_ENV} ` +
+        `${writeCapMs === WORKER_DB_FENCE_WRITE_TRANSACTION_CAP_MS ? 'unset, default' : 'set'})`
+    )
+    loggedWriteCapMs = writeCapMs
   }
   const initialHeartbeat = snapshotHeartbeat(heartbeat, 'acquire')
   const region = initialHeartbeat.regions[0]
