@@ -47,6 +47,7 @@ import {
   finishLeaderboardAcquisitionAttemptInTransaction,
   startLeaderboardAcquisitionAttemptInTransaction,
   type AttemptBoundLeaderboardAcquisitionContract,
+  type LeaderboardManifestOutcomeProjection,
   type ClaimedLeaderboardAcquisitionAttempt,
   type LeaderboardAcquisitionExecutionBinding,
   type LeaderboardAcquisitionFailureStage,
@@ -965,6 +966,186 @@ export async function processTierA(
   }
   executionSignal.addEventListener('abort', closeSessionOnAbort, { once: true })
 
+  type RecordWindowReceipt = typeof recordTierAExecutionWindowReceipt
+  // Everything after a window's capture evidence is durable and terminal:
+  // trust gate, metric-trust check, fenced publication, count check, board
+  // series and the durable window receipt. Shared by the capture path and the
+  // republish path (which replays an earlier attempt's recorded RAW), so both
+  // publish under exactly the same gates; only the receipt RPC differs.
+  const publishGatedWindowEvidence = async (window: {
+    timeframe: RankingTimeframe
+    attemptId: string
+    pages: readonly RawPage[]
+    ctx: ParseCtx
+    valid: ParsedLeaderboardRow[]
+    rejects: ReturnType<typeof validateLeaderboardRows>['rejects']
+    projection: LeaderboardManifestOutcomeProjection
+    evidence:
+      | { kind: 'v3'; bundle: LeaderboardMetricTrustBundle }
+      | { kind: 'v4'; bundle: LeaderboardAttemptBoundV4Bundle }
+    rawObjectId: number
+    recordReceipt: RecordWindowReceipt
+    markTerminalSideEffect: (sideEffect: 'receipt' | null) => void
+  }): Promise<TierAResult> => {
+    const { timeframe, attemptId, pages, ctx, valid, rejects, projection, evidence, rawObjectId } =
+      window
+    if (projection.terminalState !== 'complete' && !projection.exhaustionVerified) {
+      throw new Error(
+        `acquisition trust gate FAILED: acquisition=` +
+          `${projection.acquisitionState}, population=` +
+          `${projection.populationState}, source_run=` +
+          `${projection.sourceRunId}`
+      )
+    }
+
+    // Series are additive serving material, not population evidence.
+    // Parse them only after the capture pair passed its trust gate so a
+    // series-specific bug cannot erase an otherwise truthful manifest.
+    const boardSeries = parseLeaderboardSeriesWindow({ adapter, pages, ctx, timeframe })
+
+    if (evidence.kind === 'v3' && !hasRegisteredLeaderboardMetricTrust(src, timeframe)) {
+      throw new Error(
+        `[tier-a] ${src.slug} ${timeframe}d attempt-bound capture has no reviewed metric trust contract`
+      )
+    }
+    const receiptSourceRunId = evidence.bundle.sourceRunId
+    const result =
+      evidence.kind === 'v4'
+        ? await publishClaimedAttemptBoundLeaderboardSnapshot(
+            {
+              src,
+              timeframe,
+              rows: valid,
+              rejects,
+              observationCycleId: attemptBoundCycleId,
+              attemptEvidence: evidence.bundle,
+            },
+            context,
+            execution,
+            executionSignal
+          )
+        : await publishClaimedTrustedLeaderboardSnapshot(
+            {
+              src,
+              timeframe,
+              rows: valid,
+              rejects,
+              observationCycleId: cycleId ?? undefined,
+              trust: evidence.bundle,
+            },
+            context,
+            execution,
+            executionSignal
+          )
+    throwIfTierACancelled(executionSignal)
+
+    const status = result.published ? 'PUBLISHED' : 'GATED'
+    console.log(
+      `[tier-a] ${src.slug} ${timeframe}d: ${valid.length} rows ` +
+        `(${rejects.length} rejected, baseline=${result.verdict.baselineUsed}, ` +
+        `deviation=${result.verdict.deviationPct?.toFixed(1) ?? '–'}%) → ${status}`
+    )
+    if (result.published) {
+      // Output watermark next to the heartbeat (audit P2-8): proves this
+      // node is publishing, not just alive. Best-effort, never throws.
+      noteTierAPublished()
+    }
+    if (!result.published) {
+      // Keep this window out of serving, but do not sacrifice the other
+      // native windows. The aggregate error after the loop still fails the
+      // BullMQ job for retry and operator visibility.
+      throw new Error(
+        `count check FAILED: actual=${valid.length} ` +
+          `baseline=${result.verdict.baselineUsed} — snapshot ${result.snapshotId} ` +
+          `recorded, serving keeps last good`
+      )
+    }
+
+    // Board-level free series (spec §13.1): every ranked trader gets a
+    // chart with no extra fetch — closes the long-tail series gap that
+    // otherwise waits on Tier-B topN / on-demand Tier-C.
+    if (boardSeries.size > 0) {
+      const seriesOut = await publishClaimedBoardSeries(
+        src,
+        boardSeries,
+        result.traderIds,
+        context,
+        execution,
+        {
+          expectedLatestSnapshots: new Map([
+            [
+              timeframe,
+              {
+                id: result.snapshotId,
+                rawObjectId,
+                scrapedAt: new Date(result.scrapedAt).toISOString(),
+              },
+            ],
+          ]),
+        },
+        executionSignal
+      )
+      throwIfTierACancelled(executionSignal)
+      console.log(
+        `[tier-a] ${src.slug} ${timeframe}d board series: ` +
+          `${seriesOut.points} pts for ${seriesOut.traders} traders`
+      )
+    }
+
+    // (compat→trader_latest write removed 2026-06-15) The score chain now runs
+    // on arena directly (compute-leaderboard reads arena_score_inputs, not
+    // trader_latest), so the compat bridge is orphaned and trader_latest is
+    // being dropped. publish() above already wrote arena.* — the canonical source.
+
+    // The database receipt, not Redis job.data, is the sole retry skip
+    // authority. It is committed only after snapshot and optional series.
+    window.markTerminalSideEffect('receipt')
+    await execution.withClaimedWrite((transaction) =>
+      withTierAExecutionReceiptWriter(
+        transaction,
+        {
+          claimId: execution.proof.claimId,
+          generationSeq: execution.proof.generationSeq,
+          queueJobId: execution.proof.queueJobId,
+          queueName: execution.proof.queueName,
+          sourceId: src.id,
+        },
+        (writer) =>
+          window.recordReceipt(writer, {
+            attemptId,
+            observationCycleId: attemptBoundCycleId,
+            rawObjectId,
+            snapshotId: result.snapshotId,
+            sourceRunId: receiptSourceRunId,
+            timeframe,
+          })
+      )
+    )
+    throwIfTierACancelled(executionSignal)
+    window.markTerminalSideEffect(null)
+
+    completedTimeframes.add(timeframe)
+    persistedJobData = await replaceCompletedTimeframeCache({
+      provenance,
+      execution,
+      persistedJobData,
+      completedTimeframes,
+      nativeTimeframes: timeframes,
+      sourceSlug: src.slug,
+      timeframe,
+    })
+    throwIfTierACancelled(executionSignal)
+
+    return {
+      timeframe,
+      actualCount: valid.length,
+      rejects: rejects.length,
+      passed: result.verdict.passed,
+      baselineUsed: result.verdict.baselineUsed,
+      snapshotId: result.snapshotId,
+    }
+  }
+
   try {
     await execution.withClaimedWrite(async (transaction) => {
       for (const timeframe of timeframes) {
@@ -1244,164 +1425,23 @@ export async function processTierA(
         // The failed/partial response is now durable and terminal. Preserve
         // the upstream error for retry classification, but never publish it.
         if (capturedError) throw capturedError
-        if (
-          artifactSet.projection.terminalState !== 'complete' &&
-          !artifactSet.projection.exhaustionVerified
-        ) {
-          throw new Error(
-            `acquisition trust gate FAILED: acquisition=` +
-              `${artifactSet.projection.acquisitionState}, population=` +
-              `${artifactSet.projection.populationState}, source_run=` +
-              `${artifactSet.projection.sourceRunId}`
-          )
-        }
-
-        // Series are additive serving material, not population evidence.
-        // Parse them only after the capture pair passed its trust gate so a
-        // series-specific bug cannot erase an otherwise truthful manifest.
-        const boardSeries = parseLeaderboardSeriesWindow({ adapter, pages, ctx, timeframe })
-
-        if (evidence.kind === 'v3' && !hasRegisteredLeaderboardMetricTrust(src, timeframe)) {
-          throw new Error(
-            `[tier-a] ${src.slug} ${timeframe}d attempt-bound capture has no reviewed metric trust contract`
-          )
-        }
-        const receiptSourceRunId = evidence.bundle.sourceRunId
-        const result =
-          evidence.kind === 'v4'
-            ? await publishClaimedAttemptBoundLeaderboardSnapshot(
-                {
-                  src,
-                  timeframe,
-                  rows: valid,
-                  rejects,
-                  observationCycleId: attemptBoundCycleId,
-                  attemptEvidence: evidence.bundle,
-                },
-                context,
-                execution,
-                executionSignal
-              )
-            : await publishClaimedTrustedLeaderboardSnapshot(
-                {
-                  src,
-                  timeframe,
-                  rows: valid,
-                  rejects,
-                  observationCycleId: cycleId ?? undefined,
-                  trust: evidence.bundle,
-                },
-                context,
-                execution,
-                executionSignal
-              )
-        throwIfTierACancelled(executionSignal)
-
-        const status = result.published ? 'PUBLISHED' : 'GATED'
-        console.log(
-          `[tier-a] ${src.slug} ${timeframe}d: ${valid.length} rows ` +
-            `(${rejects.length} rejected, baseline=${result.verdict.baselineUsed}, ` +
-            `deviation=${result.verdict.deviationPct?.toFixed(1) ?? '–'}%) → ${status}`
-        )
-        if (result.published) {
-          // Output watermark next to the heartbeat (audit P2-8): proves this
-          // node is publishing, not just alive. Best-effort, never throws.
-          noteTierAPublished()
-        }
-        if (!result.published) {
-          // Keep this window out of serving, but do not sacrifice the other
-          // native windows. The aggregate error after the loop still fails the
-          // BullMQ job for retry and operator visibility.
-          throw new Error(
-            `count check FAILED: actual=${valid.length} ` +
-              `baseline=${result.verdict.baselineUsed} — snapshot ${result.snapshotId} ` +
-              `recorded, serving keeps last good`
-          )
-        }
-
-        // Board-level free series (spec §13.1): every ranked trader gets a
-        // chart with no extra fetch — closes the long-tail series gap that
-        // otherwise waits on Tier-B topN / on-demand Tier-C.
-        if (boardSeries.size > 0) {
-          const seriesOut = await publishClaimedBoardSeries(
-            src,
-            boardSeries,
-            result.traderIds,
-            context,
-            execution,
-            {
-              expectedLatestSnapshots: new Map([
-                [
-                  timeframe,
-                  {
-                    id: result.snapshotId,
-                    rawObjectId,
-                    scrapedAt: new Date(result.scrapedAt).toISOString(),
-                  },
-                ],
-              ]),
+        results.push(
+          await publishGatedWindowEvidence({
+            timeframe,
+            attemptId: attempt.attemptId,
+            pages,
+            ctx,
+            valid,
+            rejects,
+            projection: artifactSet.projection,
+            evidence,
+            rawObjectId,
+            recordReceipt: recordTierAExecutionWindowReceipt,
+            markTerminalSideEffect: (sideEffect) => {
+              terminalWindowSideEffect = sideEffect
             },
-            executionSignal
-          )
-          throwIfTierACancelled(executionSignal)
-          console.log(
-            `[tier-a] ${src.slug} ${timeframe}d board series: ` +
-              `${seriesOut.points} pts for ${seriesOut.traders} traders`
-          )
-        }
-
-        // (compat→trader_latest write removed 2026-06-15) The score chain now runs
-        // on arena directly (compute-leaderboard reads arena_score_inputs, not
-        // trader_latest), so the compat bridge is orphaned and trader_latest is
-        // being dropped. publish() above already wrote arena.* — the canonical source.
-
-        // The database receipt, not Redis job.data, is the sole retry skip
-        // authority. It is committed only after snapshot and optional series.
-        terminalWindowSideEffect = 'receipt'
-        await execution.withClaimedWrite((transaction) =>
-          withTierAExecutionReceiptWriter(
-            transaction,
-            {
-              claimId: execution.proof.claimId,
-              generationSeq: execution.proof.generationSeq,
-              queueJobId: execution.proof.queueJobId,
-              queueName: execution.proof.queueName,
-              sourceId: src.id,
-            },
-            (writer) =>
-              recordTierAExecutionWindowReceipt(writer, {
-                attemptId: attempt.attemptId,
-                observationCycleId: attemptBoundCycleId,
-                rawObjectId,
-                snapshotId: result.snapshotId,
-                sourceRunId: receiptSourceRunId,
-                timeframe,
-              })
-          )
+          })
         )
-        throwIfTierACancelled(executionSignal)
-        terminalWindowSideEffect = null
-
-        completedTimeframes.add(timeframe)
-        persistedJobData = await replaceCompletedTimeframeCache({
-          provenance,
-          execution,
-          persistedJobData,
-          completedTimeframes,
-          nativeTimeframes: timeframes,
-          sourceSlug: src.slug,
-          timeframe,
-        })
-        throwIfTierACancelled(executionSignal)
-
-        results.push({
-          timeframe,
-          actualCount: valid.length,
-          rejects: rejects.length,
-          passed: result.verdict.passed,
-          baselineUsed: result.verdict.baselineUsed,
-          snapshotId: result.snapshotId,
-        })
       } catch (cause) {
         // A failed CAS has already durably committed the receipt and then
         // asserted the now-sticky Bull authority. Preserve both failures;
