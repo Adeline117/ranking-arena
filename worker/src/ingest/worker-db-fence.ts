@@ -36,13 +36,16 @@ export const WORKER_DB_FENCE_WRITE_TRANSACTION_CAP_MS = 120_000
  * authority lease: a write's deadline is also bounded by the database
  * authority deadline minus the finalize margin, so more than
  * lease TTL - safety margin - finalize margin (140 s) could never be used.
- * Read at each write, so it does not depend on when the environment is loaded.
+ * Read when authority is acquired (after the environment is loaded), then
+ * reused by every write of that authority.
  */
 export const WORKER_DB_FENCE_WRITE_CAP_ENV = 'INGEST_DB_FENCE_WRITE_CAP_MS' as const
 export const WORKER_DB_FENCE_WRITE_CAP_MAX_MS =
   WORKER_OWNER_LEASE_TTL_MS -
   WORKER_DB_FENCE_SAFETY_MARGIN_MS -
   WORKER_DB_FENCE_WRITE_FINALIZE_MARGIN_MS
+
+let loggedWriteCapMs: number | null = null
 
 export function resolveWorkerDbFenceWriteCapMs(
   env: Readonly<Record<string, string | undefined>> = process.env
@@ -1041,7 +1044,24 @@ export async function acquireWorkerDbFenceAuthority({
 }: AcquireWorkerDbFenceOptions): Promise<AcquireWorkerDbFenceResult> {
   // Validated before any ownership is taken: a malformed margin fails startup,
   // not the first write. Every write of this authority uses this value.
-  const writeCapMs = resolveWorkerDbFenceWriteCapMs()
+  let writeCapMs: number
+  try {
+    writeCapMs = resolveWorkerDbFenceWriteCapMs()
+  } catch (error) {
+    // The authority-acquisition retry wrapper logs only that acquisition
+    // failed; say why here. The message names the variable and its bounds only.
+    console.error(error instanceof Error ? error.message : String(error))
+    throw error
+  }
+  if (loggedWriteCapMs !== writeCapMs) {
+    // Once per process (and on change): lets an operator confirm the margin a
+    // deploy set without reading the environment of the host.
+    console.log(
+      `[worker-db-fence] write cap ${writeCapMs} ms (${WORKER_DB_FENCE_WRITE_CAP_ENV} ` +
+        `${process.env[WORKER_DB_FENCE_WRITE_CAP_ENV] ? 'set' : 'unset, default'})`
+    )
+    loggedWriteCapMs = writeCapMs
+  }
   const initialHeartbeat = snapshotHeartbeat(heartbeat, 'acquire')
   const region = initialHeartbeat.regions[0]
   const identity = createIdentity(region)

@@ -1222,6 +1222,62 @@ describe('worker database fence lifecycle', () => {
 })
 
 describe('worker database fenced writes', () => {
+  it('gives the business query and the PostgreSQL timeouts the raised cap', async () => {
+    process.env[WORKER_DB_FENCE_WRITE_CAP_ENV] = '135000'
+    const logs = jest.spyOn(console, 'log').mockImplementation(() => undefined)
+    try {
+      const database = databaseHarness(
+        [
+          { operation: 'activate' },
+          { operation: 'renew' },
+          {
+            businessQueries: [
+              {
+                result: {
+                  command: 'INSERT',
+                  rowCount: 1,
+                  rows: [{ id: 'saved' }],
+                } as QueryResult,
+                sql: 'INSERT INTO arena.test_rows(value) VALUES ($1) RETURNING id',
+              },
+            ],
+            operation: 'write',
+          },
+          { operation: 'release' },
+        ],
+        [],
+        true
+      )
+      const { fence } = await acquireActiveFence(database)
+      await expect(
+        fence.withFencedWrite(async (transaction) => {
+          const result = await transaction.query(
+            'INSERT INTO arena.test_rows(value) VALUES ($1) RETURNING id',
+            ['raised']
+          )
+          return result.rows[0]?.id
+        })
+      ).resolves.toBe('saved')
+
+      const writeClient = database.clients[2]
+      const [statementTimeout, transactionTimeout] = (
+        writeClient.observedQueries[1].valuesAtCall as string[]
+      ).map((value) => Number(value.replace(/ms$/, '')))
+      const businessTimeout = Number(writeClient.observedQueries[3].queryTimeout)
+      for (const timeout of [statementTimeout, transactionTimeout, businessTimeout]) {
+        expect(timeout).toBeGreaterThan(WORKER_DB_FENCE_WRITE_QUERY_CAP_MS)
+        expect(timeout).toBeLessThanOrEqual(135_000)
+      }
+      expect(logs).toHaveBeenCalledWith(
+        '[worker-db-fence] write cap 135000 ms (INGEST_DB_FENCE_WRITE_CAP_MS set)'
+      )
+      await fence.release()
+    } finally {
+      logs.mockRestore()
+      delete process.env[WORKER_DB_FENCE_WRITE_CAP_ENV]
+    }
+  })
+
   it('runs one frozen extended-protocol facade on the asserted transaction', async () => {
     const database = databaseHarness(
       [
@@ -2044,6 +2100,36 @@ describe('worker database fenced writes', () => {
     }
   })
 
+  it('labels an explicit default as set in the write cap log', async () => {
+    process.env[WORKER_DB_FENCE_WRITE_CAP_ENV] = '120000'
+    const logs = jest.spyOn(console, 'log').mockImplementation(() => undefined)
+    try {
+      // A raised cap first, so the explicit default is a change and is logged.
+      process.env[WORKER_DB_FENCE_WRITE_CAP_ENV] = '130000'
+      const first = databaseHarness(
+        [{ operation: 'activate' }, { operation: 'renew' }, { operation: 'release' }],
+        [],
+        true
+      )
+      const { fence: raised } = await acquireActiveFence(first)
+      await raised.release()
+      process.env[WORKER_DB_FENCE_WRITE_CAP_ENV] = '120000'
+      const second = databaseHarness(
+        [{ operation: 'activate' }, { operation: 'renew' }, { operation: 'release' }],
+        [],
+        true
+      )
+      const { fence } = await acquireActiveFence(second)
+      expect(logs).toHaveBeenCalledWith(
+        '[worker-db-fence] write cap 120000 ms (INGEST_DB_FENCE_WRITE_CAP_MS set)'
+      )
+      await fence.release()
+    } finally {
+      logs.mockRestore()
+      delete process.env[WORKER_DB_FENCE_WRITE_CAP_ENV]
+    }
+  })
+
   describe('resolveWorkerDbFenceWriteCapMs', () => {
     it('keeps 120 s when unset or empty', () => {
       expect(resolveWorkerDbFenceWriteCapMs({})).toBe(WORKER_DB_FENCE_WRITE_TRANSACTION_CAP_MS)
@@ -2069,8 +2155,9 @@ describe('worker database fenced writes', () => {
       }
     )
 
-    it('refuses a malformed value before taking any ownership', async () => {
+    it('refuses a malformed value before taking any ownership, and logs why', async () => {
       process.env[WORKER_DB_FENCE_WRITE_CAP_ENV] = '200000'
+      const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined)
       try {
         const redis = redisHarness([])
         const database = databaseHarness([], [], true)
@@ -2082,7 +2169,11 @@ describe('worker database fenced writes', () => {
           })
         ).rejects.toThrow('INGEST_DB_FENCE_WRITE_CAP_MS')
         expect(database.connect).not.toHaveBeenCalled()
+        expect(errors).toHaveBeenCalledWith(
+          '[worker-db-fence] INGEST_DB_FENCE_WRITE_CAP_MS must be an integer from 120000 to 140000'
+        )
       } finally {
+        errors.mockRestore()
         delete process.env[WORKER_DB_FENCE_WRITE_CAP_ENV]
       }
     })
