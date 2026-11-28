@@ -28,6 +28,15 @@
 #     candidate with every RAW pointer and count mapped from its outcome row
 #   + a window with no attempt returns null
 #   + the statement passes the worker's fenced-statement contract
+#   + the republish receipt probe (hasTierAExecutionWindowRepublishReceipt)
+#     reports false when the RPC is absent, false when current_user lacks
+#     EXECUTE on it, and true once EXECUTE is granted
+#
+# Proof boundary: arena.sources, traders, leaderboard_snapshots,
+# leaderboard_entries and raw_objects are hand-written minimal fixtures (the
+# shapes the migrations above require), the 20260729015500 columns are a
+# fixture, the ledger rows are written in replica mode, and the receipt RPC
+# used by the probe is a stub with the real signature.
 
 set -Eeuo pipefail
 

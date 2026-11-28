@@ -5,6 +5,7 @@
  */
 import { Client } from 'pg'
 import { validateWorkerDbFencedWriteStatement } from '@/lib/ingest/db-fenced-write-contract'
+import { hasTierAExecutionWindowRepublishReceipt } from '@/worker/src/ingest/tier-a-execution-window-receipt'
 import {
   classifyTierAWindowRepublishCandidate,
   findLatestTierAWindowAttempt,
@@ -115,6 +116,37 @@ async function main(): Promise<void> {
 
     const none = await findLatestTierAWindowAttempt(client, { sourceId: 2, timeframe: 7 })
     check('a window without attempts returns null', none === null, none)
+
+    // Receipt RPC probe: absent, present without EXECUTE, present with it.
+    check(
+      'probe: an absent republish receipt RPC reports false',
+      (await hasTierAExecutionWindowRepublishReceipt(client)) === false
+    )
+    await client.query('RESET ROLE')
+    await client.query(
+      `CREATE FUNCTION arena.record_tier_a_execution_window_republish_receipt(
+         p_claim_id uuid, p_generation_seq bigint, p_attempt_id uuid, p_snapshot_id bigint
+       ) RETURNS jsonb LANGUAGE sql AS 'SELECT NULL::jsonb'`
+    )
+    await client.query(
+      `REVOKE ALL ON FUNCTION arena.record_tier_a_execution_window_republish_receipt(
+         uuid, bigint, uuid, bigint) FROM PUBLIC, service_role`
+    )
+    await client.query('SET ROLE service_role')
+    check(
+      'probe: the RPC without EXECUTE for current_user reports false',
+      (await hasTierAExecutionWindowRepublishReceipt(client)) === false
+    )
+    await client.query('RESET ROLE')
+    await client.query(
+      `GRANT EXECUTE ON FUNCTION arena.record_tier_a_execution_window_republish_receipt(
+         uuid, bigint, uuid, bigint) TO service_role`
+    )
+    await client.query('SET ROLE service_role')
+    check(
+      'probe: the RPC with EXECUTE for current_user reports true',
+      (await hasTierAExecutionWindowRepublishReceipt(client)) === true
+    )
   } finally {
     await client.end()
   }
