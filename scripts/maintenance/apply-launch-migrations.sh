@@ -542,6 +542,13 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # rows, so no attempt-bound capture can prove completeness and every Tier-A
 # run failed before a session. Refuses unless xt_spot is active/serving (or
 # already inactive/shadow, on replay). Independent of the other entries.
+# 20261127201511 drops idx_arena_metric_trust_observations_lookup (393 MB, never
+# scanned): one index fewer to maintain for every observation a Tier-A
+# publication writes (bybit_mt5 7D ran into the write deadline, 2026-11-27).
+# Refuses unless the index is exactly the 20260721120000 definition; leaves
+# the five other indexes (incl. run, which bounds readiness). lock_timeout 3 s:
+# apply between publication windows; a timeout changes nothing and can be
+# retried. Independent of the other entries.
 # 20261122204058 makes public.arena_resolve_trader() also return the source's
 # public name (meta.legacy_platform when set, else the slug) and adds the
 # index and trigger that keep that name unambiguous among active serving
@@ -603,6 +610,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261125035803_readiness_reads_run_metadata_once.sql
   20261125183157_clear_gate_cfd_unverified_mdd.sql
   20261127094031_xt_spot_out_of_serving.sql
+  20261127201511_metric_trust_observations_drop_lookup_index.sql
   20261122204058_resolve_trader_public_source.sql
   20261124225312_hero_stats_exclude_idle_window.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
