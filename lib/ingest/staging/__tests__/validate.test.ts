@@ -272,3 +272,39 @@ describe('roiCrossCheckOk', () => {
     expect(roiCrossCheckOk(0.1, 0.14, 5)).toBe(true) // 4% 差
   })
 })
+
+describe('validateLeaderboardRows identity merge annotation', () => {
+  const board = [
+    row({ exchangeTraderId: 'a', rank: 3, raw: { portfolio: 'a-2' } }),
+    row({ exchangeTraderId: 'b', rank: 2, raw: { portfolio: 'b-1' } }),
+    row({ exchangeTraderId: 'a', rank: 1, raw: { portfolio: 'a-1' } }),
+    row({ exchangeTraderId: 'a', rank: 7, raw: { portfolio: 'a-3' } }),
+  ]
+
+  it('keeps the best rank per identity and hands the annotation every dropped row', () => {
+    const calls: Array<[string, string[]]> = []
+    const { valid } = validateLeaderboardRows(board, [], {
+      annotateIdentityMerge: (kept, merged) => {
+        calls.push([
+          String(kept.raw.portfolio),
+          merged.map((other) => String(other.raw.portfolio)).sort(),
+        ])
+        return { ...kept, headlineExtras: { merged: merged.length } }
+      },
+    })
+    expect(valid.map((kept) => [kept.raw.portfolio, kept.headlineExtras])).toEqual([
+      ['a-1', { merged: 2 }],
+      ['b-1', { merged: 0 }],
+    ])
+    expect(calls.sort()).toEqual([
+      ['a-1', ['a-2', 'a-3']],
+      ['b-1', []],
+    ])
+  })
+
+  it('is the plain dedupe without the option', () => {
+    const plain = validateLeaderboardRows(board)
+    expect(plain.valid.map((kept) => kept.raw.portfolio)).toEqual(['a-1', 'b-1'])
+    expect(plain.valid.every((kept) => kept.headlineExtras === undefined)).toBe(true)
+  })
+})

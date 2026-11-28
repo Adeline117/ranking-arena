@@ -51,17 +51,31 @@ function exactHeadlineMetricSources(
 }
 
 /**
+ * Called once for every kept row of a source that ranks one row per identity
+ * (an exhaustion declaration with identity_merge): `merged` are the other
+ * valid rows of the same exchangeTraderId, which the dedupe drops. Returns the
+ * row to keep (e.g. with the merge recorded in headlineExtras). The choice of
+ * row is not the callback's: the dedupe always keeps the best (lowest) rank.
+ */
+export type LeaderboardIdentityMergeAnnotation = (
+  kept: ParsedLeaderboardRow,
+  merged: readonly ParsedLeaderboardRow[]
+) => ParsedLeaderboardRow
+
+/**
  * Validate + dedupe leaderboard rows.
  * requiredFields: sources.meta.required_fields — fields that must be
  * non-null for THIS source (e.g. Binance profiles must yield ROI+PnL).
  */
 export function validateLeaderboardRows(
   rows: ParsedLeaderboardRow[],
-  requiredFields: Array<keyof ParsedLeaderboardRow> = []
+  requiredFields: Array<keyof ParsedLeaderboardRow> = [],
+  options: { annotateIdentityMerge?: LeaderboardIdentityMergeAnnotation } = {}
 ): ValidationResult<ParsedLeaderboardRow> {
   const valid: ParsedLeaderboardRow[] = []
   const rejects: RejectedRow[] = []
   const seen = new Map<string, ParsedLeaderboardRow>()
+  const dropped = new Map<string, ParsedLeaderboardRow[]>()
 
   for (const row of rows) {
     const parsed = parsedLeaderboardRowSchema.safeParse(row)
@@ -78,10 +92,16 @@ export function validateLeaderboardRows(
     const existing = seen.get(row.exchangeTraderId)
     if (!existing || row.rank < existing.rank) {
       seen.set(row.exchangeTraderId, row)
+      if (existing) pushDropped(dropped, existing)
+    } else {
+      pushDropped(dropped, row)
     }
   }
 
-  for (const row of seen.values()) {
+  for (const seenRow of seen.values()) {
+    const row = options.annotateIdentityMerge
+      ? options.annotateIdentityMerge(seenRow, dropped.get(seenRow.exchangeTraderId) ?? [])
+      : seenRow
     const headlineRoi = clampRoi(row.headlineRoi)
     const headlineWinRate = boundPct(row.headlineWinRate)
     const headlineMdd = boundPct(row.headlineMdd)
@@ -100,6 +120,12 @@ export function validateLeaderboardRows(
   }
   valid.sort((a, b) => a.rank - b.rank)
   return { valid, rejects }
+}
+
+function pushDropped(dropped: Map<string, ParsedLeaderboardRow[]>, row: ParsedLeaderboardRow) {
+  const list = dropped.get(row.exchangeTraderId)
+  if (list) list.push(row)
+  else dropped.set(row.exchangeTraderId, [row])
 }
 
 /** Validate per-timeframe stats blocks (Tier B/C profile crawls). */

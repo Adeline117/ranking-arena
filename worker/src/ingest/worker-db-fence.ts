@@ -29,6 +29,39 @@ export const WORKER_DB_FENCE_WRITE_FINALIZE_MARGIN_MS = 10_000
 export const WORKER_DB_FENCE_WRITE_LOCK_TIMEOUT_MS = 5_000
 export const WORKER_DB_FENCE_WRITE_QUERY_CAP_MS = 120_000
 export const WORKER_DB_FENCE_WRITE_TRANSACTION_CAP_MS = 120_000
+/**
+ * Operator margin for both write caps above (default unchanged). A Tier-A
+ * board publication of ~33k rows takes 78-95 s and ran into the 120 s cap on
+ * 2026-11-27 (bybit_mt5 7D). The cap can only be raised, and never past the
+ * authority lease: a write's deadline is also bounded by the database
+ * authority deadline minus the finalize margin, so more than
+ * lease TTL - safety margin - finalize margin (140 s) could never be used.
+ * Read at each write, so it does not depend on when the environment is loaded.
+ */
+export const WORKER_DB_FENCE_WRITE_CAP_ENV = 'INGEST_DB_FENCE_WRITE_CAP_MS' as const
+export const WORKER_DB_FENCE_WRITE_CAP_MAX_MS =
+  WORKER_OWNER_LEASE_TTL_MS -
+  WORKER_DB_FENCE_SAFETY_MARGIN_MS -
+  WORKER_DB_FENCE_WRITE_FINALIZE_MARGIN_MS
+
+export function resolveWorkerDbFenceWriteCapMs(
+  env: Readonly<Record<string, string | undefined>> = process.env
+): number {
+  const raw = env[WORKER_DB_FENCE_WRITE_CAP_ENV]
+  if (raw === undefined || raw === '') return WORKER_DB_FENCE_WRITE_TRANSACTION_CAP_MS
+  const value = /^[1-9][0-9]{0,8}$/.test(raw) ? Number(raw) : Number.NaN
+  if (
+    !Number.isSafeInteger(value) ||
+    value < WORKER_DB_FENCE_WRITE_TRANSACTION_CAP_MS ||
+    value > WORKER_DB_FENCE_WRITE_CAP_MAX_MS
+  ) {
+    throw new TypeError(
+      `[worker-db-fence] ${WORKER_DB_FENCE_WRITE_CAP_ENV} must be an integer from ` +
+        `${WORKER_DB_FENCE_WRITE_TRANSACTION_CAP_MS} to ${WORKER_DB_FENCE_WRITE_CAP_MAX_MS}`
+    )
+  }
+  return value
+}
 export const WORKER_DB_FENCE_XACT_STATUS_TIMEOUT_MS = 5_000
 
 const MAX_SAFE_DATABASE_INTEGER = 9_007_199_254_740_000
@@ -1006,6 +1039,9 @@ export async function acquireWorkerDbFenceAuthority({
   connect = ingestClientConnect,
   monotonicNow = () => performance.now(),
 }: AcquireWorkerDbFenceOptions): Promise<AcquireWorkerDbFenceResult> {
+  // Validated before any ownership is taken: a malformed margin fails startup,
+  // not the first write. Every write of this authority uses this value.
+  const writeCapMs = resolveWorkerDbFenceWriteCapMs()
   const initialHeartbeat = snapshotHeartbeat(heartbeat, 'acquire')
   const region = initialHeartbeat.regions[0]
   const identity = createIdentity(region)
@@ -1177,7 +1213,7 @@ export async function acquireWorkerDbFenceAuthority({
     // may serve new writes, but it cannot safely extend this transaction's
     // already-armed PostgreSQL transaction_timeout.
     const writeDeadlineAt = Math.min(
-      writeStartedAt + WORKER_DB_FENCE_WRITE_TRANSACTION_CAP_MS,
+      writeStartedAt + writeCapMs,
       databaseDeadlineAt - WORKER_DB_FENCE_WRITE_FINALIZE_MARGIN_MS
     )
     const writeAbortController = new AbortController()
@@ -1244,7 +1280,7 @@ export async function acquireWorkerDbFenceAuthority({
         abortWrite(reason)
         throw reason
       }
-      return Math.min(WORKER_DB_FENCE_WRITE_QUERY_CAP_MS, queryTimeoutMs)
+      return Math.min(writeCapMs, queryTimeoutMs)
     }
     const aborted = new Promise<never>((_resolve, reject) => {
       writeAbortController.signal.addEventListener('abort', () => reject(writeAbortError()), {

@@ -12,7 +12,6 @@ type ActiveSources = Awaited<ReturnType<typeof import('@/lib/ingest/sources').ge
 type StaticScheduler = { id: string; name: string; everyMs: number; standby: boolean }
 
 let getActiveSources: typeof import('@/lib/ingest/sources').getActiveSources
-let getServingSourceNames: typeof import('@/lib/ingest/sources').getServingSourceNames
 let EXPECTED_METRICS: typeof import('@/lib/ingest/adapters/expected-metrics').EXPECTED_METRICS
 let EXPECTED_METRICS_BY_SOURCE: typeof import('@/lib/ingest/adapters/expected-metrics').EXPECTED_METRICS_BY_SOURCE
 let getIngestPool: typeof import('@/lib/ingest/db').getIngestPool
@@ -46,7 +45,6 @@ function loadSchedulerRuntime(): Promise<void> {
     ])
 
     getActiveSources = sources.getActiveSources
-    getServingSourceNames = sources.getServingSourceNames
     EXPECTED_METRICS = expectedMetrics.EXPECTED_METRICS
     EXPECTED_METRICS_BY_SOURCE = expectedMetrics.EXPECTED_METRICS_BY_SOURCE
     getIngestPool = database.getIngestPool
@@ -578,7 +576,6 @@ export async function reconcileSchedulers(): Promise<void> {
     await alertFailedRegistrations(failedSources)
   }
 
-  await reconcileServingSources()
   await syncExpectedMetrics(sources)
 }
 
@@ -635,41 +632,5 @@ async function syncExpectedMetrics(sources: ActiveSources): Promise<void> {
         err instanceof Error ? err.message : err
       )
     }
-  }
-}
-
-/**
- * Mirror the DB serving set (arena.sources.serving_mode='serving') into the
- * Redis `serving_sources` key the frontend reads. The DB is authoritative;
- * this keeps the hot-path Redis mirror fresh so flipping serving_mode is the
- * ONLY control surface — no hand-editing the Redis list (the past source of
- * drift). Best-effort: a failure here must never abort the scheduler.
- */
-export async function reconcileServingSources(): Promise<void> {
-  // This mirror writes Redis, so keep it behind the same source publication
-  // boundary even when called independently of scheduler reconciliation.
-  if (!isV1IngestExecutionPublished()) {
-    console.error(
-      '[RETIRED] V1 ingest execution is not published; serving-source mirror remains untouched.'
-    )
-    return
-  }
-
-  await loadSchedulerRuntime()
-  try {
-    const names = await getServingSourceNames()
-    if (names.length === 0) {
-      // Never blow away the list from an empty/transient read — the frontend
-      // would revert every trader to the empty legacy page.
-      console.warn('[ingest-scheduler] serving set empty; leaving Redis mirror untouched')
-      return
-    }
-    await getConnection().set('serving_sources', names.join(','))
-    console.log(`[ingest-scheduler] serving_sources mirror updated: ${names.length} names`)
-  } catch (err) {
-    console.error(
-      '[ingest-scheduler] serving_sources mirror failed (non-fatal): ' +
-        (err instanceof Error ? err.message : String(err))
-    )
   }
 }

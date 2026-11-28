@@ -17,6 +17,8 @@ import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
 import { V1_HEARTBEAT_HISTORY_NOT_PUBLISHED_CODE } from '@/lib/monitoring/v1-heartbeat-history-publication'
 import { PipelineState } from '@/lib/services/pipeline-state'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { logger } from '@/lib/utils/logger'
+import { readServedRankingSources } from '@/lib/data/served-ranking-sources'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -45,17 +47,12 @@ export async function GET(request: Request) {
   try {
     const supabase = getSupabaseAdmin()
 
-    // 1. Per-platform leaderboard counts
-    const { data: lrCounts } = await supabase
-      .from('leaderboard_count_cache')
-      .select('source, total_count, season_id')
-      .eq('season_id', '90D')
-      .not('source', 'eq', '_all')
-      .not('source', 'like', '%_gt0')
-      .gt('total_count', 0)
-      .order('total_count', { ascending: false })
-
-    const platforms = (lrCounts || []).map((r: Record<string, unknown>) => String(r.source))
+    // 1. Per-platform published counts, for the sources the public board is
+    //    serving (issue #554), largest first.
+    const servedSources = (await readServedRankingSources(supabase)).sort(
+      (left, right) => right.publishedCount - left.publishedCount
+    )
+    const platforms = servedSources.map((served) => served.source)
 
     // 2. Per-platform enrichment completeness (equity curve coverage)
     const enrichmentStats: Array<Record<string, unknown>> = []
@@ -75,8 +72,8 @@ export async function GET(request: Request) {
           .eq('source', platform),
       ])
 
-      const lrRow = (lrCounts || []).find((r: Record<string, unknown>) => r.source === platform)
-      const totalInLeaderboard = Number(lrRow?.total_count) || 0
+      const totalInLeaderboard =
+        servedSources.find((served) => served.source === platform)?.publishedCount ?? 0
 
       enrichmentStats.push({
         platform,
@@ -154,7 +151,8 @@ export async function GET(request: Request) {
       },
       { headers: PRIVATE_NO_STORE_HEADERS }
     )
-  } catch {
+  } catch (error) {
+    logger.error('[enrichment-completeness] panel read failed', error)
     return NextResponse.json(
       {
         ok: false,
