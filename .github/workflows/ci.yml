@@ -575,6 +575,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:public-ranked-leaderboard-inline-row-policy-pg17
 
+      - name: Prove the trader_stats score-input value function inlines with the same results
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:trader-stats-score-input-value-inline-pg17
+
       - name: Prove dropping the unused metric-trust lookup index keeps every other index
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin

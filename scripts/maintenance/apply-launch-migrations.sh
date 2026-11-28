@@ -542,6 +542,12 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # rows, so no attempt-bound capture can prove completeness and every Tier-A
 # run failed before a session. Refuses unless xt_spot is active/serving (or
 # already inactive/shadow, on replay). Independent of the other entries.
+# 20261127200517 makes arena.trader_stats_score_input_value inlinable (SQL-
+# standard body, no SET): the trader_stats evidence triggers stop paying one
+# function call per metric per row, which shortens the Tier-A board upsert
+# that ran into the publication write deadline (bybit_mt5 7D, 2026-11-27).
+# Results are unchanged. Refuses unless the function is the 20261116205144
+# definition (predeploy) or its own. Independent of the other entries.
 # 20261127201511 drops idx_arena_metric_trust_observations_lookup (393 MB, never
 # scanned): one index fewer to maintain for every observation a Tier-A
 # publication writes (bybit_mt5 7D ran into the write deadline, 2026-11-27).
@@ -619,6 +625,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261125035803_readiness_reads_run_metadata_once.sql
   20261125183157_clear_gate_cfd_unverified_mdd.sql
   20261127094031_xt_spot_out_of_serving.sql
+  20261127200517_trader_stats_score_input_value_inline.sql
   20261127201511_metric_trust_observations_drop_lookup_index.sql
   20261122204058_resolve_trader_public_source.sql
   20261124225312_hero_stats_exclude_idle_window.sql
