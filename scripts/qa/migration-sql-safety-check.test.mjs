@@ -538,7 +538,7 @@ test('a reviewed exception waives exactly the reviewed findings of the exact fil
 
   const applied = []
   assert.deepEqual(
-    applyReviewedExceptions(findings, DROP_SOURCE, DROP_MIGRATION, [entry], applied),
+    applyReviewedExceptions(findings, Buffer.from(DROP_SOURCE), DROP_MIGRATION, [entry], applied),
     []
   )
   assert.deepEqual(applied, [entry])
@@ -547,9 +547,12 @@ test('a reviewed exception waives exactly the reviewed findings of the exact fil
   const edited = DROP_SOURCE + '\n'
   assert.deepEqual(
     rules(
-      applyReviewedExceptions(analyzeMigrationSql(edited, DROP_MIGRATION), edited, DROP_MIGRATION, [
-        entry,
-      ])
+      applyReviewedExceptions(
+        analyzeMigrationSql(edited, DROP_MIGRATION),
+        Buffer.from(edited),
+        DROP_MIGRATION,
+        [entry]
+      )
     ),
     ['drop', 'reviewed-exception-mismatch']
   )
@@ -563,7 +566,7 @@ test('a reviewed exception waives exactly the reviewed findings of the exact fil
     rules(
       applyReviewedExceptions(
         analyzeMigrationSql(twoDrops, DROP_MIGRATION),
-        twoDrops,
+        Buffer.from(twoDrops),
         DROP_MIGRATION,
         [twoEntry]
       )
@@ -575,7 +578,12 @@ test('a reviewed exception waives exactly the reviewed findings of the exact fil
   const other = 'supabase/migrations/20261201000001_other.sql'
   assert.deepEqual(
     rules(
-      applyReviewedExceptions(analyzeMigrationSql(DROP_SOURCE, other), DROP_SOURCE, other, [entry])
+      applyReviewedExceptions(
+        analyzeMigrationSql(DROP_SOURCE, other),
+        Buffer.from(DROP_SOURCE),
+        other,
+        [entry]
+      )
     ),
     ['drop']
   )
@@ -587,7 +595,7 @@ test('a reviewed exception waives exactly the reviewed findings of the exact fil
     rules(
       applyReviewedExceptions(
         analyzeMigrationSql(withTruncate, DROP_MIGRATION),
-        withTruncate,
+        Buffer.from(withTruncate),
         DROP_MIGRATION,
         [truncEntry]
       )
@@ -687,6 +695,36 @@ test('git mode applies an exception added with its migration, prints it, and ref
   const retro = runIn(retroBase)
   assert.equal(retro.status, 1)
   assert.match(retro.err, /20261130000000_old_drop\.sql:1 \[reviewed-exception-retroactive\]/)
+
+  // A reviewed file saved with a UTF-8 byte-order mark: the sha256 of the
+  // committed bytes (BOM included) is what matches, not the decoded text.
+  const bomBase = git('rev-parse', 'HEAD')
+  const bomMigration = 'supabase/migrations/20261203000000_bom_drop.sql'
+  const bomBytes = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(DROP_SOURCE)])
+  mkdirSync(path.dirname(path.join(repo, bomMigration)), { recursive: true })
+  writeFileSync(path.join(repo, bomMigration), bomBytes)
+  const bomHash = createHash('sha256').update(bomBytes).digest('hex')
+  assert.notEqual(bomHash, sha256(DROP_SOURCE))
+  write(
+    REVIEWED_EXCEPTIONS_PATH,
+    JSON.stringify(
+      [
+        exception(),
+        exception({ path: old, sha256: sha256('DROP INDEX arena.idx_old;\n') }),
+        exception({ path: bomMigration, sha256: bomHash }),
+      ],
+      null,
+      2
+    ) + '\n'
+  )
+  git('add', '.')
+  git('commit', '-q', '-m', 'reviewed drop saved with a BOM')
+  const bom = runIn(bomBase)
+  assert.equal(bom.status, 0, bom.err)
+  assert.match(
+    bom.out,
+    /Reviewed exception applied: supabase\/migrations\/20261203000000_bom_drop\.sql rule=drop count=1/
+  )
 
   // A malformed list is an operational failure, not a pass.
   const malformedBase = git('rev-parse', 'HEAD')

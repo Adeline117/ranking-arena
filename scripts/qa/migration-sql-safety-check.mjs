@@ -847,18 +847,21 @@ function readReviewedExceptionsAt(commit, root = ROOT) {
   return parseReviewedExceptions(text, `${REVIEWED_EXCEPTIONS_PATH}@${commit.slice(0, 12)}`)
 }
 
-function sha256Hex(source) {
-  return createHash('sha256').update(Buffer.from(source, 'utf8')).digest('hex')
+// Hash the file's exact bytes: decoding may drop a byte-order mark, and the
+// reviewed sha256 names the committed file, not its decoded text.
+function sha256Hex(bytes) {
+  return createHash('sha256').update(bytes).digest('hex')
 }
 
 /**
  * Removes the findings a matching reviewed exception covers. Returns the
  * remaining findings; every waiver used is pushed onto `applied`.
  */
-export function applyReviewedExceptions(findings, source, relativePath, exceptions, applied = []) {
+export function applyReviewedExceptions(findings, bytes, relativePath, exceptions, applied = []) {
   const entries = exceptions.filter((entry) => entry.path === relativePath)
   if (entries.length === 0) return findings
-  const digest = sha256Hex(source)
+  if (!Buffer.isBuffer(bytes)) throw new TypeError('reviewed exceptions need the file bytes')
+  const digest = sha256Hex(bytes)
   let remaining = findings
   const extra = []
   for (const entry of entries) {
@@ -907,11 +910,12 @@ export function scanMigrationFiles(paths, root = ROOT, exceptions = [], applied 
     if (!stat.isFile() || stat.isSymbolicLink()) {
       throw new Error(`migration path must be a regular file: ${relativePath}`)
     }
-    const source = readFileSync(absolutePath, 'utf8')
+    const bytes = readFileSync(absolutePath)
+    const source = bytes.toString('utf8')
     findings.push(
       ...applyReviewedExceptions(
         analyzeMigrationSql(source, relativePath),
-        source,
+        bytes,
         relativePath,
         exceptions,
         applied
@@ -965,7 +969,7 @@ function committedMigrationSource(rawPath, commit, root = ROOT) {
 
   const blob = gitBuffer(['cat-file', 'blob', match[2]], root)
   try {
-    return { relativePath, source: utf8Decoder.decode(blob) }
+    return { bytes: blob, relativePath, source: utf8Decoder.decode(blob) }
   } catch {
     throw new Error(`committed migration is not valid UTF-8: ${relativePath}`)
   }
@@ -977,11 +981,11 @@ export function scanMigrationBlobs(paths, commit, root = ROOT, exceptions = [], 
   }
   const findings = []
   for (const rawPath of paths) {
-    const { relativePath, source } = committedMigrationSource(rawPath, commit, root)
+    const { bytes, relativePath, source } = committedMigrationSource(rawPath, commit, root)
     findings.push(
       ...applyReviewedExceptions(
         analyzeMigrationSql(source, relativePath),
-        source,
+        bytes,
         relativePath,
         exceptions,
         applied
