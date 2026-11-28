@@ -127,6 +127,7 @@
     "qa:headline-stats-as-of-pg17": "bash lib/ingest/serving/__tests__/headline-stats-as-of.pg17.sh",
     "qa:score-bundle-columnar-pg17": "bash supabase/migrations/__tests__/score-bundle-columnar-rows.pg17.sh",
     "qa:public-ranked-leaderboard-inline-row-policy-pg17": "bash supabase/migrations/__tests__/public-ranked-leaderboard-inline-row-policy.pg17.sh",
+    "qa:metric-trust-observations-drop-lookup-index-pg17": "bash supabase/migrations/__tests__/metric-trust-observations-drop-lookup-index.pg17.sh",
     "qa:public-ranked-leaderboard-pg17": "bash supabase/migrations/__tests__/public-ranked-leaderboard.pg17.sh",
     "qa:public-ranking-season-publication-pg17": "bash supabase/migrations/__tests__/public-ranking-season-publication.pg17.sh",
     "qa:expected-sources-capture-contract-pg17": "bash supabase/migrations/__tests__/expected-sources-require-capture-contract.pg17.sh",
