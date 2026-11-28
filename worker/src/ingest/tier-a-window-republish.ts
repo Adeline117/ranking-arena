@@ -34,6 +34,8 @@ export type TierAWindowRepublishSkipReason =
   | 'page_hash_mismatch'
   | 'parse_mismatch'
   | 'receipt_rpc_unavailable'
+  | 'count_check_gated'
+  | 'publish_rejected'
   | 'publish_failed'
   | 'stale'
 
@@ -44,6 +46,13 @@ export type TierAWindowRepublishSkipReason =
  * stale capture never downloads its RAW.
  */
 export const TIER_A_WINDOW_REPUBLISH_MAX_AGE_MS = 6 * 60 * 60 * 1000
+
+/**
+ * Headroom kept below the freshness bound: two RAW downloads, the re-parse
+ * and the manifest rebuild of a large board take real time, and a capture
+ * that expires mid-replay would fail publication and waste the retry.
+ */
+export const TIER_A_WINDOW_REPUBLISH_FRESHNESS_MARGIN_MS = 15 * 60 * 1000
 
 export interface TierAWindowRepublishOutcome {
   terminalState: string
@@ -72,6 +81,12 @@ export interface TierAWindowRepublishOutcome {
   safetyLimited: boolean
   /** An exhaustion proof row exists for this outcome's source run. */
   exhaustionEvidencePresent: boolean
+  /**
+   * A snapshot carrying this outcome's source payload RAW already failed its
+   * count check. Replaying the same capture cannot pass: within one cycle the
+   * baseline does not move, so it would be GATED again on every retry.
+   */
+  gatedSnapshotPresent: boolean
 }
 
 export interface LatestTierAWindowAttempt {
@@ -165,6 +180,14 @@ export const LATEST_TIER_A_WINDOW_ATTEMPT_SQL = `SELECT
        WHERE evidence.attempt_seq = attempt.attempt_seq
          AND evidence.source_run_id = outcome.source_run_id
     ) AS exhaustion_evidence_present,
+    EXISTS (
+      SELECT 1
+        FROM arena.leaderboard_snapshots AS snapshot
+       WHERE snapshot.source_id = attempt.source_id
+         AND snapshot.timeframe = attempt.timeframe
+         AND snapshot.raw_object_id = outcome.source_payload_raw_object_id
+         AND NOT snapshot.count_check_passed
+    ) AS gated_snapshot_present,
     pg_catalog.clock_timestamp()::text AS database_now
   FROM arena.leaderboard_acquisition_attempts AS attempt
   LEFT JOIN arena.leaderboard_acquisition_outcomes AS outcome
@@ -225,6 +248,7 @@ interface LatestAttemptRow {
   caller_limited: boolean | null
   safety_limited: boolean | null
   exhaustion_evidence_present: boolean
+  gated_snapshot_present: boolean
   database_now: string
 }
 
@@ -351,6 +375,7 @@ function parseOutcome(row: LatestAttemptRow): TierAWindowRepublishOutcome | null
     callerLimited: row.caller_limited === true,
     safetyLimited: row.safety_limited === true,
     exhaustionEvidencePresent: row.exhaustion_evidence_present === true,
+    gatedSnapshotPresent: row.gated_snapshot_present === true,
   })
 }
 
@@ -404,6 +429,10 @@ export function classifyTierAWindowRepublishCandidate(
 ): TierAWindowRepublishClassification {
   if (latest === null || latest.outcome === null) return { kind: 'none' }
   const { attempt, outcome } = latest
+  // The attempt row carries no queue name (only the claim does, and the
+  // worker role cannot read claims): queue_job_id is matched here, and the
+  // republish receipt RPC additionally requires the capturing claim's
+  // queue_name to equal the calling claim's before recording anything.
   if (
     attempt.sourceId !== current.sourceId ||
     attempt.timeframe !== current.timeframe ||
@@ -425,14 +454,73 @@ export function classifyTierAWindowRepublishCandidate(
     return skip('contract_unsupported')
   }
   if (attempt.runnerGitSha !== current.gitSha) return skip('sha_mismatch')
+  if (outcome.gatedSnapshotPresent) return skip('count_check_gated')
   // The earliest page cannot be fetched before the attempt start, so judging
   // age from the start is never looser than publication's sourceAsOf check.
-  const maxAgeMs = Math.min(
-    current.maxFreshnessMs ?? TIER_A_WINDOW_REPUBLISH_MAX_AGE_MS,
-    TIER_A_WINDOW_REPUBLISH_MAX_AGE_MS
-  )
+  // The margin keeps a replay from expiring while it is still running.
+  const maxAgeMs =
+    Math.min(
+      current.maxFreshnessMs ?? TIER_A_WINDOW_REPUBLISH_MAX_AGE_MS,
+      TIER_A_WINDOW_REPUBLISH_MAX_AGE_MS
+    ) - TIER_A_WINDOW_REPUBLISH_FRESHNESS_MARGIN_MS
   if (Date.parse(latest.databaseNow) - Date.parse(attempt.recordedStartedAt) >= maxAgeMs) {
     return skip('stale')
   }
   return { kind: 'candidate', attempt, outcome }
+}
+
+function errorCode(value: unknown): string {
+  if (typeof value !== 'object' || value === null || !('code' in value)) return ''
+  return String((value as { code: unknown }).code)
+}
+
+function errorMessage(value: unknown): string {
+  if (typeof value !== 'object' || value === null || !('message' in value)) return ''
+  return String((value as { message: unknown }).message)
+}
+
+const TRANSIENT_NODE_ERROR_CODES = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'EDBHANDLEREXITED',
+  'EPIPE',
+  'ETIMEDOUT',
+])
+const TRANSIENT_MESSAGE =
+  /EDBHANDLEREXITED|ECONNRESET|EPIPE|ETIMEDOUT|connection terminated|connection to database closed|query read timeout|socket hang up|timeout exceeded when trying to connect|canceling statement due to statement timeout/i
+
+function isTransientLeaf(value: unknown): boolean {
+  const code = errorCode(value)
+  // 08 connection, 40 serialization/deadlock, 53 resources, 57 operator
+  // intervention (57014 statement timeout); 55P03 lock_not_available only:
+  // the rest of class 55 (55000 prerequisite state) is a deterministic refusal.
+  if (/^(08|40|53|57)[0-9A-Z]{3}$/.test(code) || code === '55P03') return true
+  if (TRANSIENT_NODE_ERROR_CODES.has(code)) return true
+  return code === '' && TRANSIENT_MESSAGE.test(errorMessage(value))
+}
+
+/**
+ * Classify a failed republish publication. Transient (deadline, timeout,
+ * connection, lock, serialization) failures can succeed on the next BullMQ
+ * retry, so the window fails without a same-attempt rescan and the next
+ * attempt republishes again. Everything else, unknown errors included, is
+ * treated as deterministic: the same recorded capture would fail the same way
+ * on every retry (identity conflict, an exhaustion proof that no longer holds,
+ * a missing metric contract, ...), so the caller rescans now. Rescanning once
+ * too often is cheaper than republishing a doomed capture until the job's
+ * attempts run out. The whole cause chain (including AggregateError members)
+ * is inspected because publication wraps database failures.
+ */
+export function isTransientRepublishPublicationError(error: unknown): boolean {
+  const seen = new Set<unknown>()
+  const visit = (value: unknown, depth: number): boolean => {
+    if (value === null || typeof value !== 'object' || seen.has(value) || depth > 8) return false
+    seen.add(value)
+    if (isTransientLeaf(value)) return true
+    if (value instanceof AggregateError && value.errors.some((inner) => visit(inner, depth + 1))) {
+      return true
+    }
+    return 'cause' in value && visit((value as { cause: unknown }).cause, depth + 1)
+  }
+  return visit(error, 0)
 }

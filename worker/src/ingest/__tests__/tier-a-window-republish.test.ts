@@ -1,4 +1,5 @@
 import type { IngestQueryExecutor } from '@/lib/ingest/db'
+import { validateWorkerDbFencedWriteStatement } from '@/lib/ingest/db-fenced-write-contract'
 import {
   ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_CONTRACT,
   ATTEMPT_BOUND_LEADERBOARD_ACQUISITION_V4_CONTRACT,
@@ -8,6 +9,8 @@ import {
 import {
   classifyTierAWindowRepublishCandidate,
   findLatestTierAWindowAttempt,
+  isTransientRepublishPublicationError,
+  TIER_A_WINDOW_REPUBLISH_FRESHNESS_MARGIN_MS,
   LATEST_TIER_A_WINDOW_ATTEMPT_SQL,
   TIER_A_WINDOW_REPUBLISH_MAX_AGE_MS,
   type TierAWindowRepublishCurrentExecution,
@@ -70,6 +73,7 @@ function row(overrides: Record<string, unknown> = {}) {
     caller_limited: false,
     safety_limited: false,
     exhaustion_evidence_present: true,
+    gated_snapshot_present: false,
     database_now: '2026-11-27 12:30:00+00',
     ...overrides,
   }
@@ -110,6 +114,10 @@ describe('findLatestTierAWindowAttempt', () => {
     expect(query).toHaveBeenCalledWith(LATEST_TIER_A_WINDOW_ATTEMPT_SQL, [44, 7])
     expect(LATEST_TIER_A_WINDOW_ATTEMPT_SQL).toContain('ORDER BY attempt.attempt_seq DESC')
     expect(LATEST_TIER_A_WINDOW_ATTEMPT_SQL).not.toMatch(/\b(INSERT|UPDATE|DELETE|FOR UPDATE)\b/)
+    // It runs on the claimed executor, which only accepts fenced statements.
+    expect(validateWorkerDbFencedWriteStatement(LATEST_TIER_A_WINDOW_ATTEMPT_SQL)).toBe(
+      LATEST_TIER_A_WINDOW_ATTEMPT_SQL.trim()
+    )
     expect(latest?.attempt).toEqual(
       expect.objectContaining({
         attemptSeq: 901,
@@ -215,5 +223,62 @@ describe('classifyTierAWindowRepublishCandidate', () => {
     await expect(classify({}, { maxFreshnessMs: 24 * 60 * 60 * 1000 })).resolves.toEqual(
       expect.objectContaining({ kind: 'candidate' })
     )
+  })
+
+  it('skips a capture whose snapshot already failed its count check', async () => {
+    await expect(classify({ gated_snapshot_present: true })).resolves.toEqual({
+      kind: 'skip',
+      reason: 'count_check_gated',
+      attemptSeq: 901,
+    })
+  })
+
+  it('keeps a fifteen-minute margin below the freshness bound', async () => {
+    const bound = TIER_A_WINDOW_REPUBLISH_MAX_AGE_MS - TIER_A_WINDOW_REPUBLISH_FRESHNESS_MARGIN_MS
+    const at = (ms: number) => new Date(Date.parse(STARTED) + ms).toISOString()
+    await expect(classify({ database_now: at(bound - 1) })).resolves.toEqual(
+      expect.objectContaining({ kind: 'candidate' })
+    )
+    await expect(classify({ database_now: at(bound) })).resolves.toEqual(
+      expect.objectContaining({ kind: 'skip', reason: 'stale' })
+    )
+    // A capture inside the raw bound but within the margin is not replayed.
+    await expect(
+      classify({ database_now: at(TIER_A_WINDOW_REPUBLISH_MAX_AGE_MS - 60_000) })
+    ).resolves.toEqual(expect.objectContaining({ kind: 'skip', reason: 'stale' }))
+  })
+})
+
+describe('isTransientRepublishPublicationError', () => {
+  const withCode = (code: string, message = 'db failure') =>
+    Object.assign(new Error(message), { code })
+
+  it.each(['57014', '08006', '40001', '40P01', '53300', '55P03', 'ECONNRESET', 'ETIMEDOUT'])(
+    'treats %s as transient',
+    (code) => {
+      expect(isTransientRepublishPublicationError(withCode(code))).toBe(true)
+    }
+  )
+
+  it('finds a transient failure through causes and aggregate members', () => {
+    const wrapped = new Error('[publish] failed', { cause: withCode('57014') })
+    expect(isTransientRepublishPublicationError(wrapped)).toBe(true)
+    expect(
+      isTransientRepublishPublicationError(new AggregateError([new Error('x'), wrapped], 'agg'))
+    ).toBe(true)
+    expect(
+      isTransientRepublishPublicationError(new Error('Connection terminated unexpectedly'))
+    ).toBe(true)
+  })
+
+  it.each([
+    ['a unique violation', withCode('23505')],
+    ['a prerequisite refusal', withCode('55000')],
+    ['a privilege refusal', withCode('42501')],
+    ['a missing metric contract', new Error('has no reviewed metric trust contract')],
+    ['an unknown error', new Error('something else')],
+    ['a non-error value', 'boom'],
+  ])('treats %s as deterministic', (_label, error) => {
+    expect(isTransientRepublishPublicationError(error)).toBe(false)
   })
 })
