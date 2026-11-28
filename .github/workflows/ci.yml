@@ -542,7 +542,7 @@ jobs:
           curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o "$RUNNER_TEMP/pgdg.asc" https://www.postgresql.org/media/keys/ACCC4CF8.asc
           sudo gpg --dearmor --yes -o /etc/apt/trusted.gpg.d/pgdg.gpg "$RUNNER_TEMP/pgdg.asc"
           sudo apt-get update -qq
-          sudo apt-get install -y -qq --allow-downgrades "postgresql-17=${PG17_VERSION}" "postgresql-client-17=${PG17_VERSION}"
+          sudo apt-get install -y -qq --allow-downgrades "postgresql-17=${PG17_VERSION}" "postgresql-client-17=${PG17_VERSION}" ripgrep
           /usr/lib/postgresql/17/bin/initdb --version
 
       - name: Prove one complete public ranking season publication
@@ -673,6 +673,12 @@ jobs:
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:worker-readiness-trigger-catalog-pg17
+
+      - name: Prove the Tier-A execution claim fence and its launch enforcement migration
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:tier-a-execution-claim-fence-pg17
+
       - name: Prove the gate_cfd drawdown cleanup archives and clears only that column
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
