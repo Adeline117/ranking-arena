@@ -390,5 +390,14 @@ if psql_cmd -qc "SET ROLE service_role; INSERT INTO arena.tier_a_execution_windo
 fi
 grep -q "permission denied" "$ERROR_FILE" || { cat "$ERROR_FILE" >&2; exit 1; }
 echo "ok: only service_role may call it, and nobody but the function writes republish rows"
+expect_eq "the republish table has row level security on" "$(psql_cmd -Atqc "
+  SELECT relrowsecurity FROM pg_catalog.pg_class
+   WHERE oid = 'arena.tier_a_execution_window_republishes'::pg_catalog.regclass")" "t"
+expect_eq "table privileges: service_role SELECT only; anon and authenticated none" "$(psql_cmd -Atqc "
+  SELECT pg_catalog.string_agg(grantee || ':' || privilege_type, ',' ORDER BY grantee, privilege_type)
+    FROM information_schema.role_table_grants
+   WHERE table_schema = 'arena' AND table_name = 'tier_a_execution_window_republishes'
+     AND grantee IN ('service_role', 'anon', 'authenticated', 'PUBLIC')")" "service_role:SELECT"
+echo "ok: row level security is on and only service_role may read the table"
 
 echo "Tier-A window republish receipt PostgreSQL 17 proof passed"
