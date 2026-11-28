@@ -38,6 +38,7 @@ import {
   LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
   projectPartitionedNumericParserPage,
   type BuildLeaderboardAcquisitionManifestInput,
+  type LeaderboardAcquisitionManifestV3,
   type BuildLeaderboardAcquisitionManifestV4Input,
 } from '@/lib/ingest/acquisition-manifest'
 import {
@@ -490,7 +491,7 @@ function buildAttemptBoundCaptureManifest(
   return { kind: 'v4' as const, built: buildLeaderboardAcquisitionManifestV4(manifestInput) }
 }
 
-interface CapturedPageRankAnchor {
+export interface CapturedPageRankAnchor {
   sourcePageOrdinal: number
   rankBase: number
   sourceRowCount: number
@@ -541,6 +542,72 @@ function capturedIdentityPageRankAnchors(capture: LeaderboardCapture): CapturedP
     rankBase += sourcePage.sourceRowCount
     if (!Number.isSafeInteger(rankBase)) {
       throw new TypeError('[tier-a] captured rank base exceeds the safe integer range')
+    }
+    return anchor
+  })
+}
+
+/**
+ * Replay counterpart of capturedIdentityPageRankAnchors for a capture read
+ * back from its stored RAW. There is no in-memory graph to compare by
+ * reference, so every parser page must be canonically byte-equal to the
+ * stored source page at its ordinal, and that stored page must carry the
+ * payload hash, ordinal and page-index position the manifest recorded. Rank
+ * bases come from the manifest's per-page source_row_count, under the same
+ * continuous-prefix rule: skips, reordering, a missing or tampered page all
+ * fail closed.
+ */
+export function replayedIdentityPageRankAnchors(input: {
+  sourcePages: readonly RawPage[]
+  parsePages: readonly RawPage[]
+  manifest: Pick<LeaderboardAcquisitionManifestV3, 'source_pages' | 'parser_input'>
+}): CapturedPageRankAnchor[] {
+  const transformation = input.manifest.parser_input.transformation
+  if (transformation.kind !== 'identity_projection') {
+    throw new TypeError('[tier-a] replayed v3 parser pages require an identity projection')
+  }
+  const ordinals = transformation.source_page_ordinals
+  if (
+    ordinals.length !== input.parsePages.length ||
+    input.manifest.parser_input.page_count !== input.parsePages.length ||
+    input.manifest.source_pages.length !== input.sourcePages.length
+  ) {
+    throw new TypeError('[tier-a] replayed parser pages require one source-page ordinal each')
+  }
+
+  let rankBase = 0
+  return input.parsePages.map((parsePage, pageOffset) => {
+    const sourcePageOrdinal = ordinals[pageOffset]
+    if (sourcePageOrdinal !== pageOffset + 1) {
+      throw new TypeError('[tier-a] replayed parser pages must be a continuous source prefix')
+    }
+    const sourcePage = input.sourcePages[sourcePageOrdinal - 1]
+    const recorded = input.manifest.source_pages[sourcePageOrdinal - 1]
+    if (
+      !sourcePage ||
+      !recorded ||
+      recorded.ordinal !== sourcePageOrdinal ||
+      recorded.stored_page_index !== sourcePageOrdinal ||
+      sourcePage.pageIndex !== sourcePageOrdinal ||
+      recorded.pagination_position?.kind !== 'page_index' ||
+      recorded.pagination_position.request_page_index !== sourcePageOrdinal ||
+      strictCanonicalSha256(sourcePage.payload) !== recorded.payload.sha256 ||
+      strictCanonicalJson(sourcePage) !== strictCanonicalJson(parsePage)
+    ) {
+      throw new TypeError('[tier-a] replayed parser page is not bound to its stored source page')
+    }
+    const sourceRowCount = recorded.source_row_count
+    if (
+      !Number.isSafeInteger(sourceRowCount) ||
+      Object.is(sourceRowCount, -0) ||
+      sourceRowCount < 1
+    ) {
+      throw new TypeError('[tier-a] replayed parser page must have a positive source row count')
+    }
+    const anchor = { sourcePageOrdinal, rankBase, sourceRowCount }
+    rankBase += sourceRowCount
+    if (!Number.isSafeInteger(rankBase)) {
+      throw new TypeError('[tier-a] replayed rank base exceeds the safe integer range')
     }
     return anchor
   })
