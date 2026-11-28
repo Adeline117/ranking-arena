@@ -1,6 +1,7 @@
 import type { QueryResult, QueryResultRow } from 'pg'
 
 import type { IngestQueryExecutor } from '@/lib/ingest/db'
+import { validateWorkerDbFencedWriteStatement } from '@/lib/ingest/db-fenced-write-contract'
 
 jest.mock('../source-job-execution-authority', () => ({
   assertTierAExecutionClaimedWrite: jest.fn(),
@@ -613,9 +614,21 @@ describe('Tier-A execution window republish receipt', () => {
       )
       expect(query).toHaveBeenCalledWith(TIER_A_EXECUTION_WINDOW_REPUBLISH_RECEIPT_PRESENT_SQL)
     }
-    expect(TIER_A_EXECUTION_WINDOW_REPUBLISH_RECEIPT_PRESENT_SQL).toContain(
-      "to_regprocedure(\n    'arena.record_tier_a_execution_window_republish_receipt(uuid,bigint,uuid,bigint)'"
+    expect(TIER_A_EXECUTION_WINDOW_REPUBLISH_RECEIPT_PRESENT_SQL).toMatch(
+      /to_regprocedure\(\s*'arena\.record_tier_a_execution_window_republish_receipt\(uuid,bigint,uuid,bigint\)'/
     )
+    expect(TIER_A_EXECUTION_WINDOW_REPUBLISH_RECEIPT_PRESENT_SQL).toMatch(
+      /has_function_privilege\(\s*current_user,\s*'arena\.record_tier_a_execution_window_republish_receipt\(uuid,bigint,uuid,bigint\)',\s*'EXECUTE'/
+    )
+  })
+
+  it('keeps the probe and receipt SQL inside the worker fenced-statement contract', () => {
+    for (const sql of [
+      TIER_A_EXECUTION_WINDOW_REPUBLISH_RECEIPT_PRESENT_SQL,
+      RECORD_TIER_A_EXECUTION_WINDOW_REPUBLISH_RECEIPT_SQL,
+    ]) {
+      expect(validateWorkerDbFencedWriteStatement(sql)).toBe(sql.trim())
+    }
   })
 
   it('reports a malformed probe result as a contract violation', async () => {

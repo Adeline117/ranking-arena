@@ -57,10 +57,24 @@ export const RECORD_TIER_A_EXECUTION_WINDOW_REPUBLISH_RECEIPT_SQL = `SELECT aren
     p_snapshot_id => $4::bigint
   ) AS ${RECEIPT_RESULT_ALIAS}`
 
-/** Read-only probe: whether the republish receipt RPC exists (migration applied). */
-export const TIER_A_EXECUTION_WINDOW_REPUBLISH_RECEIPT_PRESENT_SQL = `SELECT pg_catalog.to_regprocedure(
-    'arena.record_tier_a_execution_window_republish_receipt(uuid,bigint,uuid,bigint)'
-  ) IS NOT NULL AS republish_receipt_present`
+/**
+ * Read-only probe: whether the republish receipt RPC exists (migration
+ * applied) AND the current database role may execute it. Existence alone is
+ * not enough: a missing EXECUTE grant would only surface at the receipt,
+ * after the snapshot was already published. The privilege check runs only
+ * when the function exists (CASE), since has_function_privilege raises on an
+ * unknown signature.
+ */
+export const TIER_A_EXECUTION_WINDOW_REPUBLISH_RECEIPT_PRESENT_SQL = `SELECT CASE
+    WHEN pg_catalog.to_regprocedure(
+      'arena.record_tier_a_execution_window_republish_receipt(uuid,bigint,uuid,bigint)'
+    ) IS NULL THEN false
+    ELSE pg_catalog.has_function_privilege(
+      current_user,
+      'arena.record_tier_a_execution_window_republish_receipt(uuid,bigint,uuid,bigint)',
+      'EXECUTE'
+    )
+  END AS republish_receipt_present`
 
 export const GET_TIER_A_EXECUTION_WINDOW_RECEIPT_SQL = `SELECT arena.get_tier_a_execution_window_receipt(
     p_source_id => $1::integer,
