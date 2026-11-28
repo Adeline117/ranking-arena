@@ -574,6 +574,14 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # HOT (0 % in production). Refuses unless the index is exactly the
 # 20260610223752 definition; keeps the seven other indexes. lock_timeout 3 s,
 # as above. Independent of the other entries, incl. 20261128001007.
+# 20261128022325 sets fillfactor = 90 on arena.trader_stats: after
+# 20261128001007 most of its remaining non-HOT board updates moved rows to a
+# new page for lack of room (26 % of updates). Storage parameter only, no
+# rewrite; SHARE UPDATE EXCLUSIVE does not block publications. Refuses
+# unless reloptions are empty (or already fillfactor=90) and the table is
+# plain, not partitioned. lock_timeout 3 s. Independent of the other entries.
+# 20261128022326 does the same for arena.traders (20 % moved to a new page
+# after 20261128001008). Independent of the other entries, incl. 20261128022325.
 # 20261122204058 makes public.arena_resolve_trader() also return the source's
 # public name (meta.legacy_platform when set, else the slug) and adds the
 # index and trigger that keep that name unambiguous among active serving
@@ -649,6 +657,8 @@ POSTDEPLOY_MIGRATIONS=(
   20261127202748_tier_a_window_republish_receipt.sql
   20261128001007_trader_stats_drop_as_of_index.sql
   20261128001008_traders_drop_last_seen_index.sql
+  20261128022325_trader_stats_fillfactor_90.sql
+  20261128022326_traders_fillfactor_90.sql
   20261122204058_resolve_trader_public_source.sql
   20261124225312_hero_stats_exclude_idle_window.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
