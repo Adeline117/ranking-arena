@@ -27,7 +27,9 @@ jest.mock('@/lib/ingest/db', () => ({
 import {
   type IngestTransactionRunner,
   RAW_JSON_STRINGIFY_CONTRACT,
+  LeaderboardTrustRawReadError,
   cleanupRawObjects,
+  readAttemptBoundLeaderboardTrustRawPayload,
   readRawObject,
   writeRawObject,
 } from '@/lib/ingest/raw'
@@ -689,5 +691,138 @@ describe('cleanupRawObjects fail-closed garbage collection', () => {
     }
 
     expect(mockClientRelease).toHaveBeenCalledWith(true)
+  })
+})
+
+describe('readAttemptBoundLeaderboardTrustRawPayload', () => {
+  const payload = [{ fetchedAt: '2026-11-27T00:00:00.000Z', pageIndex: 1, payload: { a: 1 } }]
+  const json = JSON.stringify(payload)
+  const jsonBytes = Buffer.from(json, 'utf8')
+  const gz = gzipSync(jsonBytes)
+  const contentHash = fullHash(jsonBytes)
+  const sourceRunId = 'e'.repeat(64)
+  const storagePath = `bybit_mt5/tier_a_trust/${sourceRunId}/source_payload_${contentHash}.json.gz`
+  const request = {
+    rawObjectId: 501,
+    role: 'source_payload' as const,
+    expectedSourceId: 7,
+    expectedTimeframe: 7 as const,
+    expectedSourceRunId: sourceRunId,
+    expectedContentHash: contentHash,
+    expectedStoragePath: storagePath,
+  }
+
+  function pointer(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 501,
+      source_id: 7,
+      job_type: 'tier_a',
+      trader_id: null,
+      timeframe: 7,
+      fetched_at: '2026-11-27 00:00:00+00',
+      storage_path: storagePath,
+      bytes: gz.byteLength,
+      content_hash: contentHash,
+      quarantined: false,
+      meta: {
+        raw_integrity: integrityMetadata(jsonBytes, gz, {
+          serialization_contract: STRICT_CANONICAL_JSON_CONTRACT,
+        }),
+      },
+      source_run_id: sourceRunId,
+      trust_artifact_role: 'source_payload',
+      ...overrides,
+    }
+  }
+
+  function runner(rows: unknown[]) {
+    const executorQuery = jest.fn(async () => ({ rows }))
+    const transaction = { query: executorQuery } as unknown as IngestQueryExecutor
+    const runTransaction = jest.fn(
+      async <T>(operation: (executor: IngestQueryExecutor) => Promise<T>): Promise<T> =>
+        operation(transaction)
+    ) as IngestTransactionRunner
+    return { runTransaction, executorQuery }
+  }
+
+  beforeAll(() => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co'
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key'
+  })
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('reads the exact bound trust artifact through the caller runner only', async () => {
+    const { runTransaction, executorQuery } = runner([pointer()])
+    mockDownload.mockResolvedValueOnce({ data: asDownloadBody(gz), error: null })
+
+    await expect(
+      readAttemptBoundLeaderboardTrustRawPayload(request, runTransaction)
+    ).resolves.toEqual(payload)
+    expect(runTransaction).toHaveBeenCalledTimes(1)
+    expect(executorQuery).toHaveBeenCalledTimes(1)
+    expect(String((executorQuery.mock.calls[0] as unknown[])[0])).not.toMatch(
+      /FOR UPDATE|INSERT|UPDATE /
+    )
+    expect(mockQuery).not.toHaveBeenCalled()
+  })
+
+  it('reports a pointer hash that differs from the outcome as hash_mismatch before download', async () => {
+    const { runTransaction } = runner([pointer({ content_hash: 'f'.repeat(64) })])
+
+    await expect(
+      readAttemptBoundLeaderboardTrustRawPayload(request, runTransaction)
+    ).rejects.toMatchObject({ failure: 'hash_mismatch' })
+    expect(mockDownload).not.toHaveBeenCalled()
+  })
+
+  it('reports stored bytes that differ from the recorded hash as hash_mismatch', async () => {
+    const tamperedBytes = Buffer.from(json.replace('"a":1', '"a":2'), 'utf8')
+    const tampered = gzipSync(tamperedBytes)
+    const { runTransaction } = runner([
+      pointer({
+        bytes: tampered.byteLength,
+        meta: {
+          raw_integrity: integrityMetadata(tamperedBytes, tampered, {
+            serialization_contract: STRICT_CANONICAL_JSON_CONTRACT,
+          }),
+        },
+      }),
+    ])
+    mockDownload.mockResolvedValueOnce({ data: asDownloadBody(tampered), error: null })
+
+    const failure = readAttemptBoundLeaderboardTrustRawPayload(request, runTransaction)
+    await expect(failure).rejects.toBeInstanceOf(LeaderboardTrustRawReadError)
+    await expect(failure).rejects.toMatchObject({ failure: 'hash_mismatch' })
+  })
+
+  it.each([
+    ['a missing pointer', []],
+    ['a foreign role', [pointer({ trust_artifact_role: 'population_manifest' })]],
+    ['a foreign source run', [pointer({ source_run_id: 'a'.repeat(64) })]],
+    ['a quarantined pointer', [pointer({ quarantined: true })]],
+    ['a different path', [pointer({ storage_path: 'other.json.gz' })]],
+    [
+      'a non-canonical serialization',
+      [pointer({ meta: { raw_integrity: integrityMetadata(jsonBytes, gz) } })],
+    ],
+  ])('rejects %s as unreadable', async (_label, rows) => {
+    const { runTransaction } = runner(rows)
+
+    await expect(
+      readAttemptBoundLeaderboardTrustRawPayload(request, runTransaction)
+    ).rejects.toMatchObject({ failure: 'unreadable' })
+    expect(mockDownload).not.toHaveBeenCalled()
+  })
+
+  it('reports a failed download as unreadable', async () => {
+    const { runTransaction } = runner([pointer()])
+    mockDownload.mockResolvedValueOnce({ data: null, error: { message: 'gone' } })
+
+    await expect(
+      readAttemptBoundLeaderboardTrustRawPayload(request, runTransaction)
+    ).rejects.toMatchObject({ failure: 'unreadable' })
   })
 })
