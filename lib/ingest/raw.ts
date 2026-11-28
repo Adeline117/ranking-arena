@@ -295,6 +295,18 @@ function rawIntegrityError(rawObjectId: number, storagePath: string, detail: str
   )
 }
 
+/**
+ * The stored bytes do not hash to the pointer's content_hash. Same message as
+ * every other RAW integrity failure; the type lets callers tell a hash
+ * mismatch from an unreadable object without matching message text.
+ */
+class RawChecksumMismatchError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'RawChecksumMismatchError'
+  }
+}
+
 function verifyRawIntegrityMetadata(
   rawObjectId: number,
   storagePath: string,
@@ -2272,7 +2284,9 @@ async function readRawPayload(
   const fullHash = createHash('sha256').update(jsonBytes).digest('hex')
   const expectedHash = pointer.content_hash.length === 32 ? fullHash.slice(0, 32) : fullHash
   if (pointer.content_hash !== expectedHash) {
-    throw rawIntegrityError(rawObjectId, pointer.storage_path, 'SHA-256 checksum mismatch')
+    throw new RawChecksumMismatchError(
+      rawIntegrityError(rawObjectId, pointer.storage_path, 'SHA-256 checksum mismatch').message
+    )
   }
 
   let json: string
@@ -2431,7 +2445,7 @@ export async function readAttemptBoundLeaderboardTrustRawPayload(
     const detail = asError(cause).message
     throw new LeaderboardTrustRawReadError(
       rawObjectId,
-      detail.includes('SHA-256 checksum mismatch') ? 'hash_mismatch' : 'unreadable',
+      cause instanceof RawChecksumMismatchError ? 'hash_mismatch' : 'unreadable',
       detail
     )
   }
