@@ -162,6 +162,7 @@
     "qa:public-source-capture-contracts-pg17": "bash supabase/migrations/__tests__/public-source-attempt-bound-capture.pg17.sh",
     "qa:public-source-exhaustion-capture-pg17": "bash supabase/migrations/__tests__/public-source-exhaustion-and-total-capture.pg17.sh",
     "qa:bitget-spot-live-board-pg17": "bash supabase/migrations/__tests__/bitget-spot-live-board-exhaustion-contract.pg17.sh",
+    "qa:bitget-cfd-one-row-per-trader-pg17": "bash supabase/migrations/__tests__/bitget-cfd-one-row-per-trader-exhaustion.pg17.sh",
     "qa:exhaustion-completeness-pg17": "bash supabase/migrations/__tests__/leaderboard-exhaustion-completeness-evidence.pg17.sh",
     "qa:metric-contract-retirement-pg17": "bash supabase/migrations/__tests__/metric-source-contract-retirement.pg17.sh",
     "qa:snapshot-retention-pg17": "bash supabase/migrations/__tests__/leaderboard-snapshot-retention.pg17.sh && bash worker/src/ingest/processors/__tests__/positions-off-cohort.pg17.sh",

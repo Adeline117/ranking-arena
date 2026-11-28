@@ -33,6 +33,7 @@ import type { FetchSession } from '../fetch/types'
 import type { AnyLeaderboardCapture } from '../fetch/capture'
 import type { AttemptBoundLeaderboardAcquisitionContract } from '../acquisition-attempts'
 import type { ProfileQualityReject } from './profile-quality'
+import type { LeaderboardIdentityMergeAnnotation } from '../staging/validate'
 import type { SelectedHistoryTerminalVerifier } from '../history-acquisition'
 import type {
   ContinuableHistoryKind,
@@ -166,6 +167,13 @@ export interface SourceAdapter {
     timeframe: RankingTimeframe,
     options?: LeaderboardValidationOptions
   ): void
+  /**
+   * Optional: for a source that ranks one row per identity (its exhaustion
+   * declaration has identity_merge), the annotation the staging dedupe
+   * applies to every kept row (validateLeaderboardRows). Null or absent: rows
+   * are kept unannotated.
+   */
+  leaderboardIdentityMerge?(src: SourceRow): LeaderboardIdentityMergeAnnotation | null
   parseProfile(raw: unknown, ctx: ParseCtx): ParsedProfile
   /** Optional source-specific whole-profile quality gate. Processors invoke
    *  it only after RAW is durable and before any serving/cache publication. */

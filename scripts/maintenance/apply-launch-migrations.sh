@@ -559,6 +559,14 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # release depends on it; it must be applied before the scoring worker
 # publishes with roi_pnl, or the hero count and the profile percentile badge
 # include idle rows. It touches no table 192134 guards.
+# 20261127101312 lets an exhaustion declaration rank one row per identity
+# (identity_merge: rows proven complete by portfolio, each read once and equal
+# to the reported total, then the best-ranked row kept per trader) and
+# registers bitget_cfd with it. It replaces the 114230 bodies of the two
+# exhaustion functions (refusing any other body), so it follows 114230 and
+# 114433 (it is listed right after 114433); it takes effect with the worker
+# release that captures bitget_cfd in this mode. It refuses a replay or an
+# earlier bitget_cfd registration and touches no table 192134 guards.
 POSTDEPLOY_MIGRATIONS=(
   20261111135144_freeze_legacy_position_history_relations_prod_creator.sql
   20260716192000_social_edge_write_contract.sql
@@ -600,6 +608,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261124114140_stale_source_hides_only_its_own_rows.sql
   20261127104836_public_ranked_leaderboard_inline_row_policy.sql
   20261124114433_register_bitget_spot_live_board_exhaustion_contract.sql
+  20261127101312_bitget_cfd_one_row_per_trader_exhaustion_contract.sql
   20261125035803_readiness_reads_run_metadata_once.sql
   20261125183157_clear_gate_cfd_unverified_mdd.sql
   20261127094031_xt_spot_out_of_serving.sql
