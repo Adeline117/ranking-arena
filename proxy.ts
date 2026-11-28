@@ -9,6 +9,11 @@ import { Ratelimit } from '@upstash/ratelimit'
 import { Redis } from '@upstash/redis'
 import { generateRequestId } from '@/lib/utils/logger'
 import {
+  recordRedisFailure,
+  recordRedisSuccess,
+  redisCircuitAllowsRequest,
+} from '@/lib/cache/redis-circuit'
+import {
   PROXY_STRICT_RATE_LIMITS,
   classifyProxyStrictRateLimit,
   type ProxyStrictRateLimitTier,
@@ -159,6 +164,22 @@ const HEALTH_HEARTBEAT_BYPASS_PATHS = new Set(['/api/health/heartbeat', '/api/v1
 // ============================================
 
 const tierLimiters = new Map<ProxyStrictRateLimitTier, Ratelimit>()
+
+/**
+ * One limiter round trip, reported to the Redis circuit breaker. Both proxy
+ * limiters fail open; while the circuit is open they are skipped outright
+ * instead of waiting about a second per request for Redis to fail.
+ */
+async function limitThroughCircuit(limiter: Ratelimit, identifier: string) {
+  try {
+    const result = await limiter.limit(identifier)
+    recordRedisSuccess()
+    return result
+  } catch (error) {
+    recordRedisFailure()
+    throw error
+  }
+}
 
 function getTieredLimiter(tier: ProxyStrictRateLimitTier): Ratelimit | null {
   const cached = tierLimiters.get(tier)
@@ -562,8 +583,9 @@ async function ipFloorCheck(req: NextRequest, pathname: string): Promise<NextRes
   if (!rl) return null // fail-open
   const ip = ipFloorClientIp(req)
   if (ip === 'unknown') return null // can't attribute → don't block
+  if (!redisCircuitAllowsRequest()) return null // fail-open without waiting on a dead Redis
   try {
-    const { success, limit, remaining, reset } = await rl.limit(`ip:${ip}`)
+    const { success, limit, remaining, reset } = await limitThroughCircuit(rl, `ip:${ip}`)
     if (!success) {
       return new NextResponse(
         JSON.stringify({ success: false, error: 'Too many requests', code: 'RATE_LIMIT_EXCEEDED' }),
@@ -671,12 +693,12 @@ export async function proxy(request: NextRequest) {
     const tier = classifyProxyStrictRateLimit(pathname, method)
     if (tier) {
       const limiter = getTieredLimiter(tier)
-      if (limiter) {
+      if (limiter && redisCircuitAllowsRequest()) {
         try {
           const forwarded = request.headers.get('x-forwarded-for')
           const ip =
             forwarded?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'anonymous'
-          const { success, limit, remaining, reset } = await limiter.limit(ip)
+          const { success, limit, remaining, reset } = await limitThroughCircuit(limiter, ip)
 
           if (!success) {
             const retryAfter = Math.ceil((reset - Date.now()) / 1000)

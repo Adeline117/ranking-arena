@@ -560,6 +560,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:headline-stats-as-of-pg17
 
+      - name: Prove the public leaderboard evaluates the row policy inline with the same rows
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:public-ranked-leaderboard-inline-row-policy-pg17
+
       - name: Prove profile captures attest score inputs only through the attempt ledger
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
@@ -663,6 +668,10 @@ jobs:
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:worker-readiness-trigger-catalog-pg17
+      - name: Prove the gate_cfd drawdown cleanup archives and clears only that column
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:clear-gate-cfd-mdd-pg17
 
       - name: Prove observation lineage per statement keeps every per-row outcome
         env:
