@@ -492,14 +492,24 @@ const TRANSIENT_NODE_ERROR_CODES = new Set([
   'ETIMEDOUT',
 ])
 const TRANSIENT_MESSAGE =
-  /EDBHANDLEREXITED|ECONNRESET|EPIPE|ETIMEDOUT|connection terminated|connection to database closed|query read timeout|socket hang up|timeout exceeded when trying to connect|canceling statement due to statement timeout/i
+  /EDBHANDLEREXITED|ECONNRESET|EPIPE|ETIMEDOUT|connection terminated|connection to database closed|query read timeout|socket hang up|timeout exceeded when trying to connect|canceling statement due to statement timeout|terminating connection/i
 
 function isTransientLeaf(value: unknown): boolean {
   const code = errorCode(value)
   // 08 connection, 40 serialization/deadlock, 53 resources, 57 operator
   // intervention (57014 statement timeout); 55P03 lock_not_available only:
   // the rest of class 55 (55000 prerequisite state) is a deterministic refusal.
-  if (/^(08|40|53|57)[0-9A-Z]{3}$/.test(code) || code === '55P03') return true
+  // 25P04 transaction_timeout and 25P03 idle_in_transaction_session_timeout:
+  // a server-side transaction timeout that fires before the client's own
+  // write timer must stay transient, not trigger a 107-minute rescan.
+  if (
+    /^(08|40|53|57)[0-9A-Z]{3}$/.test(code) ||
+    code === '55P03' ||
+    code === '25P03' ||
+    code === '25P04'
+  ) {
+    return true
+  }
   if (TRANSIENT_NODE_ERROR_CODES.has(code)) return true
   return code === '' && TRANSIENT_MESSAGE.test(errorMessage(value))
 }

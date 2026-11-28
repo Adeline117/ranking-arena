@@ -4119,6 +4119,7 @@ describe('Tier-A board-series publication guard', () => {
       ['a statement timeout', { code: '57014' }],
       ['a dropped connection', { code: 'ECONNRESET' }],
       ['a lock timeout', { code: '55P03' }],
+      ['a server-side transaction timeout (25P04)', { code: '25P04' }],
     ])('fails without rescanning on a transient publish failure: %s', async (_label, fields) => {
       const { captureLeaderboard, attempt } = await recordCaptureThatFailedToPublish()
       mockPublishTrustedLeaderboardSnapshot.mockRejectedValueOnce(

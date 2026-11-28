@@ -258,12 +258,20 @@ describe('isTransientRepublishPublicationError', () => {
   const withCode = (code: string, message = 'db failure') =>
     Object.assign(new Error(message), { code })
 
-  it.each(['57014', '08006', '40001', '40P01', '53300', '55P03', 'ECONNRESET', 'ETIMEDOUT'])(
-    'treats %s as transient',
-    (code) => {
-      expect(isTransientRepublishPublicationError(withCode(code))).toBe(true)
-    }
-  )
+  it.each([
+    '57014',
+    '08006',
+    '40001',
+    '40P01',
+    '53300',
+    '55P03',
+    '25P03',
+    '25P04',
+    'ECONNRESET',
+    'ETIMEDOUT',
+  ])('treats %s as transient', (code) => {
+    expect(isTransientRepublishPublicationError(withCode(code))).toBe(true)
+  })
 
   it('finds a transient failure through causes and aggregate members', () => {
     const wrapped = new Error('[publish] failed', { cause: withCode('57014') })
@@ -274,6 +282,13 @@ describe('isTransientRepublishPublicationError', () => {
     expect(
       isTransientRepublishPublicationError(new Error('Connection terminated unexpectedly'))
     ).toBe(true)
+
+    for (const message of [
+      'terminating connection due to transaction timeout',
+      'terminating connection due to administrator command',
+    ]) {
+      expect(isTransientRepublishPublicationError(new Error(message))).toBe(true)
+    }
   })
 
   it.each([
