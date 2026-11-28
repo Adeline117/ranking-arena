@@ -216,6 +216,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20261124114140_stale_source_hides_only_its_own_rows.sql',
     '20261127104836_public_ranked_leaderboard_inline_row_policy.sql',
     '20261124114433_register_bitget_spot_live_board_exhaustion_contract.sql',
+    '20261127101312_bitget_cfd_one_row_per_trader_exhaustion_contract.sql',
     '20261125035803_readiness_reads_run_metadata_once.sql',
     '20261125183157_clear_gate_cfd_unverified_mdd.sql',
     '20261127094031_xt_spot_out_of_serving.sql',
@@ -284,7 +285,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20261113151848_sync_user_profile_email_from_auth.sql',
     '20261113151849_auth_user_has_password_rpc.sql',
   ])
-  assert.equal(new Set(all).size, 243)
+  assert.equal(new Set(all).size, 244)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
   assert.deepEqual(predeploy.slice(-120), [
     '20260718120000_leaderboard_source_freshness.sql',

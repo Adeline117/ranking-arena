@@ -6,6 +6,7 @@
 import { withAdminAuth } from '@/lib/api/with-admin-auth'
 import { success as apiSuccess } from '@/lib/api/response'
 import { createLogger } from '@/lib/utils/logger'
+import { readServedRankingSources } from '@/lib/data/served-ranking-sources'
 
 const logger = createLogger('admin-stats')
 
@@ -96,41 +97,22 @@ export const GET = withAdminAuth(
         .gte('computed_at', yesterday.toISOString()),
     ])
 
-    // Scraper health — use leaderboard_count_cache instead of full table scan
+    // Scraper health and traders per platform, from the sources the public
+    // board is serving (issue #554). The count cache this used to read counts
+    // the raw rank table and keeps listing sources the board has dropped.
     const scraperHealth = { fresh: 0, stale: 0, critical: 0 }
-    try {
-      const { data: platformFreshness } = await supabase
-        .from('leaderboard_count_cache')
-        .select('source, updated_at')
-        .neq('source', '_all')
-
-      if (platformFreshness) {
-        const nowMs = Date.now()
-        for (const p of platformFreshness) {
-          const ageHours = (nowMs - new Date(p.updated_at).getTime()) / (1000 * 60 * 60)
-          if (ageHours < 12) scraperHealth.fresh++
-          else if (ageHours < 24) scraperHealth.stale++
-          else scraperHealth.critical++
-        }
-      }
-    } catch (e: unknown) {
-      logger.warn('Error computing scraper health', { error: e })
-    }
-
-    // Traders per platform — use leaderboard_count_cache instead of full table scan
     const tradersByPlatform: Record<string, number> = {}
     try {
-      const { data: countCache } = await supabase
-        .from('leaderboard_count_cache')
-        .select('source, count')
-        .neq('source', '_all')
-      if (countCache) {
-        for (const row of countCache) {
-          tradersByPlatform[row.source] = row.count
-        }
+      const nowMs = Date.now()
+      for (const served of await readServedRankingSources(supabase)) {
+        const ageHours = (nowMs - new Date(served.recordedAt).getTime()) / (1000 * 60 * 60)
+        if (ageHours < 12) scraperHealth.fresh++
+        else if (ageHours < 24) scraperHealth.stale++
+        else scraperHealth.critical++
+        tradersByPlatform[served.source] = served.publishedCount
       }
     } catch (e: unknown) {
-      logger.warn('Error fetching platform counts', { error: e })
+      logger.error('Served ranking sources unavailable', { error: e })
     }
 
     return apiSuccess({

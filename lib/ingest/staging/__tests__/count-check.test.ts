@@ -361,4 +361,46 @@ describe('getCountBaseline — 独立观测周期', () => {
       'derived-native-eligibility-v1',
     ])
   })
+
+  describe('adopted level-shift anchors the baseline', () => {
+    it('fewer than three passing cycles since the shift: the adopted level is the baseline', async () => {
+      mockQuery
+        .mockResolvedValueOnce({
+          rows: [{ actual_count: 342, cycle_id: 'c', explicit_cycle: true, anchor_level: '341' }],
+        })
+        .mockResolvedValueOnce({ rows: [] })
+
+      await expect(
+        getCountBaseline(19, 30, 781, { actualCount: 333, cycleId: 'd' })
+      ).resolves.toEqual({ baseline: 341, isBootstrap: false })
+    })
+
+    it('no passing cycle since the shift: the anchor-only row still carries its level', async () => {
+      mockQuery
+        .mockResolvedValueOnce({
+          rows: [{ actual_count: null, cycle_id: null, explicit_cycle: null, anchor_level: '341' }],
+        })
+        .mockResolvedValueOnce({ rows: [] })
+
+      await expect(
+        getCountBaseline(19, 30, 781, { actualCount: 342, cycleId: 'c' })
+      ).resolves.toEqual({ baseline: 341, isBootstrap: false })
+    })
+
+    it('three or more passing cycles since the shift: their median, not the anchor', async () => {
+      mockQuery
+        .mockResolvedValueOnce({
+          rows: [
+            { actual_count: 334, cycle_id: 'e', explicit_cycle: true, anchor_level: '341' },
+            { actual_count: 333, cycle_id: 'd', explicit_cycle: true, anchor_level: '341' },
+            { actual_count: 342, cycle_id: 'c', explicit_cycle: true, anchor_level: '341' },
+          ],
+        })
+        .mockResolvedValueOnce({ rows: [] })
+
+      await expect(
+        getCountBaseline(19, 30, 781, { actualCount: 330, cycleId: 'f' })
+      ).resolves.toEqual({ baseline: 334, isBootstrap: false })
+    })
+  })
 })
