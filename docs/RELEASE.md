@@ -32,7 +32,7 @@ git push origin vX.Y.Z
 ## 算分进程 arena-worker 的受控发布通道（2026-11，V1 暂停期间不得执行）
 
 - 入口：`worker/deploy-scoring-local.sh --target-sha=<40hex> [--dry-run]`，PM2 配置 `worker/ecosystem.local-scoring.config.cjs`，构建 `worker/build-scoring-worker.mjs`。
-- 与 `deploy-ingest-local.sh` 同等约束：目标必须是 origin/main 中的精确 commit；`git archive` 到不可变目录 `<ARENA_SCORING_RELEASE_ROOT>/<sha>`；按该 commit 的 lockfile 安装依赖并构建单一产物，PM2 用显式 Node 运行产物（不再 `npx tsx` 跑共享工作树）；以该发布日志中的 scoring 心跳写入作为成功判据，失败回滚到上一发布。
+- 与 `deploy-ingest-local.sh` 同等约束：目标必须是 origin/main 中的精确 commit；`git archive` 到不可变目录 `<ARENA_SCORING_RELEASE_ROOT>/<sha>`；按该 commit 的 lockfile 安装依赖并构建单一产物，PM2 用显式 Node 运行产物（不再 `npx tsx` 跑共享工作树）；**在碰 PM2 之前**先用候选版本跑一次 worker 自己的启动门（`worker/dist/scoring-preflight.mjs`，只读），不过则直接失败、正在运行的进程不动；成功判据是“本次启动的标记之后”出现 scoring 心跳且同一 pid 持续稳定，失败回滚到上一发布并按同一判据验证。
 - **V1 NO-GO 期间**：只允许 `--dry-run`（只读：不写文件、不碰 PM2）。真实执行会在目标 commit 的 `V1_RANKING_COMMAND_CHAIN_PUBLISHED` 不为 true 时拒绝；即便为 true，也需要 owner 另行记录的发布计划与授权，agent 不得自行执行。
 - 旧 `worker/ecosystem.config.cjs` 中的 `arena-worker` 条目为遗留、不受控入口，不得再用于发布。
 

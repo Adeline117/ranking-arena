@@ -140,9 +140,22 @@ describe('idle-window account (ranked, no trading, not scored)', () => {
     })
     expect(markup).toContain('data-testid="trader-summary-idle"')
     expect(markup).toContain(en.noTradingThisPeriod)
-    expect(markup).toContain('#4261')
+    // No rank, score, return or PnL for an idle window (one rule on every surface).
+    expect(markup).not.toContain('#4261')
     expect(markup).not.toContain(en.arenaScore)
     expect(markup).not.toContain('&lt;1')
+    expect(markup).not.toContain('+0.00%')
+    expect(markup).not.toContain(en.rank)
+  })
+
+  it('keeps its own win rate and drawdown', () => {
+    const markup = html({
+      idleWindow: true,
+      metrics: { rank: 6044, arenaScore: 0.01, roi: 0, pnl: 0, winRate: 90.4, maxDrawdown: 50.5 },
+    })
+    expect(markup).toContain('90.4%')
+    expect(markup).toContain('-50.5%')
+    expect(markup).not.toContain('#6044')
   })
 
   it('still renders the note when there is nothing else to show', () => {

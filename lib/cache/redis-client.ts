@@ -5,120 +5,140 @@
  * to avoid duplicate connections and initialization overhead.
  */
 
-import { dataLogger, fireAndForget } from '@/lib/utils/logger'
+import { dataLogger } from '@/lib/utils/logger'
+import {
+  RedisCircuitOpenError,
+  closeRedisCircuit,
+  recordRedisFailure,
+  recordRedisSuccess,
+  redisCircuitAllowsRequest,
+  redisCircuitCoolingDown,
+  redisCircuitTripped,
+} from './redis-circuit'
+import { reportRedisFailure } from './redis-outage'
 
 type UpstashRedisType = InstanceType<(typeof import('@upstash/redis'))['Redis']>
 
+/** Raw SDK client: used only by pingRedis, which must bypass the circuit. */
+let rawClient: UpstashRedisType | null = null
+/** What callers receive: every round trip is gated and observed. */
 let redisClient: UpstashRedisType | null = null
 let initialized = false
-let healthy = true
-let lastHealthCheck = 0
-let consecutiveErrors = 0
-
-const HEALTH_CHECK_INTERVAL = 30_000 // 30s
-const MAX_CONSECUTIVE_ERRORS = 3
 
 /**
- * Get the shared Redis client. Returns null if unavailable or in browser.
+ * Get the shared Redis client. Returns null if unconfigured, in the browser,
+ * or while the circuit breaker is cooling down after a failure.
  */
 export async function getSharedRedis(): Promise<UpstashRedisType | null> {
   if (typeof window !== 'undefined') return null
 
-  if (initialized && redisClient) {
-    if (!healthy) {
-      const now = Date.now()
-      if (now - lastHealthCheck > HEALTH_CHECK_INTERVAL) {
-        lastHealthCheck = now
-        fireAndForget(pingRedis(), 'redis-health-check')
-      }
+  if (!initialized) {
+    initialized = true
+
+    const url = process.env.UPSTASH_REDIS_REST_URL
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN
+
+    if (!url || !token) {
+      dataLogger.warn('[Redis] env vars not configured, using memory cache')
+      return null
     }
-    return healthy ? redisClient : null
+
+    try {
+      const { Redis } = await import('@upstash/redis')
+      // CRITICAL: Upstash SDK defaults to `cache: 'no-store'` on its internal fetch calls.
+      // This causes Next.js to treat ANY page that touches Redis as fully dynamic,
+      // breaking ISR on /rankings/[exchange], homepage, and all cached pages.
+      // Use the SDK's supported cache option. The previous custom `fetch` field is
+      // not part of RedisConfigNodejs, was ignored at runtime, and `as any` hid it.
+      // Redis commands are POST requests, so the browser/HTTP default does not
+      // cache their responses; it only avoids explicitly opting the route out of ISR.
+      rawClient = new Redis({ url, token, enableAutoPipelining: true, cache: 'default' })
+      redisClient = withCircuit(rawClient)
+      dataLogger.info('[Redis] connected')
+    } catch (error) {
+      dataLogger.error('[Redis] init failed:', error)
+      return null
+    }
   }
 
-  if (initialized && !redisClient) return null
+  if (!redisClient || redisCircuitCoolingDown()) return null
+  return redisClient
+}
 
-  initialized = true
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { then?: unknown }).then === 'function'
+  )
+}
 
-  const url = process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN
-
-  if (!url || !token) {
-    dataLogger.warn('[Redis] env vars not configured, using memory cache')
-    healthy = false
-    return null
-  }
-
-  try {
-    const { Redis } = await import('@upstash/redis')
-    // CRITICAL: Upstash SDK defaults to `cache: 'no-store'` on its internal fetch calls.
-    // This causes Next.js to treat ANY page that touches Redis as fully dynamic,
-    // breaking ISR on /rankings/[exchange], homepage, and all cached pages.
-    // Use the SDK's supported cache option. The previous custom `fetch` field is
-    // not part of RedisConfigNodejs, was ignored at runtime, and `as any` hid it.
-    // Redis commands are POST requests, so the browser/HTTP default does not
-    // cache their responses; it only avoids explicitly opting the route out of ISR.
-    redisClient = new Redis({ url, token, enableAutoPipelining: true, cache: 'default' })
-    dataLogger.info('[Redis] connected')
-    return redisClient
-  } catch (error) {
-    dataLogger.error('[Redis] init failed:', error)
-    healthy = false
-    return null
-  }
+/** Run one Redis round trip through the circuit breaker. */
+function guarded(run: () => unknown): unknown {
+  if (!redisCircuitAllowsRequest()) return Promise.reject(new RedisCircuitOpenError())
+  const result = run()
+  if (isThenable(result)) result.then(recordRedisSuccess, recordRedisError)
+  return result
 }
 
 /**
- * Record a Redis error. After MAX_CONSECUTIVE_ERRORS, marks Redis as unhealthy.
+ * Wrap the SDK client so every command (and pipeline `exec`) is gated and
+ * observed in one place. Call sites cannot forget to report a failure, and a
+ * client reference captured before the circuit opened stops sending requests.
  */
-export function recordRedisError(_error: unknown): void {
-  consecutiveErrors++
-  if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS && healthy) {
-    dataLogger.error('[Redis] Falling back to memory cache after consecutive failures', {
-      lastError: _error instanceof Error ? _error.message : String(_error),
-      consecutiveErrors,
-    })
-    healthy = false
-    lastHealthCheck = Date.now()
-    // Alert on Redis transition to unhealthy (dynamic import to avoid circular deps)
-    const alertPromise = import('@/lib/alerts/send-alert')
-      .then((m) =>
-        m.sendRateLimitedAlert(
-          {
-            title: 'Redis DOWN — memory fallback active',
-            message: `Redis failed ${consecutiveErrors} consecutive times. All cache operations using in-memory fallback. Rankings, rate limiting, and dedup affected.`,
-            level: 'critical',
-            details: { consecutiveErrors },
-          },
-          'redis-down',
-          30 * 60 * 1000
-        )
-      )
-      .catch(() => undefined)
-    fireAndForget(alertPromise, 'redis-down-alert')
-  }
+function withCircuit(client: UpstashRedisType): UpstashRedisType {
+  return new Proxy(client, {
+    get(target, prop) {
+      const value: unknown = Reflect.get(target, prop, target)
+      if (typeof value !== 'function') return value
+      if (prop === 'pipeline' || prop === 'multi') {
+        // Building a pipeline is local; only exec() talks to Redis.
+        return (...args: unknown[]) => {
+          const pipeline: unknown = Reflect.apply(value, target, args)
+          if (typeof pipeline !== 'object' || pipeline === null) return pipeline
+          const exec: unknown = Reflect.get(pipeline, 'exec')
+          if (typeof exec === 'function') {
+            Reflect.set(pipeline, 'exec', (...execArgs: unknown[]) =>
+              guarded(() => Reflect.apply(exec, pipeline, execArgs))
+            )
+          }
+          return pipeline
+        }
+      }
+      return (...args: unknown[]) => guarded(() => Reflect.apply(value, target, args))
+    },
+  })
+}
+
+/**
+ * Record a Redis error. The first failure opens the circuit and alerts.
+ */
+export function recordRedisError(error: unknown): void {
+  reportRedisFailure(error)
 }
 
 /**
  * Check if Redis is currently considered available.
  */
 export function isRedisAvailable(): boolean {
-  return healthy
+  if (initialized && !redisClient) return false
+  return !redisCircuitTripped()
 }
 
 /**
- * Ping Redis and update health status.
+ * Ping Redis and update health status. Explicit health checks bypass the
+ * circuit so an operator probe always reflects the live service.
  */
 export async function pingRedis(): Promise<boolean> {
-  if (!redisClient) return false
+  if (!rawClient) return false
   try {
-    await redisClient.ping()
-    if (!healthy) dataLogger.info('[Redis] connection recovered')
-    healthy = true
-    consecutiveErrors = 0
+    await rawClient.ping()
+    if (redisCircuitTripped()) dataLogger.info('[Redis] connection recovered')
+    closeRedisCircuit()
     return true
   } catch (err) {
     dataLogger.warn('[Redis] ping failed:', err instanceof Error ? err.message : String(err))
-    healthy = false
+    recordRedisFailure()
     return false
   }
 }

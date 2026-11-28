@@ -12,6 +12,11 @@
 // module here. Use requireActual + explicit re-mock with the real exports.
 jest.mock('@/lib/utils/rate-limit', () => jest.requireActual('@/lib/utils/rate-limit'))
 
+const mockSendRateLimitedAlert = jest.fn(async (..._args: unknown[]) => undefined)
+jest.mock('@/lib/alerts/send-alert', () => ({
+  sendRateLimitedAlert: (...args: unknown[]) => mockSendRateLimitedAlert(...args),
+}))
+
 // We'll override @upstash/redis and @upstash/ratelimit per-test via jest.doMock,
 // so we isolate modules between tests.
 import type { NextRequest } from 'next/server'
@@ -342,5 +347,82 @@ describe('checkRateLimitFull with Redis errors at runtime', () => {
       remaining: 9,
       reset: expect.any(Number),
     })
+  })
+})
+
+describe('checkRateLimitFull while the Redis circuit is open', () => {
+  // Production 2026-11-27: every limiter round trip took about a second to
+  // fail. After the first failure the limiter must not be called again, and
+  // each preset must keep the outcome it already had for a failing Redis.
+  async function loadWithFailingLimiter() {
+    const limit = jest.fn(async () => {
+      throw new Error('fetch failed')
+    })
+    let rlMod!: typeof import('../rate-limit')
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('@upstash/redis', () => ({ Redis: jest.fn(() => ({})) }))
+      jest.doMock('@upstash/ratelimit', () => {
+        const Ratelimit = jest.fn(() => ({ limit })) as unknown as jest.Mock & {
+          slidingWindow: jest.Mock
+        }
+        Ratelimit.slidingWindow = jest.fn(() => 'sliding-window-marker')
+        return { Ratelimit }
+      })
+      rlMod = await import('../rate-limit')
+    })
+    return { rlMod, limit }
+  }
+
+  const originalUrl = process.env.UPSTASH_REDIS_REST_URL
+  const originalToken = process.env.UPSTASH_REDIS_REST_TOKEN
+
+  beforeEach(() => {
+    process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example.test'
+    process.env.UPSTASH_REDIS_REST_TOKEN = 'test-token'
+  })
+
+  afterEach(() => {
+    if (originalUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL
+    else process.env.UPSTASH_REDIS_REST_URL = originalUrl
+    if (originalToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN
+    else process.env.UPSTASH_REDIS_REST_TOKEN = originalToken
+  })
+
+  it('keeps a fail-close preset at 503 without calling Redis again', async () => {
+    const { rlMod, limit } = await loadWithFailingLimiter()
+    const config = { requests: 5, window: 60, prefix: 'login', failClose: true }
+
+    const first = await rlMod.checkRateLimitFull(makeRequest(), config)
+    expect(first.response?.status).toBe(503)
+    expect(limit).toHaveBeenCalledTimes(1)
+
+    const second = await rlMod.checkRateLimitFull(makeRequest(), config)
+    expect(second.response?.status).toBe(503)
+    expect(limit).toHaveBeenCalledTimes(1)
+  })
+
+  it('sends the Redis outage alert once when the limiter meets the outage first', async () => {
+    mockSendRateLimitedAlert.mockClear()
+    const { rlMod } = await loadWithFailingLimiter()
+    const config = { requests: 5, window: 60, prefix: 'read' }
+
+    await rlMod.checkRateLimitFull(makeRequest(), config)
+    await rlMod.checkRateLimitFull(makeRequest(), config)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(mockSendRateLimitedAlert).toHaveBeenCalledTimes(1)
+    expect(mockSendRateLimitedAlert.mock.calls[0]?.[1]).toBe('redis-down')
+  })
+
+  it('keeps an ordinary preset on the in-memory limiter without calling Redis again', async () => {
+    const { rlMod, limit } = await loadWithFailingLimiter()
+    const config = { requests: 2, window: 60, prefix: 'read' }
+
+    // First request: Redis fails, memory limiter counts it (1 of 2).
+    expect((await rlMod.checkRateLimitFull(makeRequest(), config)).response).toBeNull()
+    // Circuit open: counted in memory (2 of 2), then refused — never unlimited.
+    expect((await rlMod.checkRateLimitFull(makeRequest(), config)).response).toBeNull()
+    expect((await rlMod.checkRateLimitFull(makeRequest(), config)).response?.status).toBe(429)
+    expect(limit).toHaveBeenCalledTimes(1)
   })
 })
