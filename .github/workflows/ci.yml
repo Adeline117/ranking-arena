@@ -595,6 +595,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:fillfactor-hot-pg17
 
+      - name: Prove dropping trader_stats tf_roi leaves the primary key as the only index and derive-boards on it
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:trader-stats-drop-tf-roi-index-pg17
+
       - name: Prove a Tier-A window receipt can be recorded once for an earlier queue attempt's capture
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin
