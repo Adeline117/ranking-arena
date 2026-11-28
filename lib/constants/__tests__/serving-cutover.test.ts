@@ -10,6 +10,10 @@ const mockRpc = jest.fn()
 jest.mock('@/lib/cache/redis-client', () => ({
   getSharedRedis: (...args: unknown[]) => mockGetSharedRedis(...args),
 }))
+const mockLogError = jest.fn()
+jest.mock('@/lib/utils/logger', () => ({
+  createLogger: () => ({ error: (...args: unknown[]) => mockLogError(...args) }),
+}))
 jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: () => ({ rpc: (...args: unknown[]) => mockRpc(...args) }),
 }))
@@ -28,6 +32,7 @@ describe('isServingSource', () => {
   beforeEach(() => {
     mockGetSharedRedis.mockReset()
     mockRpc.mockReset()
+    mockLogError.mockReset()
     delete process.env.NEXT_PUBLIC_SERVING_SOURCES
   })
 
@@ -72,5 +77,7 @@ describe('isServingSource', () => {
 
     await expect(isServingSource('okx_futures')).resolves.toBe(true)
     await expect(isServingSource('not_a_serving_source')).resolves.toBe(false)
+    // The failure is recorded, not swallowed.
+    expect(mockLogError).toHaveBeenCalled()
   })
 })

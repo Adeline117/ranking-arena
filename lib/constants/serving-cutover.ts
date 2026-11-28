@@ -22,6 +22,9 @@
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { createLogger } from '@/lib/utils/logger'
+
+const log = createLogger('serving-cutover')
 
 const envList = (): Set<string> =>
   new Set(
@@ -44,12 +47,21 @@ async function getDbServingSet(): Promise<Set<string> | null> {
   }
   try {
     const { data, error } = await getSupabaseAdmin().rpc('arena_serving_sources')
-    if (error || !Array.isArray(data)) return null
+    if (error || !Array.isArray(data)) {
+      log.error('arena_serving_sources failed; using the bootstrap list', {
+        error: error?.message ?? 'response is not a list',
+      })
+      return null
+    }
     const sources = new Set((data as string[]).filter((s) => typeof s === 'string' && s))
     dbServingSet = { sources, expiresAt: Date.now() + DB_TTL_MS }
     return sources
-  } catch {
-    return null // DB unavailable → fall back to env bootstrap list
+  } catch (err) {
+    // DB unavailable → fall back to env bootstrap list
+    log.error('arena_serving_sources threw; using the bootstrap list', {
+      error: err instanceof Error ? err.message : String(err),
+    })
+    return null
   }
 }
 
