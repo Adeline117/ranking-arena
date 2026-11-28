@@ -2,7 +2,10 @@ import type { PoolClient, QueryConfig, QueryResult } from 'pg'
 
 import {
   acquireWorkerDbFenceAuthority,
+  resolveWorkerDbFenceWriteCapMs,
   WORKER_DB_FENCE_CONTRACT,
+  WORKER_DB_FENCE_WRITE_CAP_ENV,
+  WORKER_DB_FENCE_WRITE_CAP_MAX_MS,
   WORKER_DB_FENCE_WRITE_LOCK_TIMEOUT_MS,
   WORKER_DB_FENCE_WRITE_QUERY_CAP_MS,
   WORKER_DB_FENCE_WRITE_TRANSACTION_CAP_MS,
@@ -1948,6 +1951,141 @@ describe('worker database fenced writes', () => {
     } finally {
       jest.useRealTimers()
     }
+  })
+
+  it('raises the transaction cap to INGEST_DB_FENCE_WRITE_CAP_MS when it is set', async () => {
+    process.env[WORKER_DB_FENCE_WRITE_CAP_ENV] = '135000'
+    jest.useFakeTimers()
+    try {
+      let monotonicNow = 0
+      const callbackBarrier = deferred()
+      const callbackEntered = deferred()
+      const callbackFinished = deferred()
+      const redis = redisHarness([
+        scriptResult(1, INITIAL_CONTROL_TIME),
+        scriptResult(1, INITIAL_CONTROL_TIME + 1_000, INITIAL_CONTROL_TIME),
+        scriptResult(1, INITIAL_CONTROL_TIME + 2_000, INITIAL_CONTROL_TIME),
+        scriptResult(1, INITIAL_CONTROL_TIME + 2_000, INITIAL_CONTROL_TIME, 0),
+      ])
+      const database = databaseHarness(
+        [
+          { operation: 'activate' },
+          { operation: 'renew' },
+          { operation: 'write' },
+          { operation: 'renew' },
+          { operation: 'write' },
+          { operation: 'release' },
+        ],
+        [],
+        true
+      )
+      const acquired = await acquireWorkerDbFenceAuthority({
+        connect: database.connect,
+        heartbeat: heartbeat(),
+        monotonicNow: () => monotonicNow,
+        redis,
+      })
+      if (acquired.status !== 'active') throw new Error('expected active fence')
+      const fence = acquired.fence
+      let writeSettled = false
+
+      const expiredWrite = fence.withFencedWrite(async () => {
+        callbackEntered.resolve()
+        try {
+          await callbackBarrier.promise
+          return 'late-result'
+        } finally {
+          callbackFinished.resolve()
+        }
+      })
+      void expiredWrite.then(
+        () => {
+          writeSettled = true
+        },
+        () => {
+          writeSettled = true
+        }
+      )
+      await callbackEntered.promise
+
+      monotonicNow = 135_000 - 1
+      jest.advanceTimersByTime(135_000 - 1)
+      await Promise.resolve()
+      expect(writeSettled).toBe(false)
+      expect(database.clients[2].release).not.toHaveBeenCalled()
+      expect(fence.state).toBe('active')
+
+      monotonicNow = 135_000
+      jest.advanceTimersByTime(1)
+      await expect(expiredWrite).rejects.toMatchObject({
+        code: 'write_deadline_exceeded',
+        operation: 'write',
+        retryPolicy: 'never',
+      })
+      expect(database.clients[2].release).toHaveBeenCalledWith(true)
+      expect(fence.state).toBe('active')
+      expect(fence.signal.aborted).toBe(false)
+
+      callbackBarrier.resolve()
+      await callbackFinished.promise
+
+      await expect(fence.renewAndPublish(heartbeat(43))).resolves.toBeUndefined()
+      expect(fence.state).toBe('active')
+      await expect(fence.withFencedWrite(async () => 'second-write')).resolves.toBe('second-write')
+      expect(database.clients[4].release).toHaveBeenCalledWith(false)
+      expect(fence.state).toBe('active')
+
+      await fence.release()
+      expect(fence.state).toBe('released')
+      expect(database.remainingBehaviors).toHaveLength(0)
+    } finally {
+      delete process.env[WORKER_DB_FENCE_WRITE_CAP_ENV]
+      jest.useRealTimers()
+    }
+  })
+
+  describe('resolveWorkerDbFenceWriteCapMs', () => {
+    it('keeps 120 s when unset or empty', () => {
+      expect(resolveWorkerDbFenceWriteCapMs({})).toBe(WORKER_DB_FENCE_WRITE_TRANSACTION_CAP_MS)
+      expect(resolveWorkerDbFenceWriteCapMs({ [WORKER_DB_FENCE_WRITE_CAP_ENV]: '' })).toBe(120_000)
+    })
+
+    it('accepts a raise up to the lease bound (140 s)', () => {
+      expect(WORKER_DB_FENCE_WRITE_CAP_MAX_MS).toBe(140_000)
+      expect(resolveWorkerDbFenceWriteCapMs({ [WORKER_DB_FENCE_WRITE_CAP_ENV]: '135000' })).toBe(
+        135_000
+      )
+      expect(resolveWorkerDbFenceWriteCapMs({ [WORKER_DB_FENCE_WRITE_CAP_ENV]: '140000' })).toBe(
+        140_000
+      )
+    })
+
+    it.each(['119999', '140001', '0', '-1', '135000.5', '1e5', ' 135000', '135000ms', 'abc'])(
+      'refuses %p',
+      (value) => {
+        expect(() =>
+          resolveWorkerDbFenceWriteCapMs({ [WORKER_DB_FENCE_WRITE_CAP_ENV]: value })
+        ).toThrow('INGEST_DB_FENCE_WRITE_CAP_MS must be an integer from 120000 to 140000')
+      }
+    )
+
+    it('refuses a malformed value before taking any ownership', async () => {
+      process.env[WORKER_DB_FENCE_WRITE_CAP_ENV] = '200000'
+      try {
+        const redis = redisHarness([])
+        const database = databaseHarness([], [], true)
+        await expect(
+          acquireWorkerDbFenceAuthority({
+            connect: database.connect,
+            heartbeat: heartbeat(),
+            redis,
+          })
+        ).rejects.toThrow('INGEST_DB_FENCE_WRITE_CAP_MS')
+        expect(database.connect).not.toHaveBeenCalled()
+      } finally {
+        delete process.env[WORKER_DB_FENCE_WRITE_CAP_ENV]
+      }
+    })
   })
 
   it('keeps an active write on its starting DB deadline after a concurrent renewal', async () => {
