@@ -537,6 +537,11 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # copy_tradfi max_drawdown is not an established metric. Apply only after the
 # collection worker carrying #571 is deployed and no older worker runs — an
 # older worker writes the value again. Independent of the other entries.
+# 20261127094031 takes xt_spot out of collection and serving (status
+# inactive, serving_mode shadow): its spot board is almost all placeholder
+# rows, so no attempt-bound capture can prove completeness and every Tier-A
+# run failed before a session. Refuses unless xt_spot is active/serving (or
+# already inactive/shadow, on replay). Independent of the other entries.
 # 20261122204058 makes public.arena_resolve_trader() also return the source's
 # public name (meta.legacy_platform when set, else the slug) and adds the
 # index and trigger that keep that name unambiguous among active serving
@@ -597,6 +602,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261124114433_register_bitget_spot_live_board_exhaustion_contract.sql
   20261125035803_readiness_reads_run_metadata_once.sql
   20261125183157_clear_gate_cfd_unverified_mdd.sql
+  20261127094031_xt_spot_out_of_serving.sql
   20261122204058_resolve_trader_public_source.sql
   20261124225312_hero_stats_exclude_idle_window.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
