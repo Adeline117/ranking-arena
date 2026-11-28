@@ -20,6 +20,7 @@ import { z } from 'zod'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getLeaderboard, getTraderDetail } from '@/lib/data/unified'
+import { countPublicRankedTradersBySource } from '@/lib/data/public-ranked-source-counts'
 import { quarantineLegacyPositionHistory } from '@/lib/data/trader/history-quarantine'
 import { LEGACY_METRIC_PUBLICATION_UNAVAILABLE } from '@/lib/data/trader/history-quarantine'
 import { mapLeaderboardRow } from '@/lib/data/trader/mappers'
@@ -52,8 +53,6 @@ const V3_PUBLIC_SEARCH_PERIOD = '90D'
 const V3_PLATFORM_COUNT_PERIOD = '90D'
 const PUBLIC_V3_SEARCH_COLUMNS =
   'source,source_trader_id,handle,avatar_url,source_type,roi,pnl,win_rate,max_drawdown,trades_count,followers,copiers,arena_score,rank,computed_at,season_id,profitability_score,risk_control_score,execution_score,score_completeness,metrics_estimated,trader_type,is_outlier'
-const PUBLIC_V3_PLATFORM_COUNT_COLUMNS =
-  'source,source_trader_id,season_id,rank,arena_score,roi,pnl,win_rate,max_drawdown,score_completeness,metrics_estimated,is_outlier,computed_at'
 
 type V3RankingVisibility = 'partial' | 'unknown'
 
@@ -530,17 +529,13 @@ async function handlePlatforms() {
     // A platform count has to remain bound to the current serving head and
     // source-freshness lease. Do not cache this derivative: a cache hit cannot
     // independently prove those authorities are still live.
-    const supabase = getSupabaseAdmin()
-    const { data, error } = await supabase
-      .from(PUBLIC_RANKED_LEADERBOARD)
-      .select(PUBLIC_V3_PLATFORM_COUNT_COLUMNS)
-      .eq('season_id', V3_PLATFORM_COUNT_PERIOD)
-      .not('rank', 'is', null)
-      // Per-platform trader counts are traders with performance in the
-      // period, as in get_hero_stats: idle-window rows are not counted.
-      .eq('idle_window', false)
-
-    if (error || !Array.isArray(data)) {
+    // Counted by the database, one exact count per served source: reading the
+    // rows back would stop at PostgREST's 1,000-row page (issue #563).
+    const counts = await countPublicRankedTradersBySource(
+      getSupabaseAdmin(),
+      V3_PLATFORM_COUNT_PERIOD
+    )
+    if (counts === null) {
       return {
         data: [],
         totalCountIsExact: false,
@@ -549,27 +544,11 @@ async function handlePlatforms() {
       }
     }
 
-    // The view is the sole row authority, and the same response-boundary
-    // sanitizer used by v3 search makes a malformed direct response partial
-    // rather than emitting a shortened count map.
-    const cohort = sanitizePublicSearchRows(data)
-    if (cohort.integrityCompromised) {
-      return {
-        data: [],
-        totalCountIsExact: false,
-        rankingVisibility: 'partial' as const,
-        rankingVisibilityReason: 'public_cohort_unverified',
-      }
-    }
-
+    // A counted source this API does not list would make the map incomplete;
+    // report partial rather than a shortened count map.
     const activeSourceSet = new Set<string>(activeSources)
-    const countMap: Record<string, number> = {}
-    for (const row of cohort.rows) {
-      if (
-        typeof row.source !== 'string' ||
-        !activeSourceSet.has(row.source) ||
-        !isPublicRankingSourceAllowed(row.source)
-      ) {
+    for (const source of counts.bySource.keys()) {
+      if (!activeSourceSet.has(source)) {
         return {
           data: [],
           totalCountIsExact: false,
@@ -577,11 +556,10 @@ async function handlePlatforms() {
           rankingVisibilityReason: 'public_cohort_unverified',
         }
       }
-      countMap[row.source] = (countMap[row.source] || 0) + 1
     }
 
     const platforms = activeSources.flatMap((source) => {
-      const traderCount = countMap[source]
+      const traderCount = counts.bySource.get(source)
       // Absent from the sealed response is deliberately not rendered as a
       // platform with a fake zero count.
       if (traderCount === undefined) return []

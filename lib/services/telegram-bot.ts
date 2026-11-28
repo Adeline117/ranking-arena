@@ -16,6 +16,7 @@
 
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getLeaderboard, searchTraders } from '@/lib/data/unified'
+import { countPublicRankedTradersBySource } from '@/lib/data/public-ranked-source-counts'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { logger } from '@/lib/logger'
 import { botMessages, type BotLang } from '@/lib/i18n/bot'
@@ -48,13 +49,6 @@ interface TelegramSendMessageParams {
 }
 
 const PUBLIC_TELEGRAM_STATS_PERIOD = '90D'
-// Keep the bot's source scan bounded. A partial source list is less honest
-// than explicitly reporting its publication state as unknown.
-const MAX_PUBLIC_TELEGRAM_STATS_SOURCE_ROWS = 5_000
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 function exactPublicTraderCount(value: unknown): number | null {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : null
@@ -340,43 +334,26 @@ async function handlePrice(chatId: number, args: string, lang: BotLang): Promise
 }
 
 async function handleStats(chatId: number, lang: BotLang): Promise<void> {
-  const cohort = getSupabaseAdmin()
-  const [traderResult, exchangeResult] = await Promise.all([
-    cohort
-      .from('public_ranked_leaderboard')
-      .select('source_trader_id', { count: 'exact', head: true })
-      .eq('season_id', PUBLIC_TELEGRAM_STATS_PERIOD)
-      .eq('idle_window', false),
-    cohort
-      .from('public_ranked_leaderboard')
-      .select('source')
-      .eq('season_id', PUBLIC_TELEGRAM_STATS_PERIOD)
-      .eq('idle_window', false)
-      .range(0, MAX_PUBLIC_TELEGRAM_STATS_SOURCE_ROWS),
-  ])
+  // Exact counts from the database (issue #563): reading the rows back stops
+  // at PostgREST's 1,000-row page, which made the exchange list unknowable.
+  let counts: Awaited<ReturnType<typeof countPublicRankedTradersBySource>> = null
+  try {
+    counts = await countPublicRankedTradersBySource(
+      getSupabaseAdmin(),
+      PUBLIC_TELEGRAM_STATS_PERIOD
+    )
+  } catch (err) {
+    logger.error('[TelegramBot] published cohort counts failed:', err)
+  }
 
   // A published-count failure or an empty view is not proof that zero traders
   // exist. The bot is public, so never substitute raw ranks or a numeric zero.
-  const traderCount = traderResult.error ? null : exactPublicTraderCount(traderResult.count)
+  const traderCount = counts === null ? null : exactPublicTraderCount(counts.total)
   let activeExchanges: string[] | null = null
-  if (
-    traderCount !== null &&
-    traderCount <= MAX_PUBLIC_TELEGRAM_STATS_SOURCE_ROWS &&
-    !exchangeResult.error &&
-    Array.isArray(exchangeResult.data) &&
-    exchangeResult.data.length === traderCount
-  ) {
-    const sources = new Set<string>()
-    for (const row of exchangeResult.data) {
-      const source = isRecord(row) ? row.source : null
-      if (typeof source !== 'string' || !isPublicRankingSourceAllowed(source)) {
-        sources.clear()
-        break
-      }
-      sources.add(source)
-    }
-    if (sources.size > 0) {
-      activeExchanges = Array.from(sources)
+  if (counts !== null && traderCount !== null) {
+    const sources = Array.from(counts.bySource.keys())
+    if (sources.length > 0 && sources.every((source) => isPublicRankingSourceAllowed(source))) {
+      activeExchanges = sources
         .map((source) => EXCHANGE_CONFIG[source as keyof typeof EXCHANGE_CONFIG]?.name || source)
         .sort()
     }

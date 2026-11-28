@@ -81,6 +81,8 @@ CHAIN=(
   20261113110430_rank_publication_source_evidence_binding.sql
   20261114193017_rank_publication_requires_attempt_bound_evidence.sql
   20261116210657_rank_publication_evidence_score_input_digest.sql
+  # The publisher reads the score bundle in columnar form.
+  20261127103322_score_bundle_columnar_rows.sql
 )
 
 # lib/constants/exchanges.ts PUBLIC_ACTIVE_RANKING_SOURCES that the publication

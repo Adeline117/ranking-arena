@@ -130,6 +130,9 @@ async function getRecommendedTraders(typeId: PersonalityTypeId): Promise<Recomme
       .from('public_ranked_leaderboard')
       .select(PUBLIC_QUIZ_TRADER_COLUMNS)
       .eq('season_id', QUIZ_RECOMMENDATION_PERIOD)
+      // Rows with no PnL in the window are listed but must not be recommended
+      // (a trade-count ordering could otherwise surface one).
+      .eq('idle_window', false)
       .not('rank', 'is', null)
       .not(query.orderBy, 'is', null)
       .order(query.orderBy, { ascending: query.ascending })

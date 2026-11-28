@@ -3,6 +3,7 @@
  */
 
 import { mapArenaScoreRowToTraderRow } from '../arena-score-row-mapper'
+import { encodeColumnarScoreBundle } from '@/lib/rankings/publication/columnar-score-bundle'
 import {
   SourcePublicationBundleReaderError,
   readSourcePublicationBundle,
@@ -65,7 +66,8 @@ function bundle(
   scoreRows: Record<string, unknown>[] = [scoreRow()],
   physicalBoards: Record<string, unknown>[] = [physicalBoard()]
 ) {
-  return { scoreRows, physicalBoards }
+  // The RPC's columnar form (20261127103322); the reader decodes it back.
+  return encodeColumnarScoreBundle({ scoreRows, physicalBoards })
 }
 
 function supabaseReturning(data: unknown, error: unknown = null) {
@@ -148,7 +150,7 @@ describe('readSourcePublicationBundle', () => {
 
     const result = await readSourcePublicationBundle(supabase as never, '30D', { now: NOW })
 
-    expect(supabase.rpc).toHaveBeenCalledWith('arena_score_inputs_publish_bundle_json', {
+    expect(supabase.rpc).toHaveBeenCalledWith('arena_score_inputs_publish_bundle_columnar_json', {
       p_window: '30D',
       p_per_platform_limit: 1000,
       p_max_age_hours: DEFAULT_SOURCE_PUBLICATION_MAX_AGE_HOURS,
@@ -210,6 +212,38 @@ describe('readSourcePublicationBundle', () => {
     ['top-level array', []],
     ['non-array scoreRows', { scoreRows: {}, physicalBoards: [physicalBoard()] }],
     ['non-array physicalBoards', { scoreRows: [], physicalBoards: {} }],
+    [
+      'a columnar row shorter than its columns',
+      {
+        scoreRowColumns: ['platform', 'trader_key'],
+        scoreRowValues: [['alpha']],
+        physicalBoards: [physicalBoard()],
+      },
+    ],
+    [
+      'duplicate columns',
+      {
+        scoreRowColumns: ['platform', 'platform'],
+        scoreRowValues: [],
+        physicalBoards: [physicalBoard()],
+      },
+    ],
+    [
+      'a column the score row does not have',
+      encodeColumnarScoreBundle({
+        scoreRows: [scoreRow({ extra: 1 })],
+        physicalBoards: [physicalBoard()],
+      }),
+    ],
+    [
+      'a missing required column',
+      encodeColumnarScoreBundle({
+        scoreRows: [
+          Object.fromEntries(Object.entries(scoreRow()).filter(([key]) => key !== 'roi_pct')),
+        ],
+        physicalBoards: [physicalBoard()],
+      }),
+    ],
   ])('rejects an invalid bundle with %s before projection', async (_label, data) => {
     const mapScoreRow = jest.fn(mapArenaScoreRowToTraderRow)
 
@@ -226,6 +260,43 @@ describe('readSourcePublicationBundle', () => {
     expect(mapScoreRow).not.toHaveBeenCalled()
   })
 
+  it('splits the elapsed time into the RPC wait and the parsing after it', async () => {
+    // A controlled clock: the RPC takes 700 ms, mapping each row 30 ms.
+    let clock = 1_000_000
+    const nowSpy = jest.spyOn(Date, 'now').mockImplementation(() => clock)
+    try {
+      const data = bundle(
+        [
+          scoreRow({ trader_key: 'trader-1', board_rank: 1 }),
+          scoreRow({ trader_key: 'trader-2', board_rank: 2 }),
+        ],
+        [physicalBoard({ actual_count: 2, entry_count: 2, rank_limited_entry_count: 2 })]
+      )
+      const supabase = {
+        rpc: jest.fn().mockImplementation(async () => {
+          clock += 700
+          return { data, error: null }
+        }),
+      }
+      const mapScoreRow = jest.fn((row: Parameters<typeof mapArenaScoreRowToTraderRow>[0]) => {
+        clock += 30
+        return mapArenaScoreRowToTraderRow(row)
+      })
+
+      const result = await readSourcePublicationBundle(
+        supabase as never,
+        '30D',
+        { now: NOW },
+        { mapScoreRow }
+      )
+
+      expect(mapScoreRow).toHaveBeenCalledTimes(2)
+      expect(result.timings).toEqual({ queryMs: 700, parseMs: 60 })
+    } finally {
+      nowSpy.mockRestore()
+    }
+  })
+
   it('rejects an RPC rank limit that differs from the requested per-alias limit', async () => {
     const supabase = supabaseReturning(bundle())
     const mapScoreRow = jest.fn(mapArenaScoreRowToTraderRow)
@@ -240,7 +311,7 @@ describe('readSourcePublicationBundle', () => {
     ).rejects.toMatchObject<Partial<SourcePublicationEvidenceError>>({
       code: 'invalid_count',
     })
-    expect(supabase.rpc).toHaveBeenCalledWith('arena_score_inputs_publish_bundle_json', {
+    expect(supabase.rpc).toHaveBeenCalledWith('arena_score_inputs_publish_bundle_columnar_json', {
       p_window: '30D',
       p_per_platform_limit: 925,
       p_max_age_hours: DEFAULT_SOURCE_PUBLICATION_MAX_AGE_HOURS,

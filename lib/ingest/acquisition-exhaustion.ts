@@ -20,7 +20,11 @@
  *    re-read after the last page yields identical row keys; or, for a live
  *    board that keeps moving while it is paged, bounded drift: the total each
  *    page reports, the distinct rows against the last reported total, and the
- *    duplicate rows each stay within the declared share of the board.
+ *    duplicate rows each stay within the declared share of the board;
+ *  - one ranked row per identity (`identity_merge`, bitget_cfd): the rows
+ *    (portfolios) are each read exactly once and equal the last reported
+ *    total, and the only rows dropped are those merged into the best-ranked
+ *    row of the same identity. Declarations without it are judged as before.
  *
  * The declaration is the per-source capture contract. The database holds the
  * reviewed copy (arena.leaderboard_exhaustion_contracts) and re-checks the same
@@ -117,20 +121,50 @@ export const leaderboardExhaustionBoardVersionSchema = z.discriminatedUnion('kin
     .strict(),
 ])
 
+/**
+ * One ranked row per identity (bitget_cfd: one trader, several portfolios).
+ * Each board row is one portfolio (`row_key_path`); several rows may belong
+ * to one trader (`identity_path`). The board is proven complete by portfolio
+ * (every portfolio read exactly once, as many as the board reports) and the
+ * capture then keeps, for each identity, its best-ranked row: the staging
+ * dedupe (lib/ingest/staging/validate.ts) keeps the lower rank. The kept row
+ * is one real portfolio's figures, not the trader's combined performance.
+ *
+ * Only with a reported_total_drift board version and max_duplicate_rows 0:
+ * a portfolio read twice is never tolerated, and the portfolio count must
+ * equal the last reported total exactly.
+ */
+export const leaderboardExhaustionIdentityMergeSchema = z
+  .object({
+    kind: z.literal('best_rank'),
+    /** Path, inside one row, of the identity the ranking keeps one row for. */
+    identity_path: payloadPathSchema,
+  })
+  .strict()
+
 /** The per-source capture contract for exhausted completeness (reviewed, DB-registered). */
 export const leaderboardExhaustionDeclarationSchema = z
   .object({
     completeness_mode: z.literal('exhausted'),
     /** Payload path of the upstream row array. */
     list_path: payloadPathSchema,
-    /** Path, inside one row, of its stable trader identity. */
+    /** Path, inside one row, of its stable key (one per board row). */
     row_key_path: payloadPathSchema,
     end_signal: leaderboardExhaustionEndSignalSchema,
     board_version: leaderboardExhaustionBoardVersionSchema,
     /** Cross-page duplicate rows the contract tolerates (0 = none). */
     max_duplicate_rows: safeNonNegativeIntegerSchema,
+    /** Absent: one ranked row per row key (every contract before bitget_cfd). */
+    identity_merge: leaderboardExhaustionIdentityMergeSchema.optional(),
   })
   .strict()
+  .refine(
+    (declaration) =>
+      declaration.identity_merge === undefined ||
+      (declaration.board_version.kind === 'reported_total_drift' &&
+        declaration.max_duplicate_rows === 0),
+    'identity_merge requires a reported_total_drift board version and max_duplicate_rows 0'
+  )
 
 export type LeaderboardExhaustionDeclaration = z.infer<
   typeof leaderboardExhaustionDeclarationSchema
@@ -174,6 +208,18 @@ export const leaderboardExhaustionCompletenessSchema = z
         duplicate: safeNonNegativeIntegerSchema,
       })
       .strict(),
+    /**
+     * Present exactly when the declaration has identity_merge: the distinct
+     * identities among the rows, and the rows merged into another row of the
+     * same identity (distinct row keys - identities).
+     */
+    identity_merge: z
+      .object({
+        identities: safeNonNegativeIntegerSchema,
+        merged_rows: safeNonNegativeIntegerSchema,
+      })
+      .strict()
+      .optional(),
     board_version: z.discriminatedUnion('kind', [
       z.object({ kind: z.literal('token') }).strict(),
       z
@@ -260,6 +306,11 @@ export function exhaustionBindingIssues(
   if (completeness.board_version.kind !== declaration.board_version.kind) {
     issues.push('board version evidence must follow the declaration')
   }
+  if ((declaration.identity_merge === undefined) !== (completeness.identity_merge === undefined)) {
+    issues.push(
+      'identity merge evidence is recorded exactly when the declaration merges identities'
+    )
+  }
   if (completeness.row_keys.observed !== facts.observed_row_count) {
     issues.push('row-key observations must equal the observed row count')
   }
@@ -321,10 +372,16 @@ function boardVersionHolds(completeness: LeaderboardExhaustionCompleteness): boo
     const declared = completeness.declaration.board_version
     if (declared.kind !== 'reported_total_drift') return false
     const totals = completeness.board_version.reported_totals
-    const allowance = Math.min(
-      Math.floor((totals.last * declared.max_drift_bps) / 10_000),
-      completeness.declaration.max_duplicate_rows
-    )
+    // identity_merge declares max_duplicate_rows 0 and forbids any duplicate
+    // and any distinct-vs-total gap on its own; the drift share then bounds
+    // only how far the reported total may move between pages.
+    const allowance =
+      completeness.declaration.identity_merge === undefined
+        ? Math.min(
+            Math.floor((totals.last * declared.max_drift_bps) / 10_000),
+            completeness.declaration.max_duplicate_rows
+          )
+        : Math.floor((totals.last * declared.max_drift_bps) / 10_000)
     return (
       totals.min <= totals.last &&
       totals.last <= totals.max &&
@@ -353,6 +410,10 @@ export function exhaustionCompletenessHolds(
 ): boolean {
   if (exhaustionBindingIssues(completeness, facts).length > 0) return false
   const rows = completeness.row_keys
+  const merge = completeness.identity_merge
+  if (completeness.declaration.identity_merge !== undefined) {
+    return merge !== undefined && identityMergeHolds(completeness, merge, facts)
+  }
   return (
     facts.population_report_state === 'unknown' &&
     facts.rejected_row_count === 0 &&
@@ -360,6 +421,37 @@ export function exhaustionCompletenessHolds(
     rows.distinct === facts.accepted_population &&
     rows.duplicate === facts.deduplicated_row_count &&
     rows.duplicate <= completeness.declaration.max_duplicate_rows &&
+    exhaustionEndSignalHolds(completeness, facts) &&
+    boardVersionHolds(completeness)
+  )
+}
+
+/**
+ * The identity_merge proof: every row (portfolio) read exactly once, as many
+ * as the last reported total, and the only rows the capture drops are those
+ * merged into a better-ranked row of the same identity. A portfolio read twice
+ * is never tolerated, whatever the board's drift allowance.
+ */
+function identityMergeHolds(
+  completeness: LeaderboardExhaustionCompleteness,
+  merge: { identities: number; merged_rows: number },
+  facts: LeaderboardExhaustionManifestFacts
+): boolean {
+  const rows = completeness.row_keys
+  const version = completeness.board_version
+  return (
+    completeness.declaration.max_duplicate_rows === 0 &&
+    version.kind === 'reported_total_drift' &&
+    facts.population_report_state === 'unknown' &&
+    facts.rejected_row_count === 0 &&
+    facts.accepted_population > 0 &&
+    rows.duplicate === 0 &&
+    rows.distinct === version.reported_totals.last &&
+    merge.identities === facts.accepted_population &&
+    merge.identities >= 1 &&
+    merge.identities <= rows.distinct &&
+    merge.merged_rows === rows.distinct - merge.identities &&
+    facts.deduplicated_row_count === merge.merged_rows &&
     exhaustionEndSignalHolds(completeness, facts) &&
     boardVersionHolds(completeness)
   )

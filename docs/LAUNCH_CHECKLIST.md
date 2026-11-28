@@ -9,7 +9,7 @@
 2026-11-13 起，2026-08-04 之后新增的迁移已全部分类，`scripts/qa/launch-inventory-gap.json` 为空列表。`launch-inventory-gap.test.mjs` 保证以后新增的迁移也必须先分类。分类写在 `scripts/maintenance/apply-launch-migrations.sh` 里：
 
 - **predeploy**（161 个）：部署前，按清单顺序逐文件应用。
-- **postdeploy**（44 个）：目标版本上线后才应用。
+- **postdeploy**（47 个）：目标版本上线后才应用。
 - **ADR-023 单文件**（`ADR023_SINGLE_FILE_MIGRATIONS`，2 个）：已分类，但执行脚本不会输出它们，`render-predeploy-one` 也会拒绝。每个都必须走 ADR-023 单文件通道，在下文规定的位置、各自的操作窗口里单独应用。
 - **superseded**：永不重放。
 
@@ -97,6 +97,7 @@
 - **币安改由本机采集（2026-11-17 owner 已定）**：binance_futures、binance_spot 的采集区域由 `vps_sg` 改为 `local`（迁移 `20261117204948`，postdeploy），其余字段不变。依据：SG 节点未运行导致两源过期；2026-11-18 从本机用真实浏览器按适配器的预热方式只读探测，合约榜（7/30/90 天，total 13127）、现货榜（total 2469）、合约详情/曲线、现货详情均返回 `000000`。bitmart_futures 仍留在 `vps_sg`（本机被 Turnstile 拦，curl 403）。
 - **blofin_spot 详情采集契约（迁移 `20261120235710`，postdeploy）**：登记 `blofin_spot-profile-capture@1`，认证现货详情接口 `/sapi/v1/spot_copy/trader/stat/indicators` 的分周期胜率（`win_ratio_all`）和交易次数（`trades`）；回撤不登记（空仓账户在 7/30/90 天返回同一个非零值，不是所选窗口的值）；榜单行的回撤就是同一个数，不是独立证据，周期内零成交的行不把回撤当周期指标（另一处改动实现）。必须在带现货详情路由和同一契约文档的 worker 上线之后应用；旧 worker 不抓现货详情，也不开采集记录。每轮深抓覆盖全榜（约 150 人 × 3 个周期）。2026-11-20 公开只读实测：所选周期内有成交、因而有胜率的交易员只有 3 / 8 / 17 人（7D / 30D / 90D），其余人周期内零成交，交易所返回的胜率是 "0"，解析器按"无胜率"留空。
 - **bitget_spot 实时榜单穷尽契约（迁移 `20261124114433`，postdeploy）**：在 `arena.leaderboard_exhaustion_contracts` 登记 bitget_spot，采集读到短页或空页结束，用报告总数漂移（`reported_total_drift`）证明完整：各页报告总数的极差、不重复行数与最后一次总数之差、跨页重复行数都不超过最后一次总数的 0.35%（`max_drift_bps` 35，5,415 人时 18 行），且不超过 20 行（`max_duplicate_rows`）。依据：现货榜约 5,400 人、181 页，一个周期约 8 分钟，翻页期间名次变动，总数模式每轮都因 2–4 条跨页重复被拒，见证过期导致整季下线。2026-11-24 公开只读实测 8 遍（7/30/90 天，按采集节奏 2.5 秒一页）：每遍都在第 181 页出现真正的短页（15 行），第 182 页为空页；报告总数极差 0–1；重复 1–6 条，漏掉的行数相同。允许量取实测最大值的 3 倍，它同时是“判为完整的采集最多可能漏掉的行数”。必须排在 `20261118114230` 之后；带该声明的 worker 上线与本迁移应用都完成之前，bitget_spot 的采集照旧被拒。bitget_cfd、bitget_futures 不登记，行为不变。登记表强制 RLS 且只有只读策略，应用迁移的角色需要 BYPASSRLS。PG17 证明：`npm run qa:bitget-spot-live-board-pg17`。
+- **bitget_cfd 每人一行（迁移 `20261127101312`，postdeploy）**：穷尽证明新增可选的 `identity_merge`（按身份合并，取名次最好的一行），并用它登记 bitget_cfd。CFD 榜每行是一个组合，一个交易员可以带两个组合（type 1 跟单组合和 type 2 UTA 组合），同一个 traderUid 出现两行；采集按 traderUid 去重，总数模式因此从 2026-11-24 起每轮都报 population=partial。证明按 portfolioId 计：每个组合恰好读到一次（零重复）、组合数等于最后一次报告总数（`max_duplicate_rows` 0，组合重复零容忍）；翻页期间报告总数允许变动最后总数的 0.6%（`max_drift_bps` 60：7D 191、30D 220、90D 224 都是 1 行，三个窗口都只容忍变 1；取 60 而不是 50，是为了让 7D 的 191 也能容忍 1，50 时 ⌊191×0.5%⌋=0。依据：实测 12 次窗口读取里有 1 次（90D）总数在 224 和 225 之间变动）；被接受的人数等于不同 traderUid 数，manifest 的去重行数必须等于合并掉的组合数。每个 traderUid 只保留名次最好的组合，该行在 trader_stats extras 里记 `ranked_portfolio_id`、`ranked_portfolio_type`、`merged_portfolio_count`。这是在多个真实组合里选了最好的一个，不是此人的整体表现。2026-11-27 公开只读实测 4 遍（每页 2.5 秒）：7D 191 个组合 / 188 人，30D 220 / 218，90D 224 / 222，各遍一致，都以短页加空页结束。本迁移替换 `20261118114230` 写入的两个函数体（预检核对其摘要，其他函数体一律拒绝），未声明 identity_merge 的契约走原路径、结果逐位不变（PG17 证明里对 7,680 个用例比对迁移前后）。必须排在 `20261118114230`、`20261124114433` 之后；带该声明的 worker 上线与本迁移应用都完成之前，bitget_cfd 的采集照旧被拒。登记表强制 RLS 且只有只读策略，应用迁移的角色需要 BYPASSRLS。迁移序号第 47 位（排在 46 = #578 之后）。PG17 证明：`npm run qa:bitget-cfd-one-row-per-trader-pg17`。
 
 ## 上线前要确认的产品问题
 
