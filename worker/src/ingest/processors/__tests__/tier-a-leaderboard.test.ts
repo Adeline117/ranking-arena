@@ -25,6 +25,7 @@ import {
   LEADERBOARD_PARTITIONED_NUMERIC_PARSER_PAGE_CONTRACT,
   projectPartitionedNumericParserPage,
 } from '@/lib/ingest/acquisition-manifest'
+import { LEADERBOARD_EXHAUSTION_COMPLETENESS_CONTRACT } from '@/lib/ingest/acquisition-exhaustion'
 import type { TierJobData } from '../../queues'
 
 const mockGetSourceBySlug = jest.fn()
@@ -376,6 +377,67 @@ function capturedLeaderboard(overrides: Partial<LeaderboardCapture> = {}): Leade
     captureConfig: { caller_page_cap: null, safety_page_cap: 5_000 },
     parserTransformation: { kind: 'identity_projection', source_page_ordinals: [1] },
     ...overrides,
+  }
+}
+
+function exhaustedLeaderboardCapture(): LeaderboardCapture {
+  const fetchedAt = new Date().toISOString()
+  const rawPage = { ...page, fetchedAt }
+  const requestSha256 = 'a'.repeat(64)
+  const responseSha256 = strictCanonicalSha256(rawPage.payload)
+  const rowKeysSha256 = strictCanonicalSha256(['xt-1'])
+  return {
+    sourcePages: [
+      {
+        rawPage,
+        sourceRowCount: 1,
+        requestSha256,
+        httpStatus: 200,
+        paginationPosition: { kind: 'page_index', request_page_index: 1 },
+        sourceReports: {
+          population: { state: 'not_reported' },
+          page_count: { state: 'not_reported' },
+          current_page: { state: 'not_reported' },
+          page_size: { state: 'not_reported' },
+        },
+      },
+    ],
+    parsePages: [rawPage],
+    terminationReason: 'short_page',
+    captureConfig: { caller_page_cap: null, safety_page_cap: 5_000 },
+    parserTransformation: { kind: 'identity_projection', source_page_ordinals: [1] },
+    completeness: {
+      data_contract: LEADERBOARD_EXHAUSTION_COMPLETENESS_CONTRACT,
+      declaration: {
+        completeness_mode: 'exhausted',
+        list_path: ['result', 'items'],
+        row_key_path: ['accountId'],
+        end_signal: { kind: 'short_page' },
+        board_version: { kind: 'first_page_reread' },
+        max_duplicate_rows: 0,
+      },
+      pages: [
+        {
+          ordinal: 1,
+          request_sha256: requestSha256,
+          response_sha256: responseSha256,
+          row_count: 1,
+          row_keys_sha256: rowKeysSha256,
+          end_signal_value: null,
+          version_token_sha256: null,
+        },
+      ],
+      row_keys: { observed: 1, distinct: 1, duplicate: 0 },
+      board_version: {
+        kind: 'first_page_reread',
+        reread: {
+          request_sha256: requestSha256,
+          response_sha256: responseSha256,
+          http_status: 200,
+          row_keys_sha256: rowKeysSha256,
+        },
+      },
+    },
   }
 }
 
@@ -3595,63 +3657,113 @@ describe('Tier-A board-series publication guard', () => {
      * Run the ordinary capture path once with a failing publication (as on
      * 11-27), and return what a later queue attempt finds in the database:
      * the earlier attempt, its terminal outcome and its two stored RAWs.
+     * With several timeframes every window captures and fails to publish;
+     * `republishable` selects which of them the lookup then offers.
      */
-    async function recordCaptureThatFailedToPublish() {
-      const captureLeaderboard = configureAttemptBoundSource([30])
-      mockPublishTrustedLeaderboardSnapshot.mockRejectedValueOnce(new Error('write deadline'))
-      await expect(processTierA(job)).rejects.toThrow('1/1 native windows failed (30d)')
-      expect(captureLeaderboard).toHaveBeenCalledTimes(1)
-
-      const startedAttempt = (await mockStartLeaderboardAcquisitionAttempt.mock.results[0]
-        .value) as LeaderboardAcquisitionAttempt
-      const [write] = attemptBoundRawWrites()
-      const artifacts = (await mockWriteAttemptBoundLeaderboardRawArtifactSet.mock.results[0]
-        .value) as ReturnType<typeof attemptBoundRawReceipt>
-      const projection = artifacts.projection
-      const storedManifest = JSON.parse(JSON.stringify(write.manifest)) as Record<string, unknown>
-      const storedPages = JSON.parse(JSON.stringify(write.sourcePages)) as RawPage[]
-      const attempt = Object.freeze({
-        ...startedAttempt,
-        queueAttempt: job.attemptsMade - 1,
-        executionClaimId: CAPTURED_BY_CLAIM,
-        executionGenerationSeq: 16,
-      })
-      const latest = {
-        attempt,
-        outcome: {
-          terminalState: projection.terminalState,
-          acquisitionState: projection.acquisitionState,
-          populationState: projection.populationState,
-          reasonCode: projection.reasonCode,
-          captureEvidenceState: projection.captureEvidenceState,
-          terminationReason: projection.terminationReason,
-          captureStartedAt: projection.binding.captureStartedAt,
-          captureCompletedAt: projection.binding.captureCompletedAt,
-          sourceRunId: projection.sourceRunId,
-          sourcePayload: artifacts.sourcePayload,
-          populationManifest: artifacts.populationManifest,
-          diagnosticRawObjectId: null,
-          failureStage: null,
-          reportedPopulation: projection.reportedPopulation,
-          populationReportState: projection.populationReportState,
-          sourcePageCount: projection.sourcePageCount,
-          reportedPageCount: projection.reportedPageCount,
-          pageCountReportState: projection.pageCountReportState,
-          observedPopulation: projection.observedPopulation,
-          acceptedPopulation: projection.acceptedPopulation,
-          rejectedRowCount: projection.rejectedRowCount,
-          deduplicatedRowCount: projection.deduplicatedRowCount,
-          callerLimited: projection.callerLimited,
-          safetyLimited: projection.safetyLimited,
-          exhaustionEvidencePresent: false,
-        },
-        databaseNow: new Date().toISOString(),
+    async function recordCaptureThatFailedToPublish(
+      options: {
+        timeframes?: Array<7 | 30 | 90>
+        republishable?: Array<7 | 30 | 90>
+        capture?: () => LeaderboardCapture
+      } = {}
+    ) {
+      const timeframes = options.timeframes ?? [30]
+      const captureLeaderboard = configureAttemptBoundSource(
+        timeframes,
+        jest.fn(async () => (options.capture ?? capturedLeaderboard)())
+      )
+      for (const _timeframe of timeframes) {
+        mockPublishTrustedLeaderboardSnapshot.mockRejectedValueOnce(
+          Object.assign(new Error('canceling statement due to statement timeout'), {
+            code: '57014',
+          })
+        )
       }
-      mockFindLatestTierAWindowAttempt.mockResolvedValue(latest)
-      mockReadTrustRaw.mockImplementation(async (input: { role: string }) =>
-        input.role === 'population_manifest'
-          ? JSON.parse(JSON.stringify(storedManifest))
-          : JSON.parse(JSON.stringify(storedPages))
+      await expect(processTierA(job)).rejects.toThrow('native windows failed')
+      expect(captureLeaderboard).toHaveBeenCalledTimes(timeframes.length)
+
+      const writes = attemptBoundRawWrites()
+      const byTimeframe = new Map<
+        number,
+        {
+          latest: {
+            attempt: Record<string, unknown>
+            outcome: Record<string, unknown>
+            databaseNow: string
+          }
+          attempt: LeaderboardAcquisitionAttempt & { executionGenerationSeq: number }
+          storedManifest: Record<string, unknown>
+          storedPages: RawPage[]
+          projection: ReturnType<typeof attemptBoundRawReceipt>['projection']
+        }
+      >()
+      for (const [index] of timeframes.entries()) {
+        const startedAttempt = (await mockStartLeaderboardAcquisitionAttempt.mock.results[index]
+          .value) as LeaderboardAcquisitionAttempt
+        const write = writes[index]
+        const artifacts = (await mockWriteAttemptBoundLeaderboardRawArtifactSet.mock.results[index]
+          .value) as ReturnType<typeof attemptBoundRawReceipt>
+        const projection = artifacts.projection
+        const attempt = Object.freeze({
+          ...startedAttempt,
+          queueAttempt: job.attemptsMade - 1,
+          executionClaimId: CAPTURED_BY_CLAIM,
+          executionGenerationSeq: 16,
+        })
+        const latest = {
+          attempt,
+          outcome: {
+            terminalState: projection.terminalState,
+            acquisitionState: projection.acquisitionState,
+            populationState: projection.populationState,
+            reasonCode: projection.reasonCode,
+            captureEvidenceState: projection.captureEvidenceState,
+            terminationReason: projection.terminationReason,
+            captureStartedAt: projection.binding.captureStartedAt,
+            captureCompletedAt: projection.binding.captureCompletedAt,
+            sourceRunId: projection.sourceRunId,
+            sourcePayload: artifacts.sourcePayload,
+            populationManifest: artifacts.populationManifest,
+            diagnosticRawObjectId: null,
+            failureStage: null,
+            reportedPopulation: projection.reportedPopulation,
+            populationReportState: projection.populationReportState,
+            sourcePageCount: projection.sourcePageCount,
+            reportedPageCount: projection.reportedPageCount,
+            pageCountReportState: projection.pageCountReportState,
+            observedPopulation: projection.observedPopulation,
+            acceptedPopulation: projection.acceptedPopulation,
+            rejectedRowCount: projection.rejectedRowCount,
+            deduplicatedRowCount: projection.deduplicatedRowCount,
+            callerLimited: projection.callerLimited,
+            safetyLimited: projection.safetyLimited,
+            exhaustionEvidencePresent: projection.exhaustionVerified,
+            gatedSnapshotPresent: false,
+          },
+          databaseNow: new Date().toISOString(),
+        }
+        byTimeframe.set(startedAttempt.timeframe, {
+          latest,
+          attempt,
+          storedManifest: JSON.parse(JSON.stringify(write.manifest)) as Record<string, unknown>,
+          storedPages: JSON.parse(JSON.stringify(write.sourcePages)) as RawPage[],
+          projection,
+        })
+      }
+      const republishable = new Set(options.republishable ?? timeframes)
+      mockFindLatestTierAWindowAttempt.mockImplementation(
+        async (_transaction: unknown, input: { timeframe: number }) =>
+          republishable.has(input.timeframe as 7 | 30 | 90)
+            ? (byTimeframe.get(input.timeframe)?.latest ?? null)
+            : null
+      )
+      mockReadTrustRaw.mockImplementation(
+        async (input: { role: string; expectedTimeframe: number }) => {
+          const stored = byTimeframe.get(input.expectedTimeframe)!
+          return input.role === 'population_manifest'
+            ? JSON.parse(JSON.stringify(stored.storedManifest))
+            : JSON.parse(JSON.stringify(stored.storedPages))
+        }
       )
 
       // The retry: a fresh claim of the same job, nothing else carried over.
@@ -3664,7 +3776,8 @@ describe('Tier-A board-series publication guard', () => {
       captureLeaderboard.mockClear()
       warnSpy.mockClear()
       logSpy.mockClear()
-      return { captureLeaderboard, latest, attempt, storedManifest, storedPages, projection }
+      const first = byTimeframe.get(timeframes[0])!
+      return { captureLeaderboard, byTimeframe, ...first }
     }
 
     function expectRescanned(captureLeaderboard: jest.Mock) {
@@ -3914,9 +4027,11 @@ describe('Tier-A board-series publication guard', () => {
       expectRescanned(captureLeaderboard)
     })
 
-    it('fails the window on publish_failed without rescanning in the same job attempt', async () => {
+    it('fails the window on a transient publish_failed without rescanning in the same job attempt', async () => {
       const { captureLeaderboard, attempt } = await recordCaptureThatFailedToPublish()
-      mockPublishTrustedLeaderboardSnapshot.mockRejectedValueOnce(new Error('write deadline'))
+      mockPublishTrustedLeaderboardSnapshot.mockRejectedValueOnce(
+        Object.assign(new Error('write deadline'), { code: '57014' })
+      )
 
       const failure = await processTierA(job).then(
         () => null,
@@ -3934,6 +4049,184 @@ describe('Tier-A board-series publication guard', () => {
       expect(mockRecordRepublishReceipt).not.toHaveBeenCalled()
       expect(mockRecordExecutionWindowReceipt).not.toHaveBeenCalled()
       expect(mockExecutionClose).toHaveBeenLastCalledWith('failed')
+    })
+
+    it('rescans after a GATED republish instead of failing every retry', async () => {
+      const { captureLeaderboard, attempt } = await recordCaptureThatFailedToPublish()
+      mockPublishTrustedLeaderboardSnapshot.mockResolvedValueOnce({
+        snapshotId: 790,
+        scrapedAt: '2026-07-16 00:01:02.123456+00',
+        verdict: { passed: false, baselineUsed: 500, deviationPct: -99.8 },
+        published: false,
+        traderIds: new Map(),
+        trust: { sourceRunId: 'c'.repeat(64), observationsWritten: 0, artifactRefsWritten: 0 },
+      })
+
+      await expect(processTierA(job)).resolves.toHaveLength(1)
+
+      expectSkipped('count_check_gated', attempt.attemptSeq)
+      expect(mockPublishTrustedLeaderboardSnapshot).toHaveBeenCalledTimes(2)
+      expectRescanned(captureLeaderboard)
+    })
+
+    it('skips a capture whose snapshot is already GATED before reading RAW', async () => {
+      const { captureLeaderboard, latest, attempt } = await recordCaptureThatFailedToPublish()
+      latest.outcome = { ...latest.outcome, gatedSnapshotPresent: true }
+
+      await expect(processTierA(job)).resolves.toHaveLength(1)
+
+      expectSkipped('count_check_gated', attempt.attemptSeq)
+      expect(mockReadTrustRaw).not.toHaveBeenCalled()
+      expectRescanned(captureLeaderboard)
+    })
+
+    it.each([
+      [
+        'an identity conflict',
+        () =>
+          mockPublishTrustedLeaderboardSnapshot.mockRejectedValueOnce(
+            Object.assign(new Error('duplicate trader identity'), { code: '23505' })
+          ),
+      ],
+      [
+        'an exhaustion proof that no longer holds',
+        () =>
+          mockPublishTrustedLeaderboardSnapshot.mockRejectedValueOnce(
+            new Error(
+              'attempt-bound trusted publication requires one exact complete acquisition outcome'
+            )
+          ),
+      ],
+      [
+        'a missing metric trust contract',
+        () => mockHasRegisteredLeaderboardMetricTrust.mockReturnValueOnce(false),
+      ],
+      [
+        'an unknown error',
+        () => mockPublishTrustedLeaderboardSnapshot.mockRejectedValueOnce(new Error('unexpected')),
+      ],
+    ])('rescans on a deterministic publish failure: %s', async (_label, arrange) => {
+      const { captureLeaderboard, attempt } = await recordCaptureThatFailedToPublish()
+      arrange()
+
+      await expect(processTierA(job)).resolves.toHaveLength(1)
+
+      expectSkipped('publish_rejected', attempt.attemptSeq)
+      expectRescanned(captureLeaderboard)
+    })
+
+    it.each([
+      ['a statement timeout', { code: '57014' }],
+      ['a dropped connection', { code: 'ECONNRESET' }],
+      ['a lock timeout', { code: '55P03' }],
+    ])('fails without rescanning on a transient publish failure: %s', async (_label, fields) => {
+      const { captureLeaderboard, attempt } = await recordCaptureThatFailedToPublish()
+      mockPublishTrustedLeaderboardSnapshot.mockRejectedValueOnce(
+        Object.assign(new Error('publication failed'), fields)
+      )
+
+      await expect(processTierA(job)).rejects.toThrow('1/1 native windows failed (30d)')
+
+      expectSkipped('publish_failed', attempt.attemptSeq)
+      expect(captureLeaderboard).not.toHaveBeenCalled()
+      expect(mockStartLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
+    })
+
+    it('skips a candidate inside the freshness margin and rescans', async () => {
+      const { captureLeaderboard, latest, attempt } = await recordCaptureThatFailedToPublish()
+      latest.databaseNow = new Date(
+        Date.parse(attempt.recordedStartedAt) + 6 * 60 * 60 * 1000 - 10 * 60 * 1000
+      ).toISOString()
+
+      await expect(processTierA(job)).resolves.toHaveLength(1)
+
+      expectSkipped('stale', attempt.attemptSeq)
+      expect(mockReadTrustRaw).not.toHaveBeenCalled()
+      expectRescanned(captureLeaderboard)
+    })
+
+    it('re-publishes an exhausted capture with a holding proof', async () => {
+      const { captureLeaderboard, attempt, projection } = await recordCaptureThatFailedToPublish({
+        capture: exhaustedLeaderboardCapture,
+      })
+      expect(projection.terminalState).toBe('unknown')
+      expect(projection.exhaustionVerified).toBe(true)
+
+      await expect(processTierA(job)).resolves.toEqual([
+        expect.objectContaining({ timeframe: 30, snapshotId: 777 }),
+      ])
+
+      expect(captureLeaderboard).not.toHaveBeenCalled()
+      expect(mockRecordRepublishReceipt).toHaveBeenCalledTimes(1)
+      expect(logLines()).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining(
+            `[tier-a] republished source=binance_futures tf=30d attempt_seq=${attempt.attemptSeq} rows=1`
+          ),
+        ])
+      )
+    })
+
+    it('re-publishes 7D and rescans 30D in one job', async () => {
+      const { captureLeaderboard, byTimeframe } = await recordCaptureThatFailedToPublish({
+        timeframes: [7, 30],
+        republishable: [7],
+      })
+
+      const results = await processTierA(job)
+
+      expect(results.map((result) => result.timeframe)).toEqual([7, 30])
+      expect(captureLeaderboard).toHaveBeenCalledTimes(1)
+      expect(captureLeaderboard.mock.calls[0][2]).toBe(30)
+      expect(mockRecordRepublishReceipt).toHaveBeenCalledTimes(1)
+      expect(mockRecordRepublishReceipt.mock.calls[0][1]).toEqual(
+        expect.objectContaining({ timeframe: 7, attemptId: byTimeframe.get(7)!.attempt.attemptId })
+      )
+      expect(mockRecordExecutionWindowReceipt).toHaveBeenCalledTimes(1)
+      expect(mockRecordExecutionWindowReceipt.mock.calls[0][1]).toEqual(
+        expect.objectContaining({ timeframe: 30 })
+      )
+      expect(job.data.completedTimeframes).toEqual([7, 30])
+    })
+
+    it.each(['55000', '42501'])(
+      'fails the job when the republish receipt is refused (%s) after publication',
+      async (code) => {
+        const { captureLeaderboard, attempt } = await recordCaptureThatFailedToPublish()
+        const { TierAExecutionWindowReceiptError } = jest.requireMock(
+          '@/worker/src/ingest/tier-a-execution-window-receipt'
+        ) as { TierAExecutionWindowReceiptError: new (message: string) => Error }
+        const refusal = Object.assign(new TierAExecutionWindowReceiptError('receipt refused'), {
+          code: 'unavailable',
+          cause: Object.assign(new Error('refused'), { code }),
+        })
+        mockRecordRepublishReceipt.mockRejectedValueOnce(refusal)
+
+        await expect(processTierA(job)).rejects.toBe(refusal)
+
+        expectSkipped('publish_failed', attempt.attemptSeq)
+        expect(mockPublishTrustedLeaderboardSnapshot).toHaveBeenCalledTimes(1)
+        expect(captureLeaderboard).not.toHaveBeenCalled()
+        expect(job.data.completedTimeframes ?? []).toEqual([])
+      }
+    )
+
+    it('stops when execution authority is revoked during the republish', async () => {
+      const { captureLeaderboard } = await recordCaptureThatFailedToPublish()
+      const lost = new Error('execution lease lost')
+      mockPublishTrustedLeaderboardSnapshot.mockImplementationOnce(async () => {
+        mockExecutionAssertActive.mockImplementation(() => {
+          throw lost
+        })
+        throw new Error('publication aborted')
+      })
+
+      await expect(processTierA(job)).rejects.toBeDefined()
+
+      expect(captureLeaderboard).not.toHaveBeenCalled()
+      expect(mockStartLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
+      expect(mockRecordRepublishReceipt).not.toHaveBeenCalled()
+      expect(mockExecutionClose).toHaveBeenLastCalledWith('revoked')
     })
 
     it('rescans when a newer snapshot already serves the window (stale publication)', async () => {

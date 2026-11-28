@@ -107,6 +107,7 @@ import {
 import {
   classifyTierAWindowRepublishCandidate,
   findLatestTierAWindowAttempt,
+  isTransientRepublishPublicationError,
   type TierAWindowRepublishSkipReason,
 } from '../tier-a-window-republish'
 
@@ -240,6 +241,14 @@ class TierAAttemptFinalizationError extends AggregateError {
     this.name = 'TierAAttemptFinalizationError'
   }
 }
+
+/**
+ * The snapshot was recorded but failed its count check (GATED). A plain Error
+ * subclass with the unchanged message, so the capture path handles it exactly
+ * as before; the republish path recognises it, because replaying the same
+ * capture within the same cycle would be GATED again on every retry.
+ */
+class TierACountCheckGatedError extends Error {}
 
 function throwIfTierACancelled(signal?: AbortSignal): void {
   if (!signal?.aborted) return
@@ -1135,7 +1144,7 @@ export async function processTierA(
       // Keep this window out of serving, but do not sacrifice the other
       // native windows. The aggregate error after the loop still fails the
       // BullMQ job for retry and operator visibility.
-      throw new Error(
+      throw new TierACountCheckGatedError(
         `count check FAILED: actual=${valid.length} ` +
           `baseline=${result.verdict.baselineUsed} — snapshot ${result.snapshotId} ` +
           `recorded, serving keeps last good`
@@ -1258,14 +1267,18 @@ export async function processTierA(
    *
    * Any check failing before publication logs one `republish skipped` line
    * and returns `rescan`, so the ordinary capture path runs unchanged. Once
-   * publication has started, a failure (reason=publish_failed) fails this
-   * window like the ordinary path would and does NOT rescan in the same job
-   * attempt: a failed republish followed by a 107-minute rescan could exceed
-   * the job's lock/timeout budget, and the next BullMQ retry can try the
-   * republish again (the capture is still the window's latest attempt).
-   * The one exception is a stale-publication rejection (a newer snapshot
-   * already serves the window): it rolled back, can never succeed on a later
-   * retry either, and so falls back to the rescan (reason=stale).
+   * publication has started, errors are split in two. A transient failure
+   * (deadline, timeout, connection, lock, serialization;
+   * reason=publish_failed) fails this window like the ordinary path would and
+   * does NOT rescan in the same job attempt: a failed republish followed by a
+   * 107-minute rescan could exceed the job's lock/timeout budget, and the
+   * next BullMQ retry can republish again (the capture is still the window's
+   * latest attempt). A deterministic one (stale, count_check_gated,
+   * publish_rejected; unknown errors count as deterministic) would fail the
+   * same way on every retry, so it rescans now. This classification was
+   * chosen over a per-attempt republish-failure counter: it needs no new
+   * durable state, and a repeatedly transient failure is bounded by the
+   * job's own attempt limit, exactly as it was for the rescan.
    */
   const republishRecordedWindow = async (timeframe: RankingTimeframe): Promise<WindowRepublish> => {
     // Only pending windows reach here, so the window has no durable receipt
@@ -1609,28 +1622,49 @@ export async function processTierA(
           `[tier-a] ${src.slug} ${timeframe}d republish failed while execution authority was revoked`
         )
       }
-      // A newer snapshot already serves this window (for instance a prior
-      // republish whose receipt did not commit). The publication transaction
-      // rolled back, so nothing of this attempt is published: rescan, which
-      // supersedes the recorded attempt, instead of failing every retry.
-      if (cause instanceof StaleLeaderboardPublicationError && terminalSideEffect === null) {
-        logRepublishSkipped('stale', timeframe, attempt.attemptSeq, cause)
-        return { kind: 'rescan' }
-      }
-      logRepublishSkipped(
-        cause instanceof TierAExecutionWindowReceiptError && cause.code === 'undefined_function'
-          ? 'receipt_rpc_unavailable'
-          : 'publish_failed',
-        timeframe,
-        attempt.attemptSeq,
-        cause
-      )
       // As in the capture path: a receipt-stage or receipt-contract failure
-      // leaves an ambiguous terminal side effect and fails the job; any other
-      // publication failure fails only this window.
+      // follows a published snapshot, leaves an ambiguous terminal side
+      // effect and fails the job. The next retry finds that snapshot newer
+      // than or equal to this capture (stale publication below) and rescans.
       if (cause instanceof TierAExecutionWindowReceiptError || terminalSideEffect !== null) {
+        logRepublishSkipped(
+          cause instanceof TierAExecutionWindowReceiptError && cause.code === 'undefined_function'
+            ? 'receipt_rpc_unavailable'
+            : 'publish_failed',
+          timeframe,
+          attempt.attemptSeq,
+          cause
+        )
         throw cause
       }
+      // Failures that the same recorded capture would hit again on every
+      // retry fall back to the rescan now; nothing of this replay is left
+      // published (the snapshot transaction rolled back, or the snapshot is
+      // GATED and out of serving, or the optional series alone failed):
+      // - stale: a newer snapshot already serves the window (for instance a
+      //   prior republish whose receipt did not commit);
+      // - count_check_gated: within one cycle the baseline does not move;
+      // - publish_rejected: every other non-transient error, unknown ones
+      //   included (identity conflict, a no-longer-holding exhaustion proof,
+      //   a missing metric contract...). Rescanning once too often is cheaper
+      //   than republishing a doomed capture until the job's attempts run out.
+      // Only a transient failure (deadline, timeout, connection, lock,
+      // serialization) keeps the no-rescan rule: the window fails and the
+      // next BullMQ retry republishes again.
+      const deterministicReason: TierAWindowRepublishSkipReason | null =
+        cause instanceof StaleLeaderboardPublicationError
+          ? 'stale'
+          : cause instanceof TierACountCheckGatedError
+            ? 'count_check_gated'
+            : isTransientRepublishPublicationError(cause)
+              ? null
+              : 'publish_rejected'
+      if (deterministicReason !== null) {
+        execution.assertActive()
+        logRepublishSkipped(deterministicReason, timeframe, attempt.attemptSeq, cause)
+        return { kind: 'rescan' }
+      }
+      logRepublishSkipped('publish_failed', timeframe, attempt.attemptSeq, cause)
       const detail = asError(cause).message
       const error = new Error(`[tier-a] ${src.slug} ${timeframe}d failed: ${detail}`, { cause })
       console.error(error.message)
