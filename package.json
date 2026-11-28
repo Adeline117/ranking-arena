@@ -329,7 +329,7 @@
     "eslint-config-next": "16.4.0",
     "jest": "^30.3.0",
     "jest-environment-jsdom": "^30.3.0",
-    "lighthouse": "^13.0.3",
+    "lighthouse": "^13.6.0",
     "lint-staged": "^16.4.0",
     "playwright": "^1.58.2",
     "prettier": "^3.8.1",
