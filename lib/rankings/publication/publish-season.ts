@@ -706,6 +706,15 @@ export function rankPublicationStageTimingLine(
   return `[${season}] stage=${stage} rows=${rows} ms=${Math.max(0, Math.round(elapsedMs))}`
 }
 
+/** The read stage split into the RPC round trip and the parsing after it. */
+export function rankPublicationReadSplitLine(
+  season: PublicationWindow,
+  timings: { queryMs: number; parseMs: number }
+): string {
+  const ms = (value: number) => Math.max(0, Math.round(value))
+  return `[${season}] stage=read query_ms=${ms(timings.queryMs)} parse_ms=${ms(timings.parseMs)}`
+}
+
 /**
  * Order in which rows are sent to the database.
  *
@@ -1134,6 +1143,7 @@ async function publishInTransaction(
     // required: it arrives as null and the row is ranked with it empty.
     const traderRows = bundle.traderRows.filter((row) => expected.has(row.source))
     log(rankPublicationStageTimingLine(season, 'read', traderRows.length, readElapsedMs))
+    log(rankPublicationReadSplitLine(season, bundle.timings))
     const unevidencedKeys = new Set(
       evidence.freshScoreRows
         .filter((row) => lacksRequiredMetricEvidence(row, rowEligibility))

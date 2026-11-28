@@ -474,6 +474,11 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # entry counts come from index-only scans instead of fetching every entry row
 # from the 53 GB heap (5.5 s of a 9.9 s warm run; first 7D attempt timing out
 # at 30 s when cold). Output is unchanged. Independent of the other entries.
+# 20261127103322 adds public.arena_score_inputs_publish_bundle_columnar_json, a
+# wrapper that returns the same bundle with the score rows as column arrays
+# (key names once, about half the bytes). Additive; it must be applied before
+# the scoring worker release that reads it, and changes nothing for an older
+# worker. Follows 154211 only for readability; independent of the other entries.
 # 20261120235710 registers the blofin_spot profile capture contract
 # (win_rate, total_positions from the spot detail endpoints) in the registry of
 # predeploy 20261116215328. It is only meaningful to the worker release that
@@ -589,6 +594,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261121201553_visible_sources_from_served_ranks.sql
   20261122152622_metric_trust_observation_lineage_per_statement.sql
   20261122154211_score_bundle_index_only_entry_counts.sql
+  20261127103322_score_bundle_columnar_rows.sql
   20261118134316_raw_retention_backlog_census.sql
   20261120235710_register_blofin_spot_profile_capture_contract.sql
   20261123020207_metric_trust_artifact_raw_integrity_per_statement.sql
