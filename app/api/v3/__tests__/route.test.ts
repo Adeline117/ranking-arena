@@ -72,6 +72,7 @@ jest.mock('@/lib/utils/logger', () => ({
 
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
+import { fakePublicRankedCountClient } from '@/lib/data/testing/public-ranked-count-client'
 const PRIVATE_NO_STORE = 'private, no-store, max-age=0, must-revalidate'
 
 function request(path: string, headers?: HeadersInit) {
@@ -206,19 +207,17 @@ describe('GET /api/v3 cache and publication boundaries', () => {
     expect(mockGetLeaderboard).not.toHaveBeenCalled()
   })
 
+  function usePlatformCounts(state: Parameters<typeof fakePublicRankedCountClient>[0]) {
+    const fake = fakePublicRankedCountClient(state)
+    mockFrom.mockImplementation((relation: string) => fake.from(relation))
+    mockRpc.mockImplementation((name: string, args: unknown) => fake.rpc(name, args))
+    return fake
+  }
+
   it('builds each platform count from the sealed 90D cohort, never the retained raw table', async () => {
-    const query = publicRankedQuery({
-      data: [
-        publicSearchRow(),
-        publicSearchRow({ source_trader_id: 'alice-2', rank: 2 }),
-        publicSearchRow({ source: 'bybit', source_trader_id: 'bob', rank: 3 }),
-      ],
-    })
-    mockFrom.mockImplementation((relation: string) => {
-      if (relation !== 'public_ranked_leaderboard') {
-        throw new Error(`Unexpected relation ${relation}`)
-      }
-      return query
+    const fake = usePlatformCounts({
+      served: ['binance_futures', 'bybit'],
+      nonIdleBySource: { binance_futures: 2, bybit: 1 },
     })
 
     const response = await GET(request('/api/v3?endpoint=platforms'))
@@ -228,8 +227,9 @@ describe('GET /api/v3 cache and publication boundaries', () => {
     expect(response.headers.get('cache-control')).toBe(PRIVATE_NO_STORE)
     expect(mockFrom).toHaveBeenCalledWith('public_ranked_leaderboard')
     expect(mockFrom).not.toHaveBeenCalledWith('leaderboard_ranks')
-    expect(query.eq).toHaveBeenCalledWith('season_id', '90D')
-    expect(query.not).toHaveBeenCalledWith('rank', 'is', null)
+    for (const filter of fake.filters) {
+      expect(filter).toEqual(expect.objectContaining({ season_id: '90D', 'not:rank:is': null }))
+    }
     expect(body.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ key: 'binance_futures', traderCount: 2 }),
@@ -239,37 +239,43 @@ describe('GET /api/v3 cache and publication boundaries', () => {
     expect(body.meta).toEqual(expect.objectContaining({ total_count_is_exact: true, total: 2 }))
   })
 
-  it('counts each platform without idle-window rows', async () => {
-    const query = publicRankedQuery({
-      data: [
-        publicSearchRow(),
-        publicSearchRow({ source_trader_id: 'alice-2', rank: 2 }),
-        publicSearchRow({ source: 'bybit', source_trader_id: 'bob', rank: 3 }),
-      ],
+  it('reports platform counts beyond one 1,000-row page', async () => {
+    usePlatformCounts({
+      served: ['binance_futures', 'bybit'],
+      nonIdleBySource: { binance_futures: 2_600, bybit: 1_500 },
     })
-    mockFrom.mockReturnValueOnce(query)
 
     const response = await GET(request('/api/v3?endpoint=platforms'))
     const body = await response.json()
 
-    expect(query.eq).toHaveBeenCalledWith('idle_window', false)
-    // Old rule (no idle row): the predicate removes nothing, same counts.
     expect(body.data).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ key: 'binance_futures', traderCount: 2 }),
-        expect.objectContaining({ key: 'bybit', traderCount: 1 }),
+        expect.objectContaining({ key: 'binance_futures', traderCount: 2_600 }),
+        expect.objectContaining({ key: 'bybit', traderCount: 1_500 }),
       ])
     )
   })
 
-  it('does not reuse a stale platform count between requests', async () => {
-    const firstQuery = publicRankedQuery({
-      data: [publicSearchRow(), publicSearchRow({ source_trader_id: 'alice-2', rank: 2 })],
+  it('counts each platform without idle-window rows', async () => {
+    const fake = usePlatformCounts({
+      served: ['binance_futures', 'bybit'],
+      nonIdleBySource: { binance_futures: 2, bybit: 0 },
     })
-    const currentQuery = publicRankedQuery({ data: [publicSearchRow()] })
-    mockFrom.mockReturnValueOnce(firstQuery).mockReturnValueOnce(currentQuery)
 
+    const response = await GET(request('/api/v3?endpoint=platforms'))
+    const body = await response.json()
+
+    for (const filter of fake.filters) {
+      expect(filter).toEqual(expect.objectContaining({ idle_window: false }))
+    }
+    // A served platform whose rows are all idle is absent, not a zero.
+    expect(body.data).toEqual([expect.objectContaining({ key: 'binance_futures', traderCount: 2 })])
+  })
+
+  it('does not reuse a stale platform count between requests', async () => {
+    usePlatformCounts({ served: ['binance_futures'], nonIdleBySource: { binance_futures: 2 } })
     const first = await GET(request('/api/v3?endpoint=platforms'))
+    usePlatformCounts({ served: ['binance_futures'], nonIdleBySource: { binance_futures: 1 } })
     const second = await GET(request('/api/v3?endpoint=platforms'))
     const firstBody = await first.json()
     const secondBody = await second.json()
@@ -280,22 +286,13 @@ describe('GET /api/v3 cache and publication boundaries', () => {
     expect(secondBody.data).toContainEqual(
       expect.objectContaining({ key: 'binance_futures', traderCount: 1 })
     )
-    expect(mockFrom).toHaveBeenCalledTimes(2)
   })
 
-  it('makes a malformed platform cohort partial instead of emitting a shortened count map', async () => {
-    const query = publicRankedQuery({
-      data: [
-        publicSearchRow(),
-        {
-          source: 'binance_futures',
-          source_trader_id: 'unverified',
-          season_id: '90D',
-          rank: 2,
-        },
-      ],
+  it('makes a count for a platform this API does not list partial instead of a shortened map', async () => {
+    usePlatformCounts({
+      served: ['binance_futures', 'untrusted_alias'],
+      nonIdleBySource: { binance_futures: 2, untrusted_alias: 1 },
     })
-    mockFrom.mockReturnValue(query)
 
     const response = await GET(request('/api/v3?endpoint=platforms&format=csv'))
     const body = await response.json()
@@ -308,6 +305,26 @@ describe('GET /api/v3 cache and publication boundaries', () => {
         total_count_is_exact: false,
         ranking_visibility: 'partial',
         ranking_visibility_reason: 'public_cohort_unverified',
+      })
+    )
+  })
+
+  it('reports platform counts as unknown when they do not add up to the season total', async () => {
+    usePlatformCounts({
+      served: ['binance_futures'],
+      nonIdleBySource: { binance_futures: 2 },
+      total: 3,
+    })
+
+    const response = await GET(request('/api/v3?endpoint=platforms'))
+    const body = await response.json()
+
+    expect(body.data).toEqual([])
+    expect(body.meta).toEqual(
+      expect.objectContaining({
+        total_count_is_exact: false,
+        ranking_visibility: 'unknown',
+        ranking_visibility_reason: 'public_platform_counts_unavailable',
       })
     )
   })
