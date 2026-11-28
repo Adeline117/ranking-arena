@@ -582,6 +582,13 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # plain, not partitioned. lock_timeout 3 s. Independent of the other entries.
 # 20261128022326 does the same for arena.traders (20 % moved to a new page
 # after 20261128001008). Independent of the other entries, incl. 20261128022325.
+# 20261128025722 drops idx_arena_trader_stats_tf_roi (101 MB): every scan
+# read a whole timeframe (225,000 entries each), no current reader uses it
+# (derive-boards, publication_score_rows_json and onchain-enrich plans use the
+# primary key), and each roi change of a board upsert inserted into it at
+# random. trader_stats_pkey stays the only index. Refuses unless the index is
+# exactly the 20260610223901 definition. After 20261128001007, which must not
+# be re-applied after it. lock_timeout 3 s. Independent of the other entries.
 # 20261122204058 makes public.arena_resolve_trader() also return the source's
 # public name (meta.legacy_platform when set, else the slug) and adds the
 # index and trigger that keep that name unambiguous among active serving
@@ -659,6 +666,7 @@ POSTDEPLOY_MIGRATIONS=(
   20261128001008_traders_drop_last_seen_index.sql
   20261128022325_trader_stats_fillfactor_90.sql
   20261128022326_traders_fillfactor_90.sql
+  20261128025722_trader_stats_drop_tf_roi_index.sql
   20261122204058_resolve_trader_public_source.sql
   20261124225312_hero_stats_exclude_idle_window.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
