@@ -131,6 +131,7 @@
     "qa:trader-stats-score-input-value-inline-pg17": "bash supabase/migrations/__tests__/trader-stats-score-input-value-inline.pg17.sh",
     "qa:metric-trust-observations-drop-lookup-index-pg17": "bash supabase/migrations/__tests__/metric-trust-observations-drop-lookup-index.pg17.sh",
     "qa:hot-update-index-drops-pg17": "bash supabase/migrations/__tests__/hot-update-index-drops.pg17.sh",
+    "qa:fillfactor-hot-pg17": "bash supabase/migrations/__tests__/fillfactor-hot.pg17.sh",
     "qa:tier-a-window-republish-receipt-pg17": "bash supabase/migrations/__tests__/tier-a-window-republish-receipt.pg17.sh",
     "qa:public-ranked-leaderboard-pg17": "bash supabase/migrations/__tests__/public-ranked-leaderboard.pg17.sh",
     "qa:public-ranking-season-publication-pg17": "bash supabase/migrations/__tests__/public-ranking-season-publication.pg17.sh",
