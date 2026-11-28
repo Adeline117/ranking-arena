@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { handleTelegramUpdate } from './telegram-bot'
+import { fakePublicRankedCountClient } from '@/lib/data/testing/public-ranked-count-client'
 
 jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(),
@@ -16,24 +17,6 @@ jest.mock('@/lib/logger', () => ({
     warn: jest.fn(),
   },
 }))
-
-type QueryResult = {
-  data: unknown[] | null
-  error: { message: string } | null
-  count?: number | null
-}
-
-function query(result: QueryResult) {
-  const builder: Record<string, jest.Mock | ((...args: unknown[]) => Promise<unknown>)> = {}
-  for (const method of ['select', 'eq', 'range']) {
-    builder[method] = jest.fn(() => builder)
-  }
-  builder.then = (
-    resolve: (value: QueryResult) => unknown,
-    reject?: (reason: unknown) => unknown
-  ) => Promise.resolve(result).then(resolve, reject)
-  return builder
-}
 
 function statsUpdate() {
   return {
@@ -68,83 +51,85 @@ describe('Telegram /stats public ranking authority', () => {
     })
   })
 
+  function useCounts(state: Parameters<typeof fakePublicRankedCountClient>[0]) {
+    const fake = fakePublicRankedCountClient(state)
+    mockedGetSupabaseAdmin.mockReturnValue(fake.client as never)
+    return fake
+  }
+
+  function sentText(): string {
+    const payload = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as { text: string }
+    return payload.text
+  }
+
   it('uses only the sealed public view for the public bot audience', async () => {
-    const countQuery = query({ data: null, error: null, count: 2 })
-    const sourceQuery = query({
-      data: [{ source: 'binance_futures' }, { source: 'bybit' }],
-      error: null,
+    const fake = useCounts({
+      served: ['binance_futures', 'bybit'],
+      nonIdleBySource: { binance_futures: 1, bybit: 1 },
     })
-    const from = jest.fn().mockReturnValueOnce(countQuery).mockReturnValueOnce(sourceQuery)
-    mockedGetSupabaseAdmin.mockReturnValue({ from } as never)
 
     await handleTelegramUpdate(statsUpdate())
 
-    expect(from).toHaveBeenCalledTimes(2)
-    expect(from).toHaveBeenNthCalledWith(1, 'public_ranked_leaderboard')
-    expect(from).toHaveBeenNthCalledWith(2, 'public_ranked_leaderboard')
-    expect(from).not.toHaveBeenCalledWith('leaderboard_ranks')
-    expect(countQuery.select).toHaveBeenCalledWith('source_trader_id', {
-      count: 'exact',
-      head: true,
-    })
-    expect(countQuery.eq).toHaveBeenCalledWith('season_id', '90D')
-    expect(sourceQuery.eq).toHaveBeenCalledWith('season_id', '90D')
+    expect(new Set(fake.relations)).toEqual(new Set(['public_ranked_leaderboard']))
+    for (const filter of fake.filters) {
+      expect(filter).toEqual(expect.objectContaining({ season_id: '90D' }))
+    }
 
-    const request = fetchMock.mock.calls[0]
-    const payload = JSON.parse(String(request[1]?.body)) as { chat_id: number; text: string }
+    const payload = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as { chat_id: number }
     expect(payload.chat_id).toBe(99)
-    expect(payload.text).toContain('Ranked Traders: 2')
-    expect(payload.text).toContain('Active Exchanges: 2')
+    expect(sentText()).toContain('Ranked Traders: 2')
+    expect(sentText()).toContain('Active Exchanges: 2')
+  })
+
+  it('lists the active exchanges of a board larger than one 1,000-row page', async () => {
+    useCounts({
+      served: ['binance_futures', 'bybit'],
+      nonIdleBySource: { binance_futures: 2_600, bybit: 1_500 },
+    })
+
+    await handleTelegramUpdate(statsUpdate())
+
+    expect(sentText()).toContain(`Ranked Traders: ${(4_100).toLocaleString()}`)
+    expect(sentText()).toContain('Active Exchanges: 2')
   })
 
   it('does not turn a failed published cohort into a numeric zero', async () => {
-    const countQuery = query({ data: null, error: { message: 'cohort unavailable' }, count: null })
-    const sourceQuery = query({ data: null, error: { message: 'cohort unavailable' } })
-    const from = jest.fn().mockReturnValueOnce(countQuery).mockReturnValueOnce(sourceQuery)
-    mockedGetSupabaseAdmin.mockReturnValue({ from } as never)
+    const fake = useCounts({
+      served: ['binance_futures'],
+      nonIdleBySource: { binance_futures: 1 },
+      failCountFor: ['total'],
+    })
 
     await handleTelegramUpdate(statsUpdate())
 
-    const request = fetchMock.mock.calls[0]
-    const payload = JSON.parse(String(request[1]?.body)) as { text: string }
-    expect(payload.text).toContain('Unknown (published cohort unavailable)')
-    expect(payload.text).not.toContain('Ranked Traders: 0')
-    expect(from).not.toHaveBeenCalledWith('leaderboard_ranks')
+    expect(sentText()).toContain('Unknown (published cohort unavailable)')
+    expect(sentText()).not.toContain('Ranked Traders: 0')
+    expect(fake.relations).not.toContain('leaderboard_ranks')
   })
 
-  it('withholds a malformed source list rather than presenting it as public', async () => {
-    const countQuery = query({ data: null, error: null, count: 1 })
-    const sourceQuery = query({ data: [{ source: 'untrusted_alias' }], error: null })
-    const from = jest.fn().mockReturnValueOnce(countQuery).mockReturnValueOnce(sourceQuery)
-    mockedGetSupabaseAdmin.mockReturnValue({ from } as never)
+  it('withholds a source list naming a non-public source rather than presenting it', async () => {
+    useCounts({ served: ['untrusted_alias'], nonIdleBySource: { untrusted_alias: 1 } })
 
     await handleTelegramUpdate(statsUpdate())
 
-    const request = fetchMock.mock.calls[0]
-    const payload = JSON.parse(String(request[1]?.body)) as { text: string }
-    expect(payload.text).toContain('Ranked Traders: 1')
-    expect(payload.text).toContain('Active Exchanges: Unknown (published cohort unavailable)')
-    expect(payload.text).not.toContain('untrusted_alias')
+    expect(sentText()).toContain('Ranked Traders: 1')
+    expect(sentText()).toContain('Active Exchanges: Unknown (published cohort unavailable)')
+    expect(sentText()).not.toContain('untrusted_alias')
   })
 
   it('counts ranked traders and active exchanges without idle-window rows', async () => {
-    const countQuery = query({ data: null, error: null, count: 2 })
-    const sourceQuery = query({
-      data: [{ source: 'binance_futures' }, { source: 'bybit' }],
-      error: null,
+    const fake = useCounts({
+      served: ['binance_futures', 'bybit', 'okx_futures'],
+      nonIdleBySource: { binance_futures: 1, bybit: 1, okx_futures: 0 },
     })
-    const from = jest.fn().mockReturnValueOnce(countQuery).mockReturnValueOnce(sourceQuery)
-    mockedGetSupabaseAdmin.mockReturnValue({ from } as never)
 
     await handleTelegramUpdate(statsUpdate())
 
-    // Both queries share the predicate: the source list is only trusted when
-    // it has exactly as many rows as the count.
-    expect(countQuery.eq).toHaveBeenCalledWith('idle_window', false)
-    expect(sourceQuery.eq).toHaveBeenCalledWith('idle_window', false)
-    // Old rule (no idle row): the predicate removes nothing, same message.
-    const payload = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as { text: string }
-    expect(payload.text).toContain('Ranked Traders: 2')
-    expect(payload.text).toContain('Active Exchanges: 2')
+    for (const filter of fake.filters) {
+      expect(filter).toEqual(expect.objectContaining({ idle_window: false }))
+    }
+    // The source whose rows are all idle is not an active exchange.
+    expect(sentText()).toContain('Ranked Traders: 2')
+    expect(sentText()).toContain('Active Exchanges: 2')
   })
 })
