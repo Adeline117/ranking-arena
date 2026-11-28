@@ -585,6 +585,11 @@ jobs:
           PG17_BIN: /usr/lib/postgresql/17/bin
         run: npm run qa:metric-trust-observations-drop-lookup-index-pg17
 
+      - name: Prove dropping the unused trader_stats as_of and traders last_seen indexes makes board upserts HOT
+        env:
+          PG17_BIN: /usr/lib/postgresql/17/bin
+        run: npm run qa:hot-update-index-drops-pg17
+
       - name: Prove a Tier-A window receipt can be recorded once for an earlier queue attempt's capture
         env:
           PG17_BIN: /usr/lib/postgresql/17/bin

@@ -563,6 +563,17 @@ TIP_CHECKOUT_CUTOVER_ATTESTATION='TIP_CHECKOUT_FROZEN_PENDING_ZERO'
 # additive: the existing receipt RPC, its table and everything the worker
 # startup gate pins are untouched, so it may be applied before the worker
 # release that calls it. After 20261118161307. Independent of the others.
+# 20261128001007 drops idx_arena_trader_stats_as_of (218 MB, never scanned):
+# every board upsert moves as_of, so while it is indexed no trader_stats
+# update can be HOT (bybit_mt5 30D took 110.8 s on 2026-11-28). Refuses unless
+# the index is exactly the 20260610223901 definition; keeps the primary key
+# and tf_roi. lock_timeout 3 s: apply between publication windows; a timeout
+# changes nothing and can be retried. Independent of the other entries.
+# 20261128001008 drops idx_arena_traders_last_seen (168 MB, never scanned):
+# every board upsert sets last_seen_at = now(), so no traders update can be
+# HOT (0 % in production). Refuses unless the index is exactly the
+# 20260610223752 definition; keeps the seven other indexes. lock_timeout 3 s,
+# as above. Independent of the other entries, incl. 20261128001007.
 # 20261122204058 makes public.arena_resolve_trader() also return the source's
 # public name (meta.legacy_platform when set, else the slug) and adds the
 # index and trigger that keep that name unambiguous among active serving
@@ -636,6 +647,8 @@ POSTDEPLOY_MIGRATIONS=(
   20261127200517_trader_stats_score_input_value_inline.sql
   20261127201511_metric_trust_observations_drop_lookup_index.sql
   20261127202748_tier_a_window_republish_receipt.sql
+  20261128001007_trader_stats_drop_as_of_index.sql
+  20261128001008_traders_drop_last_seen_index.sql
   20261122204058_resolve_trader_public_source.sql
   20261124225312_hero_stats_exclude_idle_window.sql
   20261111192134_tier_a_execution_claim_enforcement_later_raw_guards.sql
