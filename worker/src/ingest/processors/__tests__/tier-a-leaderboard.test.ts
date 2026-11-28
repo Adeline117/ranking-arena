@@ -4307,6 +4307,52 @@ describe('Tier-A board-series publication guard', () => {
       expect(mockExecutionClose).toHaveBeenLastCalledWith('revoked')
     })
 
+    it('reuses the committed snapshot after a failed receipt instead of rescanning or republishing twice', async () => {
+      const { captureLeaderboard, attempt, projection } = await recordCaptureThatFailedToPublish()
+      // Retry 1: the republish commits snapshot 777, then the receipt fails.
+      const receiptFailure = new Error('receipt transaction failed')
+      mockRecordRepublishReceipt.mockRejectedValueOnce(receiptFailure)
+      await expect(processTierA(job)).rejects.toBe(receiptFailure)
+      expect(mockPublishTrustedLeaderboardSnapshot).toHaveBeenCalledTimes(1)
+
+      // Retry 2: publication reconciles the same source run to the committed
+      // snapshot (reconcileLeaderboardMetricTrust) and returns it as replayed.
+      mockPublishTrustedLeaderboardSnapshot.mockClear()
+      mockRecordRepublishReceipt.mockClear()
+      warnSpy.mockClear()
+      mockPublishTrustedLeaderboardSnapshot.mockResolvedValueOnce({
+        snapshotId: 777,
+        scrapedAt: '2026-07-16 00:01:02.123456+00',
+        verdict: { passed: true, baselineUsed: 1, deviationPct: 0 },
+        published: true,
+        traderIds: new Map([[row.exchangeTraderId, 42]]),
+        trust: {
+          sourceRunId: projection.sourceRunId,
+          observationsWritten: 0,
+          artifactRefsWritten: 0,
+          replayed: true,
+        },
+      })
+
+      await expect(processTierA(job)).resolves.toEqual([
+        expect.objectContaining({ timeframe: 30, snapshotId: 777 }),
+      ])
+
+      expect(mockPublishTrustedLeaderboardSnapshot).toHaveBeenCalledTimes(1)
+      const [publishInput] = mockPublishTrustedLeaderboardSnapshot.mock.calls[0] as [
+        { trust: { sourceRunId: string } },
+      ]
+      expect(publishInput.trust.sourceRunId).toBe(projection.sourceRunId)
+      expect(mockRecordRepublishReceipt).toHaveBeenCalledTimes(1)
+      expect(mockRecordRepublishReceipt.mock.calls[0][1]).toEqual(
+        expect.objectContaining({ attemptId: attempt.attemptId, snapshotId: 777 })
+      )
+      expect(captureLeaderboard).not.toHaveBeenCalled()
+      expect(mockStartLeaderboardAcquisitionAttempt).not.toHaveBeenCalled()
+      expect(warnLines().some((line) => line.includes('republish skipped'))).toBe(false)
+      expect(job.data.completedTimeframes).toEqual([30])
+    })
+
     it('stops when execution authority is revoked during the republish', async () => {
       const { captureLeaderboard } = await recordCaptureThatFailedToPublish()
       const lost = new Error('execution lease lost')
